@@ -3,15 +3,15 @@ import { AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescript
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { base44 } from '@/api/base44Client';
+import { entities } from '@/api/entities';
 
-export default function MemorialDialog({ cat, open, onOpenChange, onSuccess }) {
-  const [date, setDate] = useState(cat?.memorial_date || new Date().toISOString().split('T')[0]);
+export default function MemorialDialog({ pet, open, onOpenChange, onSuccess }) {
+  const [date, setDate] = useState(pet?.memorial_date || new Date().toISOString().split('T')[0]);
   const [saving, setSaving] = useState(false);
 
   const handleConfirm = async () => {
     setSaving(true);
-    await base44.entities.Cat.update(cat.id, { is_memorial: true, memorial_date: date });
+    await entities.Pet.update(pet.id, { is_memorial: true, memorial_date: date });
     setSaving(false);
     onSuccess?.();
     onOpenChange(false);
@@ -23,7 +23,7 @@ export default function MemorialDialog({ cat, open, onOpenChange, onSuccess }) {
         <AlertDialogHeader>
           <AlertDialogTitle className="font-serif text-xl">🌈 Crossed the Rainbow Bridge</AlertDialogTitle>
           <AlertDialogDescription className="text-sm leading-relaxed">
-            Mark <strong>{cat?.name}</strong>'s profile as a memorial. Their health history and memories will be lovingly preserved.
+            Mark <strong>{pet?.name}</strong>'s profile as a memorial. Their health history and memories will be lovingly preserved.
           </AlertDialogDescription>
         </AlertDialogHeader>
         <div className="space-y-2 py-1">

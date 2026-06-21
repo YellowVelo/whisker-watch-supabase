@@ -1,53 +1,55 @@
 import { useState, useEffect, useCallback } from 'react';
-import { base44 } from '@/api/base44Client';
+import { entities } from '@/api/entities';
+import { supabase } from '@/api/supabaseClient';
 import { Button } from '@/components/ui/button';
 import { Plus } from 'lucide-react';
-import CatCard from '../components/CatCard';
-import AddCatDialog from '../components/AddCatDialog';
+import PetCard from '../components/PetCard';
+import AddPetDialog from '../components/AddPetDialog';
 import PageTransition from '../components/PageTransition';
 import usePullToRefresh from '../hooks/usePullToRefresh';
 import PullToRefreshIndicator from '../components/PullToRefreshIndicator';
 
 export default function Home() {
-  const [cats, setCats] = useState([]);
-  const [sharedCats, setSharedCats] = useState([]);
+  const [pets, setPets] = useState([]);
+  const [sharedPets, setSharedPets] = useState([]);
   const [latestLogs, setLatestLogs] = useState({});
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
 
   const loadData = useCallback(async () => {
     setLoading(true);
-    const me = await base44.auth.me();
-    const catList = await base44.entities.Cat.list('-created_date');
-    setCats(catList);
+    const { data: userData } = await supabase.auth.getUser();
+    const me = userData?.user;
+    const petList = await entities.Pet.list('-created_date');
+    setPets(petList);
 
     // Load pets shared with me as a sitter (via pet sit records)
-    const accesses = await base44.entities.PetSitterAccess.filter({ sitter_email: me.email });
+    const accesses = await entities.PetSitterAccess.filter({ sitter_email: me.email });
     if (accesses.length > 0) {
       const sitIds = [...new Set(accesses.map(a => a.pet_sit_id).filter(Boolean))];
       if (sitIds.length > 0) {
-        const sits = await Promise.all(sitIds.map(id => base44.entities.PetSit.get(id)));
-        const catIds = [...new Set(sits.flatMap(s => s?.cat_ids || []))];
-        const ownIds = new Set(catList.map(c => c.id));
-        const toFetch = catIds.filter(id => !ownIds.has(id));
+        const sits = await Promise.all(sitIds.map(id => entities.PetSit.get(id)));
+        const petIds = [...new Set(sits.flatMap(s => s?.pet_ids || []))];
+        const ownIds = new Set(petList.map(p => p.id));
+        const toFetch = petIds.filter(id => !ownIds.has(id));
         if (toFetch.length > 0) {
-          const shared = await Promise.all(toFetch.map(id => base44.entities.Cat.get(id)));
-          setSharedCats(shared.filter(Boolean));
+          const shared = await Promise.all(toFetch.map(id => entities.Pet.get(id)));
+          setSharedPets(shared.filter(Boolean));
         } else {
-          setSharedCats([]);
+          setSharedPets([]);
         }
       } else {
-        setSharedCats([]);
+        setSharedPets([]);
       }
     } else {
-      setSharedCats([]);
+      setSharedPets([]);
     }
-    if (catList.length) {
-      const logs = await base44.entities.SymptomLog.list('-date', 200);
+    if (petList.length) {
+      const logs = await entities.SymptomLog.list('-date', 200);
       const latest = {};
       for (const log of logs) {
-        if (!latest[log.cat_id] || log.date > latest[log.cat_id].date) {
-          latest[log.cat_id] = log;
+        if (!latest[log.pet_id] || log.date > latest[log.pet_id].date) {
+          latest[log.pet_id] = log;
         }
       }
       setLatestLogs(latest);
@@ -91,7 +93,7 @@ export default function Home() {
       </header>
 
       <main className="max-w-2xl mx-auto px-4 py-5">
-        {cats.length === 0 ? (
+        {pets.length === 0 ? (
           <div className="text-center py-20">
             <div className="h-20 w-20 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
               <span className="text-5xl">🐾</span>
@@ -106,35 +108,35 @@ export default function Home() {
           </div>
         ) : (
           <div className="space-y-6">
-            {cats.filter(c => !c.is_memorial).length > 0 && (
+            {pets.filter(p => !p.is_memorial).length > 0 && (
               <div className="grid grid-cols-2 gap-4">
-                {cats.filter(c => !c.is_memorial).map(cat => (
-                  <CatCard key={cat.id} cat={cat} latestLog={latestLogs[cat.id]} />
+                {pets.filter(p => !p.is_memorial).map(pet => (
+                  <PetCard key={pet.id} pet={pet} latestLog={latestLogs[pet.id]} />
                 ))}
               </div>
             )}
-            {cats.filter(c => c.is_memorial).length > 0 && (
+            {pets.filter(p => p.is_memorial).length > 0 && (
               <div>
                 <div className="flex items-center gap-2 mb-3">
                   <span className="text-lg">🌈</span>
                   <p className="text-sm font-semibold text-purple-700">Rainbow Bridge</p>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
-                  {cats.filter(c => c.is_memorial).map(cat => (
-                    <CatCard key={cat.id} cat={cat} latestLog={latestLogs[cat.id]} />
+                  {pets.filter(p => p.is_memorial).map(pet => (
+                    <PetCard key={pet.id} pet={pet} latestLog={latestLogs[pet.id]} />
                   ))}
                 </div>
               </div>
             )}
-            {sharedCats.length > 0 && (
+            {sharedPets.length > 0 && (
               <div>
                 <div className="flex items-center gap-2 mb-3">
                   <span className="text-lg">🏠</span>
                   <p className="text-sm font-semibold text-muted-foreground">Shared with Me</p>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
-                  {sharedCats.map(cat => (
-                    <CatCard key={cat.id} cat={cat} latestLog={latestLogs[cat.id]} />
+                  {sharedPets.map(pet => (
+                    <PetCard key={pet.id} pet={pet} latestLog={latestLogs[pet.id]} />
                   ))}
                 </div>
               </div>
@@ -143,7 +145,7 @@ export default function Home() {
         )}
       </main>
 
-      <AddCatDialog open={showAdd} onOpenChange={setShowAdd} onSuccess={loadData} />
+      <AddPetDialog open={showAdd} onOpenChange={setShowAdd} onSuccess={loadData} />
     </div>
     </PageTransition>
   );

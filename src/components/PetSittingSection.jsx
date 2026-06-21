@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { base44 } from '@/api/base44Client';
+import { entities } from '@/api/entities';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -15,20 +15,20 @@ const EMPTY_FORM = {
   custom_tasks: [],
 };
 
-// catId is optional — if provided, filters sits to those that include this cat
-export default function PetSittingSection({ catId }) {
+// petId is optional — if provided, filters sits to those that include this pet
+export default function PetSittingSection({ petId }) {
   const [sits, setSits] = useState([]);
-  const [allCats, setAllCats] = useState([]);
-  const [medicationsByCat, setMedicationsByCat] = useState({});
-  const [foodsByCat, setFoodsByCat] = useState({});
-  const [vaccinationsByCat, setVaccinationsByCat] = useState({});
+  const [allPets, setAllPets] = useState([]);
+  const [medicationsByPet, setMedicationsByPet] = useState({});
+  const [foodsByPet, setFoodsByPet] = useState({});
+  const [vaccinationsByPet, setVaccinationsByPet] = useState({});
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [inviteSitId, setInviteSitId] = useState(null);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(EMPTY_FORM);
-  const [selectedCatIds, setSelectedCatIds] = useState([]);
+  const [selectedPetIds, setSelectedPetIds] = useState([]);
   const [saving, setSaving] = useState(false);
   const [expandedId, setExpandedId] = useState(null);
   const [sitLogs, setSitLogs] = useState({});
@@ -36,40 +36,40 @@ export default function PetSittingSection({ catId }) {
 
   const load = async () => {
     setLoading(true);
-    const [cats, sitData] = await Promise.all([
-      base44.entities.Cat.list('-created_date'),
-      base44.entities.PetSit.list('-start_date', 50),
+    const [pets, sitData] = await Promise.all([
+      entities.Pet.list('-created_date'),
+      entities.PetSit.list('-start_date', 50),
     ]);
-    const activeCats = cats.filter(c => !c.is_memorial);
-    setAllCats(activeCats);
+    const activePets = pets.filter(c => !c.is_memorial);
+    setAllPets(activePets);
 
-    // Load meds/food/vax for all cats in parallel
-    const catIds = activeCats.map(c => c.id);
+    // Load meds/food/vax for all pets in parallel
+    const petIds = activePets.map(c => c.id);
     const [medsAll, foodsAll, vacsAll] = await Promise.all([
-      Promise.all(catIds.map(id => base44.entities.Medication.filter({ cat_id: id, active: true }))),
-      Promise.all(catIds.map(id => base44.entities.CatFood.filter({ cat_id: id, active: true }))),
-      Promise.all(catIds.map(id => base44.entities.Vaccination.filter({ cat_id: id }))),
+      Promise.all(petIds.map(id => entities.Medication.filter({ pet_id: id, active: true }))),
+      Promise.all(petIds.map(id => entities.PetFood.filter({ pet_id: id, active: true }))),
+      Promise.all(petIds.map(id => entities.Vaccination.filter({ pet_id: id }))),
     ]);
     const medsMap = {}, foodsMap = {}, vacsMap = {};
-    catIds.forEach((id, i) => {
+    petIds.forEach((id, i) => {
       medsMap[id] = medsAll[i];
       foodsMap[id] = foodsAll[i];
       vacsMap[id] = vacsAll[i];
     });
-    setMedicationsByCat(medsMap);
-    setFoodsByCat(foodsMap);
-    setVaccinationsByCat(vacsMap);
+    setMedicationsByPet(medsMap);
+    setFoodsByPet(foodsMap);
+    setVaccinationsByPet(vacsMap);
 
-    // Filter sits: if catId prop provided, only show sits that include this cat
-    const filtered = catId
-      ? sitData.filter(s => (s.cat_ids || []).includes(catId))
+    // Filter sits: if petId prop provided, only show sits that include this pet
+    const filtered = petId
+      ? sitData.filter(s => (s.pet_ids || []).includes(petId))
       : sitData;
     setSits(filtered);
     setLoading(false);
   };
 
   const loadSitLogs = async (sitId) => {
-    const logs = await base44.entities.PetSitLog.filter({ pet_sit_id: sitId });
+    const logs = await entities.PetSitLog.filter({ pet_sit_id: sitId });
     setSitLogs(prev => ({ ...prev, [sitId]: logs }));
   };
 
@@ -82,17 +82,17 @@ export default function PetSittingSection({ catId }) {
   const ensureLogsForSit = async (sit) => {
     if (!sit.start_date || !sit.end_date) return;
     const days = eachDayOfInterval({ start: parseISO(sit.start_date), end: parseISO(sit.end_date) });
-    const existing = await base44.entities.PetSitLog.filter({ pet_sit_id: sit.id });
+    const existing = await entities.PetSitLog.filter({ pet_sit_id: sit.id });
     const existingDates = new Set(existing.map(l => l.date));
-    // Create one log per day (not per cat — the checklist is sit-level)
+    // Create one log per day (not per pet — the checklist is sit-level)
     const toCreate = days
       .map(d => format(d, 'yyyy-MM-dd'))
       .filter(d => !existingDates.has(d))
-      .map(d => ({ pet_sit_id: sit.id, cat_id: (sit.cat_ids || [])[0] || '', date: d }));
-    if (toCreate.length > 0) await base44.entities.PetSitLog.bulkCreate(toCreate);
+      .map(d => ({ pet_sit_id: sit.id, pet_id: (sit.pet_ids || [])[0] || '', date: d }));
+    if (toCreate.length > 0) await entities.PetSitLog.bulkCreate(toCreate);
   };
 
-  useEffect(() => { load(); }, [catId]);
+  useEffect(() => { load(); }, [petId]);
 
   const setField = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
@@ -109,7 +109,7 @@ export default function PetSittingSection({ catId }) {
     setEditing(null);
     setForm(EMPTY_FORM);
     // Default: no pets selected
-    setSelectedCatIds(catId ? [catId] : []);
+    setSelectedPetIds(petId ? [petId] : []);
     setNewTask('');
     setDialogOpen(true);
   };
@@ -125,20 +125,20 @@ export default function PetSittingSection({ catId }) {
       vet_contact: s.vet_contact || '',
       custom_tasks: s.custom_tasks || [],
     });
-    setSelectedCatIds(s.cat_ids || allCats.map(c => c.id));
+    setSelectedPetIds(s.pet_ids || allPets.map(c => c.id));
     setNewTask('');
     setDialogOpen(true);
   };
 
   const handleSave = async () => {
     setSaving(true);
-    const data = { ...form, cat_ids: selectedCatIds };
+    const data = { ...form, pet_ids: selectedPetIds };
     let sit;
     if (editing) {
-      await base44.entities.PetSit.update(editing.id, data);
+      await entities.PetSit.update(editing.id, data);
       sit = { ...editing, ...data };
     } else {
-      sit = await base44.entities.PetSit.create(data);
+      sit = await entities.PetSit.create(data);
     }
     await ensureLogsForSit(sit);
     setSaving(false);
@@ -149,12 +149,12 @@ export default function PetSittingSection({ catId }) {
   };
 
   const handleDelete = async (id) => {
-    await base44.entities.PetSit.delete(id);
+    await entities.PetSit.delete(id);
     load();
   };
 
   const toggleBoolField = async (sit, log, field) => {
-    await base44.entities.PetSitLog.update(log.id, { [field]: !log[field] });
+    await entities.PetSitLog.update(log.id, { [field]: !log[field] });
     setSitLogs(prev => ({
       ...prev,
       [sit.id]: prev[sit.id].map(l => l.id === log.id ? { ...l, [field]: !l[field] } : l),
@@ -164,15 +164,15 @@ export default function PetSittingSection({ catId }) {
   const toggleTask = async (sit, log, task) => {
     const current = log.completed_tasks || [];
     const updated = current.includes(task) ? current.filter(t => t !== task) : [...current, task];
-    await base44.entities.PetSitLog.update(log.id, { completed_tasks: updated });
+    await entities.PetSitLog.update(log.id, { completed_tasks: updated });
     setSitLogs(prev => ({
       ...prev,
       [sit.id]: prev[sit.id].map(l => l.id === log.id ? { ...l, completed_tasks: updated } : l),
     }));
   };
 
-  const toggleCatSelection = (id) => {
-    setSelectedCatIds(prev =>
+  const togglePetSelection = (id) => {
+    setSelectedPetIds(prev =>
       prev.includes(id) ? prev.filter(c => c !== id) : [...prev, id]
     );
   };
@@ -195,14 +195,14 @@ export default function PetSittingSection({ catId }) {
       ) : (
         <div className="space-y-2">
           {sits.map(sit => {
-            const sitCatIds = sit.cat_ids || [];
-            const sitCats = allCats.filter(c => sitCatIds.includes(c.id));
+            const sitPetIds = sit.pet_ids || [];
+            const sitPets = allPets.filter(c => sitPetIds.includes(c.id));
             const days = (sit.start_date && sit.end_date)
               ? eachDayOfInterval({ start: parseISO(sit.start_date), end: parseISO(sit.end_date) })
               : [];
             const logs = sitLogs[sit.id] || [];
             const customTasks = sit.custom_tasks || [];
-            const hasPmMed = sitCats.some(cat => (medicationsByCat[cat.id] || []).some(m => m.frequency === 'Twice daily'));
+            const hasPmMed = sitPets.some(pet => (medicationsByPet[pet.id] || []).some(m => m.frequency === 'Twice daily'));
 
             return (
               <div key={sit.id} className="bg-card border border-border rounded-xl overflow-hidden">
@@ -215,9 +215,9 @@ export default function PetSittingSection({ catId }) {
                     </p>
                     <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                       {sit.sitter_name && <p className="text-xs text-muted-foreground">Sitter: {sit.sitter_name}</p>}
-                      {sitCats.length > 0 && (
+                      {sitPets.length > 0 && (
                         <p className="text-xs text-muted-foreground">
-                          🐾 {sitCats.map(c => c.name).join(', ')}
+                          🐾 {sitPets.map(c => c.name).join(', ')}
                         </p>
                       )}
                     </div>
@@ -242,16 +242,16 @@ export default function PetSittingSection({ catId }) {
 
                 {expandedId === sit.id && (
                   <div className="border-t border-border px-4 py-4 space-y-5">
-                    {/* Instructions summary — per cat */}
+                    {/* Instructions summary — per pet */}
                     <div className="bg-secondary/50 rounded-lg p-3 space-y-3 text-sm">
                       <p className="font-semibold text-xs uppercase tracking-wider text-muted-foreground">Sitter Instructions</p>
-                      {sitCats.map(cat => {
-                        const meds = medicationsByCat[cat.id] || [];
-                        const foods = foodsByCat[cat.id] || [];
-                        const vacs = vaccinationsByCat[cat.id] || [];
+                      {sitPets.map(pet => {
+                        const meds = medicationsByPet[pet.id] || [];
+                        const foods = foodsByPet[pet.id] || [];
+                        const vacs = vaccinationsByPet[pet.id] || [];
                         return (
-                          <div key={cat.id} className="space-y-1.5 border-l-2 border-primary/30 pl-3">
-                            <p className="font-semibold text-sm">🐾 {cat.name}</p>
+                          <div key={pet.id} className="space-y-1.5 border-l-2 border-primary/30 pl-3">
+                            <p className="font-semibold text-sm">🐾 {pet.name}</p>
                             {foods.length > 0 && (
                               <div>
                                 <p className="font-medium text-xs">🍽 Food:</p>
@@ -312,7 +312,7 @@ export default function PetSittingSection({ catId }) {
                                 <div className="flex gap-2 flex-wrap">
                                   <CheckBtn label="AM Food" checked={!!log.am_food_given} onToggle={() => toggleBoolField(sit, log, 'am_food_given')} />
                                   <CheckBtn label="PM Food" checked={!!log.pm_food_given} onToggle={() => toggleBoolField(sit, log, 'pm_food_given')} />
-                                  {sitCats.some(cat => (medicationsByCat[cat.id] || []).length > 0) && (
+                                  {sitPets.some(pet => (medicationsByPet[pet.id] || []).length > 0) && (
                                     <CheckBtn label="AM Meds" checked={!!log.am_meds_given} onToggle={() => toggleBoolField(sit, log, 'am_meds_given')} />
                                   )}
                                   {hasPmMed && <CheckBtn label="PM Meds" checked={!!log.pm_meds_given} onToggle={() => toggleBoolField(sit, log, 'pm_meds_given')} />}
@@ -353,23 +353,23 @@ export default function PetSittingSection({ catId }) {
           <div className="space-y-4 mt-2">
 
             {/* Pet selection */}
-            {allCats.length > 1 && (
+            {allPets.length > 1 && (
               <div className="space-y-2">
                 <Label>Pets on this sit</Label>
                 <div className="flex flex-wrap gap-2">
-                  {allCats.map(cat => (
+                  {allPets.map(pet => (
                     <button
-                      key={cat.id}
+                      key={pet.id}
                       type="button"
-                      onClick={() => toggleCatSelection(cat.id)}
+                      onClick={() => togglePetSelection(pet.id)}
                       className={`flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-full border transition-colors ${
-                        selectedCatIds.includes(cat.id)
+                        selectedPetIds.includes(pet.id)
                           ? 'bg-primary text-primary-foreground border-primary'
                           : 'bg-background text-muted-foreground border-border hover:border-primary/50'
                       }`}
                     >
-                      {selectedCatIds.includes(cat.id) && <Check className="h-3 w-3" />}
-                      {cat.name}
+                      {selectedPetIds.includes(pet.id) && <Check className="h-3 w-3" />}
+                      {pet.name}
                     </button>
                   ))}
                 </div>
@@ -431,7 +431,7 @@ export default function PetSittingSection({ catId }) {
               <Label>Additional Instructions</Label>
               <Textarea value={form.additional_instructions} onChange={e => setField('additional_instructions', e.target.value)} rows={3} placeholder="Hiding spots, favorite toys, behavioral notes..." />
             </div>
-            <Button onClick={handleSave} className="w-full" disabled={saving || !form.start_date || !form.end_date || selectedCatIds.length === 0}>
+            <Button onClick={handleSave} className="w-full" disabled={saving || !form.start_date || !form.end_date || selectedPetIds.length === 0}>
               {saving ? 'Saving & creating daily logs...' : editing ? 'Save Changes' : 'Create & Generate Checklist'}
             </Button>
           </div>

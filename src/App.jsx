@@ -10,7 +10,7 @@ import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import BottomTabBar from './components/BottomTabBar';
 import Home from './pages/Home';
-import CatProfile from './pages/CatProfile';
+import PetProfile from './pages/PetProfile';
 import VetExport from './pages/VetExport';
 import Settings from './pages/Settings';
 import Login from './pages/Login';
@@ -49,8 +49,8 @@ const AuthenticatedApp = () => {
           <Route path="/reset-password" element={<ResetPassword />} />
           <Route element={<ProtectedRoute unauthenticatedElement={<Navigate to="/login" replace />} />}>
             <Route path="/" element={<Home />} />
-            <Route path="/cat/:catId" element={<CatProfile />} />
-            <Route path="/cat/:catId/export" element={<VetExport />} />
+            <Route path="/pet/:petId" element={<PetProfile />} />
+            <Route path="/pet/:petId/export" element={<VetExport />} />
             <Route path="/settings" element={<Settings />} />
           </Route>
           <Route path="*" element={<PageNotFound />} />

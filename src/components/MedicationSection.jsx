@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { base44 } from '@/api/base44Client';
+import { entities } from '@/api/entities';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -11,7 +11,7 @@ import { format, parseISO, addMonths, addWeeks } from 'date-fns';
 import SmartSelect from './SmartSelect';
 
 const today = () => new Date().toISOString().split('T')[0];
-const emptyMed = (catId) => ({ cat_id: catId, name: '', med_type: 'General', prescribed: false, dosage: '', frequency: '', timing_instructions: '', route: '', start_date: today(), next_due_date: '', end_date: '', prescribing_vet: '', active: true, notes: '' });
+const emptyMed = (petId) => ({ pet_id: petId, name: '', med_type: 'General', prescribed: false, dosage: '', frequency: '', timing_instructions: '', route: '', start_date: today(), next_due_date: '', end_date: '', prescribing_vet: '', active: true, notes: '' });
 
 const FREQUENCIES_WITH_NEXT_DUE = ['Monthly', 'Every 3 months'];
 
@@ -28,25 +28,25 @@ const MED_TYPE_BADGE = {
   'Heartworm':   { label: '❤️ Heartworm',   classes: 'bg-pink-100 text-pink-700 dark:bg-pink-900/40 dark:text-pink-300' },
 };
 
-export default function MedicationSection({ catId }) {
+export default function MedicationSection({ petId }) {
   const [meds, setMeds] = useState([]);
   const [showDialog, setShowDialog] = useState(false);
   const [editing, setEditing] = useState(null);
-  const [form, setForm] = useState(emptyMed(catId));
+  const [form, setForm] = useState(emptyMed(petId));
   const [saving, setSaving] = useState(false);
   const [showInactive, setShowInactive] = useState(false);
   const [givenToday, setGivenToday] = useState(new Set());
 
   const load = async () => {
-    const data = await base44.entities.Medication.filter({ cat_id: catId }, '-start_date');
+    const data = await entities.Medication.filter({ pet_id: petId }, '-start_date');
     setMeds(data);
   };
 
-  useEffect(() => { load(); }, [catId]);
+  useEffect(() => { load(); }, [petId]);
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
-  const openAdd = () => { setForm(emptyMed(catId)); setEditing(null); setShowDialog(true); };
+  const openAdd = () => { setForm(emptyMed(petId)); setEditing(null); setShowDialog(true); };
   const openEdit = (med) => { setForm({ ...med }); setEditing(med.id); setShowDialog(true); };
 
   const handleSubmit = async (e) => {
@@ -55,15 +55,15 @@ export default function MedicationSection({ catId }) {
     const data = { ...form };
     if (!data.end_date) delete data.end_date;
     if (!data.prescribing_vet) delete data.prescribing_vet;
-    if (editing) await base44.entities.Medication.update(editing, data);
-    else await base44.entities.Medication.create(data);
+    if (editing) await entities.Medication.update(editing, data);
+    else await entities.Medication.create(data);
     setSaving(false);
     setShowDialog(false);
     load();
   };
 
   const deleteMed = async (id) => {
-    await base44.entities.Medication.delete(id);
+    await entities.Medication.delete(id);
     load();
   };
 

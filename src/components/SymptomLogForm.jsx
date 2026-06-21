@@ -5,15 +5,15 @@ import { Label } from '@/components/ui/label';
 import SmartSelect from './SmartSelect';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
-import { base44 } from '@/api/base44Client';
+import { entities } from '@/api/entities';
 import { Loader2 } from 'lucide-react';
 
 const today = () => new Date().toISOString().split('T')[0];
 
-export default function SymptomLogForm({ catId, onOptimisticUpdate, onSuccess }) {
+export default function SymptomLogForm({ petId, onOptimisticUpdate, onSuccess }) {
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({
-    cat_id: catId,
+    pet_id: petId,
     date: today(),
     appetite: '',
     vomiting: 0,
@@ -44,7 +44,7 @@ export default function SymptomLogForm({ catId, onOptimisticUpdate, onSuccess })
       onOptimisticUpdate(tempLog);
     }
 
-    await base44.entities.SymptomLog.create(data);
+    await entities.SymptomLog.create(data);
     setSaving(false);
     onSuccess?.();
   };

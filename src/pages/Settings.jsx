@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { base44 } from '@/api/base44Client';
+import { entities } from '@/api/entities';
+import { supabase } from '@/api/supabaseClient';
 import { Button } from '@/components/ui/button';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Settings as SettingsIcon, Trash2, LogOut, Moon, Sun, Monitor } from 'lucide-react';
@@ -10,22 +11,29 @@ export default function Settings() {
 
   const handleDeleteAccount = async () => {
     setDeleting(true);
-    // Delete all user data then log out
+    // Delete all user data then log out.
+    // NOTE: this only deletes pet/health data (same as the original
+    // Base44 behavior) — it does not delete the actual auth account.
+    // True account deletion would need a Supabase Edge Function using
+    // the service role key (the anon key used client-side can't delete
+    // auth.users rows). Flagging as a follow-up, not silently expanding
+    // scope here.
     try {
-      const cats = await base44.entities.Cat.list();
-      for (const cat of cats) {
-        await base44.entities.SymptomLog.filter({ cat_id: cat.id }).then(logs =>
-          Promise.all(logs.map(l => base44.entities.SymptomLog.delete(l.id)))
+      const pets = await entities.Pet.list();
+      for (const pet of pets) {
+        await entities.SymptomLog.filter({ pet_id: pet.id }).then(logs =>
+          Promise.all(logs.map(l => entities.SymptomLog.delete(l.id)))
         );
-        await base44.entities.Medication.filter({ cat_id: cat.id }).then(meds =>
-          Promise.all(meds.map(m => base44.entities.Medication.delete(m.id)))
+        await entities.Medication.filter({ pet_id: pet.id }).then(meds =>
+          Promise.all(meds.map(m => entities.Medication.delete(m.id)))
         );
-        await base44.entities.FoodLog.filter({ cat_id: cat.id }).then(foods =>
-          Promise.all(foods.map(f => base44.entities.FoodLog.delete(f.id)))
+        await entities.FoodLog.filter({ pet_id: pet.id }).then(foods =>
+          Promise.all(foods.map(f => entities.FoodLog.delete(f.id)))
         );
-        await base44.entities.Cat.delete(cat.id);
+        await entities.Pet.delete(pet.id);
       }
-      base44.auth.logout('/');
+      await supabase.auth.signOut();
+      window.location.href = '/';
     } catch (e) {
       setDeleting(false);
     }
@@ -39,7 +47,7 @@ export default function Settings() {
           label: 'Sign Out',
           icon: LogOut,
           color: 'text-foreground',
-          action: () => base44.auth.logout('/'),
+          action: () => { supabase.auth.signOut().then(() => { window.location.href = '/login'; }); },
           destructive: false,
         },
         {
@@ -53,7 +61,7 @@ export default function Settings() {
     {
       section: 'About',
       items: [
-        { label: 'Whisker Watch', sublabel: 'Cat Health Tracker', icon: SettingsIcon, color: 'text-muted-foreground', static: true },
+        { label: 'Whisker Watch', sublabel: 'Pet Health Tracker', icon: SettingsIcon, color: 'text-muted-foreground', static: true },
       ],
     },
   ];
@@ -101,7 +109,7 @@ export default function Settings() {
                           <AlertDialogHeader>
                             <AlertDialogTitle>Delete Account?</AlertDialogTitle>
                             <AlertDialogDescription>
-                              This will permanently delete all your cats, symptom logs, medications, and food data. This action cannot be undone.
+                              This will permanently delete all your pets, symptom logs, medications, and food data. This action cannot be undone.
                             </AlertDialogDescription>
                           </AlertDialogHeader>
                           <AlertDialogFooter>

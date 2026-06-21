@@ -5,11 +5,12 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Textarea } from '@/components/ui/textarea';
-import { base44 } from '@/api/base44Client';
+import { base44 } from '@/api/base44Client'; // still used below for UploadFile (Phase B)
+import { entities } from '@/api/entities';
 import { Loader2, Camera } from 'lucide-react';
 import { getConditions, getPetEmoji, getPetLabel } from '@/lib/speciesConfig';
 
-export default function AddCatDialog({ open, onOpenChange, onSuccess }) {
+export default function AddPetDialog({ open, onOpenChange, onSuccess }) {
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [species, setSpecies] = useState(null); // null = not chosen yet
@@ -39,7 +40,7 @@ export default function AddCatDialog({ open, onOpenChange, onSuccess }) {
     setSaving(true);
     const data = { ...form, species };
     if (!data.birth_date) delete data.birth_date;
-    await base44.entities.Cat.create(data);
+    await entities.Pet.create(data);
     setSaving(false);
     setSpecies(null);
     setForm({ name: '', breed: '', birth_date: '', conditions: [], medications: '', notes: '', photo_url: '' });

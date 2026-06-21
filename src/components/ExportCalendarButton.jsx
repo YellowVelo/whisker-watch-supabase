@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { base44 } from '@/api/base44Client';
+import { entities } from '@/api/entities';
 import { Button } from '@/components/ui/button';
 import { CalendarDays, Loader2 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
@@ -44,15 +44,15 @@ function buildICS(events) {
   return lines.join('\r\n');
 }
 
-export default function ExportCalendarButton({ catId, catName, iconOnly = false }) {
+export default function ExportCalendarButton({ petId, petName, iconOnly = false }) {
   const [loading, setLoading] = useState(false);
 
   const handleExport = async () => {
     setLoading(true);
     try {
       const [meds, vaccines] = await Promise.all([
-        base44.entities.Medication.filter({ cat_id: catId }),
-        base44.entities.Vaccination.filter({ cat_id: catId }),
+        entities.Medication.filter({ pet_id: petId }),
+        entities.Vaccination.filter({ pet_id: petId }),
       ]);
 
       const events = [];
@@ -63,7 +63,7 @@ export default function ExportCalendarButton({ catId, catName, iconOnly = false 
           events.push({
             uid: `med-${med.id}`,
             date: med.next_due_date,
-            title: `💊 ${catName}: ${med.name} due`,
+            title: `💊 ${petName}: ${med.name} due`,
             description: [
               med.dosage && `Dosage: ${med.dosage}`,
               med.frequency && `Frequency: ${med.frequency}`,
@@ -80,7 +80,7 @@ export default function ExportCalendarButton({ catId, catName, iconOnly = false 
           events.push({
             uid: `vax-${vax.id}`,
             date: vax.next_due_date,
-            title: `💉 ${catName}: ${vax.vaccine_name} due`,
+            title: `💉 ${petName}: ${vax.vaccine_name} due`,
             description: [
               vax.administered_by && `Vet: ${vax.administered_by}`,
               vax.notes,
@@ -99,7 +99,7 @@ export default function ExportCalendarButton({ catId, catName, iconOnly = false 
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `${catName.replace(/\s+/g, '_')}_health_calendar.ics`;
+      a.download = `${petName.replace(/\s+/g, '_')}_health_calendar.ics`;
       a.click();
       URL.revokeObjectURL(url);
     } finally {

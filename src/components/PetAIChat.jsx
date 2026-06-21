@@ -2,16 +2,16 @@ import { useState, useRef, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
 import { Send } from 'lucide-react';
 
-const SYSTEM_CONTEXT = (cat, medications) => {
-  const conditions = cat.conditions?.join(', ') || 'None noted';
+const SYSTEM_CONTEXT = (pet, medications) => {
+  const conditions = pet.conditions?.join(', ') || 'None noted';
   const activeMeds = medications?.filter(m => m.active).map(m => `${m.name} ${m.dosage || ''} ${m.frequency || ''}`).join(', ') || 'None';
-  const age = cat.birth_date ? Math.floor((new Date() - new Date(cat.birth_date)) / (365.25 * 24 * 60 * 60 * 1000)) : null;
-  return `You are a compassionate, experienced veterinarian with 20+ years of clinical practice. You are assisting the owner of a pet named ${cat.name}, a ${age ? age + '-year-old ' : ''}${cat.species || 'cat'} (${cat.breed || 'mixed breed'}) with the following known conditions: ${conditions}. Active medications: ${activeMeds}. Answer questions clearly and practically. Always recommend consulting a licensed veterinarian for diagnosis, prescriptions, or emergencies. Keep responses concise and friendly.`;
+  const age = pet.birth_date ? Math.floor((new Date() - new Date(pet.birth_date)) / (365.25 * 24 * 60 * 60 * 1000)) : null;
+  return `You are a compassionate, experienced veterinarian with 20+ years of clinical practice. You are assisting the owner of a pet named ${pet.name}, a ${age ? age + '-year-old ' : ''}${pet.species || 'cat'} (${pet.breed || 'mixed breed'}) with the following known conditions: ${conditions}. Active medications: ${activeMeds}. Answer questions clearly and practically. Always recommend consulting a licensed veterinarian for diagnosis, prescriptions, or emergencies. Keep responses concise and friendly.`;
 };
 
-export default function PetAIChat({ cat, medications }) {
+export default function PetAIChat({ pet, medications }) {
   const [messages, setMessages] = useState([
-    { role: 'assistant', content: `Hi! I'm here to help with questions about ${cat.name}. I have their profile on file — what would you like to know?` }
+    { role: 'assistant', content: `Hi! I'm here to help with questions about ${pet.name}. I have their profile on file — what would you like to know?` }
   ]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -33,7 +33,7 @@ export default function PetAIChat({ cat, medications }) {
     const history = [...messages, userMsg].map(m => `${m.role === 'user' ? 'Owner' : 'Vet Assistant'}: ${m.content}`).join('\n\n');
 
     const reply = await base44.integrations.Core.InvokeLLM({
-      prompt: `${SYSTEM_CONTEXT(cat, medications)}\n\nConversation so far:\n${history}\n\nOwner's latest question: ${text}\n\nVet Assistant:`,
+      prompt: `${SYSTEM_CONTEXT(pet, medications)}\n\nConversation so far:\n${history}\n\nOwner's latest question: ${text}\n\nVet Assistant:`,
     });
 
     setMessages(prev => [...prev, { role: 'assistant', content: reply }]);
@@ -81,7 +81,7 @@ export default function PetAIChat({ cat, medications }) {
           value={input}
           onChange={e => setInput(e.target.value)}
           onKeyDown={handleKey}
-          placeholder={`Ask about ${cat.name}…`}
+          placeholder={`Ask about ${pet.name}…`}
           rows={1}
           className="flex-1 resize-none rounded-xl border border-input bg-background px-3 py-2.5 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring placeholder:text-muted-foreground min-h-[42px] max-h-24"
           style={{ WebkitUserSelect: 'text', userSelect: 'text' }}

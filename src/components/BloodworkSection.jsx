@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { base44 } from '@/api/base44Client';
+import { base44 } from '@/api/base44Client'; // still used below for UploadFile/InvokeLLM/ExtractDataFromUploadedFile (Phase B/C)
+import { entities } from '@/api/entities';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -35,7 +36,7 @@ const URINE_FIELDS = [
 
 const EMPTY_FORM = { date: '', lab_name: '', vet_name: '', notes: '', urine_specific_gravity: '', urine_protein: '' };
 
-export default function BloodworkSection({ catId }) {
+export default function BloodworkSection({ petId }) {
   const [records, setRecords] = useState([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -48,12 +49,12 @@ export default function BloodworkSection({ catId }) {
 
   const load = async () => {
     setLoading(true);
-    const data = await base44.entities.Bloodwork.filter({ cat_id: catId }, '-date', 100);
+    const data = await entities.Bloodwork.filter({ pet_id: petId }, '-date', 100);
     setRecords(data);
     setLoading(false);
   };
 
-  useEffect(() => { load(); }, [catId]);
+  useEffect(() => { load(); }, [petId]);
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
@@ -137,16 +138,16 @@ export default function BloodworkSection({ catId }) {
 
   const handleSave = async () => {
     setSaving(true);
-    const data = { cat_id: catId };
+    const data = { pet_id: petId };
     Object.entries(form).forEach(([k, v]) => {
       if (v === '' || v === null || v === undefined) return;
       const numField = FIELDS.find(f => f.key === k);
       data[k] = numField ? parseFloat(v) : v;
     });
     if (editing) {
-      await base44.entities.Bloodwork.update(editing.id, data);
+      await entities.Bloodwork.update(editing.id, data);
     } else {
-      await base44.entities.Bloodwork.create(data);
+      await entities.Bloodwork.create(data);
     }
     setSaving(false);
     setDialogOpen(false);
@@ -154,7 +155,7 @@ export default function BloodworkSection({ catId }) {
   };
 
   const handleDelete = async (id) => {
-    await base44.entities.Bloodwork.delete(id);
+    await entities.Bloodwork.delete(id);
     load();
   };
 

@@ -4,23 +4,24 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { base44 } from '@/api/base44Client';
+import { base44 } from '@/api/base44Client'; // still used below for UploadFile (Phase B)
+import { entities } from '@/api/entities';
 import { Loader2, X, Plus } from 'lucide-react';
 import { getConditions } from '@/lib/speciesConfig';
 
-export default function EditCatSheet({ cat, open, onOpenChange, onSuccess }) {
+export default function EditPetSheet({ pet, open, onOpenChange, onSuccess }) {
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [form, setForm] = useState({
-    name: cat?.name || '',
-    breed: cat?.breed || '',
-    birth_date: cat?.birth_date || '',
-    photo_url: cat?.photo_url || '',
-    conditions: cat?.conditions || [],
-    nicknames: cat?.nicknames || [],
-    favorite_activities: cat?.favorite_activities || [],
-    medications: cat?.medications || '',
-    notes: cat?.notes || '',
+    name: pet?.name || '',
+    breed: pet?.breed || '',
+    birth_date: pet?.birth_date || '',
+    photo_url: pet?.photo_url || '',
+    conditions: pet?.conditions || [],
+    nicknames: pet?.nicknames || [],
+    favorite_activities: pet?.favorite_activities || [],
+    medications: pet?.medications || '',
+    notes: pet?.notes || '',
   });
   const [newNickname, setNewNickname] = useState('');
   const [newActivity, setNewActivity] = useState('');
@@ -56,13 +57,13 @@ export default function EditCatSheet({ cat, open, onOpenChange, onSuccess }) {
 
   const handleSave = async () => {
     setSaving(true);
-    await base44.entities.Cat.update(cat.id, form);
+    await entities.Pet.update(pet.id, form);
     setSaving(false);
     onSuccess?.();
     onOpenChange(false);
   };
 
-  const conditions = getConditions(cat?.species);
+  const conditions = getConditions(pet?.species);
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>

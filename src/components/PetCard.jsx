@@ -1,6 +1,5 @@
 import { Link } from 'react-router-dom';
 import { getPetEmoji } from '@/lib/speciesConfig';
-import { Cat } from 'lucide-react';
 import { format } from 'date-fns';
 
 const conditionColors = {
@@ -13,19 +12,19 @@ const conditionColors = {
   Other: 'bg-gray-100 text-gray-800',
 };
 
-export default function CatCard({ cat, latestLog }) {
-  const isMemorial = cat.is_memorial;
+export default function PetCard({ pet, latestLog }) {
+  const isMemorial = pet.is_memorial;
   return (
-    <Link to={`/cat/${cat.id}`} className="block group active:scale-[0.97] transition-transform">
+    <Link to={`/pet/${pet.id}`} className="block group active:scale-[0.97] transition-transform">
       <div className="bg-card rounded-2xl border border-border overflow-hidden shadow-sm transition-all duration-200 hover:shadow-lg hover:-translate-y-1 hover:border-primary/30 active:shadow-none">
         {/* Photo area */}
         <div className={`relative aspect-[3/4] overflow-hidden ${isMemorial ? 'bg-gradient-to-br from-purple-100 to-purple-50' : 'bg-gradient-to-br from-primary/10 to-accent/10'}`}>
-          {cat.photo_url ? (
-            <img src={cat.photo_url} alt={cat.name} className={`h-full w-full object-cover transition-transform duration-300 group-hover:scale-105 ${isMemorial ? 'grayscale' : ''}`} />
+          {pet.photo_url ? (
+            <img src={pet.photo_url} alt={pet.name} className={`h-full w-full object-cover transition-transform duration-300 group-hover:scale-105 ${isMemorial ? 'grayscale' : ''}`} />
           ) : (
             <div className="h-full w-full flex items-center justify-center">
               <div className="text-center">
-                <span className="text-6xl">{getPetEmoji(cat.species)}</span>
+                <span className="text-6xl">{getPetEmoji(pet.species)}</span>
               </div>
             </div>
           )}
@@ -35,16 +34,16 @@ export default function CatCard({ cat, latestLog }) {
             <div className="absolute top-2 right-2 bg-purple-600/80 text-white text-xs px-2 py-0.5 rounded-full backdrop-blur-sm">🌈</div>
           )}
           <div className="absolute bottom-0 inset-x-0 p-3">
-            <h3 className="font-serif text-xl text-white drop-shadow-sm">{cat.name}</h3>
-            {cat.breed && <p className="text-xs text-white/80">{cat.breed}</p>}
+            <h3 className="font-serif text-xl text-white drop-shadow-sm">{pet.name}</h3>
+            {pet.breed && <p className="text-xs text-white/80">{pet.breed}</p>}
           </div>
         </div>
 
         {/* Info area */}
         <div className="p-3 space-y-2">
-          {cat.conditions?.length > 0 && (
+          {pet.conditions?.length > 0 && (
             <div className="flex flex-wrap gap-1">
-              {cat.conditions.map(c => (
+              {pet.conditions.map(c => (
                 <span key={c} className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${conditionColors[c] || conditionColors.Other}`}>{c}</span>
               ))}
             </div>

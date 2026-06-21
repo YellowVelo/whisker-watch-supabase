@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { base44 } from '@/api/base44Client';
+import { entities } from '@/api/entities';
+import { supabase } from '@/api/supabaseClient';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,7 +15,7 @@ export default function InviteSitterDialog({ petSitId, open, onOpenChange }) {
 
   const load = async () => {
     if (!petSitId) return;
-    const data = await base44.entities.PetSitterAccess.filter({ pet_sit_id: petSitId });
+    const data = await entities.PetSitterAccess.filter({ pet_sit_id: petSitId });
     setAccesses(data);
     setLoaded(true);
   };
@@ -29,16 +30,24 @@ export default function InviteSitterDialog({ petSitId, open, onOpenChange }) {
     e.preventDefault();
     if (!email.trim() || !petSitId) return;
     setSaving(true);
-    const me = await base44.auth.me();
+    const { data: userData } = await supabase.auth.getUser();
+    const me = userData?.user;
     // Check if already invited
     const existing = accesses.find(a => a.sitter_email === email.trim().toLowerCase());
     if (!existing) {
-      await base44.entities.PetSitterAccess.create({
+      await entities.PetSitterAccess.create({
         pet_sit_id: petSitId,
         owner_id: me.id,
         sitter_email: email.trim().toLowerCase(),
       });
-      try { await base44.users.inviteUser(email.trim().toLowerCase(), 'user'); } catch (_) {}
+      // NOTE (Phase D — not yet built): Base44's `users.inviteUser()` sent
+      // an actual invite email and registered the sitter as a user of
+      // this app. Supabase has no direct equivalent. The access record
+      // above is created so the sitter WILL see shared pets once they
+      // sign up/log in with this email (see Home.jsx's sitter-access
+      // lookup), but right now nobody is notified automatically. A
+      // Supabase Edge Function (or simple transactional email call)
+      // is needed here to actually email the sitter an invite link.
     }
     setEmail('');
     setSaving(false);
@@ -46,7 +55,7 @@ export default function InviteSitterDialog({ petSitId, open, onOpenChange }) {
   };
 
   const handleRemove = async (id) => {
-    await base44.entities.PetSitterAccess.delete(id);
+    await entities.PetSitterAccess.delete(id);
     load();
   };
 

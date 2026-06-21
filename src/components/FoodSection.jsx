@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { base44 } from '@/api/base44Client';
+import { entities } from '@/api/entities';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -10,7 +10,7 @@ import { format, parseISO } from 'date-fns';
 import SmartSelect from './SmartSelect';
 
 const today = () => new Date().toISOString().split('T')[0];
-const emptyFood = (catId) => ({ cat_id: catId, name: '', brand: '', food_type: '', prescription: false, start_date: today(), end_date: '', active: true, notes: '' });
+const emptyFood = (petId) => ({ pet_id: petId, name: '', brand: '', food_type: '', prescription: false, start_date: today(), end_date: '', active: true, notes: '' });
 
 const typeColors = {
   'Wet food': 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
@@ -22,24 +22,24 @@ const typeColors = {
   Other: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300',
 };
 
-export default function FoodSection({ catId }) {
+export default function FoodSection({ petId }) {
   const [foods, setFoods] = useState([]);
   const [showDialog, setShowDialog] = useState(false);
   const [editing, setEditing] = useState(null);
-  const [form, setForm] = useState(emptyFood(catId));
+  const [form, setForm] = useState(emptyFood(petId));
   const [saving, setSaving] = useState(false);
   const [showInactive, setShowInactive] = useState(false);
 
   const load = async () => {
-    const data = await base44.entities.CatFood.filter({ cat_id: catId }, '-start_date');
+    const data = await entities.PetFood.filter({ pet_id: petId }, '-start_date');
     setFoods(data);
   };
 
-  useEffect(() => { load(); }, [catId]);
+  useEffect(() => { load(); }, [petId]);
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
-  const openAdd = () => { setForm(emptyFood(catId)); setEditing(null); setShowDialog(true); };
+  const openAdd = () => { setForm(emptyFood(petId)); setEditing(null); setShowDialog(true); };
   const openEdit = (food) => { setForm({ ...food }); setEditing(food.id); setShowDialog(true); };
 
   const handleSubmit = async (e) => {
@@ -47,20 +47,20 @@ export default function FoodSection({ catId }) {
     setSaving(true);
     const data = { ...form };
     if (!data.end_date) delete data.end_date;
-    if (editing) await base44.entities.CatFood.update(editing, data);
-    else await base44.entities.CatFood.create(data);
+    if (editing) await entities.PetFood.update(editing, data);
+    else await entities.PetFood.create(data);
     setSaving(false);
     setShowDialog(false);
     load();
   };
 
   const deleteFood = async (id) => {
-    await base44.entities.CatFood.delete(id);
+    await entities.PetFood.delete(id);
     load();
   };
 
   const toggleActive = async (food) => {
-    await base44.entities.CatFood.update(food.id, { active: !food.active });
+    await entities.PetFood.update(food.id, { active: !food.active });
     load();
   };
 

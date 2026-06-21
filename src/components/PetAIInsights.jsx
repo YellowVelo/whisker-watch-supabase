@@ -3,7 +3,7 @@ import { base44 } from '@/api/base44Client';
 import { Sparkles, RefreshCw, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
-export default function PetAIInsights({ cat, logs, medications, bloodwork }) {
+export default function PetAIInsights({ pet, logs, medications, bloodwork }) {
   const [insights, setInsights] = useState(null);
   const [loading, setLoading] = useState(false);
   const [generated, setGenerated] = useState(false);
@@ -15,15 +15,15 @@ export default function PetAIInsights({ cat, logs, medications, bloodwork }) {
     ).join('\n');
 
     const activeMeds = medications?.filter(m => m.active).map(m => `${m.name} ${m.dosage || ''} ${m.frequency || ''}`).join(', ') || 'None';
-    const conditions = cat.conditions?.join(', ') || 'None noted';
-    const species = cat.species || 'Cat';
-    const age = cat.birth_date ? Math.floor((new Date() - new Date(cat.birth_date)) / (365.25 * 24 * 60 * 60 * 1000)) : null;
+    const conditions = pet.conditions?.join(', ') || 'None noted';
+    const species = pet.species || 'Cat';
+    const age = pet.birth_date ? Math.floor((new Date() - new Date(pet.birth_date)) / (365.25 * 24 * 60 * 60 * 1000)) : null;
 
     return `
-Pet Name: ${cat.name}
+Pet Name: ${pet.name}
 Species: ${species}
 ${age ? `Age: ${age} years` : ''}
-Breed: ${cat.breed || 'Unknown'}
+Breed: ${pet.breed || 'Unknown'}
 Known Conditions: ${conditions}
 Active Medications: ${activeMeds}
 
@@ -87,10 +87,10 @@ Respond in JSON with this structure:
           </div>
           <p className="text-sm font-medium mb-1">AI Health Insights</p>
           <p className="text-xs text-muted-foreground mb-4 max-w-xs mx-auto">
-            Get a veterinary perspective on {cat.name}'s recent health trends and patterns.
+            Get a veterinary perspective on {pet.name}'s recent health trends and patterns.
           </p>
           <Button onClick={generateInsights} className="gap-2">
-            <Sparkles className="h-4 w-4" /> Analyze {cat.name}'s Records
+            <Sparkles className="h-4 w-4" /> Analyze {pet.name}'s Records
           </Button>
         </div>
       )}
@@ -98,7 +98,7 @@ Respond in JSON with this structure:
       {loading && (
         <div className="text-center py-10">
           <div className="w-8 h-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin mx-auto mb-3" />
-          <p className="text-sm text-muted-foreground">Reviewing {cat.name}'s health records…</p>
+          <p className="text-sm text-muted-foreground">Reviewing {pet.name}'s health records…</p>
         </div>
       )}
 

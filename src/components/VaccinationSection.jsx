@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { base44 } from '@/api/base44Client';
+import { base44 } from '@/api/base44Client'; // still used below for UploadFile/InvokeLLM (Phase B/C)
+import { entities } from '@/api/entities';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -19,7 +20,7 @@ function getReminderStatus(next_due_date) {
   return { label: `Due ${format(parseISO(next_due_date), 'MMM d, yyyy')}`, color: 'bg-green-100 text-green-700 border-green-200' };
 }
 
-export default function VaccinationSection({ catId, species }) {
+export default function VaccinationSection({ petId, species }) {
   const [vaccines, setVaccines] = useState([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -30,12 +31,12 @@ export default function VaccinationSection({ catId, species }) {
 
   const load = async () => {
     setLoading(true);
-    const data = await base44.entities.Vaccination.filter({ cat_id: catId }, '-date_given');
+    const data = await entities.Vaccination.filter({ pet_id: petId }, '-date_given');
     setVaccines(data);
     setLoading(false);
   };
 
-  useEffect(() => { load(); }, [catId]);
+  useEffect(() => { load(); }, [petId]);
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
@@ -48,18 +49,18 @@ export default function VaccinationSection({ catId, species }) {
 
   const handleSave = async () => {
     setSaving(true);
-    const data = { cat_id: catId, ...form };
+    const data = { pet_id: petId, ...form };
     if (!data.date_given) delete data.date_given;
     if (!data.next_due_date) delete data.next_due_date;
-    if (editing) await base44.entities.Vaccination.update(editing.id, data);
-    else await base44.entities.Vaccination.create(data);
+    if (editing) await entities.Vaccination.update(editing.id, data);
+    else await entities.Vaccination.create(data);
     setSaving(false);
     setDialogOpen(false);
     load();
   };
 
   const handleDelete = async (id) => {
-    await base44.entities.Vaccination.delete(id);
+    await entities.Vaccination.delete(id);
     load();
   };
 
@@ -107,9 +108,9 @@ export default function VaccinationSection({ catId, species }) {
         );
 
         if (existing) {
-          await base44.entities.Vaccination.update(existing.id, clean);
+          await entities.Vaccination.update(existing.id, clean);
         } else {
-          await base44.entities.Vaccination.create({ cat_id: catId, ...clean });
+          await entities.Vaccination.create({ pet_id: petId, ...clean });
         }
       }));
 

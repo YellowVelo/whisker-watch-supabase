@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { base44 } from '@/api/base44Client';
+import { entities } from '@/api/entities';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, Printer } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
@@ -8,8 +8,8 @@ import { format, parseISO } from 'date-fns';
 const qualityColor = { Normal: '#16a34a', Soft: '#ca8a04', Loose: '#ea580c', Watery: '#dc2626', Bloody: '#991b1b', Constipated: '#d97706', None: '#6b7280' };
 
 export default function VetExport() {
-  const { catId } = useParams();
-  const [cat, setCat] = useState(null);
+  const { petId } = useParams();
+  const [pet, setPet] = useState(null);
   const [logs, setLogs] = useState([]);
   const [meds, setMeds] = useState([]);
   const [foods, setFoods] = useState([]);
@@ -17,18 +17,18 @@ export default function VetExport() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!catId || catId === ':catId') return;
+    if (!petId || petId === ':petId') return;
     Promise.all([
-      base44.entities.Cat.get(catId),
-      base44.entities.SymptomLog.filter({ cat_id: catId }, '-date', 200),
-      base44.entities.Medication.filter({ cat_id: catId }, '-start_date'),
-      base44.entities.FoodLog.filter({ cat_id: catId }, '-date', 100),
-      base44.entities.Vaccination.filter({ cat_id: catId }, '-date_given'),
-    ]).then(([c, l, m, f, v]) => { setCat(c); setLogs(l); setMeds(m); setFoods(f); setVaccinations(v); setLoading(false); });
-  }, [catId]);
+      entities.Pet.get(petId),
+      entities.SymptomLog.filter({ pet_id: petId }, '-date', 200),
+      entities.Medication.filter({ pet_id: petId }, '-start_date'),
+      entities.FoodLog.filter({ pet_id: petId }, '-date', 100),
+      entities.Vaccination.filter({ pet_id: petId }, '-date_given'),
+    ]).then(([c, l, m, f, v]) => { setPet(c); setLogs(l); setMeds(m); setFoods(f); setVaccinations(v); setLoading(false); });
+  }, [petId]);
 
   if (loading) return <div className="fixed inset-0 flex items-center justify-center"><div className="w-8 h-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin" /></div>;
-  if (!cat) return <div className="text-center py-20"><p className="text-muted-foreground">Cat not found.</p></div>;
+  if (!pet) return <div className="text-center py-20"><p className="text-muted-foreground">Pet not found.</p></div>;
 
   const sortedLogs = [...logs].sort((a, b) => b.date.localeCompare(a.date));
   const activeMeds = meds.filter(m => m.active);
@@ -44,7 +44,7 @@ export default function VetExport() {
     <div className="min-h-screen bg-background">
       {/* Print toolbar - hidden when printing */}
       <div className="no-print border-b border-border bg-card/50 px-4 py-3 flex items-center justify-between sticky top-0 z-10">
-        <Link to={`/cat/${catId}`} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
+        <Link to={`/pet/${petId}`} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
           <ArrowLeft className="h-4 w-4" /> Back
         </Link>
         <Button size="sm" onClick={() => window.print()}>
@@ -58,19 +58,19 @@ export default function VetExport() {
         <div className="mb-6 pb-4 border-b-2 border-foreground">
           <div className="flex items-start justify-between">
             <div>
-              <h1 className="font-serif text-3xl font-bold">{cat.name}</h1>
-              {cat.breed && <p className="text-muted-foreground">{cat.breed}</p>}
-              {cat.birth_date && <p className="text-sm text-muted-foreground">Born: {format(parseISO(cat.birth_date), 'MMMM d, yyyy')}</p>}
+              <h1 className="font-serif text-3xl font-bold">{pet.name}</h1>
+              {pet.breed && <p className="text-muted-foreground">{pet.breed}</p>}
+              {pet.birth_date && <p className="text-sm text-muted-foreground">Born: {format(parseISO(pet.birth_date), 'MMMM d, yyyy')}</p>}
             </div>
             <div className="text-right text-sm text-muted-foreground">
               <p>Generated: {format(new Date(), 'MMMM d, yyyy')}</p>
               <p>Records: {logs.length} symptom logs</p>
             </div>
           </div>
-          {cat.conditions?.length > 0 && (
+          {pet.conditions?.length > 0 && (
             <div className="mt-3 flex gap-2 flex-wrap">
               <span className="text-sm font-semibold">Conditions:</span>
-              {cat.conditions.map(c => <span key={c} className="text-sm bg-secondary px-2 py-0.5 rounded">{c}</span>)}
+              {pet.conditions.map(c => <span key={c} className="text-sm bg-secondary px-2 py-0.5 rounded">{c}</span>)}
             </div>
           )}
         </div>

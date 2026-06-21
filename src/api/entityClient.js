@@ -21,19 +21,18 @@ import { supabase } from './supabaseClient';
  * the app (base44.entities.X.method(...)) so existing components
  * don't need to change — only the import does.
  *
- * COLUMN TRANSLATION: the existing app code still reads/writes
- * "cat_id" and "cat_ids" (and "catIds" in JS-object form) since the
- * Cat -> Pet rename hasn't been done in the frontend yet. The actual
- * Postgres columns are named pet_id / pet_ids. translateKeys() below
- * converts old field names to new ones so nothing breaks before the
- * full rename pass happens. Once that rename pass is done, this
- * translation map can be deleted.
+ * COLUMN TRANSLATION: kept as a safety net during the Cat -> Pet
+ * rename. The app now uses pet_id/pet_ids natively, but this alias
+ * map stays as a harmless fallback in case any old cat_id reference
+ * was missed. Safe to delete once confirmed unnecessary.
  */
 const FIELD_ALIASES = {
   cat_id: 'pet_id',
   cat_ids: 'pet_ids',
   catId: 'pet_id',
   catIds: 'pet_ids',
+  created_date: 'created_at', // Base44 used created_date; our schema uses created_at
+  updated_date: 'updated_at',
 };
 
 function toDbKeys(obj) {

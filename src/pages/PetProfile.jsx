@@ -1,12 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { base44 } from '@/api/base44Client';
+import { entities } from '@/api/entities';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ArrowLeft, Plus, FileText, X, Rainbow } from 'lucide-react';
 import { getPetEmoji } from '@/lib/speciesConfig';
 import SymptomLogForm from '../components/SymptomLogForm';
-import EditCatSheet from '../components/EditCatSheet';
+import EditPetSheet from '../components/EditPetSheet';
 import MemorialDialog from '../components/MemorialDialog';
 import SymptomTrends from '../components/SymptomTrends';
 import LogHistory from '../components/LogHistory';
@@ -29,9 +29,9 @@ const conditionColors = {
   Other: 'bg-gray-100 text-gray-800',
 };
 
-export default function CatProfile() {
-  const { catId } = useParams();
-  const [cat, setCat] = useState(null);
+export default function PetProfile() {
+  const { petId } = useParams();
+  const [pet, setPet] = useState(null);
   const [logs, setLogs] = useState([]);
   const [medications, setMedications] = useState([]);
   const [bloodwork, setBloodwork] = useState([]);
@@ -40,24 +40,24 @@ export default function CatProfile() {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [memorialOpen, setMemorialOpen] = useState(false);
-  const isMemorial = cat?.is_memorial;
+  const isMemorial = pet?.is_memorial;
 
   const loadData = useCallback(async () => {
     setLoading(true);
-    const [catData, logData, medData, bwData] = await Promise.all([
-      base44.entities.Cat.get(catId),
-      base44.entities.SymptomLog.filter({ cat_id: catId }, '-date', 200),
-      base44.entities.Medication.filter({ cat_id: catId }, '-start_date', 50),
-      base44.entities.Bloodwork.filter({ cat_id: catId }, '-date', 20),
+    const [petData, logData, medData, bwData] = await Promise.all([
+      entities.Pet.get(petId),
+      entities.SymptomLog.filter({ pet_id: petId }, '-date', 200),
+      entities.Medication.filter({ pet_id: petId }, '-start_date', 50),
+      entities.Bloodwork.filter({ pet_id: petId }, '-date', 20),
     ]);
-    setCat(catData);
+    setPet(petData);
     setLogs(logData);
     setMedications(medData);
     setBloodwork(bwData);
     setLoading(false);
-  }, [catId]);
+  }, [petId]);
 
-  useEffect(() => { if (catId && catId !== ':catId') loadData(); }, [catId, loadData]);
+  useEffect(() => { if (petId && petId !== ':petId') loadData(); }, [petId, loadData]);
 
   const { isPulling, pullDistance, isRefreshing } = usePullToRefresh(loadData);
 
@@ -69,10 +69,10 @@ export default function CatProfile() {
     );
   }
 
-  if (!cat) {
+  if (!pet) {
     return (
       <div className="text-center py-20">
-        <p className="text-muted-foreground">Cat not found.</p>
+        <p className="text-muted-foreground">Pet not found.</p>
         <Link to="/" className="text-primary underline text-sm mt-2 block">Go back</Link>
       </div>
     );
@@ -84,13 +84,13 @@ export default function CatProfile() {
       <PullToRefreshIndicator pullDistance={pullDistance} isRefreshing={isRefreshing} />
       {/* Hero header */}
       <header className="relative overflow-hidden" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
-        {cat.photo_url && (
+        {pet.photo_url && (
           <div className="absolute inset-0">
-            <img src={cat.photo_url} alt={cat.name} className="w-full h-full object-cover" />
+            <img src={pet.photo_url} alt={pet.name} className="w-full h-full object-cover" />
             <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-black/20 to-black/60" />
           </div>
         )}
-        {!cat.photo_url && (
+        {!pet.photo_url && (
           <div className="absolute inset-0 bg-gradient-to-br from-primary/20 via-accent/10 to-secondary" />
         )}
         <div className="relative px-4 py-4 flex items-start justify-between">
@@ -99,22 +99,22 @@ export default function CatProfile() {
           </Link>
         </div>
         <div className="relative px-5 pt-2 pb-6">
-          {!cat.photo_url && (
+          {!pet.photo_url && (
             <div className="h-20 w-20 rounded-full bg-primary/20 flex items-center justify-center mb-3 border-2 border-primary/30">
-              <span className="text-4xl">{getPetEmoji(cat.species)}</span>
+              <span className="text-4xl">{getPetEmoji(pet.species)}</span>
             </div>
           )}
-          <h1 className={`font-serif text-4xl ${cat.photo_url ? 'text-white drop-shadow' : 'text-foreground'}`}>{cat.name}</h1>
-          {cat.breed && <p className={`text-sm mt-0.5 ${cat.photo_url ? 'text-white/80' : 'text-muted-foreground'}`}>{cat.breed}</p>}
-          {cat.nicknames?.length > 0 && (
-            <p className={`text-xs mt-0.5 italic ${cat.photo_url ? 'text-white/70' : 'text-muted-foreground'}`}>
-              also known as {cat.nicknames.join(', ')}
+          <h1 className={`font-serif text-4xl ${pet.photo_url ? 'text-white drop-shadow' : 'text-foreground'}`}>{pet.name}</h1>
+          {pet.breed && <p className={`text-sm mt-0.5 ${pet.photo_url ? 'text-white/80' : 'text-muted-foreground'}`}>{pet.breed}</p>}
+          {pet.nicknames?.length > 0 && (
+            <p className={`text-xs mt-0.5 italic ${pet.photo_url ? 'text-white/70' : 'text-muted-foreground'}`}>
+              also known as {pet.nicknames.join(', ')}
             </p>
           )}
           <div className="flex flex-wrap gap-1.5 mt-2">
-            {cat.conditions?.map(c => (
+            {pet.conditions?.map(c => (
               <span key={c} className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                cat.photo_url ? 'bg-white/20 text-white backdrop-blur-sm' : (conditionColors[c] || conditionColors.Other)
+                pet.photo_url ? 'bg-white/20 text-white backdrop-blur-sm' : (conditionColors[c] || conditionColors.Other)
               }`}>{c}</span>
             ))}
           </div>
@@ -123,13 +123,13 @@ export default function CatProfile() {
             <button onClick={() => setEditOpen(true)} className="inline-flex items-center gap-1.5 text-xs text-white/90 bg-black/20 backdrop-blur-sm hover:bg-black/30 border border-white/20 rounded-full px-3 py-1.5 transition-colors">
               ✏️ Edit
             </button>
-            <Link to={`/cat/${catId}/export`} className="inline-flex items-center gap-1.5 text-xs text-white/90 bg-black/20 backdrop-blur-sm hover:bg-black/30 border border-white/20 rounded-full px-3 py-1.5 transition-colors">
+            <Link to={`/pet/${petId}/export`} className="inline-flex items-center gap-1.5 text-xs text-white/90 bg-black/20 backdrop-blur-sm hover:bg-black/30 border border-white/20 rounded-full px-3 py-1.5 transition-colors">
               <FileText className="h-3.5 w-3.5" /> Vet Report
             </Link>
-            <ExportCalendarButton catId={catId} catName={cat.name} iconOnly />
+            <ExportCalendarButton petId={petId} petName={pet.name} iconOnly />
 
 
-            {!cat.is_memorial && (
+            {!pet.is_memorial && (
               <button
                 onClick={() => setSheetOpen(true)}
                 className="inline-flex items-center gap-1.5 text-xs text-white bg-primary/80 backdrop-blur-sm hover:bg-primary border border-primary/40 rounded-full px-3 py-1.5 transition-colors">
@@ -141,11 +141,11 @@ export default function CatProfile() {
       </header>
 
       <main className="max-w-2xl mx-auto px-4 py-5">
-        {cat.favorite_activities?.length > 0 && (
+        {pet.favorite_activities?.length > 0 && (
           <div className="mb-4 p-3.5 bg-card rounded-2xl border border-border">
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Favorite Activities</p>
             <div className="flex flex-wrap gap-1.5">
-              {cat.favorite_activities.map(a => (
+              {pet.favorite_activities.map(a => (
                 <span key={a} className="text-xs bg-primary/10 text-primary px-2.5 py-1 rounded-full">{a}</span>
               ))}
             </div>
@@ -180,27 +180,27 @@ export default function CatProfile() {
           </TabsContent>
           <TabsContent value="medications" className="mt-0">
             <div className="bg-card rounded-2xl border border-border p-4 shadow-sm">
-              <MedicationSection catId={catId} />
+              <MedicationSection petId={petId} />
             </div>
           </TabsContent>
           <TabsContent value="food" className="mt-0">
             <div className="bg-card rounded-2xl border border-border p-4 shadow-sm">
-              <FoodSection catId={catId} />
+              <FoodSection petId={petId} />
             </div>
           </TabsContent>
           <TabsContent value="bloodwork" className="mt-0">
             <div className="bg-card rounded-2xl border border-border p-4 shadow-sm">
-              <BloodworkSection catId={catId} />
+              <BloodworkSection petId={petId} />
             </div>
           </TabsContent>
           <TabsContent value="vaccines" className="mt-0">
             <div className="bg-card rounded-2xl border border-border p-4 shadow-sm">
-              <VaccinationSection catId={catId} species={cat?.species} />
+              <VaccinationSection petId={petId} species={pet?.species} />
             </div>
           </TabsContent>
           <TabsContent value="petsit" className="mt-0">
             <div className="bg-card rounded-2xl border border-border p-4 shadow-sm">
-              <PetSittingSection catId={catId} />
+              <PetSittingSection petId={petId} />
             </div>
           </TabsContent>
           <TabsContent value="ai" className="mt-0">
@@ -220,14 +220,14 @@ export default function CatProfile() {
                 >💬 Ask a Question</button>
               </div>
               {aiTab === 'insights'
-                ? <PetAIInsights cat={cat} logs={logs} medications={medications} bloodwork={bloodwork} />
-                : <PetAIChat cat={cat} medications={medications} />
+                ? <PetAIInsights pet={pet} logs={logs} medications={medications} bloodwork={bloodwork} />
+                : <PetAIChat pet={pet} medications={medications} />
               }
             </div>
           </TabsContent>
         </Tabs>
 
-        {!cat.is_memorial && (
+        {!pet.is_memorial && (
           <div className="mt-8 pt-6 border-t border-border/50">
             <button
               onClick={() => setMemorialOpen(true)}
@@ -242,12 +242,12 @@ export default function CatProfile() {
           </div>
         )}
 
-        {cat.is_memorial && (
+        {pet.is_memorial && (
           <div className="mt-8 pt-6 border-t border-border/50">
             <div className="px-4 py-4 bg-purple-50 border border-purple-200 rounded-xl text-center">
               <p className="text-2xl mb-1">🌈</p>
               <p className="text-sm font-medium text-purple-800">Forever in our hearts</p>
-              {cat.memorial_date && <p className="text-xs text-purple-600 mt-0.5">{new Date(cat.memorial_date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</p>}
+              {pet.memorial_date && <p className="text-xs text-purple-600 mt-0.5">{new Date(pet.memorial_date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</p>}
             </div>
           </div>
         )}
@@ -263,7 +263,7 @@ export default function CatProfile() {
           </div>
           <div className="px-4 py-5 pb-32">
             <SymptomLogForm
-              catId={catId}
+              petId={petId}
               onOptimisticUpdate={(tempLog) => {
                 setLogs(prev => [tempLog, ...prev]);
                 setSheetOpen(false);
@@ -273,8 +273,8 @@ export default function CatProfile() {
           </div>
         </div>
       )}
-      <EditCatSheet cat={cat} open={editOpen} onOpenChange={setEditOpen} onSuccess={loadData} />
-      <MemorialDialog cat={cat} open={memorialOpen} onOpenChange={setMemorialOpen} onSuccess={loadData} />
+      <EditPetSheet pet={pet} open={editOpen} onOpenChange={setEditOpen} onSuccess={loadData} />
+      <MemorialDialog pet={pet} open={memorialOpen} onOpenChange={setMemorialOpen} onSuccess={loadData} />
     </div>
     </PageTransition>
   );
