@@ -1,0 +1,110 @@
+{
+  "name": "Medication",
+  "type": "object",
+  "properties": {
+    "cat_id": {
+      "type": "string",
+      "title": "Cat"
+    },
+    "name": {
+      "type": "string",
+      "title": "Medication Name"
+    },
+    "med_type": {
+      "type": "string",
+      "title": "Medication Type",
+      "enum": [
+        "General",
+        "Flea & Tick",
+        "Heartworm"
+      ],
+      "default": "General"
+    },
+    "prescribed": {
+      "type": "boolean",
+      "title": "Prescribed",
+      "default": false
+    },
+    "dosage": {
+      "type": "string",
+      "title": "Dosage"
+    },
+    "frequency": {
+      "type": "string",
+      "title": "Frequency",
+      "enum": [
+        "Once daily",
+        "Twice daily",
+        "Every other day",
+        "Weekly",
+        "Monthly",
+        "Every 3 months",
+        "As needed",
+        "Other"
+      ]
+    },
+    "timing_instructions": {
+      "type": "string",
+      "title": "Timing Instructions"
+    },
+    "route": {
+      "type": "string",
+      "title": "Route",
+      "enum": [
+        "Oral",
+        "Subcutaneous injection",
+        "Transdermal",
+        "Topical",
+        "Eye drops",
+        "Ear drops",
+        "Other"
+      ]
+    },
+    "start_date": {
+      "type": "string",
+      "format": "date",
+      "title": "Start Date"
+    },
+    "next_due_date": {
+      "type": "string",
+      "format": "date",
+      "title": "Next Due Date"
+    },
+    "end_date": {
+      "type": "string",
+      "format": "date",
+      "title": "Stop Date"
+    },
+    "prescribing_vet": {
+      "type": "string",
+      "title": "Prescribing Vet"
+    },
+    "active": {
+      "type": "boolean",
+      "title": "Currently Active",
+      "default": true
+    },
+    "notes": {
+      "type": "string",
+      "title": "Notes"
+    }
+  },
+  "required": [
+    "cat_id",
+    "name"
+  ],
+  "rls": {
+    "create": {
+      "created_by": "{{user.email}}"
+    },
+    "read": {
+      "created_by": "{{user.email}}"
+    },
+    "update": {
+      "created_by": "{{user.email}}"
+    },
+    "delete": {
+      "created_by": "{{user.email}}"
+    }
+  }
+}

@@ -1,0 +1,54 @@
+{
+  "name": "Vaccination",
+  "type": "object",
+  "properties": {
+    "cat_id": {
+      "type": "string",
+      "title": "Pet"
+    },
+    "vaccine_name": {
+      "type": "string",
+      "title": "Vaccine Name"
+    },
+    "date_given": {
+      "type": "string",
+      "format": "date",
+      "title": "Date Given"
+    },
+    "next_due_date": {
+      "type": "string",
+      "format": "date",
+      "title": "Next Due Date"
+    },
+    "administered_by": {
+      "type": "string",
+      "title": "Administered By"
+    },
+    "lot_number": {
+      "type": "string",
+      "title": "Lot Number"
+    },
+    "notes": {
+      "type": "string",
+      "title": "Notes"
+    }
+  },
+  "required": [
+    "cat_id",
+    "vaccine_name"
+  ],
+  "rls": {
+    "create": {
+      "created_by": "{{user.email}}"
+    },
+    "read": {
+      "created_by": "{{user.email}}"
+    },
+    "update": {
+      "created_by": "{{user.email}}"
+    },
+    "delete": {
+      "created_by": "{{user.email}}"
+    }
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "name": "PetSitterAccess",
+  "type": "object",
+  "properties": {
+    "pet_sit_id": {
+      "type": "string",
+      "title": "Pet Sit"
+    },
+    "owner_id": {
+      "type": "string",
+      "title": "Owner User ID"
+    },
+    "sitter_email": {
+      "type": "string",
+      "title": "Sitter Email"
+    },
+    "sitter_user_id": {
+      "type": "string",
+      "title": "Sitter User ID"
+    }
+  },
+  "required": [
+    "pet_sit_id",
+    "owner_id",
+    "sitter_email"
+  ]
+}

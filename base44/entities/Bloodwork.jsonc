@@ -1,0 +1,129 @@
+{
+  "name": "Bloodwork",
+  "type": "object",
+  "properties": {
+    "cat_id": {
+      "type": "string",
+      "title": "Cat"
+    },
+    "date": {
+      "type": "string",
+      "format": "date",
+      "title": "Date"
+    },
+    "lab_name": {
+      "type": "string",
+      "title": "Lab Name"
+    },
+    "vet_name": {
+      "type": "string",
+      "title": "Ordering Vet"
+    },
+    "bun": {
+      "type": "number",
+      "title": "BUN (mg/dL)"
+    },
+    "creatinine": {
+      "type": "number",
+      "title": "Creatinine (mg/dL)"
+    },
+    "sdma": {
+      "type": "number",
+      "title": "SDMA (\u00b5g/dL)"
+    },
+    "phosphorus": {
+      "type": "number",
+      "title": "Phosphorus (mg/dL)"
+    },
+    "potassium": {
+      "type": "number",
+      "title": "Potassium (mEq/L)"
+    },
+    "sodium": {
+      "type": "number",
+      "title": "Sodium (mEq/L)"
+    },
+    "calcium": {
+      "type": "number",
+      "title": "Calcium (mg/dL)"
+    },
+    "hematocrit": {
+      "type": "number",
+      "title": "Hematocrit (%)"
+    },
+    "hemoglobin": {
+      "type": "number",
+      "title": "Hemoglobin (g/dL)"
+    },
+    "total_protein": {
+      "type": "number",
+      "title": "Total Protein (g/dL)"
+    },
+    "albumin": {
+      "type": "number",
+      "title": "Albumin (g/dL)"
+    },
+    "alt": {
+      "type": "number",
+      "title": "ALT (U/L)"
+    },
+    "ast": {
+      "type": "number",
+      "title": "AST (U/L)"
+    },
+    "alkaline_phosphatase": {
+      "type": "number",
+      "title": "Alkaline Phosphatase (U/L)"
+    },
+    "total_bilirubin": {
+      "type": "number",
+      "title": "Total Bilirubin (mg/dL)"
+    },
+    "glucose": {
+      "type": "number",
+      "title": "Glucose (mg/dL)"
+    },
+    "t4": {
+      "type": "number",
+      "title": "T4 Thyroid (\u00b5g/dL)"
+    },
+    "urine_specific_gravity": {
+      "type": "string",
+      "title": "Urine Specific Gravity"
+    },
+    "urine_protein": {
+      "type": "string",
+      "title": "Urine Protein",
+      "enum": [
+        "Negative",
+        "Trace",
+        "1+",
+        "2+",
+        "3+",
+        "4+"
+      ]
+    },
+    "notes": {
+      "type": "string",
+      "title": "Notes"
+    }
+  },
+  "required": [
+    "cat_id",
+    "date"
+  ],
+  "rls": {
+    "create": {
+      "created_by": "{{user.email}}"
+    },
+    "read": {
+      "created_by": "{{user.email}}"
+    },
+    "update": {
+      "created_by": "{{user.email}}"
+    },
+    "delete": {
+      "created_by": "{{user.email}}"
+    }
+  }
+}

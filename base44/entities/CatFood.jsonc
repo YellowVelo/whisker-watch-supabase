@@ -1,0 +1,73 @@
+{
+  "name": "CatFood",
+  "type": "object",
+  "properties": {
+    "cat_id": {
+      "type": "string",
+      "title": "Cat"
+    },
+    "name": {
+      "type": "string",
+      "title": "Food Name"
+    },
+    "brand": {
+      "type": "string",
+      "title": "Brand"
+    },
+    "food_type": {
+      "type": "string",
+      "title": "Type",
+      "enum": [
+        "Wet food",
+        "Dry food",
+        "Raw",
+        "Freeze-dried",
+        "Treat",
+        "Supplement",
+        "Other"
+      ]
+    },
+    "prescription": {
+      "type": "boolean",
+      "title": "Prescription Diet",
+      "default": false
+    },
+    "start_date": {
+      "type": "string",
+      "format": "date",
+      "title": "Start Date"
+    },
+    "end_date": {
+      "type": "string",
+      "format": "date",
+      "title": "Stop Date"
+    },
+    "active": {
+      "type": "boolean",
+      "title": "Currently Feeding",
+      "default": true
+    },
+    "notes": {
+      "type": "string",
+      "title": "Notes"
+    }
+  },
+  "required": [
+    "cat_id",
+    "name"
+  ],
+  "rls": {
+    "create": {
+      "created_by": "{{user.email}}"
+    },
+    "read": {
+      "created_by": "{{user.email}}"
+    },
+    "update": {
+      "created_by": "{{user.email}}"
+    },
+    "delete": {
+      "created_by": "{{user.email}}"
+    }
+  }
+}

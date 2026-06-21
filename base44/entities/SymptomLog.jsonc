@@ -1,0 +1,124 @@
+{
+  "name": "SymptomLog",
+  "type": "object",
+  "properties": {
+    "cat_id": {
+      "type": "string",
+      "title": "Cat"
+    },
+    "date": {
+      "type": "string",
+      "format": "date",
+      "title": "Date"
+    },
+    "appetite": {
+      "type": "string",
+      "title": "Appetite",
+      "enum": [
+        "Ate all",
+        "Ate most",
+        "Ate some",
+        "Ate very little",
+        "Refused"
+      ]
+    },
+    "vomiting": {
+      "type": "integer",
+      "title": "Vomiting Episodes",
+      "minimum": 0
+    },
+    "stool_quality": {
+      "type": "string",
+      "title": "Stool Quality",
+      "enum": [
+        "Normal",
+        "Soft",
+        "Loose",
+        "Watery",
+        "Bloody",
+        "Constipated",
+        "None"
+      ]
+    },
+    "energy_level": {
+      "type": "string",
+      "title": "Energy Level",
+      "enum": [
+        "Normal",
+        "Playful",
+        "Calm",
+        "Lethargic",
+        "Hiding"
+      ]
+    },
+    "water_intake": {
+      "type": "string",
+      "title": "Water Intake",
+      "enum": [
+        "Normal",
+        "Increased",
+        "Decreased",
+        "Not observed"
+      ]
+    },
+    "weight_grams": {
+      "type": "number",
+      "title": "Weight (g)"
+    },
+    "urination": {
+      "type": "string",
+      "title": "Urination",
+      "enum": [
+        "None",
+        "Reduced",
+        "Normal",
+        "Frequent",
+        "Excessive"
+      ]
+    },
+    "nausea_symptoms": {
+      "type": "array",
+      "title": "Nausea Symptoms",
+      "items": {
+        "type": "string",
+        "enum": [
+          "Lip licking",
+          "Burping",
+          "Drooling",
+          "Ate non-food items",
+          "Hunched posture"
+        ]
+      }
+    },
+    "pain_signs": {
+      "type": "boolean",
+      "title": "Signs of Pain"
+    },
+    "medication_given": {
+      "type": "boolean",
+      "title": "Medication Given"
+    },
+    "notes": {
+      "type": "string",
+      "title": "Notes"
+    }
+  },
+  "required": [
+    "cat_id",
+    "date"
+  ],
+  "rls": {
+    "create": {
+      "created_by": "{{user.email}}"
+    },
+    "read": {
+      "created_by": "{{user.email}}"
+    },
+    "update": {
+      "created_by": "{{user.email}}"
+    },
+    "delete": {
+      "created_by": "{{user.email}}"
+    }
+  }
+}

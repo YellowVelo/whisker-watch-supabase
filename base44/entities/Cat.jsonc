@@ -1,0 +1,88 @@
+{
+  "name": "Cat",
+  "type": "object",
+  "properties": {
+    "species": {
+      "type": "string",
+      "title": "Species",
+      "enum": [
+        "Cat",
+        "Dog"
+      ],
+      "default": "Cat"
+    },
+    "name": {
+      "type": "string",
+      "title": "Name"
+    },
+    "photo_url": {
+      "type": "string",
+      "title": "Photo URL"
+    },
+    "breed": {
+      "type": "string",
+      "title": "Breed"
+    },
+    "birth_date": {
+      "type": "string",
+      "format": "date",
+      "title": "Birth Date"
+    },
+    "conditions": {
+      "type": "array",
+      "title": "Conditions",
+      "items": {
+        "type": "string"
+      }
+    },
+    "nicknames": {
+      "type": "array",
+      "title": "Nicknames",
+      "items": {
+        "type": "string"
+      }
+    },
+    "favorite_activities": {
+      "type": "array",
+      "title": "Favorite Activities",
+      "items": {
+        "type": "string"
+      }
+    },
+    "medications": {
+      "type": "string",
+      "title": "Medications"
+    },
+    "notes": {
+      "type": "string",
+      "title": "Notes"
+    },
+    "is_memorial": {
+      "type": "boolean",
+      "title": "Memorial",
+      "default": false
+    },
+    "memorial_date": {
+      "type": "string",
+      "format": "date",
+      "title": "Date Crossed Rainbow Bridge"
+    }
+  },
+  "required": [
+    "name"
+  ],
+  "rls": {
+    "create": {
+      "created_by": "{{user.email}}"
+    },
+    "read": {
+      "created_by": "{{user.email}}"
+    },
+    "update": {
+      "created_by": "{{user.email}}"
+    },
+    "delete": {
+      "created_by": "{{user.email}}"
+    }
+  }
+}

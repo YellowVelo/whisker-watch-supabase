@@ -1,0 +1,81 @@
+{
+  "name": "FoodLog",
+  "type": "object",
+  "properties": {
+    "cat_id": {
+      "type": "string",
+      "title": "Cat"
+    },
+    "date": {
+      "type": "string",
+      "format": "date",
+      "title": "Date"
+    },
+    "food_name": {
+      "type": "string",
+      "title": "Food Name"
+    },
+    "brand": {
+      "type": "string",
+      "title": "Brand"
+    },
+    "food_type": {
+      "type": "string",
+      "title": "Type",
+      "enum": [
+        "Wet food",
+        "Dry food",
+        "Raw",
+        "Freeze-dried",
+        "Treat",
+        "Supplement",
+        "Other"
+      ]
+    },
+    "amount_eaten": {
+      "type": "string",
+      "title": "Amount Eaten",
+      "enum": [
+        "All",
+        "Most",
+        "Half",
+        "Very little",
+        "None"
+      ]
+    },
+    "reaction": {
+      "type": "string",
+      "title": "Reaction",
+      "enum": [
+        "Good",
+        "Neutral",
+        "Vomited after",
+        "Refused after",
+        "Diarrhea after"
+      ]
+    },
+    "notes": {
+      "type": "string",
+      "title": "Notes"
+    }
+  },
+  "required": [
+    "cat_id",
+    "date",
+    "food_name"
+  ],
+  "rls": {
+    "create": {
+      "created_by": "{{user.email}}"
+    },
+    "read": {
+      "created_by": "{{user.email}}"
+    },
+    "update": {
+      "created_by": "{{user.email}}"
+    },
+    "delete": {
+      "created_by": "{{user.email}}"
+    }
+  }
+}

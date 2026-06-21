@@ -1,0 +1,105 @@
+{
+  "name": "PetSitLog",
+  "type": "object",
+  "properties": {
+    "pet_sit_id": {
+      "type": "string",
+      "title": "Pet Sit"
+    },
+    "cat_id": {
+      "type": "string",
+      "title": "Cat"
+    },
+    "date": {
+      "type": "string",
+      "format": "date",
+      "title": "Date"
+    },
+    "am_food_given": {
+      "type": "boolean",
+      "title": "AM Food Given"
+    },
+    "pm_food_given": {
+      "type": "boolean",
+      "title": "PM Food Given"
+    },
+    "am_meds_given": {
+      "type": "boolean",
+      "title": "AM Meds Given"
+    },
+    "pm_meds_given": {
+      "type": "boolean",
+      "title": "PM Meds Given"
+    },
+    "completed_tasks": {
+      "type": "array",
+      "title": "Completed Custom Tasks",
+      "items": {
+        "type": "string"
+      }
+    },
+    "vomiting": {
+      "type": "integer",
+      "title": "Vomiting Episodes",
+      "minimum": 0
+    },
+    "appetite": {
+      "type": "string",
+      "title": "Appetite",
+      "enum": [
+        "Ate all",
+        "Ate most",
+        "Ate some",
+        "Ate very little",
+        "Refused"
+      ]
+    },
+    "energy_level": {
+      "type": "string",
+      "title": "Energy Level",
+      "enum": [
+        "Normal",
+        "Playful",
+        "Calm",
+        "Lethargic",
+        "Hiding"
+      ]
+    },
+    "stool_quality": {
+      "type": "string",
+      "title": "Stool Quality",
+      "enum": [
+        "Normal",
+        "Soft",
+        "Loose",
+        "Watery",
+        "Bloody",
+        "Constipated",
+        "None"
+      ]
+    },
+    "notes": {
+      "type": "string",
+      "title": "Notes"
+    }
+  },
+  "required": [
+    "pet_sit_id",
+    "cat_id",
+    "date"
+  ],
+  "rls": {
+    "create": {
+      "created_by": "{{user.email}}"
+    },
+    "read": {
+      "created_by": "{{user.email}}"
+    },
+    "update": {
+      "created_by": "{{user.email}}"
+    },
+    "delete": {
+      "created_by": "{{user.email}}"
+    }
+  }
+}

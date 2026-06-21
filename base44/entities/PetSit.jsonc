@@ -1,0 +1,64 @@
+{
+  "name": "PetSit",
+  "type": "object",
+  "properties": {
+    "cat_ids": {
+      "type": "array",
+      "title": "Pets",
+      "items": {
+        "type": "string"
+      }
+    },
+    "sitter_name": {
+      "type": "string",
+      "title": "Sitter Name"
+    },
+    "start_date": {
+      "type": "string",
+      "format": "date",
+      "title": "Start Date"
+    },
+    "end_date": {
+      "type": "string",
+      "format": "date",
+      "title": "End Date"
+    },
+    "additional_instructions": {
+      "type": "string",
+      "title": "Additional Instructions"
+    },
+    "emergency_contact": {
+      "type": "string",
+      "title": "Emergency Contact"
+    },
+    "vet_contact": {
+      "type": "string",
+      "title": "Vet Contact"
+    },
+    "custom_tasks": {
+      "type": "array",
+      "title": "Custom Daily Tasks",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "start_date",
+    "end_date"
+  ],
+  "rls": {
+    "create": {
+      "created_by": "{{user.email}}"
+    },
+    "read": {
+      "created_by": "{{user.email}}"
+    },
+    "update": {
+      "created_by": "{{user.email}}"
+    },
+    "delete": {
+      "created_by": "{{user.email}}"
+    }
+  }
+}
