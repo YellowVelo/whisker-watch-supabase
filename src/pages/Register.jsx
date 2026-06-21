@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { base44 } from '@/api/base44Client';
+import { supabase } from '@/api/supabaseClient';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -20,21 +20,37 @@ export default function Register() {
     e.preventDefault();
     if (password !== confirm) { setError('Passwords do not match'); return; }
     setLoading(true); setError('');
-    try {
-      await base44.auth.register({ email, password });
-      setStep('otp');
-    } catch (err) { setError(err.message || 'Registration failed'); }
+    const { error } = await supabase.auth.signUp({ email, password });
+    if (error) {
+      setError(error.message || 'Registration failed');
+      setLoading(false);
+      return;
+    }
+    setStep('otp');
     setLoading(false);
   };
 
   const handleVerify = async (e) => {
     e.preventDefault();
     setLoading(true); setError('');
-    try {
-      const res = await base44.auth.verifyOtp({ email, otpCode: otp });
-      base44.auth.setToken(res.access_token);
-      window.location.href = '/';
-    } catch (err) { setError(err.message || 'Verification failed'); setLoading(false); }
+    const { error } = await supabase.auth.verifyOtp({ email, token: otp, type: 'signup' });
+    if (error) {
+      setError(error.message || 'Verification failed');
+      setLoading(false);
+      return;
+    }
+    window.location.href = '/';
+  };
+
+  const handleResendOtp = async () => {
+    await supabase.auth.resend({ type: 'signup', email });
+  };
+
+  const handleGoogleLogin = async () => {
+    await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: window.location.origin },
+    });
   };
 
   return (
@@ -53,7 +69,7 @@ export default function Register() {
             <div className="space-y-1.5"><Label>Password</Label><Input type="password" value={password} onChange={e => setPassword(e.target.value)} required /></div>
             <div className="space-y-1.5"><Label>Confirm Password</Label><Input type="password" value={confirm} onChange={e => setConfirm(e.target.value)} required /></div>
             <Button type="submit" className="w-full" disabled={loading}>{loading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Sign Up'}</Button>
-            <Button type="button" variant="outline" className="w-full" onClick={() => base44.auth.loginWithProvider('google', '/')}>Continue with Google</Button>
+            <Button type="button" variant="outline" className="w-full" onClick={handleGoogleLogin}>Continue with Google</Button>
           </form>
         ) : (
           <form onSubmit={handleVerify} className="space-y-4">
@@ -65,7 +81,7 @@ export default function Register() {
               </InputOTP>
             </div>
             <Button type="submit" className="w-full" disabled={loading}>{loading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Verify'}</Button>
-            <Button type="button" variant="ghost" className="w-full text-sm" onClick={() => base44.auth.resendOtp(email)}>Resend Code</Button>
+            <Button type="button" variant="ghost" className="w-full text-sm" onClick={handleResendOtp}>Resend Code</Button>
           </form>
         )}
         <p className="text-center text-sm text-muted-foreground">Already have an account? <Link to="/login" className="text-primary hover:underline">Sign in</Link></p>
