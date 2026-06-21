@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
-import { base44 } from '@/api/base44Client'; // still used below for UploadFile/InvokeLLM/ExtractDataFromUploadedFile (Phase B/C)
+import { base44 } from '@/api/base44Client'; // still used below for UploadFile (Phase B)
 import { entities } from '@/api/entities';
+import { invokeAI } from '@/api/aiClient';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -70,49 +71,29 @@ export default function BloodworkSection({ petId }) {
     setImporting(true);
     try {
       const { file_url } = await base44.integrations.Core.UploadFile({ file });
-      const isImage = file.type.startsWith('image/');
 
-      let extracted = null;
-
-      if (isImage) {
-        // Use vision AI for photos
-        const fieldList = FIELDS.map(f => `${f.key} (${f.label}, ${f.unit})`).join(', ');
-        const result = await base44.integrations.Core.InvokeLLM({
-          prompt: `You are analyzing a veterinary bloodwork report image. Extract all available values from this lab report. Return only a JSON object with these possible fields: date (YYYY-MM-DD), lab_name, vet_name, urine_specific_gravity, urine_protein (one of: Negative, Trace, 1+, 2+, 3+, 4+), notes, and numeric fields: ${fieldList}. Only include fields that are clearly visible in the image. Omit fields not present.`,
-          file_urls: [file_url],
-          response_json_schema: {
-            type: 'object',
-            properties: Object.fromEntries([
-              ...FIELDS.map(f => [f.key, { type: 'number' }]),
-              ['date', { type: 'string' }],
-              ['lab_name', { type: 'string' }],
-              ['vet_name', { type: 'string' }],
-              ['urine_specific_gravity', { type: 'string' }],
-              ['urine_protein', { type: 'string' }],
-              ['notes', { type: 'string' }],
-            ])
-          }
-        });
-        extracted = result;
-      } else {
-        // Use document extraction for PDF/CSV
-        const schema = {
+      // The Edge Function detects whether file_url points to an image
+      // or a PDF (via content-type) and builds the right Claude input
+      // block either way, so the same call works for both — no need
+      // for a separate code path like Base44's ExtractDataFromUploadedFile.
+      const fieldList = FIELDS.map(f => `${f.key} (${f.label}, ${f.unit})`).join(', ');
+      const result = await invokeAI({
+        prompt: `You are analyzing a veterinary bloodwork report (image or PDF). Extract all available values from this lab report. Return only a JSON object with these possible fields: date (YYYY-MM-DD), lab_name, vet_name, urine_specific_gravity, urine_protein (one of: Negative, Trace, 1+, 2+, 3+, 4+), notes, and numeric fields: ${fieldList}. Only include fields that are clearly visible in the document. Omit fields not present.`,
+        file_urls: [file_url],
+        response_json_schema: {
           type: 'object',
           properties: Object.fromEntries([
-            ...FIELDS.map(f => [f.key, { type: 'number', description: `${f.label} in ${f.unit}` }]),
-            ['date', { type: 'string', description: 'Date of the bloodwork in YYYY-MM-DD format' }],
+            ...FIELDS.map(f => [f.key, { type: 'number' }]),
+            ['date', { type: 'string' }],
             ['lab_name', { type: 'string' }],
             ['vet_name', { type: 'string' }],
             ['urine_specific_gravity', { type: 'string' }],
-            ['urine_protein', { type: 'string', enum: ['Negative', 'Trace', '1+', '2+', '3+', '4+'] }],
+            ['urine_protein', { type: 'string' }],
             ['notes', { type: 'string' }],
           ])
-        };
-        const result = await base44.integrations.Core.ExtractDataFromUploadedFile({ file_url, json_schema: schema });
-        if (result.status === 'success') {
-          extracted = Array.isArray(result.output) ? result.output[0] : result.output;
         }
-      }
+      });
+      const extracted = result;
 
       if (extracted) {
         const f = { ...EMPTY_FORM };

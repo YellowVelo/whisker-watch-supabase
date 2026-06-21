@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { base44 } from '@/api/base44Client';
+import { invokeAI } from '@/api/aiClient';
 import { Send } from 'lucide-react';
 
 const SYSTEM_CONTEXT = (pet, medications) => {
@@ -32,7 +32,7 @@ export default function PetAIChat({ pet, medications }) {
     // Build conversation history for context
     const history = [...messages, userMsg].map(m => `${m.role === 'user' ? 'Owner' : 'Vet Assistant'}: ${m.content}`).join('\n\n');
 
-    const reply = await base44.integrations.Core.InvokeLLM({
+    const reply = await invokeAI({
       prompt: `${SYSTEM_CONTEXT(pet, medications)}\n\nConversation so far:\n${history}\n\nOwner's latest question: ${text}\n\nVet Assistant:`,
     });
 

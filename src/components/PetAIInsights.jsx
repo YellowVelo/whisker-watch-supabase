@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { base44 } from '@/api/base44Client';
+import { invokeAI } from '@/api/aiClient';
 import { Sparkles, RefreshCw, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -36,7 +36,7 @@ ${logSummary || 'No recent logs.'}
     setLoading(true);
     setGenerated(true);
     const context = buildContext();
-    const result = await base44.integrations.Core.InvokeLLM({
+    const result = await invokeAI({
       prompt: `You are a compassionate, experienced veterinarian with 20+ years of clinical practice reviewing a pet's health record. Analyze the following medical data and provide 3-5 specific, actionable observations or concerns. Focus on trends, anomalies, or patterns in the data. Be concise and practical. Always end with a brief reminder to consult a licensed veterinarian for diagnosis or treatment decisions.
 
 ${context}

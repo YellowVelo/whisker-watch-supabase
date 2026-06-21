@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
-import { base44 } from '@/api/base44Client'; // still used below for UploadFile/InvokeLLM (Phase B/C)
+import { base44 } from '@/api/base44Client'; // still used below for UploadFile (Phase B)
 import { entities } from '@/api/entities';
+import { invokeAI } from '@/api/aiClient';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -70,7 +71,7 @@ export default function VaccinationSection({ petId, species }) {
     setScanning(true);
     try {
       const { file_url } = await base44.integrations.Core.UploadFile({ file });
-      const result = await base44.integrations.Core.InvokeLLM({
+      const result = await invokeAI({
         prompt: `You are analyzing a veterinary vaccine record document. Extract ALL vaccinations visible on this document. For each vaccine return: vaccine_name, date_given (YYYY-MM-DD), next_due_date (YYYY-MM-DD), administered_by (vet/clinic name), lot_number, notes. Only include fields clearly visible.`,
         file_urls: [file_url],
         response_json_schema: {
