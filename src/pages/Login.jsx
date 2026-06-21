@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { base44 } from '@/api/base44Client';
+import { supabase } from '@/api/supabaseClient';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -16,13 +16,20 @@ export default function Login() {
     e.preventDefault();
     setLoading(true);
     setError('');
-    try {
-      await base44.auth.loginViaEmailPassword(email, password);
-      window.location.href = '/';
-    } catch (err) {
-      setError(err.message || 'Login failed');
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) {
+      setError(error.message || 'Login failed');
       setLoading(false);
+      return;
     }
+    window.location.href = '/';
+  };
+
+  const handleGoogleLogin = async () => {
+    await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: window.location.origin },
+    });
   };
 
   return (
@@ -33,7 +40,7 @@ export default function Login() {
             <Heart className="h-6 w-6 text-primary" />
           </div>
           <h1 className="font-serif text-2xl">Whisker Watch</h1>
-          <p className="text-sm text-muted-foreground mt-1">Sign in to track your cat's health</p>
+          <p className="text-sm text-muted-foreground mt-1">Sign in to track your pet's health</p>
         </div>
         <form onSubmit={handleSubmit} className="space-y-4">
           {error && <p className="text-sm text-destructive text-center">{error}</p>}
@@ -48,7 +55,7 @@ export default function Login() {
           <Button type="submit" className="w-full" disabled={loading}>
             {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Sign In'}
           </Button>
-          <Button type="button" variant="outline" className="w-full" onClick={() => base44.auth.loginWithProvider('google', '/')}>
+          <Button type="button" variant="outline" className="w-full" onClick={handleGoogleLogin}>
             Continue with Google
           </Button>
         </form>
