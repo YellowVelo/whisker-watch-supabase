@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Textarea } from '@/components/ui/textarea';
-import { base44 } from '@/api/base44Client'; // still used below for UploadFile (Phase B)
+import { uploadFile } from '@/api/storageClient';
 import { entities } from '@/api/entities';
 import { Loader2, Camera } from 'lucide-react';
 import { getConditions, getPetEmoji, getPetLabel } from '@/lib/speciesConfig';
@@ -29,7 +29,7 @@ export default function AddPetDialog({ open, onOpenChange, onSuccess }) {
     const file = e.target.files?.[0];
     if (!file) return;
     setUploading(true);
-    const { file_url } = await base44.integrations.Core.UploadFile({ file });
+    const { file_url } = await uploadFile({ file });
     set('photo_url', file_url);
     setUploading(false);
   };

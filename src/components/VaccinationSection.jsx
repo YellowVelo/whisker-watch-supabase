@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { base44 } from '@/api/base44Client'; // still used below for UploadFile (Phase B)
+import { uploadFile } from '@/api/storageClient';
 import { entities } from '@/api/entities';
 import { invokeAI } from '@/api/aiClient';
 import { Button } from '@/components/ui/button';
@@ -70,7 +70,7 @@ export default function VaccinationSection({ petId, species }) {
     if (!file) return;
     setScanning(true);
     try {
-      const { file_url } = await base44.integrations.Core.UploadFile({ file });
+      const { file_url } = await uploadFile({ file });
       const result = await invokeAI({
         prompt: `You are analyzing a veterinary vaccine record document. Extract ALL vaccinations visible on this document. For each vaccine return: vaccine_name, date_given (YYYY-MM-DD), next_due_date (YYYY-MM-DD), administered_by (vet/clinic name), lot_number, notes. Only include fields clearly visible.`,
         file_urls: [file_url],

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { base44 } from '@/api/base44Client'; // still used below for UploadFile (Phase B)
+import { uploadFile } from '@/api/storageClient';
 import { entities } from '@/api/entities';
 import { invokeAI } from '@/api/aiClient';
 import { Button } from '@/components/ui/button';
@@ -70,7 +70,7 @@ export default function BloodworkSection({ petId }) {
     if (!file) return;
     setImporting(true);
     try {
-      const { file_url } = await base44.integrations.Core.UploadFile({ file });
+      const { file_url } = await uploadFile({ file });
 
       // The Edge Function detects whether file_url points to an image
       // or a PDF (via content-type) and builds the right Claude input
