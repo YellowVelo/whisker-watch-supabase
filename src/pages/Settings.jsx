@@ -4,11 +4,12 @@ import { entities } from '@/api/entities';
 import { supabase } from '@/api/supabaseClient';
 import { Button } from '@/components/ui/button';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
-import { Settings as SettingsIcon, Trash2, LogOut, Plus, Pencil, Moon, Sun, Monitor, Menu } from 'lucide-react';
+import { Settings as SettingsIcon, Trash2, LogOut, Plus, Pencil, Moon, Sun, Monitor, Menu, UserPlus } from 'lucide-react';
 import PageTransition from '../components/PageTransition';
 import AddPetDialog from '../components/AddPetDialog';
 import EditPetSheet from '../components/EditPetSheet';
 import CareMenu from '../components/CareMenu';
+import InviteCoOwnerDialog from '../components/InviteCoOwnerDialog';
 
 export default function Settings() {
   const [searchParams] = useSearchParams();
@@ -18,6 +19,7 @@ export default function Settings() {
   const [editPet, setEditPet] = useState(null);
   const [editOpen, setEditOpen] = useState(false);
   const [careOpen, setCareOpen] = useState(false);
+  const [coOwnerOpen, setCoOwnerOpen] = useState(false);
 
   useEffect(() => {
     if (!petId) { setEditPet(null); return; }
@@ -66,6 +68,12 @@ export default function Settings() {
           icon: Pencil,
           color: 'text-primary',
           action: () => setEditOpen(true),
+          destructive: false,
+        }, {
+          label: `Share ${editPet.name} with a Co-Owner`,
+          icon: UserPlus,
+          color: 'text-primary',
+          action: () => setCoOwnerOpen(true),
           destructive: false,
         }] : []),
         {
@@ -187,6 +195,7 @@ export default function Settings() {
 
         <AddPetDialog open={showAdd} onOpenChange={setShowAdd} onSuccess={() => setShowAdd(false)} />
         {editPet && <EditPetSheet pet={editPet} open={editOpen} onOpenChange={setEditOpen} onSuccess={reloadEditPet} />}
+        {editPet && <InviteCoOwnerDialog petId={petId} petName={editPet.name} open={coOwnerOpen} onOpenChange={setCoOwnerOpen} />}
       </div>
     </PageTransition>
   );

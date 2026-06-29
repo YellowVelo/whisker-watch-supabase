@@ -14,5 +14,6 @@ export const entities = {
   PetSit: createEntityClient('pet_sits'),
   PetSitLog: createEntityClient('pet_sit_logs'),
   PetSitterAccess: createEntityClient('pet_sitter_access'),
+  PetCoOwner: createEntityClient('pet_co_owners'),
 };
 
