@@ -2,13 +2,15 @@ import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { entities } from '@/api/entities';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Printer } from 'lucide-react';
+import { ArrowLeft, Printer, Menu } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
+import CareMenu from '@/components/CareMenu';
 
 const qualityColor = { Normal: '#16a34a', Soft: '#ca8a04', Loose: '#ea580c', Watery: '#dc2626', Bloody: '#991b1b', Constipated: '#d97706', None: '#6b7280' };
 
 export default function VetExport() {
   const { petId } = useParams();
+  const [careOpen, setCareOpen] = useState(false);
   const [pet, setPet] = useState(null);
   const [logs, setLogs] = useState([]);
   const [meds, setMeds] = useState([]);
@@ -47,10 +49,16 @@ export default function VetExport() {
         <Link to={`/pet/${petId}`} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
           <ArrowLeft className="h-4 w-4" /> Back
         </Link>
-        <Button size="sm" onClick={() => window.print()}>
-          <Printer className="h-4 w-4 mr-1.5" /> Print / Save PDF
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button size="sm" onClick={() => window.print()}>
+            <Printer className="h-4 w-4 mr-1.5" /> Print / Save PDF
+          </Button>
+          <button onClick={() => setCareOpen(true)} className="h-9 w-9 rounded-full bg-secondary flex items-center justify-center">
+            <Menu className="h-5 w-5" />
+          </button>
+        </div>
       </div>
+      <CareMenu open={careOpen} onOpenChange={setCareOpen} petId={petId} petName={pet?.name} />
 
       {/* Printable report */}
       <div className="max-w-3xl mx-auto px-6 py-8 print:px-8 print:py-6">

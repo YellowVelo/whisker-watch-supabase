@@ -4,10 +4,11 @@ import { entities } from '@/api/entities';
 import { supabase } from '@/api/supabaseClient';
 import { Button } from '@/components/ui/button';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
-import { Settings as SettingsIcon, Trash2, LogOut, Plus, Pencil, Moon, Sun, Monitor } from 'lucide-react';
+import { Settings as SettingsIcon, Trash2, LogOut, Plus, Pencil, Moon, Sun, Monitor, Menu } from 'lucide-react';
 import PageTransition from '../components/PageTransition';
 import AddPetDialog from '../components/AddPetDialog';
 import EditPetSheet from '../components/EditPetSheet';
+import CareMenu from '../components/CareMenu';
 
 export default function Settings() {
   const [searchParams] = useSearchParams();
@@ -16,6 +17,7 @@ export default function Settings() {
   const [showAdd, setShowAdd] = useState(false);
   const [editPet, setEditPet] = useState(null);
   const [editOpen, setEditOpen] = useState(false);
+  const [careOpen, setCareOpen] = useState(false);
 
   useEffect(() => {
     if (!petId) { setEditPet(null); return; }
@@ -108,10 +110,16 @@ export default function Settings() {
           className="border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-10"
           style={{ paddingTop: 'env(safe-area-inset-top)' }}
         >
-          <div className="max-w-2xl mx-auto px-4 py-4">
-            <h1 className="font-serif text-xl">Settings</h1>
+          <div className="max-w-2xl mx-auto px-4 py-4 flex items-center gap-3">
+            <h1 className="font-serif text-xl flex-1">Settings</h1>
+            {petId && (
+              <button onClick={() => setCareOpen(true)} className="h-9 w-9 rounded-full bg-secondary flex items-center justify-center">
+                <Menu className="h-5 w-5" />
+              </button>
+            )}
           </div>
         </header>
+        <CareMenu open={careOpen} onOpenChange={setCareOpen} petId={petId} petName={editPet?.name} />
 
         <main className="max-w-2xl mx-auto px-4 py-6 space-y-6">
           {rows.map(({ section, items }) => (

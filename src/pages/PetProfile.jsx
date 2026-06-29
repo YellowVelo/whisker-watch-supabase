@@ -277,7 +277,7 @@ export default function PetProfile() {
             <Link to="/" className="w-9 h-9 rounded-full flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.35)', backdropFilter: 'blur(8px)' }}>
               <ArrowLeft className="h-5 w-5 text-white" />
             </Link>
-            <p className="text-sm font-semibold text-white/80 tracking-wide">{pet.name}</p>
+
             <div className="flex items-center gap-2">
               <button onClick={() => setCareOpen(true)} className="w-9 h-9 rounded-full flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.35)', backdropFilter: 'blur(8px)' }}>
                 <Menu className="h-5 w-5 text-white" />

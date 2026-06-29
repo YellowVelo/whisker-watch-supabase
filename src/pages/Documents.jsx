@@ -1,10 +1,13 @@
+import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Folder } from 'lucide-react';
+import { ArrowLeft, Folder, Menu } from 'lucide-react';
 import PageTransition from '@/components/PageTransition';
+import CareMenu from '@/components/CareMenu';
 
 export default function Documents() {
   const { petId } = useParams();
   const navigate = useNavigate();
+  const [careOpen, setCareOpen] = useState(false);
 
   return (
     <PageTransition>
@@ -17,9 +20,13 @@ export default function Documents() {
             <button onClick={() => navigate(-1)} className="h-9 w-9 rounded-full bg-secondary flex items-center justify-center">
               <ArrowLeft className="h-5 w-5" />
             </button>
-            <h1 className="font-serif text-2xl">Documents</h1>
+            <h1 className="font-serif text-2xl flex-1">Documents</h1>
+            <button onClick={() => setCareOpen(true)} className="h-9 w-9 rounded-full bg-secondary flex items-center justify-center">
+              <Menu className="h-5 w-5" />
+            </button>
           </div>
         </header>
+        <CareMenu open={careOpen} onOpenChange={setCareOpen} petId={petId} />
         <div className="max-w-2xl mx-auto px-4 py-10">
           <div className="text-center">
             <div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
