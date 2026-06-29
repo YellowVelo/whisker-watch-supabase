@@ -5,7 +5,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { UserPlus, Trash2, Mail } from 'lucide-react';
+import { UserPlus, Trash2, Mail, CheckCircle2 } from 'lucide-react';
 
 // Invite a co-owner (e.g. a spouse) to a pet. Unlike sitter access,
 // a co-owner gets full owner-level rights: editing, logging, and
@@ -16,6 +16,7 @@ export default function InviteCoOwnerDialog({ petId, petName, open, onOpenChange
   const [email, setEmail] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [successMsg, setSuccessMsg] = useState('');
   const [coOwners, setCoOwners] = useState([]);
   const [loaded, setLoaded] = useState(false);
 
@@ -28,7 +29,7 @@ export default function InviteCoOwnerDialog({ petId, petName, open, onOpenChange
 
   const handleOpenChange = (val) => {
     if (val && !loaded) load();
-    if (!val) { setEmail(''); setError(''); setLoaded(false); setCoOwners([]); }
+    if (!val) { setEmail(''); setError(''); setSuccessMsg(''); setLoaded(false); setCoOwners([]); }
     onOpenChange(val);
   };
 
@@ -37,6 +38,7 @@ export default function InviteCoOwnerDialog({ petId, petName, open, onOpenChange
     if (!email.trim() || !petId) return;
     setSaving(true);
     setError('');
+    setSuccessMsg('');
     const { data: userData } = await supabase.auth.getUser();
     const me = userData?.user;
     const cleanEmail = email.trim().toLowerCase();
@@ -58,11 +60,24 @@ export default function InviteCoOwnerDialog({ petId, petName, open, onOpenChange
       owner_id: me.id,
       co_owner_email: cleanEmail,
     });
-    // NOTE: same gap as InviteSitterDialog — this creates the access
-    // record so the invited person WILL see the shared pet once they
-    // sign up/log in with this email, but nobody is emailed
-    // automatically yet. Needs a Supabase Edge Function or
-    // transactional email integration to send a real invite.
+
+    // Send the invite email via the Edge Function.
+    const { data: sessionData } = await supabase.auth.getSession();
+    const token = sessionData?.session?.access_token;
+    const fnResp = await supabase.functions.invoke('invite-co-owner', {
+      body: { coOwnerEmail: cleanEmail, petName, petId },
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+
+    if (fnResp.error) {
+      // Access record is already saved; just warn rather than block.
+      console.error('invite-co-owner function error:', fnResp.error);
+      setSuccessMsg(`${cleanEmail} added as co-owner. Invite email could not be sent — they'll see ${petName || 'the pet'} on their next login.`);
+    } else if (fnResp.data?.sent === false) {
+      setSuccessMsg(`${cleanEmail} already has a Whisker Watch account and can now see ${petName || 'this pet'}.`);
+    } else {
+      setSuccessMsg(`Invite sent to ${cleanEmail}!`);
+    }
 
     setEmail('');
     setSaving(false);
@@ -98,6 +113,12 @@ export default function InviteCoOwnerDialog({ petId, petName, open, onOpenChange
           </Button>
         </form>
         {error && <p className="text-sm text-destructive">{error}</p>}
+        {successMsg && (
+          <div className="flex items-start gap-2 text-sm text-emerald-500">
+            <CheckCircle2 className="h-4 w-4 mt-0.5 shrink-0" />
+            <span>{successMsg}</span>
+          </div>
+        )}
 
         {loaded && coOwners.length > 0 && (
           <div className="mt-2 space-y-2">
