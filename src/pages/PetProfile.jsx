@@ -192,7 +192,7 @@ export default function PetProfile() {
       entities.SymptomLog.filter({ pet_id: petId }, '-date', 200),
       entities.Medication.filter({ pet_id: petId, active: true }, '-start_date', 50),
       entities.Bloodwork.filter({ pet_id: petId }, '-date', 3),
-      entities.Vaccination.filter({ pet_id: petId }, '-date', 20),
+      entities.Vaccination.filter({ pet_id: petId }, '-date_given', 20),
       entities.PetFood.filter({ pet_id: petId, active: true }),
     ]);
     const todayStr = new Date().toISOString().split('T')[0];
