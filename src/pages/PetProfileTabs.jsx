@@ -55,7 +55,7 @@ export default function PetProfileTabs() {
       entities.Medication.filter({ pet_id: petId }, '-start_date', 50),
       entities.Bloodwork.filter({ pet_id: petId }, '-date', 20),
     ]);
-    setCat(catData);
+    setPet(petData);
     setLogs(logData);
     setMedications(medData);
     setBloodwork(bwData);
@@ -106,7 +106,7 @@ export default function PetProfileTabs() {
             <button onClick={() => setCareOpen(true)} className="h-9 w-9 rounded-full bg-black/20 backdrop-blur-sm flex items-center justify-center text-white hover:bg-black/30 transition-colors">
               <Menu className="h-5 w-5" />
             </button>
-            <ExportCalendarButton petId={petId} catName={pet?.name} iconOnly />
+            <ExportCalendarButton petId={petId} petName={pet?.name} iconOnly />
           </div>
         </div>
         <div className="relative px-5 pt-2 pb-6">
@@ -258,7 +258,7 @@ export default function PetProfileTabs() {
         </div>
       )}
       <MemorialDialog pet={pet} open={memorialOpen} onOpenChange={setMemorialOpen} onSuccess={loadData} />
-      <CareMenu open={careOpen} onOpenChange={setCareOpen} petId={petId} catName={pet?.name} />
+      <CareMenu open={careOpen} onOpenChange={setCareOpen} petId={petId} petName={pet?.name} />
     </div>
     </PageTransition>
   );
