@@ -1,281 +1,546 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { entities } from '@/api/entities';
-import { Button } from '@/components/ui/button';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ArrowLeft, Plus, FileText, X, Rainbow } from 'lucide-react';
-import { getPetEmoji } from '@/lib/speciesConfig';
+import { ArrowLeft, Plus, X, ChevronRight, UtensilsCrossed, Zap, Heart, Scale, Upload, Menu, ClipboardList, Cat, Dog, Rainbow } from 'lucide-react';
+import CareMenu from '../components/CareMenu';
+import { format, parseISO, subDays } from 'date-fns';
+import { LineChart, Line, BarChart, Bar, XAxis, YAxis, ReferenceLine, Tooltip, ResponsiveContainer } from 'recharts';
 import SymptomLogForm from '../components/SymptomLogForm';
-import EditPetSheet from '../components/EditPetSheet';
-import MemorialDialog from '../components/MemorialDialog';
-import SymptomTrends from '../components/SymptomTrends';
-import LogHistory from '../components/LogHistory';
-import MedicationSection from '../components/MedicationSection';
-import FoodSection from '../components/FoodSection';
-import BloodworkSection from '../components/BloodworkSection';
-import PetSittingSection from '../components/PetSittingSection';
-import VaccinationSection from '../components/VaccinationSection';
-import PetAIInsights from '../components/PetAIInsights';
-import PetAIChat from '../components/PetAIChat';
-import ExportCalendarButton from '../components/ExportCalendarButton';
 import PageTransition from '../components/PageTransition';
 import usePullToRefresh from '../hooks/usePullToRefresh';
 import PullToRefreshIndicator from '../components/PullToRefreshIndicator';
 
-const conditionColors = {
-  IBD: 'bg-amber-100 text-amber-800', CKD: 'bg-blue-100 text-blue-800',
-  Diabetes: 'bg-purple-100 text-purple-800', Hyperthyroidism: 'bg-rose-100 text-rose-800',
-  Pancreatitis: 'bg-orange-100 text-orange-800', 'Liver Disease': 'bg-green-100 text-green-800',
-  Other: 'bg-gray-100 text-gray-800',
+// ── Status helpers ─────────────────────────────────────────
+const appetiteStatus = { 'Ate all': 'good', 'Ate most': 'good', 'Ate some': 'warn', 'Ate very little': 'warn', 'Refused': 'bad' };
+const energyStatus = { Playful: 'good', Normal: 'good', Calm: 'good', Lethargic: 'warn', Hiding: 'bad' };
+const appetiteNum = { 'Ate all': 4, 'Ate most': 3, 'Ate some': 2, 'Ate very little': 1, 'Refused': 0 };
+const energyNum = { Playful: 4, Normal: 3, Calm: 2, Lethargic: 1, Hiding: 0 };
+
+const STATUS_COLOR = { good: '#6EBBE7', warn: '#f59e0b', bad: '#ef4444' };
+const BADGE = {
+  good: 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/20',
+  warn: 'bg-amber-500/15 text-amber-400 border border-amber-500/20',
+  bad: 'bg-red-500/15 text-red-400 border border-red-500/20',
+  overdue: 'bg-red-500/15 text-red-400 border border-red-500/20',
+  soon: 'bg-amber-500/15 text-amber-400 border border-amber-500/20',
+  ok: 'bg-white/8 text-white/40 border border-white/10',
+  due: 'bg-orange-500/15 text-orange-400 border border-orange-500/20',
 };
 
+function getMedStatus(med) {
+  if (!med.next_due_date) return 'ok';
+  const diffDays = Math.ceil((parseISO(med.next_due_date) - new Date()) / 86400000);
+  if (diffDays <= 1) return 'due';
+  if (diffDays <= 3) return 'soon';
+  return 'ok';
+}
+
+function getVaxStatus(vax) {
+  if (!vax.next_due_date) return 'ok';
+  return parseISO(vax.next_due_date) < new Date() ? 'overdue' : 'ok';
+}
+
+function getBloodStatus(marker, value) {
+  const ranges = { creatinine: [0.6, 2.4], bun: [14, 36], sdma: [0, 14], phosphorus: [2.4, 8.2], potassium: [3.5, 5.8], hematocrit: [24, 45], alt: [12, 130], glucose: [70, 150], t4: [0.8, 4.7] };
+  const r = ranges[marker];
+  if (!r || value == null) return 'ok';
+  if (value < r[0] * 0.9 || value > r[1] * 1.2) return 'bad';
+  if (value < r[0] || value > r[1]) return 'warn';
+  return 'good';
+}
+
+// ── Oura-style score bubble ────────────────────────────────
+function ScoreBubble({ icon, score, label, status, onClick }) {
+  const color = STATUS_COLOR[status] || '#ffffff';
+  return (
+    <button
+      onClick={onClick}
+      className="flex flex-col items-center gap-1.5 active:opacity-70 transition-opacity flex-shrink-0"
+      style={{ minWidth: 72 }}
+    >
+      <div className="relative w-16 h-16 rounded-full flex items-center justify-center"
+        style={{ background: 'rgba(255,255,255,0.08)', border: `1.5px solid ${color}30` }}>
+        <svg className="absolute inset-0 w-full h-full -rotate-90" viewBox="0 0 64 64">
+          <circle cx="32" cy="32" r="28" fill="none" stroke={`${color}20`} strokeWidth="3" />
+          {score != null && (
+            <circle cx="32" cy="32" r="28" fill="none" stroke={color} strokeWidth="3"
+              strokeDasharray={`${(score / 4) * 175.9} 175.9`}
+              strokeLinecap="round" />
+          )}
+        </svg>
+        {icon}
+      </div>
+      <div className="text-center">
+        <p className="text-[15px] font-bold text-white leading-none">{score != null ? score : '—'}</p>
+        <p className="text-[10px] text-white/40 mt-0.5 tracking-wide">{label}</p>
+      </div>
+    </button>
+  );
+}
+
+// ── Oura-style chart card ──────────────────────────────────
+function OuraChartCard({ title, value, valueLabel, to, children }) {
+  const card = (
+    <div className="rounded-2xl overflow-hidden" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}>
+      <div className="px-5 pt-5 pb-2">
+        <div className="flex items-center justify-between">
+          <p className="text-xs font-semibold tracking-widest uppercase text-white/35">{title}</p>
+          {to && <ChevronRight className="h-4 w-4 text-white/25" />}
+        </div>
+        {value != null && (
+          <div className="flex items-end gap-1 mt-1">
+            <p className="text-4xl font-bold text-white leading-none">{value}</p>
+            {valueLabel && <p className="text-sm text-white/40 mb-1">{valueLabel}</p>}
+          </div>
+        )}
+      </div>
+      <div className="pb-2">{children}</div>
+    </div>
+  );
+  return to ? <Link to={to} className="block active:scale-[0.99] transition-transform">{card}</Link> : card;
+}
+
+// ── Quick log bottom sheet ─────────────────────────────────
+function QuickLogSheet({ type, petId, onClose, onSuccess }) {
+  const [val, setVal] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const today = format(new Date(), 'yyyy-MM-dd');
+
+  const save = async () => {
+    setSaving(true);
+    const existing = await entities.SymptomLog.filter({ pet_id: petId, date: today });
+    if (existing.length) {
+      await entities.SymptomLog.update(existing[0].id, { [type.field]: val });
+    } else {
+      await entities.SymptomLog.create({ pet_id: petId, date: today, [type.field]: val });
+    }
+    setSaving(false);
+    onSuccess();
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex flex-col justify-end" onClick={onClose}>
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
+      <div className="relative rounded-t-3xl px-5 pt-5 pb-10 shadow-2xl" style={{ background: 'rgba(18,20,32,0.98)', border: '1px solid rgba(255,255,255,0.08)' }} onClick={e => e.stopPropagation()}>
+        <div className="w-10 h-1 bg-white/20 rounded-full mx-auto mb-5" />
+        <h3 className="text-xl font-bold text-white mb-1">Log {type.label}</h3>
+        <p className="text-sm text-white/40 mb-5">Today · {format(new Date(), 'MMM d')}</p>
+        {type.options && (
+          <div className="grid grid-cols-3 gap-2 mb-5">
+            {type.options.map(opt => (
+              <button key={opt} onClick={() => setVal(opt)}
+                className={`rounded-2xl py-3 text-sm font-semibold transition-all ${val === opt ? 'text-background' : 'text-white/60 border border-white/12 hover:border-white/25'}`}
+                style={val === opt ? { background: '#6EBBE7', color: '#0D0F1A' } : { background: 'rgba(255,255,255,0.05)' }}
+              >{opt}</button>
+            ))}
+          </div>
+        )}
+        {type.isNumber && (
+          <div className="flex gap-3 mb-5 justify-center">
+            {[0,1,2,3,4,'5+'].map(n => (
+              <button key={n} onClick={() => setVal(n)}
+                className={`w-12 h-12 rounded-2xl text-lg font-bold transition-all ${val === n ? 'text-background' : 'text-white/60 border border-white/12'}`}
+style={val === n ? { background: '#6EBBE7', color: '#0D0F1A' } : { background: 'rgba(255,255,255,0.05)' }}
+              >{n}</button>
+            ))}
+          </div>
+        )}
+        {type.isWeight && (
+          <div className="mb-5">
+            <input type="number" step="0.1" placeholder="e.g. 4.2"
+              className="w-full rounded-2xl px-4 py-3 text-xl text-center font-bold text-white bg-white/8 focus:outline-none focus:ring-1 focus:ring-primary border border-white/10"
+              onChange={e => setVal(parseFloat(e.target.value) * 1000)}
+            />
+            <p className="text-xs text-center text-white/30 mt-2">kilograms</p>
+          </div>
+        )}
+        <button onClick={save} disabled={val == null || saving}
+          className="w-full text-base font-bold rounded-2xl h-14 disabled:opacity-30 transition-opacity"
+          style={{ background: '#6EBBE7', color: '#0D0F1A' }}
+        >{saving ? 'Saving…' : 'Save'}</button>
+      </div>
+    </div>
+  );
+}
+
+const QUICK_TYPES = {
+  appetite: { label: 'Appetite', field: 'appetite', options: ['Ate all','Ate most','Ate some','Ate very little','Refused'] },
+  energy:   { label: 'Energy',   field: 'energy_level', options: ['Playful','Normal','Calm','Lethargic','Hiding'] },
+  vomiting: { label: 'Vomiting', field: 'vomiting', isNumber: true },
+  weight:   { label: 'Weight',   field: 'weight_grams', isWeight: true },
+};
+
+// ── Main component ─────────────────────────────────────────
 export default function PetProfile() {
   const { petId } = useParams();
   const [pet, setPet] = useState(null);
   const [logs, setLogs] = useState([]);
   const [medications, setMedications] = useState([]);
   const [bloodwork, setBloodwork] = useState([]);
+  const [vaccinations, setVaccinations] = useState([]);
+  const [foods, setFoods] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [aiTab, setAiTab] = useState('insights');
-  const [sheetOpen, setSheetOpen] = useState(false);
-  const [editOpen, setEditOpen] = useState(false);
-  const [memorialOpen, setMemorialOpen] = useState(false);
-  const isMemorial = pet?.is_memorial;
+  const [logSheet, setLogSheet] = useState(null);
+  const [fullLogOpen, setFullLogOpen] = useState(false);
+  const [careOpen, setCareOpen] = useState(false);
 
   const loadData = useCallback(async () => {
     setLoading(true);
-    const [petData, logData, medData, bwData] = await Promise.all([
+    const [petData, logData, medData, bwData, vacData, foodData] = await Promise.all([
       entities.Pet.get(petId),
       entities.SymptomLog.filter({ pet_id: petId }, '-date', 200),
-      entities.Medication.filter({ pet_id: petId }, '-start_date', 50),
-      entities.Bloodwork.filter({ pet_id: petId }, '-date', 20),
+      entities.Medication.filter({ pet_id: petId, active: true }, '-start_date', 50),
+      entities.Bloodwork.filter({ pet_id: petId }, '-date', 3),
+      entities.Vaccination.filter({ pet_id: petId }, '-date', 20),
+      entities.PetFood.filter({ pet_id: petId, active: true }),
     ]);
-    setPet(petData);
-    setLogs(logData);
-    setMedications(medData);
-    setBloodwork(bwData);
+    const todayStr = new Date().toISOString().split('T')[0];
+    setPet(petData); setLogs(logData); setMedications(medData);
+    setBloodwork(bwData); setVaccinations(vacData);
+    setFoods(foodData.filter(f => f.active && (!f.end_date || f.end_date >= todayStr)));
     setLoading(false);
   }, [petId]);
 
-  useEffect(() => { if (petId && petId !== ':petId') loadData(); }, [petId, loadData]);
+  useEffect(() => { loadData(); }, [loadData]);
+  const { pullDistance, isRefreshing } = usePullToRefresh(loadData);
 
-  const { isPulling, pullDistance, isRefreshing } = usePullToRefresh(loadData);
+  if (loading) return (
+    <div className="fixed inset-0 flex items-center justify-center bg-background">
+      <div className="w-8 h-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
+    </div>
+  );
+  if (!pet) return null;
 
-  if (loading) {
-    return (
-      <div className="fixed inset-0 flex items-center justify-center">
-        <div className="w-8 h-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
-      </div>
-    );
-  }
+  const latestLog = logs[0];
+  const isMemorial = pet.is_memorial;
 
-  if (!pet) {
-    return (
-      <div className="text-center py-20">
-        <p className="text-muted-foreground">Pet not found.</p>
-        <Link to="/" className="text-primary underline text-sm mt-2 block">Go back</Link>
-      </div>
-    );
-  }
+  // Scores (0–4 mapped to 0–100)
+  const appetiteScore = latestLog?.appetite ? Math.round((appetiteNum[latestLog.appetite] / 4) * 100) : null;
+  const energyScore = latestLog?.energy_level ? Math.round((energyNum[latestLog.energy_level] / 4) * 100) : null;
+  const vomitScore = latestLog?.vomiting != null ? Math.max(0, 100 - latestLog.vomiting * 25) : null;
+  const weightVal = latestLog?.weight_grams ? (latestLog.weight_grams / 1000).toFixed(2) : null;
+
+  const scoreItems = [
+    { icon: <UtensilsCrossed className="h-5 w-5 text-white" />, score: appetiteScore, label: 'Appetite', status: latestLog?.appetite ? appetiteStatus[latestLog.appetite] : 'good', key: 'appetite' },
+    { icon: <Zap className="h-5 w-5 text-white" />, score: energyScore, label: 'Energy', status: latestLog?.energy_level ? energyStatus[latestLog.energy_level] : 'good', key: 'energy' },
+    { icon: <Heart className="h-5 w-5 text-white" />, score: vomitScore, label: 'Symptoms', status: latestLog?.vomiting > 1 ? 'bad' : latestLog?.vomiting > 0 ? 'warn' : 'good', key: 'vomiting' },
+    { icon: <Scale className="h-5 w-5 text-white" />, score: null, label: weightVal ? `${weightVal}kg` : 'Weight', status: 'good', key: 'weight' },
+  ];
+
+  // Chart data (last 30 days)
+  const chartData = [...logs]
+    .filter(l => parseISO(l.date) >= subDays(new Date(), 30))
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .map(l => ({
+      label: format(parseISO(l.date), 'M/d'),
+      appetite: appetiteNum[l.appetite] ?? null,
+      energy: energyNum[l.energy_level] ?? null,
+      vomiting: l.vomiting ?? 0,
+      weight: l.weight_grams ? parseFloat((l.weight_grams / 1000).toFixed(2)) : null,
+    }));
+  const hasChartData = chartData.length >= 2;
+  const hasWeight = chartData.some(d => d.weight != null);
+
+  // Latest bloodwork
+  const latestBW = bloodwork[0];
+  const bwFields = latestBW ? [
+    { label: 'Creatinine', key: 'creatinine', unit: 'mg/dL' },
+    { label: 'BUN', key: 'bun', unit: 'mg/dL' },
+    { label: 'SDMA', key: 'sdma', unit: 'µg/dL' },
+    { label: 'Hematocrit', key: 'hematocrit', unit: '%' },
+    { label: 'ALT', key: 'alt', unit: 'U/L' },
+    { label: 'Glucose', key: 'glucose', unit: 'mg/dL' },
+  ].filter(f => latestBW[f.key] != null) : [];
+
+  const chartTooltipStyle = { background: 'rgba(18,20,32,0.95)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10, fontSize: 11, color: '#fff' };
 
   return (
     <PageTransition>
-    <div className="min-h-screen pb-28">
-      <PullToRefreshIndicator pullDistance={pullDistance} isRefreshing={isRefreshing} />
-      {/* Hero header */}
-      <header className="relative overflow-hidden" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
-        {pet.photo_url && (
-          <div className="absolute inset-0">
-            <img src={pet.photo_url} alt={pet.name} className="w-full h-full object-cover" />
-            <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-black/20 to-black/60" />
-          </div>
-        )}
-        {!pet.photo_url && (
-          <div className="absolute inset-0 bg-gradient-to-br from-primary/20 via-accent/10 to-secondary" />
-        )}
-        <div className="relative px-4 py-4 flex items-start justify-between">
-          <Link to="/" className="h-9 w-9 rounded-full bg-black/20 backdrop-blur-sm flex items-center justify-center text-white hover:bg-black/30 transition-colors">
-            <ArrowLeft className="h-5 w-5" />
-          </Link>
-        </div>
-        <div className="relative px-5 pt-2 pb-6">
-          {!pet.photo_url && (
-            <div className="h-20 w-20 rounded-full bg-primary/20 flex items-center justify-center mb-3 border-2 border-primary/30">
-              <span className="text-4xl">{getPetEmoji(pet.species)}</span>
+      <div className="min-h-screen bg-background pb-28">
+        <PullToRefreshIndicator pullDistance={pullDistance} isRefreshing={isRefreshing} />
+
+        {/* ── HERO ── */}
+        <div className="relative" style={{ height: 340 }}>
+          {pet.photo_url ? (
+            <img src={pet.photo_url} alt={pet.name} className={`w-full h-full object-cover ${isMemorial ? 'grayscale' : ''}`} />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center" style={{ background: 'linear-gradient(160deg, rgba(0,212,170,0.15) 0%, rgba(10,12,22,1) 100%)' }}>
+              {pet.species === 'Dog' ? <Dog className="h-24 w-24 text-white/40" /> : <Cat className="h-24 w-24 text-white/40" />}
             </div>
           )}
-          <h1 className={`font-serif text-4xl ${pet.photo_url ? 'text-white drop-shadow' : 'text-foreground'}`}>{pet.name}</h1>
-          {pet.breed && <p className={`text-sm mt-0.5 ${pet.photo_url ? 'text-white/80' : 'text-muted-foreground'}`}>{pet.breed}</p>}
-          {pet.nicknames?.length > 0 && (
-            <p className={`text-xs mt-0.5 italic ${pet.photo_url ? 'text-white/70' : 'text-muted-foreground'}`}>
-              also known as {pet.nicknames.join(', ')}
-            </p>
-          )}
-          <div className="flex flex-wrap gap-1.5 mt-2">
-            {pet.conditions?.map(c => (
-              <span key={c} className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                pet.photo_url ? 'bg-white/20 text-white backdrop-blur-sm' : (conditionColors[c] || conditionColors.Other)
-              }`}>{c}</span>
-            ))}
-          </div>
-          {/* Action buttons — bottom-left of hero */}
-          <div className="flex gap-2 mt-3 flex-wrap">
-            <button onClick={() => setEditOpen(true)} className="inline-flex items-center gap-1.5 text-xs text-white/90 bg-black/20 backdrop-blur-sm hover:bg-black/30 border border-white/20 rounded-full px-3 py-1.5 transition-colors">
-              ✏️ Edit
-            </button>
-            <Link to={`/pet/${petId}/export`} className="inline-flex items-center gap-1.5 text-xs text-white/90 bg-black/20 backdrop-blur-sm hover:bg-black/30 border border-white/20 rounded-full px-3 py-1.5 transition-colors">
-              <FileText className="h-3.5 w-3.5" /> Vet Report
+          {/* gradient overlay — strong at bottom, fades to subtle at top */}
+          <div className="absolute inset-0" style={{ background: 'linear-gradient(to bottom, rgba(0,0,0,0.3) 0%, rgba(10,12,22,0) 35%, rgba(10,12,22,0.85) 70%, rgba(10,12,22,1) 100%)' }} />
+
+          {/* Top nav */}
+          <div className="absolute top-0 inset-x-0 flex items-center justify-between px-4" style={{ paddingTop: 'calc(env(safe-area-inset-top) + 12px)' }}>
+            <Link to="/" className="w-9 h-9 rounded-full flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.35)', backdropFilter: 'blur(8px)' }}>
+              <ArrowLeft className="h-5 w-5 text-white" />
             </Link>
-            <ExportCalendarButton petId={petId} petName={pet.name} iconOnly />
-
-
-            {!pet.is_memorial && (
-              <button
-                onClick={() => setSheetOpen(true)}
-                className="inline-flex items-center gap-1.5 text-xs text-white bg-primary/80 backdrop-blur-sm hover:bg-primary border border-primary/40 rounded-full px-3 py-1.5 transition-colors">
-                <Plus className="h-3.5 w-3.5" /> Log
+            <p className="text-sm font-semibold text-white/80 tracking-wide">{pet.name}</p>
+            <div className="flex items-center gap-2">
+              <button onClick={() => setCareOpen(true)} className="w-9 h-9 rounded-full flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.35)', backdropFilter: 'blur(8px)' }}>
+                <Menu className="h-5 w-5 text-white" />
               </button>
+            </div>
+          </div>
+
+          {/* Pet info at bottom of hero */}
+          <div className="absolute bottom-0 left-0 right-0 px-5 pb-4">
+            <h1 className="text-3xl font-bold text-white leading-tight">{pet.name}</h1>
+            {pet.breed && <p className="text-sm text-white/50 mt-0.5">{pet.breed}</p>}
+            {pet.conditions?.length > 0 && (
+              <p className="text-sm text-white/50 mt-1.5 font-medium">
+                {pet.conditions.join(' | ')}
+              </p>
             )}
           </div>
         </div>
-      </header>
 
-      <main className="max-w-2xl mx-auto px-4 py-5">
-        {pet.favorite_activities?.length > 0 && (
-          <div className="mb-4 p-3.5 bg-card rounded-2xl border border-border">
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Favorite Activities</p>
-            <div className="flex flex-wrap gap-1.5">
-              {pet.favorite_activities.map(a => (
-                <span key={a} className="text-xs bg-primary/10 text-primary px-2.5 py-1 rounded-full">{a}</span>
+        {/* ── OURA-STYLE SCORE ROW ── */}
+        {!isMemorial && (
+          <div className="px-5 pt-5 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
+            <div className="flex gap-5 pb-1" style={{ width: 'max-content' }}>
+              {scoreItems.map(item => (
+                <ScoreBubble key={item.key} {...item} onClick={() => setLogSheet(item.key)} />
               ))}
+              <Link to={`/pet/${petId}/symptoms`} className="flex flex-col items-center justify-center gap-1.5 flex-shrink-0" style={{ minWidth: 72 }}>
+                <div className="w-16 h-16 rounded-full flex items-center justify-center" style={{ background: 'rgba(255,255,255,0.08)', border: '1.5px solid rgba(255,255,255,0.12)' }}>
+                  <ClipboardList className="h-5 w-5 text-white/50" />
+                </div>
+                <p className="text-[10px] text-white/40 mt-1 uppercase tracking-wide">All logs</p>
+              </Link>
             </div>
           </div>
         )}
-        <Tabs defaultValue="history" className="w-full">
-          {/* Two-row scrollable tab bar */}
-          <div className="space-y-1.5 mb-5">
-            <TabsList className="w-full grid grid-cols-3 h-11 rounded-2xl">
-              <TabsTrigger value="history" className="rounded-xl text-sm">📋 History</TabsTrigger>
-              <TabsTrigger value="trends" className="rounded-xl text-sm">📈 Trends</TabsTrigger>
-              <TabsTrigger value="medications" className="rounded-xl text-sm">💊 Meds</TabsTrigger>
-            </TabsList>
-            <TabsList className="w-full grid grid-cols-5 h-11 rounded-2xl">
-              <TabsTrigger value="food" className="rounded-xl text-xs">🍽 Food</TabsTrigger>
-              <TabsTrigger value="bloodwork" className="rounded-xl text-xs">🩸 Labs</TabsTrigger>
-              <TabsTrigger value="vaccines" className="rounded-xl text-xs">💉 Vaccines</TabsTrigger>
-              <TabsTrigger value="petsit" className="rounded-xl text-xs">🏠 Sitter</TabsTrigger>
-              <TabsTrigger value="ai" className="rounded-xl text-xs">🤖 AI</TabsTrigger>
-            </TabsList>
-          </div>
 
-          <TabsContent value="history" className="mt-0">
-            <div className="bg-card rounded-2xl border border-border p-4 shadow-sm">
-              <LogHistory logs={logs} />
-            </div>
-          </TabsContent>
-          <TabsContent value="trends" className="mt-0">
-            <div className="bg-card rounded-2xl border border-border p-4 shadow-sm">
-              <SymptomTrends logs={logs} />
-            </div>
-          </TabsContent>
-          <TabsContent value="medications" className="mt-0">
-            <div className="bg-card rounded-2xl border border-border p-4 shadow-sm">
-              <MedicationSection petId={petId} />
-            </div>
-          </TabsContent>
-          <TabsContent value="food" className="mt-0">
-            <div className="bg-card rounded-2xl border border-border p-4 shadow-sm">
-              <FoodSection petId={petId} />
-            </div>
-          </TabsContent>
-          <TabsContent value="bloodwork" className="mt-0">
-            <div className="bg-card rounded-2xl border border-border p-4 shadow-sm">
-              <BloodworkSection petId={petId} />
-            </div>
-          </TabsContent>
-          <TabsContent value="vaccines" className="mt-0">
-            <div className="bg-card rounded-2xl border border-border p-4 shadow-sm">
-              <VaccinationSection petId={petId} species={pet?.species} />
-            </div>
-          </TabsContent>
-          <TabsContent value="petsit" className="mt-0">
-            <div className="bg-card rounded-2xl border border-border p-4 shadow-sm">
-              <PetSittingSection petId={petId} />
-            </div>
-          </TabsContent>
-          <TabsContent value="ai" className="mt-0">
-            <div className="bg-card rounded-2xl border border-border p-4 shadow-sm">
-              <div className="flex gap-2 mb-4">
-                <button
-                  onClick={() => setAiTab('insights')}
-                  className={`flex-1 py-2 rounded-xl text-sm font-medium transition-colors ${
-                    aiTab === 'insights' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:text-foreground'
-                  }`}
-                >✨ Insights</button>
-                <button
-                  onClick={() => setAiTab('chat')}
-                  className={`flex-1 py-2 rounded-xl text-sm font-medium transition-colors ${
-                    aiTab === 'chat' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:text-foreground'
-                  }`}
-                >💬 Ask a Question</button>
-              </div>
-              {aiTab === 'insights'
-                ? <PetAIInsights pet={pet} logs={logs} medications={medications} bloodwork={bloodwork} />
-                : <PetAIChat pet={pet} medications={medications} />
-              }
-            </div>
-          </TabsContent>
-        </Tabs>
+        <div className="px-4 pt-5 space-y-4 max-w-2xl mx-auto">
 
-        {!pet.is_memorial && (
-          <div className="mt-8 pt-6 border-t border-border/50">
-            <button
-              onClick={() => setMemorialOpen(true)}
-              className="w-full flex items-center gap-3 px-4 py-3.5 bg-card border border-border rounded-xl text-left hover:bg-purple-50 hover:border-purple-200 transition-colors text-purple-700"
+          {/* ── LOG TODAY BUTTON ── */}
+          {!isMemorial && (
+            <button onClick={() => setFullLogOpen(true)}
+              className="w-full flex items-center justify-center gap-2 rounded-2xl py-3.5 text-sm font-semibold transition-all active:opacity-70"
+              style={{ background: 'rgba(135,206,235,0.12)', border: '1px solid rgba(135,206,235,0.25)', color: '#6EBBE7' }}
             >
-              <span className="text-lg">🌈</span>
-              <div>
-                <p className="text-sm font-medium">Crossed the Rainbow Bridge</p>
-                <p className="text-xs text-muted-foreground">Convert to a memorial profile</p>
-              </div>
+              <Plus className="h-4 w-4" /> Log today's symptoms
             </button>
-          </div>
+          )}
+
+          {/* ── TRENDS CHARTS ── */}
+          {hasChartData && (
+            <section className="space-y-3">
+              <Link to={`/pet/${petId}/symptoms`} className="flex items-center justify-between px-1 group">
+                <p className="text-xs font-bold uppercase tracking-widest text-white/30">30-Day Trends</p>
+                <span className="flex items-center gap-0.5 text-xs font-semibold text-white/30 group-hover:text-white/60 transition-colors">
+                  View all <ChevronRight className="h-3 w-3" />
+                </span>
+              </Link>
+
+              <OuraChartCard title="Appetite & Energy" value={null} to={`/pet/${petId}/symptoms`}>
+                <ResponsiveContainer width="100%" height={150}>
+                  <LineChart data={chartData} margin={{ left: -20, right: 10, top: 5, bottom: 0 }}>
+                    <XAxis dataKey="label" tick={{ fontSize: 9, fill: 'rgba(255,255,255,0.3)' }} axisLine={false} tickLine={false} />
+                    <YAxis domain={[0,4]} ticks={[0,2,4]} tick={{ fontSize: 9, fill: 'rgba(255,255,255,0.3)' }} axisLine={false} tickLine={false} />
+                    <ReferenceLine y={2} stroke="rgba(255,255,255,0.1)" strokeDasharray="4 4" />
+                    <Tooltip contentStyle={chartTooltipStyle} cursor={{ stroke: 'rgba(255,255,255,0.1)' }} />
+                    <Line type="monotone" dataKey="appetite" stroke="#6EBBE7" strokeWidth={2} dot={{ fill: '#6EBBE7', r: 2 }} name="Appetite" connectNulls />
+                    <Line type="monotone" dataKey="energy" stroke="#60A5FA" strokeWidth={2} dot={{ fill: '#60A5FA', r: 2 }} name="Energy" connectNulls />
+                  </LineChart>
+                </ResponsiveContainer>
+                <div className="flex gap-4 px-5 pb-3">
+                  <span className="flex items-center gap-1.5 text-[11px] text-white/40"><span className="w-3 h-0.5 rounded-full bg-[#6EBBE7]" />Appetite</span>
+                  <span className="flex items-center gap-1.5 text-[11px] text-white/40"><span className="w-3 h-0.5 rounded-full bg-[#60A5FA]" />Energy</span>
+                </div>
+              </OuraChartCard>
+
+              <OuraChartCard title="Vomiting Episodes" value={null} to={`/pet/${petId}/symptoms`}>
+                <ResponsiveContainer width="100%" height={110}>
+                  <BarChart data={chartData} margin={{ left: -20, right: 10, top: 5, bottom: 0 }}>
+                    <XAxis dataKey="label" tick={{ fontSize: 9, fill: 'rgba(255,255,255,0.3)' }} axisLine={false} tickLine={false} />
+                    <YAxis tick={{ fontSize: 9, fill: 'rgba(255,255,255,0.3)' }} axisLine={false} tickLine={false} />
+                    <Tooltip contentStyle={chartTooltipStyle} cursor={{ fill: 'rgba(255,255,255,0.04)' }} />
+                    <Bar dataKey="vomiting" fill="rgba(239,68,68,0.65)" radius={[3,3,0,0]} name="Vomiting" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </OuraChartCard>
+
+              {hasWeight && (
+                <OuraChartCard title="Weight (kg)" value={weightVal} valueLabel="kg" to={`/pet/${petId}/symptoms`}>
+                  <ResponsiveContainer width="100%" height={110}>
+                    <LineChart data={chartData} margin={{ left: -20, right: 10, top: 5, bottom: 0 }}>
+                      <XAxis dataKey="label" tick={{ fontSize: 9, fill: 'rgba(255,255,255,0.3)' }} axisLine={false} tickLine={false} />
+                      <YAxis tick={{ fontSize: 9, fill: 'rgba(255,255,255,0.3)' }} axisLine={false} tickLine={false} />
+                      <Tooltip contentStyle={chartTooltipStyle} cursor={{ stroke: 'rgba(255,255,255,0.1)' }} />
+                      <Line type="monotone" dataKey="weight" stroke="white" strokeWidth={2} dot={{ fill: 'white', r: 2 }} name="Weight (kg)" connectNulls />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </OuraChartCard>
+              )}
+            </section>
+          )}
+
+          {/* ── MEDICATIONS ── */}
+          {medications.length > 0 && (
+            <section>
+              <div className="flex items-center justify-between px-1 mb-3">
+                <p className="text-xs font-bold uppercase tracking-widest text-white/30">Medications</p>
+                <Link to={`/pet/${petId}/profile?tab=medications`} className="text-xs font-semibold" style={{ color: '#6EBBE7' }}>Manage →</Link>
+                </div>
+                <div className="rounded-2xl overflow-hidden" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                {medications.map(med => {
+                  const s = getMedStatus(med);
+                  const dueLabel = med.next_due_date
+                    ? s === 'due' ? 'Due today' : s === 'soon' ? `Due ${format(parseISO(med.next_due_date), 'MMM d')}` : format(parseISO(med.next_due_date), 'MMM d')
+                    : med.frequency || '';
+                  return (
+                    <div key={med.id} className="flex items-center gap-3 px-4 py-3.5 border-b border-white/5 last:border-0">
+                      <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: STATUS_COLOR[s] || '#00D4AA', boxShadow: `0 0 6px ${STATUS_COLOR[s] || '#00D4AA'}60` }} />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-white truncate">{med.name}</p>
+                        <p className="text-xs text-white/35 mt-0.5">{med.dosage}{med.dosage && med.frequency ? ' · ' : ''}{med.frequency}</p>
+                      </div>
+                      {dueLabel && <span className={`text-xs font-medium px-2 py-0.5 rounded-full flex-shrink-0 ${BADGE[s]}`}>{dueLabel}</span>}
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+          )}
+
+          {/* ── VACCINATIONS ── */}
+          {vaccinations.length > 0 && (
+            <section>
+              <div className="flex items-center justify-between px-1 mb-3">
+                <p className="text-xs font-bold uppercase tracking-widest text-white/30">Vaccinations</p>
+                <Link to={`/pet/${petId}/profile?tab=vaccines`} className="text-xs font-semibold" style={{ color: '#6EBBE7' }}>Manage →</Link>
+                </div>
+                <div className="rounded-2xl overflow-hidden" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                {vaccinations.map(vax => {
+                  const s = getVaxStatus(vax);
+                  return (
+                    <div key={vax.id} className="flex items-center gap-3 px-4 py-3.5 border-b border-white/5 last:border-0">
+                      <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: STATUS_COLOR[s] || '#00D4AA', boxShadow: `0 0 6px ${STATUS_COLOR[s] || '#00D4AA'}60` }} />
+                      <div className="flex-1">
+                        <p className="text-sm font-semibold text-white">{vax.vaccine_name}</p>
+                        {vax.next_due_date && <p className="text-xs text-white/35 mt-0.5">{s === 'overdue' ? 'Overdue — ' : 'Due '}{format(parseISO(vax.next_due_date), 'MMM d, yyyy')}</p>}
+                      </div>
+                      <span className={`text-xs font-medium px-2 py-0.5 rounded-full flex-shrink-0 ${BADGE[s]}`}>{s === 'overdue' ? 'Overdue' : 'Current'}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+          )}
+
+          {/* ── BLOODWORK ── */}
+          {latestBW && bwFields.length > 0 && (
+            <section>
+              <div className="flex items-center justify-between px-1 mb-3">
+                <p className="text-xs font-bold uppercase tracking-widest text-white/30">Latest Bloodwork</p>
+                <Link to={`/pet/${petId}/profile?tab=bloodwork`} className="text-xs font-semibold" style={{ color: '#6EBBE7' }}>Manage →</Link>
+              </div>
+              <Link to={`/pet/${petId}/profile?tab=bloodwork`} className="block active:scale-[0.99] transition-transform">
+                <div className="rounded-2xl overflow-hidden" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                  {bwFields.map(f => {
+                    const s = getBloodStatus(f.key, latestBW[f.key]);
+                    return (
+                      <div key={f.key} className="flex items-center gap-3 px-4 py-3 border-b border-white/5 last:border-0">
+                        <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: STATUS_COLOR[s] || '#00D4AA' }} />
+                        <p className="flex-1 text-sm text-white">{f.label}</p>
+                        <span className="text-sm font-bold text-white mr-1">{latestBW[f.key]}</span>
+                        <span className="text-xs text-white/30 mr-2">{f.unit}</span>
+                        <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${BADGE[s]}`}>{s === 'good' ? 'Normal' : s === 'warn' ? 'Elevated' : 'High'}</span>
+                      </div>
+                    );
+                  })}
+                  <div className="flex items-center gap-2 px-4 py-3 border-t border-white/5" style={{ background: 'rgba(110,187,231,0.06)' }}>
+                    <Upload className="h-3.5 w-3.5" style={{ color: '#6EBBE7' }} />
+                    <span className="text-xs font-semibold" style={{ color: '#6EBBE7' }}>Upload lab report (PDF or photo)</span>
+                  </div>
+                </div>
+              </Link>
+            </section>
+          )}
+
+          {/* ── FOOD ── */}
+          {foods.length > 0 && (
+            <section>
+              <Link to={`/pet/${petId}/food`} className="flex items-center justify-between px-1 mb-3 group">
+                <p className="text-xs font-bold uppercase tracking-widest text-white/30">Current Diet</p>
+                <span className="flex items-center gap-0.5 text-xs font-semibold text-white/30 group-hover:text-white/60 transition-colors">
+                  View history <ChevronRight className="h-3 w-3" />
+                </span>
+              </Link>
+              <Link to={`/pet/${petId}/food`} className="block active:scale-[0.99] transition-transform">
+                <div className="rounded-2xl overflow-hidden" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                  {foods.map(food => (
+                    <div key={food.id} className="flex items-center gap-3 px-4 py-3.5 border-b border-white/5 last:border-0">
+                      <UtensilsCrossed className="h-4 w-4 text-white/40 flex-shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-white truncate">{food.name}</p>
+                        {food.food_type && <p className="text-xs text-white/35">{food.food_type}{food.brand ? ` · ${food.brand}` : ''}</p>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </Link>
+            </section>
+          )}
+
+          {/* ── RECENT LOGS ── */}
+          {logs.length > 0 && (
+            <section className="pb-4">
+              <div className="flex items-center justify-between px-1 mb-3">
+                <p className="text-xs font-bold uppercase tracking-widest text-white/30">Recent Logs</p>
+                <Link to={`/pet/${petId}/symptoms`} className="text-xs font-semibold" style={{ color: '#6EBBE7' }}>Full history →</Link>
+              </div>
+              <div className="space-y-2">
+                {logs.slice(0, 5).map(log => (
+                  <div key={log.id} className="rounded-xl px-4 py-3 flex items-center gap-3" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)' }}>
+                    <span className="text-xs font-bold text-white/30 w-14 flex-shrink-0">{format(parseISO(log.date), 'MMM d')}</span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {log.appetite && <span className="inline-flex items-center gap-1 text-xs text-white/55 border border-white/10 rounded-full px-2 py-0.5" style={{ background: 'rgba(255,255,255,0.06)' }}><UtensilsCrossed className="h-3 w-3" />{log.appetite}</span>}
+                      {log.energy_level && <span className="inline-flex items-center gap-1 text-xs text-white/55 border border-white/10 rounded-full px-2 py-0.5" style={{ background: 'rgba(255,255,255,0.06)' }}><Zap className="h-3 w-3" />{log.energy_level}</span>}
+                      {log.vomiting > 0 && <span className="inline-flex items-center gap-1 text-xs text-red-400 border border-red-500/20 rounded-full px-2 py-0.5" style={{ background: 'rgba(239,68,68,0.1)' }}><Heart className="h-3 w-3" />×{log.vomiting}</span>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {/* Memorial */}
+          {isMemorial && (
+            <div className="py-8 text-center flex flex-col items-center">
+              <Rainbow className="h-8 w-8 mb-2 text-purple-300" />
+              <p className="text-base font-semibold text-purple-300">Forever in our hearts</p>
+              {pet.memorial_date && <p className="text-sm text-purple-400/60 mt-1">{format(parseISO(pet.memorial_date), 'MMMM d, yyyy')}</p>}
+            </div>
+          )}
+        </div>
+
+        {/* Quick log sheet */}
+        {logSheet && (
+          <QuickLogSheet type={QUICK_TYPES[logSheet]} petId={petId} onClose={() => setLogSheet(null)} onSuccess={loadData} />
         )}
 
-        {pet.is_memorial && (
-          <div className="mt-8 pt-6 border-t border-border/50">
-            <div className="px-4 py-4 bg-purple-50 border border-purple-200 rounded-xl text-center">
-              <p className="text-2xl mb-1">🌈</p>
-              <p className="text-sm font-medium text-purple-800">Forever in our hearts</p>
-              {pet.memorial_date && <p className="text-xs text-purple-600 mt-0.5">{new Date(pet.memorial_date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</p>}
+        <CareMenu open={careOpen} onOpenChange={setCareOpen} petId={petId} petName={pet?.name} />
+
+        {/* Full log sheet */}
+        {fullLogOpen && (
+          <div className="fixed inset-0 z-50 bg-background overflow-y-auto">
+            <div className="sticky top-0 z-10 bg-background border-b border-border px-4 py-3 flex items-center justify-between" style={{ paddingTop: 'calc(env(safe-area-inset-top) + 12px)' }}>
+              <h2 className="font-bold text-xl text-white">Log Symptoms</h2>
+              <button onClick={() => setFullLogOpen(false)} className="h-9 w-9 rounded-full bg-white/8 flex items-center justify-center">
+                <X className="h-4 w-4 text-white" />
+              </button>
+            </div>
+            <div className="px-4 py-5 pb-32">
+              <SymptomLogForm petId={petId} onOptimisticUpdate={() => setFullLogOpen(false)} onSuccess={loadData} />
             </div>
           </div>
         )}
-      </main>
-
-      {sheetOpen && (
-        <div className="fixed inset-0 z-50 bg-background overflow-y-auto">
-          <div className="sticky top-0 z-10 bg-background border-b border-border px-4 py-3 flex items-center justify-between" style={{ paddingTop: 'calc(env(safe-area-inset-top) + 12px)' }}>
-            <h2 className="font-serif text-xl">Log Symptoms</h2>
-            <button onClick={() => setSheetOpen(false)} className="h-9 w-9 rounded-full bg-secondary flex items-center justify-center">
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-          <div className="px-4 py-5 pb-32">
-            <SymptomLogForm
-              petId={petId}
-              onOptimisticUpdate={(tempLog) => {
-                setLogs(prev => [tempLog, ...prev]);
-                setSheetOpen(false);
-              }}
-              onSuccess={loadData}
-            />
-          </div>
-        </div>
-      )}
-      <EditPetSheet pet={pet} open={editOpen} onOpenChange={setEditOpen} onSuccess={loadData} />
-      <MemorialDialog pet={pet} open={memorialOpen} onOpenChange={setMemorialOpen} onSuccess={loadData} />
-    </div>
+      </div>
     </PageTransition>
   );
 }

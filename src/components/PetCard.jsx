@@ -1,62 +1,98 @@
 import { Link } from 'react-router-dom';
-import { getPetEmoji } from '@/lib/speciesConfig';
-import { format } from 'date-fns';
+import { UtensilsCrossed, Zap, Heart, Scale, Cat, Dog, Rainbow } from 'lucide-react';
 
-const conditionColors = {
-  IBD: 'bg-amber-100 text-amber-800',
-  CKD: 'bg-blue-100 text-blue-800',
-  Diabetes: 'bg-purple-100 text-purple-800',
-  Hyperthyroidism: 'bg-rose-100 text-rose-800',
-  Pancreatitis: 'bg-orange-100 text-orange-800',
-  'Liver Disease': 'bg-green-100 text-green-800',
-  Other: 'bg-gray-100 text-gray-800',
+// Redesigned pet card (replaces the original grid-based PetCard).
+// Ported from a Base44 prototype build of the new design — same visual
+// language as MockupPreview.jsx, wired to our real Supabase data
+// instead of fake/mock data. Renamed props from cat/catId -> pet/petId
+// and route from /cat/:id -> /pet/:id to match our existing app.
+
+const appetiteMap = { 'Ate all': 'good', 'Ate most': 'good', 'Ate some': 'warn', 'Ate very little': 'warn', 'Refused': 'bad' };
+const energyMap = { Playful: 'good', Normal: 'good', Calm: 'good', Lethargic: 'warn', Hiding: 'bad' };
+
+const GLOW_COLOR = { good: '#6EBBE7', warn: '#f59e0b', bad: '#ef4444' };
+const CHIP = {
+  good: 'bg-emerald-500/12 text-emerald-400 border border-emerald-500/20',
+  warn: 'bg-amber-500/12 text-amber-400 border border-amber-500/20',
+  bad:  'bg-red-500/12 text-red-400 border border-red-500/20',
 };
+
+function getOverallStatus(latestLog) {
+  if (!latestLog) return 'good';
+  const signals = [];
+  if (latestLog.appetite) signals.push(appetiteMap[latestLog.appetite] || 'good');
+  if (latestLog.energy_level) signals.push(energyMap[latestLog.energy_level] || 'good');
+  if (latestLog.vomiting > 2) signals.push('bad');
+  else if (latestLog.vomiting > 0) signals.push('warn');
+  if (signals.includes('bad')) return 'bad';
+  if (signals.includes('warn')) return 'warn';
+  return 'good';
+}
 
 export default function PetCard({ pet, latestLog }) {
   const isMemorial = pet.is_memorial;
+  const status = isMemorial ? 'good' : getOverallStatus(latestLog);
+
+  const chips = [];
+  if (latestLog?.appetite) chips.push({ label: 'Appetite', icon: UtensilsCrossed, status: appetiteMap[latestLog.appetite] || 'good' });
+  if (latestLog?.energy_level) chips.push({ label: 'Energy', icon: Zap, status: energyMap[latestLog.energy_level] || 'good' });
+  if (latestLog?.vomiting != null) chips.push({ label: 'Symptoms', icon: Heart, status: latestLog.vomiting > 1 ? 'bad' : latestLog.vomiting > 0 ? 'warn' : 'good' });
+  if (latestLog?.weight_grams != null) chips.push({ label: 'Weight', icon: Scale, status: 'good' });
+
   return (
-    <Link to={`/pet/${pet.id}`} className="block group active:scale-[0.97] transition-transform">
-      <div className="bg-card rounded-2xl border border-border overflow-hidden shadow-sm transition-all duration-200 hover:shadow-lg hover:-translate-y-1 hover:border-primary/30 active:shadow-none">
-        {/* Photo area */}
-        <div className={`relative aspect-[3/4] overflow-hidden ${isMemorial ? 'bg-gradient-to-br from-purple-100 to-purple-50' : 'bg-gradient-to-br from-primary/10 to-accent/10'}`}>
-          {pet.photo_url ? (
-            <img src={pet.photo_url} alt={pet.name} className={`h-full w-full object-cover transition-transform duration-300 group-hover:scale-105 ${isMemorial ? 'grayscale' : ''}`} />
-          ) : (
-            <div className="h-full w-full flex items-center justify-center">
-              <div className="text-center">
-                <span className="text-6xl">{getPetEmoji(pet.species)}</span>
-              </div>
-            </div>
-          )}
-          {/* Gradient overlay at bottom */}
-          <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-black/60 to-transparent" />
-          {isMemorial && (
-            <div className="absolute top-2 right-2 bg-purple-600/80 text-white text-xs px-2 py-0.5 rounded-full backdrop-blur-sm">🌈</div>
-          )}
-          <div className="absolute bottom-0 inset-x-0 p-3">
-            <h3 className="font-serif text-xl text-white drop-shadow-sm">{pet.name}</h3>
-            {pet.breed && <p className="text-xs text-white/80">{pet.breed}</p>}
+    <Link to={`/pet/${pet.id}`} className="block active:scale-[0.98] transition-transform">
+    <div className="flex items-stretch rounded-2xl overflow-hidden border border-white/6" style={{ background: 'rgba(255,255,255,0.05)' }}>
+      {/* Status glow bar */}
+      <div className="w-1 flex-shrink-0" style={{ background: GLOW_COLOR[status], boxShadow: `0 0 12px ${GLOW_COLOR[status]}80` }} />
+
+      {/* Photo */}
+      <div className="relative w-24 flex-shrink-0" style={{ minHeight: 104 }}>
+        {pet.photo_url ? (
+          <img src={pet.photo_url} alt={pet.name} className={`w-full h-full object-cover ${isMemorial ? 'grayscale opacity-50' : ''}`} style={{ minHeight: 104 }} />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center" style={{ minHeight: 104, background: 'rgba(255,255,255,0.04)' }}>
+            {pet.species === 'Dog' ? <Dog className="h-8 w-8 text-white/50" /> : <Cat className="h-8 w-8 text-white/50" />}
+          </div>
+        )}
+        {isMemorial && (
+          <div className="absolute top-2 right-2 bg-purple-500/70 text-white px-1.5 py-0.5 rounded-full backdrop-blur-sm"><Rainbow className="h-3 w-3" /></div>
+        )}
+      </div>
+
+      {/* Info */}
+      <div className="flex-1 px-4 py-3 min-w-0">
+        <div className="flex items-start justify-between gap-1">
+          <div className="min-w-0">
+            <p className="font-semibold text-white text-[20px] leading-snug truncate">{pet.name}</p>
+            {pet.breed && <p className="text-[13px] text-white/35 mt-0.5 truncate">{pet.breed}</p>}
           </div>
         </div>
 
-        {/* Info area */}
-        <div className="p-3 space-y-2">
-          {pet.conditions?.length > 0 && (
-            <div className="flex flex-wrap gap-1">
-              {pet.conditions.map(c => (
-                <span key={c} className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${conditionColors[c] || conditionColors.Other}`}>{c}</span>
-              ))}
-            </div>
-          )}
-          {latestLog ? (
-            <p className="text-xs text-muted-foreground">
-              Logged {new Date(latestLog.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-            </p>
-          ) : (
-            <p className="text-xs text-muted-foreground/60">No logs yet</p>
-          )}
-        </div>
+        {pet.conditions?.length > 0 && (
+          <p className="text-[12px] text-white/40 mt-2 font-medium">
+            {pet.conditions.join(' | ')}
+          </p>
+        )}
+
+        {chips.length > 0 && (
+          <div className="flex flex-wrap gap-1 mt-2">
+            {chips.map(chip => {
+              const Icon = chip.icon;
+              return (
+                <span key={chip.label} className={`flex items-center gap-1 text-[11px] font-semibold rounded-md px-2 py-0.5 ${CHIP[chip.status]}`}>
+                  {Icon && <Icon className="h-3 w-3" />}
+                  {chip.label}
+                </span>
+              );
+            })}
+          </div>
+        )}
+
+        {!latestLog && !isMemorial && (
+          <p className="text-[11px] text-white/20 mt-2">No logs yet</p>
+        )}
       </div>
+    </div>
     </Link>
   );
 }

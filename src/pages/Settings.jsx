@@ -1,23 +1,39 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { entities } from '@/api/entities';
 import { supabase } from '@/api/supabaseClient';
 import { Button } from '@/components/ui/button';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
-import { Settings as SettingsIcon, Trash2, LogOut, Moon, Sun, Monitor } from 'lucide-react';
+import { Settings as SettingsIcon, Trash2, LogOut, Plus, Pencil, Moon, Sun, Monitor } from 'lucide-react';
 import PageTransition from '../components/PageTransition';
+import AddPetDialog from '../components/AddPetDialog';
+import EditPetSheet from '../components/EditPetSheet';
 
 export default function Settings() {
+  const [searchParams] = useSearchParams();
+  const petId = searchParams.get('petId');
   const [deleting, setDeleting] = useState(false);
+  const [showAdd, setShowAdd] = useState(false);
+  const [editPet, setEditPet] = useState(null);
+  const [editOpen, setEditOpen] = useState(false);
+
+  useEffect(() => {
+    if (!petId) { setEditPet(null); return; }
+    entities.Pet.get(petId).then(setEditPet).catch(() => setEditPet(null));
+  }, [petId]);
+
+  const reloadEditPet = () => {
+    setEditOpen(false);
+    if (petId) entities.Pet.get(petId).then(setEditPet).catch(() => {});
+  };
 
   const handleDeleteAccount = async () => {
     setDeleting(true);
     // Delete all user data then log out.
-    // NOTE: this only deletes pet/health data (same as the original
-    // Base44 behavior) — it does not delete the actual auth account.
-    // True account deletion would need a Supabase Edge Function using
-    // the service role key (the anon key used client-side can't delete
-    // auth.users rows). Flagging as a follow-up, not silently expanding
-    // scope here.
+    // NOTE: this only deletes pet/health data, same as before — it
+    // does not delete the actual Supabase Auth account. True account
+    // deletion needs a service-role Edge Function (can't be done
+    // safely from the client with the anon key).
     try {
       const pets = await entities.Pet.list();
       for (const pet of pets) {
@@ -40,6 +56,25 @@ export default function Settings() {
   };
 
   const rows = [
+    {
+      section: 'Pets',
+      items: [
+        ...(editPet ? [{
+          label: `Edit ${editPet.name}`,
+          icon: Pencil,
+          color: 'text-primary',
+          action: () => setEditOpen(true),
+          destructive: false,
+        }] : []),
+        {
+          label: 'Add a Pet',
+          icon: Plus,
+          color: 'text-primary',
+          action: () => setShowAdd(true),
+          destructive: false,
+        },
+      ],
+    },
     {
       section: 'Account',
       items: [
@@ -141,6 +176,9 @@ export default function Settings() {
             </div>
           ))}
         </main>
+
+        <AddPetDialog open={showAdd} onOpenChange={setShowAdd} onSuccess={() => setShowAdd(false)} />
+        {editPet && <EditPetSheet pet={editPet} open={editOpen} onOpenChange={setEditOpen} onSuccess={reloadEditPet} />}
       </div>
     </PageTransition>
   );

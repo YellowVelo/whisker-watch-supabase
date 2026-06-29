@@ -11,6 +11,12 @@ import ProtectedRoute from '@/components/ProtectedRoute';
 import BottomTabBar from './components/BottomTabBar';
 import Home from './pages/Home';
 import PetProfile from './pages/PetProfile';
+import PetProfileTabs from './pages/PetProfileTabs';
+import PetSymptoms from './pages/PetSymptoms';
+import PetFood from './pages/PetFood';
+import Insurance from './pages/Insurance';
+import Documents from './pages/Documents';
+import About from './pages/About';
 import VetExport from './pages/VetExport';
 import Settings from './pages/Settings';
 import Login from './pages/Login';
@@ -50,7 +56,13 @@ const AuthenticatedApp = () => {
           <Route element={<ProtectedRoute unauthenticatedElement={<Navigate to="/login" replace />} />}>
             <Route path="/" element={<Home />} />
             <Route path="/pet/:petId" element={<PetProfile />} />
+            <Route path="/pet/:petId/profile" element={<PetProfileTabs />} />
+            <Route path="/pet/:petId/symptoms" element={<PetSymptoms />} />
+            <Route path="/pet/:petId/food" element={<PetFood />} />
+            <Route path="/pet/:petId/insurance" element={<Insurance />} />
+            <Route path="/pet/:petId/documents" element={<Documents />} />
             <Route path="/pet/:petId/export" element={<VetExport />} />
+            <Route path="/about" element={<About />} />
             <Route path="/settings" element={<Settings />} />
           </Route>
           <Route path="*" element={<PageNotFound />} />

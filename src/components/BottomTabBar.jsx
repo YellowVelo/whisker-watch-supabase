@@ -1,9 +1,8 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Home, Settings } from 'lucide-react';
+import { Home } from 'lucide-react';
 
 const tabs = [
   { path: '/', label: 'Home', icon: Home },
-  { path: '/settings', label: 'Settings', icon: Settings },
 ];
 
 export default function BottomTabBar() {
@@ -21,10 +20,10 @@ export default function BottomTabBar() {
 
   return (
     <div
-      className="fixed bottom-0 left-0 right-0 z-50 bg-card/90 backdrop-blur-md border-t border-border"
-      style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+      className="fixed bottom-0 left-0 right-0 z-50 backdrop-blur-xl border-t border-white/8"
+      style={{ background: 'rgba(10,12,22,0.92)', paddingBottom: 'env(safe-area-inset-bottom)' }}
     >
-      <div className="flex items-stretch justify-around h-14 max-w-2xl mx-auto">
+      <div className="flex items-stretch h-14 max-w-2xl mx-auto px-5">
         {tabs.map(({ path, label, icon: Icon }) => {
           const active = isActive(path);
           return (
@@ -32,12 +31,12 @@ export default function BottomTabBar() {
               key={path}
               to={path}
               onClick={(e) => handleTabPress(e, path)}
-              className={`flex-1 flex flex-col items-center justify-center gap-0.5 transition-colors active:opacity-70 min-h-0 ${
+              className={`flex items-center gap-2 justify-start transition-colors active:opacity-70 min-h-0 ${
                 active ? 'text-primary' : 'text-muted-foreground hover:text-foreground'
               }`}
             >
-              <Icon className={`h-5 w-5 transition-transform ${active ? 'scale-110' : 'scale-100'}`} />
-              <span className="text-[10px] font-medium">{label}</span>
+              <Icon className={`h-6 w-6 transition-transform ${active ? 'scale-110' : 'scale-100'}`} />
+              <span className="text-[16px] font-medium">{label}</span>
             </Link>
           );
         })}
