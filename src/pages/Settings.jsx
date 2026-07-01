@@ -106,7 +106,7 @@ export default function Settings() {
     {
       section: 'About',
       items: [
-        { label: 'Whisker Watch', sublabel: 'Pet Health Tracker', icon: SettingsIcon, color: 'text-muted-foreground', static: true },
+        { label: 'Wysker Watch', sublabel: 'Pet Health Tracker', icon: SettingsIcon, color: 'text-muted-foreground', static: true },
       ],
     },
   ];

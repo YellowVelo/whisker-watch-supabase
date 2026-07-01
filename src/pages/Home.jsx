@@ -74,7 +74,7 @@ export default function Home() {
       <header style={{ paddingTop: 'env(safe-area-inset-top)' }}>
         <div className="max-w-2xl mx-auto px-5 py-6 flex items-start justify-between">
           <div>
-            <p className="text-[20px] font-semibold tracking-widest uppercase text-primary/70 mb-0.5">Whisker Watch</p>
+            <p className="text-[20px] font-semibold tracking-widest uppercase text-primary/70 mb-0.5">Wysker Watch</p>
             <h1 className="text-[28px] font-bold text-foreground tracking-tight leading-tight">My Pets</h1>
           </div>
           <Link to="/settings" className="h-9 w-9 rounded-full bg-secondary flex items-center justify-center mt-1">
@@ -89,7 +89,7 @@ export default function Home() {
             <div className="h-20 w-20 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
               <PawPrint className="h-10 w-10 text-primary" />
             </div>
-            <h2 className="font-serif text-2xl mb-2">Welcome to Whisker Watch</h2>
+            <h2 className="font-serif text-2xl mb-2">Welcome to Wysker Watch</h2>
             <p className="text-muted-foreground mb-6 max-w-sm mx-auto">
               Track daily symptoms for your cats and dogs with chronic conditions. Spot patterns and share insights with your vet.
             </p>

@@ -17,13 +17,13 @@ function buildICS(events) {
   const lines = [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
-    'PRODID:-//Whisker Watch//Pet Health//EN',
+    'PRODID:-//Wysker Watch//Pet Health//EN',
     'CALSCALE:GREGORIAN',
     'METHOD:PUBLISH',
   ];
 
   events.forEach((ev) => {
-    const uid = `${ev.uid}@whiskerwatch`;
+    const uid = `${ev.uid}@wyskerwatch`;
     const dtstart = toICSDate(ev.date);
     // All-day event: DTEND = next day
     const dtEnd = toICSDate(

@@ -39,7 +39,7 @@ export default function Login() {
           <div className="h-12 w-12 rounded-xl bg-primary/10 flex items-center justify-center mx-auto mb-3">
             <Heart className="h-6 w-6 text-primary" />
           </div>
-          <h1 className="font-serif text-2xl">Whisker Watch</h1>
+          <h1 className="font-serif text-2xl">Wysker Watch</h1>
           <p className="text-sm text-muted-foreground mt-1">Sign in to track your pet's health</p>
         </div>
         <form onSubmit={handleSubmit} className="space-y-4">

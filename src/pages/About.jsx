@@ -24,14 +24,14 @@ export default function About() {
             <div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
               <Heart className="h-8 w-8 text-primary" />
             </div>
-            <h2 className="font-serif text-3xl mb-2">Whisker Watch</h2>
+            <h2 className="font-serif text-3xl mb-2">Wysker Watch</h2>
             <p className="text-sm text-muted-foreground max-w-sm mx-auto">
               Track daily symptoms for your cats and dogs with chronic conditions. Spot patterns and share insights with your vet.
             </p>
           </div>
           <div className="space-y-4 text-sm text-muted-foreground">
             <p>
-              Whisker Watch helps pet parents caring for animals with chronic conditions like IBD, CKD, diabetes, and hyperthyroidism.
+              Wysker Watch helps pet parents caring for animals with chronic conditions like IBD, CKD, diabetes, and hyperthyroidism.
               Log appetite, energy, symptoms, and weight daily to visualize trends and catch flare-ups early.
             </p>
             <p>
