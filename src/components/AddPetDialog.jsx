@@ -150,7 +150,7 @@ export default function AddPetDialog({ open, onOpenChange, onSuccess }) {
             </div>
             {error && <p className="text-sm text-red-600">{error}</p>}
             <div className="flex gap-3">
-              <Button type="button" variant="outline" className="flex-1" onClick={() => { setSpecies(null); setForm({ name: '', breed: '', birth_date: '', conditions: [], medications: '', notes: '', photo_url: '' }); }}>
+              <Button type="button" variant="outline" className="flex-1" onClick={() => { setSpecies(null); setForm({ name: '', breed: '', birth_date: '', conditions: [], medications: '', notes: '', photo_url: '' }); setError(null); }}>
                 Back
               </Button>
               <Button type="submit" className="flex-1" disabled={saving || !form.name.trim()}>
