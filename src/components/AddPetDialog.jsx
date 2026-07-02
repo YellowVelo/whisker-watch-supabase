@@ -12,6 +12,7 @@ import { getConditions, getPetEmoji, getPetLabel } from '@/lib/speciesConfig';
 
 export default function AddPetDialog({ open, onOpenChange, onSuccess }) {
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [species, setSpecies] = useState(null); // null = not chosen yet
   const [form, setForm] = useState({ name: '', breed: '', birth_date: '', conditions: [], medications: '', notes: '', photo_url: '' });
@@ -38,9 +39,17 @@ export default function AddPetDialog({ open, onOpenChange, onSuccess }) {
     e.preventDefault();
     if (!form.name.trim()) return;
     setSaving(true);
+    setError(null);
     const data = { ...form, species };
     if (!data.birth_date) delete data.birth_date;
-    await entities.Pet.create(data);
+    try {
+      await entities.Pet.create(data);
+    } catch (err) {
+      console.error('Failed to save pet:', err);
+      setSaving(false);
+      setError("Couldn't save, please try again.");
+      return;
+    }
     setSaving(false);
     setSpecies(null);
     setForm({ name: '', breed: '', birth_date: '', conditions: [], medications: '', notes: '', photo_url: '' });
@@ -49,7 +58,7 @@ export default function AddPetDialog({ open, onOpenChange, onSuccess }) {
   };
 
   const handleClose = (val) => {
-    if (!val) { setSpecies(null); setForm({ name: '', breed: '', birth_date: '', conditions: [], medications: '', notes: '', photo_url: '' }); }
+    if (!val) { setSpecies(null); setForm({ name: '', breed: '', birth_date: '', conditions: [], medications: '', notes: '', photo_url: '' }); setError(null); }
     onOpenChange(val);
   };
 
@@ -139,6 +148,7 @@ export default function AddPetDialog({ open, onOpenChange, onSuccess }) {
               <Label>Notes</Label>
               <Textarea value={form.notes} onChange={e => set('notes', e.target.value)} rows={2} placeholder="Anything important..." />
             </div>
+            {error && <p className="text-sm text-red-600">{error}</p>}
             <div className="flex gap-3">
               <Button type="button" variant="outline" className="flex-1" onClick={() => { setSpecies(null); setForm({ name: '', breed: '', birth_date: '', conditions: [], medications: '', notes: '', photo_url: '' }); }}>
                 Back
