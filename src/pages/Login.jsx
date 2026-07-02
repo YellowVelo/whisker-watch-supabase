@@ -3,10 +3,12 @@ import { supabase } from '@/api/supabaseClient';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Link } from 'react-router-dom';
-import { Loader2, Heart } from 'lucide-react';
+import { Link, useSearchParams } from 'react-router-dom';
+import { Loader2, Heart, CheckCircle2 } from 'lucide-react';
 
 export default function Login() {
+  const [searchParams] = useSearchParams();
+  const accountDeleted = searchParams.get('deleted') === '1';
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -42,6 +44,12 @@ export default function Login() {
           <h1 className="font-serif text-2xl">Wysker Watch</h1>
           <p className="text-sm text-muted-foreground mt-1">Sign in to track your pet's health</p>
         </div>
+        {accountDeleted && (
+          <div className="flex items-start gap-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 px-3 py-2.5 text-sm text-emerald-500">
+            <CheckCircle2 className="h-4 w-4 mt-0.5 shrink-0" />
+            <span>Your account has been permanently deleted.</span>
+          </div>
+        )}
         <form onSubmit={handleSubmit} className="space-y-4">
           {error && <p className="text-sm text-destructive text-center">{error}</p>}
           <div className="space-y-1.5">

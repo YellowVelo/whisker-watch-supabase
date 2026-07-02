@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { entities } from '@/api/entities';
 import { supabase } from '@/api/supabaseClient';
 import { Button } from '@/components/ui/button';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
 import { Settings as SettingsIcon, Trash2, LogOut, Plus, Pencil, Moon, Sun, Monitor, Menu, UserPlus } from 'lucide-react';
 import PageTransition from '../components/PageTransition';
 import AddPetDialog from '../components/AddPetDialog';
@@ -15,6 +16,9 @@ export default function Settings() {
   const [searchParams] = useSearchParams();
   const petId = searchParams.get('petId');
   const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
+  const [deleteStep, setDeleteStep] = useState(0); // 0=closed 1=warning 2=confirm
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
   const [showAdd, setShowAdd] = useState(false);
   const [editPet, setEditPet] = useState(null);
   const [editOpen, setEditOpen] = useState(false);
@@ -31,30 +35,29 @@ export default function Settings() {
     if (petId) entities.Pet.get(petId).then(setEditPet).catch(() => {});
   };
 
+  const openDeleteFlow = () => { setDeleteError(''); setDeleteConfirmText(''); setDeleteStep(1); };
+  const closeDeleteFlow = () => { if (!deleting) { setDeleteStep(0); setDeleteConfirmText(''); setDeleteError(''); } };
+
   const handleDeleteAccount = async () => {
     setDeleting(true);
-    // Delete all user data then log out.
-    // NOTE: this only deletes pet/health data, same as before — it
-    // does not delete the actual Supabase Auth account. True account
-    // deletion needs a service-role Edge Function (can't be done
-    // safely from the client with the anon key).
+    setDeleteError('');
     try {
-      const pets = await entities.Pet.list();
-      for (const pet of pets) {
-        await entities.SymptomLog.filter({ pet_id: pet.id }).then(logs =>
-          Promise.all(logs.map(l => entities.SymptomLog.delete(l.id)))
-        );
-        await entities.Medication.filter({ pet_id: pet.id }).then(meds =>
-          Promise.all(meds.map(m => entities.Medication.delete(m.id)))
-        );
-        await entities.FoodLog.filter({ pet_id: pet.id }).then(foods =>
-          Promise.all(foods.map(f => entities.FoodLog.delete(f.id)))
-        );
-        await entities.Pet.delete(pet.id);
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData?.session?.access_token;
+      const { data, error } = await supabase.functions.invoke('delete-account', {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (error || !data?.success) {
+        setDeleteError(error?.message ?? data?.error ?? 'Something went wrong. Please try again.');
+        setDeleting(false);
+        return;
       }
-      await supabase.auth.signOut();
-      window.location.href = '/';
+      // Success — sign out and redirect. The auth row is already gone server-side
+      // so signOut() is best-effort; navigate regardless.
+      await supabase.auth.signOut().catch(() => {});
+      window.location.href = '/login?deleted=1';
     } catch (e) {
+      setDeleteError('Something went wrong. Please try again.');
       setDeleting(false);
     }
   };
@@ -99,7 +102,8 @@ export default function Settings() {
           label: 'Delete Account & All Data',
           icon: Trash2,
           color: 'text-destructive',
-          destructive: true,
+          action: openDeleteFlow,
+          destructive: false,
         },
       ],
     },
@@ -147,34 +151,16 @@ export default function Settings() {
                       </div>
                     );
                   }
-                  if (item.destructive) {
+                  if (item.destructive === false && item.action === openDeleteFlow) {
                     return (
-                      <AlertDialog key={i}>
-                        <AlertDialogTrigger asChild>
-                          <button className={`w-full flex items-center gap-3 px-4 py-3.5 text-left transition-colors hover:bg-destructive/5 min-h-[52px] ${item.color}`}>
-                            <Icon className="h-4.5 w-4.5" />
-                            <span className="text-sm font-medium">{item.label}</span>
-                          </button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>Delete Account?</AlertDialogTitle>
-                            <AlertDialogDescription>
-                              This will permanently delete all your pets, symptom logs, medications, and food data. This action cannot be undone.
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>Cancel</AlertDialogCancel>
-                            <AlertDialogAction
-                              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                              onClick={handleDeleteAccount}
-                              disabled={deleting}
-                            >
-                              {deleting ? 'Deleting...' : 'Delete Everything'}
-                            </AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
+                      <button
+                        key={i}
+                        onClick={item.action}
+                        className={`w-full flex items-center gap-3 px-4 py-3.5 text-left transition-colors hover:bg-destructive/5 min-h-[52px] ${item.color}`}
+                      >
+                        <Icon className="h-4.5 w-4.5" />
+                        <span className="text-sm font-medium">{item.label}</span>
+                      </button>
                     );
                   }
                   return (
@@ -196,6 +182,69 @@ export default function Settings() {
         <AddPetDialog open={showAdd} onOpenChange={setShowAdd} onSuccess={() => setShowAdd(false)} />
         {editPet && <EditPetSheet pet={editPet} open={editOpen} onOpenChange={setEditOpen} onSuccess={reloadEditPet} />}
         {editPet && <InviteCoOwnerDialog petId={petId} petName={editPet.name} open={coOwnerOpen} onOpenChange={setCoOwnerOpen} />}
+
+        {/* Step 1 — Warning */}
+        <Dialog open={deleteStep === 1} onOpenChange={(v) => !v && closeDeleteFlow()}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle className="font-serif text-xl text-destructive">Delete Account?</DialogTitle>
+            </DialogHeader>
+            <DialogDescription asChild>
+              <div className="space-y-3 text-sm text-muted-foreground">
+                <p>This will permanently delete your account and remove your access to all pets.</p>
+                <ul className="list-disc pl-4 space-y-1">
+                  <li>Pets you <strong className="text-foreground">solely own</strong> will be permanently deleted along with all their health records.</li>
+                  <li>Pets you <strong className="text-foreground">share with a co-owner</strong> will survive — ownership transfers to your co-owner.</li>
+                  <li>Your uploaded photos and documents will be permanently deleted.</li>
+                </ul>
+                <p className="font-medium text-foreground">This cannot be undone.</p>
+              </div>
+            </DialogDescription>
+            <DialogFooter className="mt-2 gap-2">
+              <button onClick={closeDeleteFlow} className="flex-1 h-10 rounded-lg border border-border text-sm font-medium hover:bg-secondary transition-colors">Cancel</button>
+              <button
+                onClick={() => setDeleteStep(2)}
+                className="flex-1 h-10 rounded-lg bg-destructive text-destructive-foreground text-sm font-medium hover:bg-destructive/90 transition-colors"
+              >
+                Continue
+              </button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Step 2 — Type DELETE to confirm */}
+        <Dialog open={deleteStep === 2} onOpenChange={(v) => !v && closeDeleteFlow()}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle className="font-serif text-xl text-destructive">Confirm Deletion</DialogTitle>
+            </DialogHeader>
+            <DialogDescription asChild>
+              <div className="space-y-3 text-sm text-muted-foreground">
+                <p>Type <strong className="text-foreground font-mono">DELETE</strong> to permanently delete your account.</p>
+              </div>
+            </DialogDescription>
+            <Input
+              value={deleteConfirmText}
+              onChange={e => setDeleteConfirmText(e.target.value)}
+              placeholder="Type DELETE"
+              className="font-mono"
+              autoCapitalize="none"
+              autoCorrect="off"
+              disabled={deleting}
+            />
+            {deleteError && <p className="text-sm text-destructive">{deleteError}</p>}
+            <DialogFooter className="mt-2 gap-2">
+              <button onClick={closeDeleteFlow} disabled={deleting} className="flex-1 h-10 rounded-lg border border-border text-sm font-medium hover:bg-secondary transition-colors disabled:opacity-50">Cancel</button>
+              <button
+                onClick={handleDeleteAccount}
+                disabled={deleteConfirmText !== 'DELETE' || deleting}
+                className="flex-1 h-10 rounded-lg bg-destructive text-destructive-foreground text-sm font-medium hover:bg-destructive/90 transition-colors disabled:opacity-40"
+              >
+                {deleting ? 'Deleting…' : 'Delete My Account'}
+              </button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </PageTransition>
   );
