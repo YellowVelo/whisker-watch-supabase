@@ -73,3 +73,7 @@ See the fuller project summary doc for complete context, but in short:
 
 - This repo (`whisker-watch-supabase`) is the active Supabase-backed rebuild
 - `whisker-watch` (original) is the untouched, still-functioning Base44 version, kept as a safety net
+
+## Migrations
+
+Schema changes live under `supabase/migrations/`. Apply them to the linked project with `supabase db push`.
