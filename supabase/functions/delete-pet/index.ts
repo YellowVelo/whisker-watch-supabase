@@ -160,18 +160,33 @@ Deno.serve(async (req) => {
       }
 
       // The promoted co-owner no longer needs a pet_co_owners row (they
-      // are now created_by directly).
-      await admin
+      // are now created_by directly). created_by has already been
+      // transferred above, so from here on we report an error rather
+      // than a silent "success" if cleanup fails — the transfer itself
+      // isn't rolled back (there's no transaction spanning these calls,
+      // matching the existing delete-account pattern), but the caller
+      // and logs need to know the sharing records may be inconsistent.
+      const { error: dropPromotedRowError } = await admin
         .from('pet_co_owners')
         .delete()
         .eq('id', newOwner.id);
 
+      if (dropPromotedRowError) {
+        console.error('Error removing promoted co-owner row after transfer:', dropPromotedRowError);
+        return json({ error: `Ownership of "${pet.name}" was transferred, but cleanup failed. Please contact support.` }, 500);
+      }
+
       // Any remaining co-owners' rows should now point at the new owner.
-      await admin
+      const { error: repointCoOwnersError } = await admin
         .from('pet_co_owners')
         .update({ owner_id: newOwner.co_owner_user_id })
         .eq('pet_id', petId)
         .neq('co_owner_user_id', newOwner.co_owner_user_id);
+
+      if (repointCoOwnersError) {
+        console.error('Error repointing remaining co-owners after transfer:', repointCoOwnersError);
+        return json({ error: `Ownership of "${pet.name}" was transferred, but cleanup failed. Please contact support.` }, 500);
+      }
 
       await admin.from('notifications').insert({
         user_id: newOwner.co_owner_user_id,

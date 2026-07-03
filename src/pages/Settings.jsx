@@ -65,7 +65,13 @@ export default function Settings() {
   }, []);
 
   useEffect(() => {
-    if (!petId) { setEditPet(null); setPetCoOwners([]); return; }
+    // Clear immediately on every petId change (including switching
+    // straight from one pet to another) — otherwise the previous pet's
+    // co-owner list can still be showing when the delete dialog opens
+    // for the new pet, before its own fetch resolves, and the warning
+    // copy would describe the wrong ownership scenario.
+    setPetCoOwners([]);
+    if (!petId) { setEditPet(null); return; }
     entities.Pet.get(petId).then(setEditPet).catch(() => setEditPet(null));
     entities.PetCoOwner.filter({ pet_id: petId }).then(setPetCoOwners).catch(() => setPetCoOwners([]));
   }, [petId]);
