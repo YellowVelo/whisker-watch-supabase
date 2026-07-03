@@ -73,6 +73,8 @@ export default function InviteCoOwnerDialog({ petId, petName, open, onOpenChange
       // Access record is already saved; just warn rather than block.
       console.error('invite-co-owner function error:', fnResp.error);
       setSuccessMsg(`${cleanEmail} added as co-owner. Invite email could not be sent — they'll see ${petName || 'the pet'} on their next login.`);
+    } else if (fnResp.data?.reason === 'test_or_demo_account') {
+      setSuccessMsg(`${cleanEmail} added as co-owner. No real email was sent (test/demo accounts don't send production email) — they'll see ${petName || 'the pet'} on their next login.`);
     } else if (fnResp.data?.sent === false) {
       setSuccessMsg(`${cleanEmail} already has a Whisker Watch account and can now see ${petName || 'this pet'}.`);
     } else {

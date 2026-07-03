@@ -72,6 +72,21 @@ Deno.serve(async (req) => {
     // Use the service-role client for admin operations (inviting users).
     const adminClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
+    // Test/demo accounts must never send real production email. The
+    // pet_co_owners record already exists by the time this function
+    // runs, so the sharing flow still works end-to-end for testing —
+    // we just skip the actual outbound email.
+    const { data: inviterProfile } = await adminClient
+      .from('profiles')
+      .select('account_type')
+      .eq('id', userData.user.id)
+      .single();
+    if (inviterProfile?.account_type === 'test' || inviterProfile?.account_type === 'demo') {
+      return new Response(JSON.stringify({ sent: false, reason: 'test_or_demo_account' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     // Redirect the invited user to the pet's profile after they sign up.
     const redirectTo = `${SUPABASE_URL.replace('https://', 'https://').replace('.supabase.co', '')}/pet/${petId}`;
     // Use the app's own URL if set as a secret, otherwise fall back to a

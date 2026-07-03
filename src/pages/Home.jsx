@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { PawPrint, Rainbow, Home as HomeIcon, Settings } from 'lucide-react';
 import { entities } from '@/api/entities';
 import { supabase } from '@/api/supabaseClient';
@@ -7,12 +7,28 @@ import PetCard from '../components/PetCard';
 import PageTransition from '../components/PageTransition';
 import usePullToRefresh from '../hooks/usePullToRefresh';
 import PullToRefreshIndicator from '../components/PullToRefreshIndicator';
+import { useToast } from '@/components/ui/use-toast';
 
 export default function Home() {
   const [pets, setPets] = useState([]);
   const [sharedPets, setSharedPets] = useState([]);
   const [latestLogs, setLatestLogs] = useState({});
   const [loading, setLoading] = useState(true);
+  const location = useLocation();
+  const navigate = useNavigate();
+  const { toast } = useToast();
+
+  useEffect(() => {
+    if (!location.state?.petDeleted) return;
+    const { petName, mode } = location.state;
+    const description =
+      mode === 'transferred' ? `${petName} has been removed from your account.` :
+      mode === 'left' ? `You no longer have access to ${petName}.` :
+      `${petName} has been deleted.`;
+    toast({ description });
+    // Clear the state so refreshing/navigating back doesn't re-show it.
+    navigate('.', { replace: true, state: {} });
+  }, [location.state, navigate, toast]);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -26,12 +42,16 @@ export default function Home() {
     if (accesses.length > 0) {
       const sitIds = [...new Set(accesses.map(a => a.pet_sit_id).filter(Boolean))];
       if (sitIds.length > 0) {
-        const sits = await Promise.all(sitIds.map(id => entities.PetSit.get(id)));
-        const petIds = [...new Set(sits.flatMap(s => s?.pet_ids || []))];
+        // .catch(() => null) on each lookup: a pet_sit or pet referenced
+        // here may have since been deleted (e.g. its owner deleted the
+        // pet or cancelled the sit) — skip it rather than let one stale
+        // reference fail the whole page load.
+        const sits = await Promise.all(sitIds.map(id => entities.PetSit.get(id).catch(() => null)));
+        const petIds = [...new Set(sits.filter(Boolean).flatMap(s => s.pet_ids || []))];
         const ownIds = new Set(petList.map(p => p.id));
         const toFetch = petIds.filter(id => !ownIds.has(id));
         if (toFetch.length > 0) {
-          const shared = await Promise.all(toFetch.map(id => entities.Pet.get(id)));
+          const shared = await Promise.all(toFetch.map(id => entities.Pet.get(id).catch(() => null)));
           setSharedPets(shared.filter(Boolean));
         } else {
           setSharedPets([]);

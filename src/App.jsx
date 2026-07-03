@@ -9,6 +9,7 @@ import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import BottomTabBar from './components/BottomTabBar';
+import AccountTypeBanner from './components/AccountTypeBanner';
 import Home from './pages/Home';
 import PetProfile from './pages/PetProfile';
 import PetProfileTabs from './pages/PetProfileTabs';
@@ -47,6 +48,7 @@ const AuthenticatedApp = () => {
 
   return (
     <>
+      <AccountTypeBanner />
       <AnimatePresence mode="wait">
         <Routes location={location} key={location.pathname}>
           <Route path="/login" element={<Login />} />
