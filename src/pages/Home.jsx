@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { PawPrint, Rainbow, Home as HomeIcon, Settings } from 'lucide-react';
+import { PawPrint, Rainbow, Home as HomeIcon, Settings, Sparkles, ChevronRight } from 'lucide-react';
 import { entities } from '@/api/entities';
 import { supabase } from '@/api/supabaseClient';
 import PetCard from '../components/PetCard';
@@ -13,6 +13,7 @@ export default function Home() {
   const [pets, setPets] = useState([]);
   const [sharedPets, setSharedPets] = useState([]);
   const [latestLogs, setLatestLogs] = useState({});
+  const [incompleteOnboardingIds, setIncompleteOnboardingIds] = useState(new Set());
   const [loading, setLoading] = useState(true);
   const location = useLocation();
   const navigate = useNavigate();
@@ -71,6 +72,14 @@ export default function Home() {
         }
       }
       setLatestLogs(latest);
+
+      // A pet with no onboarding row, or a row that isn't completed yet,
+      // still needs "Complete {PetName}'s Profile" surfaced — this is
+      // what makes a skipped/interrupted onboarding resumable.
+      const onboardingRows = await entities.PetOnboarding.list();
+      const completedIds = new Set(onboardingRows.filter(r => r.completed_at).map(r => r.pet_id));
+      const incomplete = new Set(petList.filter(p => !p.is_memorial && !completedIds.has(p.id)).map(p => p.id));
+      setIncompleteOnboardingIds(incomplete);
     }
     setLoading(false);
   }, []);
@@ -122,7 +131,12 @@ export default function Home() {
             {pets.filter(p => !p.is_memorial).length > 0 && (
               <div className="space-y-3">
                 {pets.filter(p => !p.is_memorial).map(pet => (
-                  <PetCard key={pet.id} pet={pet} latestLog={latestLogs[pet.id]} />
+                  <div key={pet.id} className="space-y-2">
+                    <PetCard pet={pet} latestLog={latestLogs[pet.id]} />
+                    {incompleteOnboardingIds.has(pet.id) && (
+                      <CompleteProfileBanner petId={pet.id} petName={pet.name} />
+                    )}
+                  </div>
                 ))}
               </div>
             )}
@@ -157,5 +171,23 @@ export default function Home() {
       </main>
     </div>
     </PageTransition>
+  );
+}
+
+function CompleteProfileBanner({ petId, petName }) {
+  return (
+    <Link
+      to={`/pet/${petId}/onboarding`}
+      className="flex items-center gap-3 rounded-2xl border border-primary/25 bg-primary/10 px-4 py-3.5 active:opacity-80 transition-opacity"
+    >
+      <div className="h-9 w-9 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0">
+        <Sparkles className="h-4 w-4 text-primary" />
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-semibold text-foreground">Complete {petName}'s Profile</p>
+        <p className="text-xs text-muted-foreground">Help Wysker Watch learn {petName}'s normal.</p>
+      </div>
+      <ChevronRight className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+    </Link>
   );
 }

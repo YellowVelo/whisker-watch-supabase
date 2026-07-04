@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, useSearchParams, Link } from 'react-router-dom';
 import { entities } from '@/api/entities';
 import { ArrowLeft, Plus, X, ChevronRight, UtensilsCrossed, Zap, Heart, Scale, Upload, Menu, ClipboardList, Cat, Dog, Rainbow } from 'lucide-react';
 import CareMenu from '../components/CareMenu';
@@ -174,6 +174,7 @@ const QUICK_TYPES = {
 // ── Main component ─────────────────────────────────────────
 export default function PetProfile() {
   const { petId } = useParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [pet, setPet] = useState(null);
   const [logs, setLogs] = useState([]);
   const [medications, setMedications] = useState([]);
@@ -204,6 +205,13 @@ export default function PetProfile() {
 
   useEffect(() => { loadData(); }, [loadData]);
   const { pullDistance, isRefreshing } = usePullToRefresh(loadData);
+
+  useEffect(() => {
+    if (searchParams.get('startCheckin') === '1') {
+      setFullLogOpen(true);
+      setSearchParams((prev) => { prev.delete('startCheckin'); return prev; }, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
 
   if (loading) return (
     <div className="fixed inset-0 flex items-center justify-center bg-background">

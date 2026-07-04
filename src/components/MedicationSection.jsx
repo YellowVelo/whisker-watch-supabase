@@ -11,7 +11,7 @@ import { format, parseISO, addMonths, addWeeks } from 'date-fns';
 import SmartSelect from './SmartSelect';
 
 const today = () => new Date().toISOString().split('T')[0];
-const emptyMed = (petId) => ({ pet_id: petId, name: '', med_type: 'General', prescribed: false, dosage: '', frequency: '', timing_instructions: '', route: '', start_date: today(), next_due_date: '', end_date: '', prescribing_vet: '', active: true, notes: '' });
+const emptyMed = (petId) => ({ pet_id: petId, name: '', med_type: 'General', prescribed: false, dosage: '', frequency: '', timing_instructions: '', route: '', start_date: today(), next_due_date: '', end_date: '', prescribing_vet: '', active: true, reminder_enabled: false, notes: '' });
 
 const FREQUENCIES_WITH_NEXT_DUE = ['Monthly', 'Every 3 months'];
 
@@ -226,6 +226,13 @@ export default function MedicationSection({ petId }) {
                 <p className="text-xs text-muted-foreground">Still being administered</p>
               </div>
               <Switch checked={form.active} onCheckedChange={v => set('active', v)} />
+            </div>
+            <div className="flex items-center justify-between p-3 bg-secondary rounded-lg">
+              <div>
+                <p className="text-sm font-medium">Reminder</p>
+                <p className="text-xs text-muted-foreground">Get notified when it's due</p>
+              </div>
+              <Switch checked={form.reminder_enabled} onCheckedChange={v => set('reminder_enabled', v)} />
             </div>
             <Button type="submit" className="w-full min-h-[44px]" disabled={saving || !form.name.trim()}>
               {saving ? 'Saving...' : editing ? 'Save Changes' : 'Add to Medication List'}

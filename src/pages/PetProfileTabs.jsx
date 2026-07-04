@@ -10,6 +10,7 @@ import CareMenu from '../components/CareMenu';
 import SymptomTrends from '../components/SymptomTrends';
 import LogHistory from '../components/LogHistory';
 import MedicationSection from '../components/MedicationSection';
+import BaselineSection from '../components/BaselineSection';
 import FoodSection from '../components/FoodSection';
 import BloodworkSection from '../components/BloodworkSection';
 import PetSittingSection from '../components/PetSittingSection';
@@ -165,6 +166,11 @@ export default function PetProfileTabs() {
           <TabsContent value="medications" className="mt-0">
             <div className="bg-card rounded-2xl border border-border p-4 shadow-sm">
               <MedicationSection petId={petId} />
+            </div>
+          </TabsContent>
+          <TabsContent value="baseline" className="mt-0">
+            <div className="bg-card rounded-2xl border border-border p-4 shadow-sm">
+              <BaselineSection petId={petId} petName={pet?.name} species={pet?.species} />
             </div>
           </TabsContent>
           <TabsContent value="food" className="mt-0">
