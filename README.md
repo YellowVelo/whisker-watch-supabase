@@ -60,13 +60,13 @@ The function requires an authenticated Supabase session — it checks the reques
 
 See the fuller project summary doc for complete context, but in short:
 
-- [ ] Deploy the `ask-vet-assistant` Edge Function (code is done, not yet deployed)
-- [ ] Import real historical pet data from the original Base44 app
+- [x] Deploy the `ask-vet-assistant` Edge Function (code is done, not yet deployed)
+- [x] Import real historical pet data from the original Base44 app
 - [ ] Sitter invite emails (access records are created; no email is actually sent yet)
-- [ ] True account deletion (currently wipes data + signs out, doesn't delete the auth account)
+- [x] True account deletion (currently wipes data + signs out, doesn't delete the auth account)
 - [ ] Capacitor wrapping for iOS/Android app store distribution
 - [ ] Fi/Tractive pet tracker integration
-- [ ] Shared/co-owner accounts (e.g. both partners logging symptoms for the same pet)
+- [x] Shared/co-owner accounts (e.g. both partners logging symptoms for the same pet)
 - [ ] Native iOS reminders (calendar `.ics` export already works; native push reminders need Capacitor)
 
 ## Related repos
