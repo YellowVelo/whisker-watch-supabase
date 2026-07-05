@@ -25,3 +25,20 @@ export function computeLifeStage(species, birthDate, birthDatePrecision) {
   if (ageYears >= band.seniorCutoff) return 'Senior';
   return 'Adult';
 }
+
+// Human-readable age for display (e.g. "3 yrs"), falling back to the life
+// stage label when birth date precision is too coarse for an exact count.
+export function computeAge(pet) {
+  if (pet.birth_date && pet.birth_date_precision && pet.birth_date_precision !== 'UNKNOWN') {
+    const birth = new Date(pet.birth_date);
+    if (!Number.isNaN(birth.getTime())) {
+      const now = new Date();
+      let years = now.getFullYear() - birth.getFullYear();
+      const monthDiff = now.getMonth() - birth.getMonth();
+      if (monthDiff < 0 || (monthDiff === 0 && now.getDate() < birth.getDate())) years -= 1;
+      if (years >= 1) return `${years} yr${years === 1 ? '' : 's'}`;
+      return 'Under 1 yr';
+    }
+  }
+  return computeLifeStage(pet.species, pet.birth_date, pet.birth_date_precision);
+}

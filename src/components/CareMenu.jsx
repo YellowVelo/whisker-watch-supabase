@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import { X, ClipboardList, TrendingUp, Pill, UtensilsCrossed, FlaskConical, Syringe, UsersRound, Sparkles, Shield, Folder, FileText, Settings, Info, Heart } from 'lucide-react';
+import { X, ClipboardList, TrendingUp, Pill, UtensilsCrossed, FlaskConical, Syringe, UsersRound, Sparkles, Menu as MenuIcon, Info, Heart } from 'lucide-react';
 
 // Redesigned slide-out "Care" navigation menu for a pet's profile page.
 // Ported from a Base44 prototype build of the new design.
@@ -22,14 +22,8 @@ export default function CareMenu({ open, onOpenChange, petId, petName }) {
     { label: 'AI', icon: Sparkles, path: `/pet/${petId}/profile?tab=ai` },
   ] : [];
 
-  const petItems = petId ? [
-    { label: 'Insurance', icon: Shield, path: `/pet/${petId}/insurance` },
-    { label: 'Documents', icon: Folder, path: `/pet/${petId}/documents` },
-    { label: 'Export Report', icon: FileText, path: `/pet/${petId}/export` },
-  ] : [];
-
   const globalItems = [
-    { label: 'Settings', icon: Settings, path: petId ? `/settings?petId=${petId}` : '/settings' },
+    { label: 'Menu', icon: MenuIcon, path: '/settings' },
     { label: 'About', icon: Info, path: '/about' },
   ];
 
@@ -49,10 +43,6 @@ export default function CareMenu({ open, onOpenChange, petId, petName }) {
         {petName && <p className="px-5 pt-3 text-xs text-muted-foreground">For {petName}</p>}
         <div className="flex-1 overflow-y-auto px-3 py-3">
           {tabItems.map((item) => (
-            <MenuItem key={item.label} label={item.label} icon={item.icon} onClick={() => go(item.path)} />
-          ))}
-          {petItems.length > 0 && <div className="my-2 border-t border-border" />}
-          {petItems.map((item) => (
             <MenuItem key={item.label} label={item.label} icon={item.icon} onClick={() => go(item.path)} />
           ))}
           {globalItems.length > 0 && <div className="my-2 border-t border-border" />}

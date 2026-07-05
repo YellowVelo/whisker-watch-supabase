@@ -1,8 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { PawPrint, Rainbow, Home as HomeIcon, Settings, Sparkles, ChevronRight } from 'lucide-react';
+import { PawPrint, Rainbow, Sparkles, ChevronRight } from 'lucide-react';
 import { entities } from '@/api/entities';
-import { supabase } from '@/api/supabaseClient';
 import PetCard from '../components/PetCard';
 import DailyCheckInSheet from '../components/DailyCheckInSheet';
 import PageTransition from '../components/PageTransition';
@@ -18,7 +17,6 @@ const yesterdayStr = () => toDateStr(new Date(Date.now() - 86400000));
 
 export default function Home() {
   const [pets, setPets] = useState([]);
-  const [sharedPets, setSharedPets] = useState([]);
   const [checkIns, setCheckIns] = useState({}); // pet_id -> today's daily_check_in row
   const [yesterdayCheckIns, setYesterdayCheckIns] = useState({}); // pet_id -> yesterday's row
   const [wellness, setWellness] = useState({}); // pet_id -> { latest, trend }
@@ -45,36 +43,9 @@ export default function Home() {
 
   const loadData = useCallback(async () => {
     setLoading(true);
-    const { data: userData } = await supabase.auth.getUser();
-    const me = userData?.user;
     const petList = await entities.Pet.list('-created_date');
     setPets(petList);
 
-    // Load pets shared with me as a sitter (via pet sit records)
-    const accesses = await entities.PetSitterAccess.filter({ sitter_email: me.email });
-    if (accesses.length > 0) {
-      const sitIds = [...new Set(accesses.map(a => a.pet_sit_id).filter(Boolean))];
-      if (sitIds.length > 0) {
-        // .catch(() => null) on each lookup: a pet_sit or pet referenced
-        // here may have since been deleted (e.g. its owner deleted the
-        // pet or cancelled the sit) — skip it rather than let one stale
-        // reference fail the whole page load.
-        const sits = await Promise.all(sitIds.map(id => entities.PetSit.get(id).catch(() => null)));
-        const petIds = [...new Set(sits.filter(Boolean).flatMap(s => s.pet_ids || []))];
-        const ownIds = new Set(petList.map(p => p.id));
-        const toFetch = petIds.filter(id => !ownIds.has(id));
-        if (toFetch.length > 0) {
-          const shared = await Promise.all(toFetch.map(id => entities.Pet.get(id).catch(() => null)));
-          setSharedPets(shared.filter(Boolean));
-        } else {
-          setSharedPets([]);
-        }
-      } else {
-        setSharedPets([]);
-      }
-    } else {
-      setSharedPets([]);
-    }
     if (petList.length) {
       const activePets = petList.filter(p => !p.is_memorial);
       const petIds = activePets.map(p => p.id);
@@ -166,14 +137,9 @@ export default function Home() {
     <div className="min-h-screen pb-28">
       <PullToRefreshIndicator pullDistance={pullDistance} isRefreshing={isRefreshing} />
       <header style={{ paddingTop: 'env(safe-area-inset-top)' }}>
-        <div className="max-w-2xl mx-auto px-5 py-6 flex items-start justify-between">
-          <div>
-            <p className="text-[20px] font-semibold tracking-widest uppercase text-primary/70 mb-0.5">Wysker Watch</p>
-            <h1 className="text-[28px] font-bold text-foreground tracking-tight leading-tight">My Pets</h1>
-          </div>
-          <Link to="/settings" className="h-9 w-9 rounded-full bg-secondary flex items-center justify-center mt-1">
-            <Settings className="h-4 w-4 text-foreground" />
-          </Link>
+        <div className="max-w-2xl mx-auto px-5 py-6">
+          <p className="text-[20px] font-semibold tracking-widest uppercase text-primary/70 mb-0.5">Wysker Watch</p>
+          <h1 className="text-[28px] font-bold text-foreground tracking-tight leading-tight">Today</h1>
         </div>
       </header>
 
@@ -187,12 +153,20 @@ export default function Home() {
             <p className="text-muted-foreground mb-6 max-w-sm mx-auto">
               Track daily symptoms for your cats and dogs with chronic conditions. Spot patterns and share insights with your vet.
             </p>
-            <Link to="/settings" className="inline-flex items-center gap-2 rounded-md bg-primary text-primary-foreground px-5 h-10 text-sm font-medium">
-              Add a Pet in Settings
+            <Link to="/pets" className="inline-flex items-center gap-2 rounded-md bg-primary text-primary-foreground px-5 h-10 text-sm font-medium">
+              Add a Pet
             </Link>
           </div>
         ) : (
           <div className="space-y-6">
+            {activePets.length === 0 && (
+              <div className="text-center py-16">
+                <Rainbow className="h-8 w-8 mx-auto mb-2 text-purple-300" />
+                <p className="text-sm text-muted-foreground">
+                  No active pets yet. Visit <Link to="/pets" className="text-primary underline">Pets</Link> to add one.
+                </p>
+              </div>
+            )}
             {activePets.length > 0 && (
               <div className="space-y-3">
                 {activePets.map(pet => {
@@ -226,32 +200,6 @@ export default function Home() {
                     </div>
                   );
                 })}
-              </div>
-            )}
-            {pets.filter(p => p.is_memorial).length > 0 && (
-              <div>
-                <div className="flex items-center gap-2 mb-3">
-                  <Rainbow className="h-4 w-4 text-purple-700" />
-                  <p className="text-sm font-semibold text-purple-700">Rainbow Bridge</p>
-                </div>
-                <div className="space-y-3">
-                  {pets.filter(p => p.is_memorial).map(pet => (
-                    <PetCard key={pet.id} pet={pet} />
-                  ))}
-                </div>
-              </div>
-            )}
-            {sharedPets.length > 0 && (
-              <div>
-                <div className="flex items-center gap-2 mb-3">
-                  <HomeIcon className="h-4 w-4 text-muted-foreground" />
-                  <p className="text-sm font-semibold text-muted-foreground">Shared with Me</p>
-                </div>
-                <div className="space-y-3">
-                  {sharedPets.map(pet => (
-                    <PetCard key={pet.id} pet={pet} />
-                  ))}
-                </div>
               </div>
             )}
           </div>
@@ -294,7 +242,7 @@ function CompleteProfileBanner({ petId, petName }) {
 // blocking modal, never phrased as a failure to log.
 function CatchUpPrompt({ petName, onNormal, onChanged, onSkip, onDismiss, pending }) {
   return (
-    <div className="rounded-2xl border border-white/8 bg-white/[0.03] px-4 py-3.5">
+    <div className="rounded-2xl border bg-white/[0.03] px-4 py-3.5" style={{ borderColor: 'rgba(255,255,255,0.08)' }}>
       <div className="flex items-start justify-between gap-2 mb-2.5">
         <p className="text-sm font-medium text-white/80">Want to catch up on yesterday for {petName}?</p>
         <button onClick={onDismiss} className="text-xs text-white/30 flex-shrink-0">Not now</button>

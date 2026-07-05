@@ -11,7 +11,9 @@ import ProtectedRoute from '@/components/ProtectedRoute';
 import BottomTabBar from './components/BottomTabBar';
 import AccountTypeBanner from './components/AccountTypeBanner';
 import Home from './pages/Home';
+import Pets from './pages/Pets';
 import PetProfile from './pages/PetProfile';
+import Timeline from './pages/Timeline';
 import PetProfileTabs from './pages/PetProfileTabs';
 import PetOnboarding from './pages/PetOnboarding';
 import PetSymptoms from './pages/PetSymptoms';
@@ -58,7 +60,9 @@ const AuthenticatedApp = () => {
           <Route path="/reset-password" element={<ResetPassword />} />
           <Route element={<ProtectedRoute unauthenticatedElement={<Navigate to="/login" replace />} />}>
             <Route path="/" element={<Home />} />
+            <Route path="/pets" element={<Pets />} />
             <Route path="/pet/:petId" element={<PetProfile />} />
+            <Route path="/pet/:petId/timeline" element={<Timeline />} />
             <Route path="/pet/:petId/profile" element={<PetProfileTabs />} />
             <Route path="/pet/:petId/onboarding" element={<PetOnboarding />} />
             <Route path="/pet/:petId/symptoms" element={<PetSymptoms />} />

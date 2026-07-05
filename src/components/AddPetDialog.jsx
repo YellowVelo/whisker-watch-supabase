@@ -109,7 +109,7 @@ function DateInfoFields({ precision, parts, onPrecisionChange, onPartsChange, id
   );
 }
 
-export default function AddPetDialog({ open, onOpenChange, onSuccess }) {
+export default function AddPetDialog({ open, onOpenChange, onSuccess, returnTo = '/' }) {
   const navigate = useNavigate();
   const [step, setStep] = useState('species'); // species | form | success
   const [saving, setSaving] = useState(false);
@@ -240,7 +240,7 @@ export default function AddPetDialog({ open, onOpenChange, onSuccess }) {
   const handleDone = () => {
     reset();
     onOpenChange(false);
-    navigate('/');
+    navigate(returnTo);
   };
 
   const handleContinueSetup = () => {

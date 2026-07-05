@@ -1,44 +1,23 @@
-import { useState, useEffect, useRef } from 'react';
-import { useSearchParams, useNavigate } from 'react-router-dom';
-import { entities } from '@/api/entities';
+import { useState } from 'react';
 import { supabase } from '@/api/supabaseClient';
-import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { Settings as SettingsIcon, Trash2, LogOut, Plus, Pencil, Moon, Sun, Monitor, Menu, UserPlus, RotateCcw, Sprout } from 'lucide-react';
+import { Settings as SettingsIcon, Trash2, LogOut, RotateCcw, Sprout } from 'lucide-react';
 import PageTransition from '../components/PageTransition';
-import AddPetDialog from '../components/AddPetDialog';
-import EditPetSheet from '../components/EditPetSheet';
-import CareMenu from '../components/CareMenu';
-import InviteCoOwnerDialog from '../components/InviteCoOwnerDialog';
 import { track } from '@/lib/analytics';
 import { useAuth } from '@/lib/AuthContext';
 import { isTestAccount } from '@/lib/accountType';
 import { SEED_SCENARIOS } from '@/lib/seedTestData';
 
+// Menu — owner-level functionality only (Account, About, Test Tools).
+// Pet management (Edit/Share/Delete Pet, Add a Pet) lives in the Pets
+// page and the Pet Profile now, not here.
 export default function Settings() {
   const { user } = useAuth();
-  const [searchParams] = useSearchParams();
-  const navigate = useNavigate();
-  const petId = searchParams.get('petId');
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState('');
   const [deleteStep, setDeleteStep] = useState(0); // 0=closed 1=warning 2=confirm
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
-  const [showAdd, setShowAdd] = useState(false);
-  const [editPet, setEditPet] = useState(null);
-  const [editOpen, setEditOpen] = useState(false);
-  const [careOpen, setCareOpen] = useState(false);
-  const [coOwnerOpen, setCoOwnerOpen] = useState(false);
-
-  // Pet deletion (separate flow/dialog/handler from account deletion)
-  const [currentUserId, setCurrentUserId] = useState(null);
-  const [petCoOwners, setPetCoOwners] = useState([]);
-  const [deletePetStep, setDeletePetStep] = useState(0); // 0=closed 1=warning 2=confirm
-  const [deletePetConfirmText, setDeletePetConfirmText] = useState('');
-  const [deletingPet, setDeletingPet] = useState(false);
-  const [deletePetError, setDeletePetError] = useState('');
-  const [isOnline, setIsOnline] = useState(navigator.onLine);
 
   // Test-account tools (reset + seed data) — only ever shown/usable
   // when the signed-in account's profile.account_type is 'test'.
@@ -49,81 +28,8 @@ export default function Settings() {
   const [seeding, setSeeding] = useState(false);
   const [seedError, setSeedError] = useState('');
 
-  useEffect(() => {
-    const goOnline = () => setIsOnline(true);
-    const goOffline = () => setIsOnline(false);
-    window.addEventListener('online', goOnline);
-    window.addEventListener('offline', goOffline);
-    return () => {
-      window.removeEventListener('online', goOnline);
-      window.removeEventListener('offline', goOffline);
-    };
-  }, []);
-
-  useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => setCurrentUserId(data?.user?.id ?? null));
-  }, []);
-
-  useEffect(() => {
-    // Clear immediately on every petId change (including switching
-    // straight from one pet to another) — otherwise the previous pet's
-    // co-owner list can still be showing when the delete dialog opens
-    // for the new pet, before its own fetch resolves, and the warning
-    // copy would describe the wrong ownership scenario.
-    setPetCoOwners([]);
-    if (!petId) { setEditPet(null); return; }
-    entities.Pet.get(petId).then(setEditPet).catch(() => setEditPet(null));
-    entities.PetCoOwner.filter({ pet_id: petId }).then(setPetCoOwners).catch(() => setPetCoOwners([]));
-  }, [petId]);
-
-  const reloadEditPet = () => {
-    setEditOpen(false);
-    if (petId) entities.Pet.get(petId).then(setEditPet).catch(() => {});
-  };
-
   const openDeleteFlow = () => { setDeleteError(''); setDeleteConfirmText(''); setDeleteStep(1); };
   const closeDeleteFlow = () => { if (!deleting) { setDeleteStep(0); setDeleteConfirmText(''); setDeleteError(''); } };
-
-  const isPrimaryOwner = editPet && currentUserId && editPet.created_by === currentUserId;
-  const hasLinkedCoOwner = petCoOwners.some(c => c.co_owner_user_id);
-
-  const openDeletePetFlow = () => {
-    setDeletePetError('');
-    setDeletePetConfirmText('');
-    setDeletePetStep(1);
-    track('pet_delete_started', { pet_id: petId });
-  };
-  const closeDeletePetFlow = () => {
-    if (!deletingPet) {
-      setDeletePetStep(0);
-      setDeletePetConfirmText('');
-      setDeletePetError('');
-      track('pet_delete_cancelled', { pet_id: petId });
-    }
-  };
-
-  const handleDeletePet = async () => {
-    setDeletingPet(true);
-    setDeletePetError('');
-    try {
-      const { data: sessionData } = await supabase.auth.getSession();
-      const token = sessionData?.session?.access_token;
-      const { data, error } = await supabase.functions.invoke('delete-pet', {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-        body: { pet_id: petId },
-      });
-      if (error || !data?.success) {
-        setDeletePetError(error?.message ?? data?.error ?? "We couldn't delete this pet. Please try again.");
-        setDeletingPet(false);
-        return;
-      }
-      track('pet_deleted', { pet_id: petId, mode: data.mode });
-      navigate('/', { state: { petDeleted: true, petName: data.pet_name, mode: data.mode } });
-    } catch (e) {
-      setDeletePetError("We couldn't delete this pet. Please try again.");
-      setDeletingPet(false);
-    }
-  };
 
   const handleResetTestAccount = async () => {
     setResetting(true);
@@ -142,7 +48,7 @@ export default function Settings() {
       track('test_account_reset', {});
       setResetting(false);
       setResetOpen(false);
-      navigate('/', { state: { petDeleted: true, petName: 'Your test data', mode: 'deleted' } });
+      window.location.href = '/';
     } catch (e) {
       setResetError('Reset failed. Please try again.');
       setResetting(false);
@@ -169,7 +75,7 @@ export default function Settings() {
       track('test_account_seeded', { scenario: scenario.key });
       setSeeding(false);
       setSeedOpen(false);
-      navigate('/');
+      window.location.href = '/';
     } catch (e) {
       setSeedError('Seeding failed. Please try again.');
       setSeeding(false);
@@ -221,39 +127,6 @@ export default function Settings() {
       ],
     }] : []),
     {
-      section: 'Pets',
-      items: [
-        ...(editPet ? [{
-          label: `Edit ${editPet.name}`,
-          icon: Pencil,
-          color: 'text-primary',
-          action: () => setEditOpen(true),
-          destructive: false,
-        }, {
-          label: `Share ${editPet.name} with a Co-Owner`,
-          icon: UserPlus,
-          color: 'text-primary',
-          action: () => setCoOwnerOpen(true),
-          destructive: false,
-        }, {
-          label: `Delete ${editPet.name}`,
-          icon: Trash2,
-          color: 'text-destructive',
-          action: openDeletePetFlow,
-          destructive: false,
-          disabled: !isOnline,
-          sublabel: !isOnline ? 'You need to be online to delete a pet.' : undefined,
-        }] : []),
-        {
-          label: 'Add a Pet',
-          icon: Plus,
-          color: 'text-primary',
-          action: () => setShowAdd(true),
-          destructive: false,
-        },
-      ],
-    },
-    {
       section: 'Account',
       items: [
         {
@@ -288,15 +161,9 @@ export default function Settings() {
           style={{ paddingTop: 'env(safe-area-inset-top)' }}
         >
           <div className="max-w-2xl mx-auto px-4 py-4 flex items-center gap-3">
-            <h1 className="font-serif text-xl flex-1">Settings</h1>
-            {petId && (
-              <button onClick={() => setCareOpen(true)} className="h-9 w-9 rounded-full bg-secondary flex items-center justify-center">
-                <Menu className="h-5 w-5" />
-              </button>
-            )}
+            <h1 className="font-serif text-xl flex-1">Menu</h1>
           </div>
         </header>
-        <CareMenu open={careOpen} onOpenChange={setCareOpen} petId={petId} petName={editPet?.name} />
 
         <main className="max-w-2xl mx-auto px-4 py-6 space-y-6">
           {rows.map(({ section, items }) => (
@@ -347,10 +214,6 @@ export default function Settings() {
             </div>
           ))}
         </main>
-
-        <AddPetDialog open={showAdd} onOpenChange={setShowAdd} />
-        {editPet && <EditPetSheet pet={editPet} open={editOpen} onOpenChange={setEditOpen} onSuccess={reloadEditPet} />}
-        {editPet && <InviteCoOwnerDialog petId={petId} petName={editPet.name} open={coOwnerOpen} onOpenChange={setCoOwnerOpen} />}
 
         {/* Step 1 — Warning */}
         <Dialog open={deleteStep === 1} onOpenChange={(v) => !v && closeDeleteFlow()}>
@@ -410,86 +273,6 @@ export default function Settings() {
                 className="flex-1 h-10 rounded-lg bg-destructive text-destructive-foreground text-sm font-medium hover:bg-destructive/90 transition-colors disabled:opacity-40"
               >
                 {deleting ? 'Deleting…' : 'Delete My Account'}
-              </button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-
-        {/* Delete Pet — Step 1: Warning (separate flow from account deletion) */}
-        <Dialog open={deletePetStep === 1} onOpenChange={(v) => !v && closeDeletePetFlow()}>
-          <DialogContent className="sm:max-w-md">
-            <DialogHeader>
-              <DialogTitle className="font-serif text-xl text-destructive">Delete {editPet?.name}?</DialogTitle>
-            </DialogHeader>
-            <DialogDescription asChild>
-              <div className="space-y-3 text-sm text-muted-foreground">
-                {isPrimaryOwner && hasLinkedCoOwner ? (
-                  <>
-                    <p>
-                      You share {editPet?.name} with a co-owner. Removing {editPet?.name} from your account will
-                      transfer full ownership to your co-owner — you'll no longer have access to their profile,
-                      logs, medications, records, or photos.
-                    </p>
-                    <p>Your co-owner will keep {editPet?.name} and all of their health history.</p>
-                  </>
-                ) : !isPrimaryOwner ? (
-                  <>
-                    <p>
-                      You'll be removed as a co-owner of {editPet?.name}. The primary owner keeps full access and
-                      all of {editPet?.name}'s health history.
-                    </p>
-                  </>
-                ) : (
-                  <p>
-                    This will permanently delete {editPet?.name} and all information connected to them, including
-                    logs, medications, records, photos, and reports.
-                  </p>
-                )}
-                <p>This will not delete your Wysker Watch account or any other pets.</p>
-                <p className="font-medium text-foreground">This cannot be undone.</p>
-              </div>
-            </DialogDescription>
-            <DialogFooter className="mt-2 gap-2">
-              <button onClick={closeDeletePetFlow} className="flex-1 h-10 rounded-lg border border-border text-sm font-medium hover:bg-secondary transition-colors">Cancel</button>
-              <button
-                onClick={() => setDeletePetStep(2)}
-                className="flex-1 h-10 rounded-lg bg-destructive text-destructive-foreground text-sm font-medium hover:bg-destructive/90 transition-colors"
-              >
-                Continue
-              </button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-
-        {/* Delete Pet — Step 2: Type pet name to confirm */}
-        <Dialog open={deletePetStep === 2} onOpenChange={(v) => !v && closeDeletePetFlow()}>
-          <DialogContent className="sm:max-w-md">
-            <DialogHeader>
-              <DialogTitle className="font-serif text-xl text-destructive">Confirm Deletion</DialogTitle>
-            </DialogHeader>
-            <DialogDescription asChild>
-              <div className="space-y-3 text-sm text-muted-foreground">
-                <p>Type <strong className="text-foreground font-mono">{editPet?.name}</strong> to confirm.</p>
-              </div>
-            </DialogDescription>
-            <Input
-              value={deletePetConfirmText}
-              onChange={e => setDeletePetConfirmText(e.target.value)}
-              placeholder={editPet?.name}
-              className="font-mono"
-              autoCapitalize="none"
-              autoCorrect="off"
-              disabled={deletingPet}
-            />
-            {deletePetError && <p className="text-sm text-destructive">{deletePetError}</p>}
-            <DialogFooter className="mt-2 gap-2">
-              <button onClick={closeDeletePetFlow} disabled={deletingPet} className="flex-1 h-10 rounded-lg border border-border text-sm font-medium hover:bg-secondary transition-colors disabled:opacity-50">Cancel</button>
-              <button
-                onClick={handleDeletePet}
-                disabled={deletePetConfirmText !== editPet?.name || deletingPet || !isOnline}
-                className="flex-1 h-10 rounded-lg bg-destructive text-destructive-foreground text-sm font-medium hover:bg-destructive/90 transition-colors disabled:opacity-40"
-              >
-                {deletingPet ? 'Deleting…' : 'Delete Pet'}
               </button>
             </DialogFooter>
           </DialogContent>
