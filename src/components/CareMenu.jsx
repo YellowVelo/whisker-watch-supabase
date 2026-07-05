@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import { X, ClipboardList, TrendingUp, Pill, UtensilsCrossed, FlaskConical, Syringe, UsersRound, Sparkles, Shield, Folder, FileText, Settings, Info } from 'lucide-react';
+import { X, ClipboardList, TrendingUp, Pill, UtensilsCrossed, FlaskConical, Syringe, UsersRound, Sparkles, Shield, Folder, FileText, Settings, Info, Heart } from 'lucide-react';
 
 // Redesigned slide-out "Care" navigation menu for a pet's profile page.
 // Ported from a Base44 prototype build of the new design.
@@ -14,6 +14,7 @@ export default function CareMenu({ open, onOpenChange, petId, petName }) {
     { label: 'History', icon: ClipboardList, path: `/pet/${petId}/profile?tab=history` },
     { label: 'Trends', icon: TrendingUp, path: `/pet/${petId}/profile?tab=trends` },
     { label: 'Meds', icon: Pill, path: `/pet/${petId}/profile?tab=medications` },
+    { label: 'Baseline', icon: Heart, path: `/pet/${petId}/profile?tab=baseline` },
     { label: 'Food', icon: UtensilsCrossed, path: `/pet/${petId}/profile?tab=food` },
     { label: 'Labs', icon: FlaskConical, path: `/pet/${petId}/profile?tab=bloodwork` },
     { label: 'Vaccines', icon: Syringe, path: `/pet/${petId}/profile?tab=vaccines` },

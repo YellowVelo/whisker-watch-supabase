@@ -10,6 +10,7 @@ import { uploadFile } from '@/api/storageClient';
 import { entities } from '@/api/entities';
 import { track } from '@/lib/analytics';
 import { computeLifeStage } from '@/lib/lifeStage';
+import { getOrCreatePetOnboarding } from '@/lib/onboardingClient';
 import { Loader2, Camera } from 'lucide-react';
 import { getPetEmoji, getPetLabel } from '@/lib/speciesConfig';
 
@@ -117,6 +118,7 @@ export default function AddPetDialog({ open, onOpenChange, onSuccess }) {
   const [species, setSpecies] = useState(null);
   const [form, setForm] = useState(emptyForm);
   const [createdPetName, setCreatedPetName] = useState('');
+  const [createdPetId, setCreatedPetId] = useState(null);
   const wasOpen = useRef(false);
 
   useEffect(() => {
@@ -131,6 +133,8 @@ export default function AddPetDialog({ open, onOpenChange, onSuccess }) {
     setForm(emptyForm);
     setError(null);
     setStep('species');
+    setCreatedPetName('');
+    setCreatedPetId(null);
   };
 
   const handlePhotoChange = async (e) => {
@@ -217,6 +221,7 @@ export default function AddPetDialog({ open, onOpenChange, onSuccess }) {
 
     setSaving(false);
     setCreatedPetName(payload.name);
+    setCreatedPetId(created.id);
     setStep('success');
     onSuccess?.();
   };
@@ -239,8 +244,26 @@ export default function AddPetDialog({ open, onOpenChange, onSuccess }) {
   };
 
   const handleContinueSetup = () => {
-    // Pet Onboarding doesn't exist yet; button is disabled until it ships.
-    track('continue_to_onboarding');
+    track('continue_to_onboarding', { pet_id: createdPetId });
+    const petId = createdPetId;
+    reset();
+    onOpenChange(false);
+    navigate(`/pet/${petId}/onboarding`);
+  };
+
+  const handleSkipOnboarding = async () => {
+    track('add_pet_onboarding_skipped', { pet_id: createdPetId });
+    // Best-effort: record that this was an explicit skip (vs. an
+    // interrupted flow) so it stays distinguishable later. A failure
+    // here shouldn't trap the owner on this dialog — skip is meant to
+    // be a low-friction escape hatch.
+    try {
+      const { row } = await getOrCreatePetOnboarding(createdPetId);
+      await entities.PetOnboarding.update(row.id, { skipped_at: new Date().toISOString() });
+    } catch (err) {
+      console.warn('Failed to record onboarding skip:', err);
+    }
+    handleDone();
   };
 
   const emoji = getPetEmoji(species);
@@ -436,20 +459,19 @@ export default function AddPetDialog({ open, onOpenChange, onSuccess }) {
         )}
 
         {step === 'success' && (
-          <div className="py-6 flex flex-col items-center gap-4 text-center">
+          <div className="py-6 flex flex-col items-center gap-3 text-center">
             <span className="text-5xl">🐾</span>
             <p className="font-serif text-xl">{createdPetName} has been added!</p>
+            <p className="text-sm text-muted-foreground max-w-xs">
+              Let's spend a few minutes teaching Wysker Watch about {createdPetName}. This helps us recognize meaningful changes over time.
+            </p>
+            <p className="text-xs text-muted-foreground">About 3 minutes.</p>
             <div className="flex flex-col gap-3 w-full mt-2">
-              <Button
-                className="w-full"
-                disabled
-                title="Pet Onboarding is coming soon"
-                onClick={handleContinueSetup}
-              >
-                Continue Setup <span className="text-xs opacity-75">(Coming soon)</span>
+              <Button className="w-full" onClick={handleContinueSetup}>
+                Complete {createdPetName}'s Profile
               </Button>
-              <Button variant="outline" className="w-full" onClick={handleDone}>
-                Done
+              <Button variant="outline" className="w-full" onClick={handleSkipOnboarding}>
+                Skip for now
               </Button>
             </div>
           </div>

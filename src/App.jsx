@@ -13,6 +13,7 @@ import AccountTypeBanner from './components/AccountTypeBanner';
 import Home from './pages/Home';
 import PetProfile from './pages/PetProfile';
 import PetProfileTabs from './pages/PetProfileTabs';
+import PetOnboarding from './pages/PetOnboarding';
 import PetSymptoms from './pages/PetSymptoms';
 import PetFood from './pages/PetFood';
 import Insurance from './pages/Insurance';
@@ -59,6 +60,7 @@ const AuthenticatedApp = () => {
             <Route path="/" element={<Home />} />
             <Route path="/pet/:petId" element={<PetProfile />} />
             <Route path="/pet/:petId/profile" element={<PetProfileTabs />} />
+            <Route path="/pet/:petId/onboarding" element={<PetOnboarding />} />
             <Route path="/pet/:petId/symptoms" element={<PetSymptoms />} />
             <Route path="/pet/:petId/food" element={<PetFood />} />
             <Route path="/pet/:petId/insurance" element={<Insurance />} />
