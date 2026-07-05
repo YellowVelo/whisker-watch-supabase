@@ -42,3 +42,29 @@ export function computeAge(pet) {
   }
   return computeLifeStage(pet.species, pet.birth_date, pet.birth_date_precision);
 }
+
+// Precise "X years, Y months" age for the Pets screen card (mockup shows
+// e.g. "5 years, 2 months" rather than computeAge's rounded "5 yrs").
+// Falls back to the life stage label when precision is too coarse for a
+// month-level count, same as computeAge.
+export function computeDetailedAge(pet) {
+  if (pet.birth_date && pet.birth_date_precision === 'EXACT') {
+    const birth = new Date(pet.birth_date);
+    if (!Number.isNaN(birth.getTime())) {
+      const now = new Date();
+      let years = now.getFullYear() - birth.getFullYear();
+      let months = now.getMonth() - birth.getMonth();
+      if (now.getDate() < birth.getDate()) months -= 1;
+      if (months < 0) { years -= 1; months += 12; }
+
+      if (years < 1) {
+        if (months <= 0) return 'Under 1 month';
+        return `${months} month${months === 1 ? '' : 's'}`;
+      }
+      const yearPart = `${years} year${years === 1 ? '' : 's'}`;
+      if (months <= 0) return yearPart;
+      return `${yearPart}, ${months} month${months === 1 ? '' : 's'}`;
+    }
+  }
+  return computeAge(pet);
+}

@@ -155,6 +155,47 @@ export function describeObservation(obs, typeIdToCode) {
   return null;
 }
 
+// Batched "raw values per category" read for a set of today's check-ins,
+// keyed by pet_id -> { [categoryCode]: { value, severityScore } }. Unlike
+// getObservationSummariesForCheckIns (full sentences for Home's Today's
+// Check-Ins card), this preserves the raw enum value and severity so the
+// Pets screen can render short chip labels (Normal/Low/High/etc.) per
+// fixed category slot.
+export async function getObservationValuesForCheckIns(checkInsByPetId) {
+  const checkInIds = Object.values(checkInsByPetId).filter(Boolean).map((c) => c.id);
+  if (checkInIds.length === 0) return {};
+
+  const [{ data, error }, catalog] = await Promise.all([
+    supabase
+      .from('observations')
+      .select('*')
+      .in('daily_check_in_id', checkInIds),
+    loadObservationCatalog(),
+  ]);
+  if (error) throw error;
+
+  const typeIdToCode = {};
+  for (const [code, entry] of Object.entries(catalog)) typeIdToCode[entry.type.id] = code;
+
+  const observationsByCheckIn = {};
+  for (const obs of data) {
+    (observationsByCheckIn[obs.daily_check_in_id] ||= []).push(obs);
+  }
+
+  const result = {};
+  for (const [petId, checkIn] of Object.entries(checkInsByPetId)) {
+    if (!checkIn) continue;
+    const values = {};
+    for (const obs of observationsByCheckIn[checkIn.id] || []) {
+      const code = typeIdToCode[obs.observation_type_id];
+      if (!code) continue;
+      values[code] = { value: obs.value, notes: obs.notes, severityScore: obs.severity_score };
+    }
+    result[petId] = values;
+  }
+  return result;
+}
+
 export async function getLatestWellness(petId) {
   const recent = await getRecentWellnessScores(petId, 14);
   return { latest: recent[0] || null, trend: computeTrend(recent) };

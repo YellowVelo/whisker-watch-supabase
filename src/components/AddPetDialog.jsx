@@ -223,7 +223,7 @@ export default function AddPetDialog({ open, onOpenChange, onSuccess, returnTo =
     setCreatedPetName(payload.name);
     setCreatedPetId(created.id);
     setStep('success');
-    onSuccess?.();
+    onSuccess?.(created.id);
   };
 
   const handleCancel = () => {
