@@ -15,7 +15,12 @@
 import { entities } from '@/api/entities';
 import { supabase } from '@/api/supabaseClient';
 import { computeDayScore, computeTrend } from './scoring';
-import { CATEGORIES } from './config';
+import { CATEGORIES, getCategory } from './config';
+
+// Answer values that represent "no change from normal" across every
+// enum category — these are never worth surfacing as an observation
+// summary line, even though they're stored as real observations.
+const BASELINE_VALUES = new Set(['normal', 'none', 'no_change']);
 
 const todayStr = () => new Date().toISOString().split('T')[0];
 
@@ -91,6 +96,63 @@ export async function getRecentWellnessForPets(petIds, limitPerPet = 14) {
     result[petId] = { latest: rows[0] || null, trend: computeTrend(rows) };
   }
   return result;
+}
+
+// Batched "what changed" summary for a set of today's check-ins, keyed
+// by pet_id -> array of human-readable observation labels (e.g. "Ate
+// less than usual"), oldest-logged first. Used by Home's Today's
+// Check-Ins cards; the UI decides how many of these to show and
+// whether to render a "+N more" tail.
+export async function getObservationSummariesForCheckIns(checkInsByPetId) {
+  const checkInIds = Object.values(checkInsByPetId).filter(Boolean).map((c) => c.id);
+  if (checkInIds.length === 0) return {};
+
+  const [{ data, error }, catalog] = await Promise.all([
+    supabase
+      .from('observations')
+      .select('*')
+      .in('daily_check_in_id', checkInIds)
+      .order('observed_at', { ascending: true }),
+    loadObservationCatalog(),
+  ]);
+  if (error) throw error;
+
+  const typeIdToCode = {};
+  for (const [code, entry] of Object.entries(catalog)) typeIdToCode[entry.type.id] = code;
+
+  const observationsByCheckIn = {};
+  for (const obs of data) {
+    (observationsByCheckIn[obs.daily_check_in_id] ||= []).push(obs);
+  }
+
+  const result = {};
+  for (const [petId, checkIn] of Object.entries(checkInsByPetId)) {
+    if (!checkIn) continue;
+    result[petId] = (observationsByCheckIn[checkIn.id] || [])
+      .map((obs) => describeObservation(obs, typeIdToCode))
+      .filter(Boolean);
+  }
+  return result;
+}
+
+// Exported (rather than kept module-private) so it can be unit tested
+// directly — it's the one piece of business logic in this file that
+// doesn't need a network call to verify.
+export function describeObservation(obs, typeIdToCode) {
+  const category = getCategory(typeIdToCode[obs.observation_type_id]);
+  if (!category) return null;
+
+  if (category.answerType === 'enum') {
+    if (obs.value == null || BASELINE_VALUES.has(obs.value)) return null;
+    return category.options.find((o) => o.value === obs.value)?.label ?? null;
+  }
+  if (category.answerType === 'number') {
+    return obs.numeric_value != null ? `${category.label} updated` : null;
+  }
+  if (category.answerType === 'text') {
+    return obs.notes ? category.label : null;
+  }
+  return null;
 }
 
 export async function getLatestWellness(petId) {

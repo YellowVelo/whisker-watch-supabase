@@ -22,5 +22,6 @@ export const entities = {
   Observation: createEntityClient('observations'),
   PetBaseline: createEntityClient('pet_baselines'),
   WellnessScore: createEntityClient('wellness_scores'),
+  Notification: createEntityClient('notifications'),
 };
 

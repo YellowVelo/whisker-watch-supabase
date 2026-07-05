@@ -12,6 +12,7 @@ import { Loader2, Heart, MailCheck } from 'lucide-react';
 // onAuthStateChange listener picks up the new session automatically.
 // No OTP-entry screen, no Supabase dashboard config required.
 export default function Register() {
+  const [firstName, setFirstName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
@@ -26,7 +27,10 @@ export default function Register() {
     const { error } = await supabase.auth.signUp({
       email,
       password,
-      options: { emailRedirectTo: window.location.origin },
+      options: {
+        emailRedirectTo: window.location.origin,
+        data: { first_name: firstName.trim() || undefined },
+      },
     });
     if (error) {
       setError(error.message || 'Registration failed');
@@ -64,6 +68,7 @@ export default function Register() {
         ) : (
           <form onSubmit={handleRegister} className="space-y-4">
             {error && <p className="text-sm text-destructive text-center">{error}</p>}
+            <div className="space-y-1.5"><Label>First Name</Label><Input type="text" value={firstName} onChange={e => setFirstName(e.target.value)} maxLength={100} required /></div>
             <div className="space-y-1.5"><Label>Email</Label><Input type="email" value={email} onChange={e => setEmail(e.target.value)} required /></div>
             <div className="space-y-1.5"><Label>Password</Label><Input type="password" value={password} onChange={e => setPassword(e.target.value)} required /></div>
             <div className="space-y-1.5"><Label>Confirm Password</Label><Input type="password" value={confirm} onChange={e => setConfirm(e.target.value)} required /></div>

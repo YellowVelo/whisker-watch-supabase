@@ -11,6 +11,7 @@ import ProtectedRoute from '@/components/ProtectedRoute';
 import BottomTabBar from './components/BottomTabBar';
 import AccountTypeBanner from './components/AccountTypeBanner';
 import Home from './pages/Home';
+import Notifications from './pages/Notifications';
 import Pets from './pages/Pets';
 import PetProfile from './pages/PetProfile';
 import Timeline from './pages/Timeline';
@@ -60,6 +61,7 @@ const AuthenticatedApp = () => {
           <Route path="/reset-password" element={<ResetPassword />} />
           <Route element={<ProtectedRoute unauthenticatedElement={<Navigate to="/login" replace />} />}>
             <Route path="/" element={<Home />} />
+            <Route path="/notifications" element={<Notifications />} />
             <Route path="/pets" element={<Pets />} />
             <Route path="/pet/:petId" element={<PetProfile />} />
             <Route path="/pet/:petId/timeline" element={<Timeline />} />

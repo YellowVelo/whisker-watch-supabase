@@ -15,6 +15,12 @@ import { Textarea } from '@/components/ui/textarea';
 // today save purely for analytics attribution (catch_up_completed vs the
 // regular events) — it doesn't change any persistence behavior.
 export default function DailyCheckInSheet({ pet, date, onClose, onSaved, isCatchUp = false }) {
+  // isCatchUp doesn't just change analytics attribution — it drives the
+  // "today" vs "yesterday" wording throughout this sheet, since a
+  // catch-up save is for a past date and showing "today" language would
+  // mislead the owner about which day they're logging (UX Principle:
+  // "owners should always understand ... what information was used").
+  const dayWord = isCatchUp ? 'yesterday' : 'today';
   const [stage, setStage] = useState('initial'); // initial | categories | details | saving
   const [selectedCodes, setSelectedCodes] = useState([]);
   const [answers, setAnswers] = useState({}); // code -> { value, numericValue, notes }
@@ -117,7 +123,7 @@ export default function DailyCheckInSheet({ pet, date, onClose, onSaved, isCatch
           <div className="w-10 h-1 bg-white/20 rounded-full mx-auto mb-4" />
           <div className="flex items-center justify-between">
             <h3 className="text-xl font-bold text-white">
-              {stage === 'initial' && `How is ${pet.name} today?`}
+              {stage === 'initial' && (isCatchUp ? `How was ${pet.name} yesterday?` : `How is ${pet.name} today?`)}
               {stage === 'categories' && 'What changed?'}
               {(stage === 'details' || stage === 'saving') && 'A few details'}
             </h3>
@@ -131,9 +137,9 @@ export default function DailyCheckInSheet({ pet, date, onClose, onSaved, isCatch
         <div className="px-5 overflow-y-auto flex-1 pb-2">
           {stage === 'initial' && (
             <div className="space-y-3 pb-2">
-              <BigChoiceButton label="Today was normal" onClick={handleNormal} />
+              <BigChoiceButton label={`${dayWord === 'yesterday' ? 'Yesterday' : 'Today'} was normal`} onClick={handleNormal} />
               <BigChoiceButton label="Something changed" onClick={() => setStage('categories')} />
-              <BigChoiceButton label="Skip today" subtle onClick={handleSkip} />
+              <BigChoiceButton label={`Skip ${dayWord}`} subtle onClick={handleSkip} />
             </div>
           )}
 
@@ -167,6 +173,7 @@ export default function DailyCheckInSheet({ pet, date, onClose, onSaved, isCatch
                   category={CATEGORIES.find((c) => c.code === code)}
                   species={pet.species}
                   petName={pet.name}
+                  dayWord={dayWord}
                   answer={answers[code] || {}}
                   onChange={(patch) => setAnswer(code, patch)}
                 />
@@ -222,14 +229,14 @@ function BigChoiceButton({ label, onClick, subtle }) {
   );
 }
 
-function CategoryQuestion({ category, species, petName, answer, onChange }) {
+function CategoryQuestion({ category, species, petName, dayWord, answer, onChange }) {
   const Icon = category.icon;
 
   return (
     <div>
       <div className="flex items-center gap-2 mb-2.5">
         <Icon className="h-4 w-4 text-white/50 flex-shrink-0" />
-        <p className="text-sm font-semibold text-white">{category.question(petName, species)}</p>
+        <p className="text-sm font-semibold text-white">{category.question(petName, species, dayWord)}</p>
       </div>
 
       {category.answerType === 'enum' && (

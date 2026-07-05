@@ -16,7 +16,7 @@ export const CATEGORIES = [
     code: 'appetite',
     label: 'Appetite',
     icon: UtensilsCrossed,
-    question: (name) => `How did ${name} eat today?`,
+    question: (name, species, dayWord = 'today') => `How did ${name} eat ${dayWord}?`,
     answerType: 'enum',
     hasNote: true,
     hasPhoto: true,
@@ -32,7 +32,7 @@ export const CATEGORIES = [
     code: 'water_intake',
     label: 'Water',
     icon: Droplets,
-    question: (name) => `Did ${name} drink differently today?`,
+    question: (name, species, dayWord = 'today') => `Did ${name} drink differently ${dayWord}?`,
     answerType: 'enum',
     options: [
       { value: 'normal', label: 'Normal' },
@@ -45,9 +45,9 @@ export const CATEGORIES = [
     code: 'bathroom',
     label: 'Bathroom',
     icon: HomeIcon,
-    question: (name, species) => species === 'Dog'
-      ? `Was ${name}'s urination different today?`
-      : `Was ${name}'s litter box use different today?`,
+    question: (name, species, dayWord = 'today') => species === 'Dog'
+      ? `Was ${name}'s urination different ${dayWord}?`
+      : `Was ${name}'s litter box use different ${dayWord}?`,
     answerType: 'enum',
     options: [
       { value: 'normal', label: 'Normal' },
@@ -64,7 +64,7 @@ export const CATEGORIES = [
     code: 'stool',
     label: 'Stool',
     icon: Waves,
-    question: (name) => `Was ${name}'s stool different today?`,
+    question: (name, species, dayWord = 'today') => `Was ${name}'s stool different ${dayWord}?`,
     answerType: 'enum',
     options: [
       { value: 'normal', label: 'Normal' },
@@ -78,7 +78,7 @@ export const CATEGORIES = [
     code: 'vomiting',
     label: 'Vomiting',
     icon: VomitIcon,
-    question: (name) => `Did ${name} vomit today?`,
+    question: (name, species, dayWord = 'today') => `Did ${name} vomit ${dayWord}?`,
     answerType: 'enum',
     hasPhoto: true,
     options: [
@@ -92,7 +92,7 @@ export const CATEGORIES = [
     code: 'energy',
     label: 'Energy',
     icon: Zap,
-    question: (name) => `Was ${name}'s energy different today?`,
+    question: (name, species, dayWord = 'today') => `Was ${name}'s energy different ${dayWord}?`,
     answerType: 'enum',
     options: [
       { value: 'normal', label: 'Normal' },
@@ -105,7 +105,7 @@ export const CATEGORIES = [
     code: 'mobility',
     label: 'Mobility',
     icon: Footprints,
-    question: (name) => `Did ${name} move differently today?`,
+    question: (name, species, dayWord = 'today') => `Did ${name} move differently ${dayWord}?`,
     answerType: 'enum',
     options: [
       { value: 'normal', label: 'Normal' },
@@ -126,7 +126,7 @@ export const CATEGORIES = [
     code: 'breathing',
     label: 'Breathing',
     icon: Wind,
-    question: (name) => `Was ${name}'s breathing different today?`,
+    question: (name, species, dayWord = 'today') => `Was ${name}'s breathing different ${dayWord}?`,
     answerType: 'enum',
     options: [
       { value: 'normal', label: 'Normal' },
@@ -140,7 +140,7 @@ export const CATEGORIES = [
     code: 'itching',
     label: 'Skin / Itching',
     icon: Sparkles,
-    question: (name) => `Did ${name} scratch, lick, or chew more today?`,
+    question: (name, species, dayWord = 'today') => `Did ${name} scratch, lick, or chew more ${dayWord}?`,
     answerType: 'enum',
     options: [
       { value: 'normal', label: 'Normal' },
@@ -154,7 +154,7 @@ export const CATEGORIES = [
     code: 'behavior',
     label: 'Mood / Behavior',
     icon: Heart,
-    question: (name) => `Was ${name}'s behavior different today?`,
+    question: (name, species, dayWord = 'today') => `Was ${name}'s behavior different ${dayWord}?`,
     answerType: 'enum',
     options: [
       { value: 'normal', label: 'Normal' },
@@ -170,7 +170,7 @@ export const CATEGORIES = [
     code: 'medication_exception',
     label: 'Medication',
     icon: Pill,
-    question: (name) => `Was anything different with ${name}'s medication today?`,
+    question: (name, species, dayWord = 'today') => `Was anything different with ${name}'s medication ${dayWord}?`,
     answerType: 'enum',
     options: [
       { value: 'no_change', label: 'No change' },
@@ -185,7 +185,7 @@ export const CATEGORIES = [
     code: 'weight',
     label: 'Weight',
     icon: Scale,
-    question: (name) => `Was ${name}'s weight updated today?`,
+    question: (name, species, dayWord = 'today') => `Was ${name}'s weight updated ${dayWord}?`,
     answerType: 'number',
   },
   {
