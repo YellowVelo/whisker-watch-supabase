@@ -1,98 +1,125 @@
 import { Link } from 'react-router-dom';
-import { UtensilsCrossed, Zap, Heart, Scale, Cat, Dog, Rainbow } from 'lucide-react';
+import { Cat, Dog, Rainbow, Loader2 } from 'lucide-react';
 
 // Redesigned pet card (replaces the original grid-based PetCard).
 // Ported from a Base44 prototype build of the new design — same visual
 // language as MockupPreview.jsx, wired to our real Supabase data
 // instead of fake/mock data. Renamed props from cat/catId -> pet/petId
 // and route from /cat/:id -> /pet/:id to match our existing app.
+//
+// Status now comes from the Wellness Score / Daily Check-In system
+// (src/lib/checkin) rather than the legacy SymptomLog fields.
 
-const appetiteMap = { 'Ate all': 'good', 'Ate most': 'good', 'Ate some': 'warn', 'Ate very little': 'warn', 'Refused': 'bad' };
-const energyMap = { Playful: 'good', Normal: 'good', Calm: 'good', Lethargic: 'warn', Hiding: 'bad' };
+const GLOW_COLOR = { good: '#4CC7B0', warn: '#F4C76B', bad: '#E57373', neutral: '#6FB7FF' };
 
-const GLOW_COLOR = { good: '#6EBBE7', warn: '#f59e0b', bad: '#ef4444' };
-const CHIP = {
-  good: 'bg-emerald-500/12 text-emerald-400 border border-emerald-500/20',
-  warn: 'bg-amber-500/12 text-amber-400 border border-amber-500/20',
-  bad:  'bg-red-500/12 text-red-400 border border-red-500/20',
-};
-
-function getOverallStatus(latestLog) {
-  if (!latestLog) return 'good';
-  const signals = [];
-  if (latestLog.appetite) signals.push(appetiteMap[latestLog.appetite] || 'good');
-  if (latestLog.energy_level) signals.push(energyMap[latestLog.energy_level] || 'good');
-  if (latestLog.vomiting > 2) signals.push('bad');
-  else if (latestLog.vomiting > 0) signals.push('warn');
-  if (signals.includes('bad')) return 'bad';
-  if (signals.includes('warn')) return 'warn';
-  return 'good';
+function getStatusTone(score) {
+  if (score == null) return 'neutral';
+  if (score >= 90) return 'good';
+  if (score >= 75) return 'warn';
+  if (score >= 60) return 'warn';
+  return 'bad';
 }
 
-export default function PetCard({ pet, latestLog }) {
-  const isMemorial = pet.is_memorial;
-  const status = isMemorial ? 'good' : getOverallStatus(latestLog);
+const TREND_LABEL = { stable: 'Stable', improving: 'Improving', monitor: 'Monitor', declining: 'Declining', unknown: null };
 
-  const chips = [];
-  if (latestLog?.appetite) chips.push({ label: 'Appetite', icon: UtensilsCrossed, status: appetiteMap[latestLog.appetite] || 'good' });
-  if (latestLog?.energy_level) chips.push({ label: 'Energy', icon: Zap, status: energyMap[latestLog.energy_level] || 'good' });
-  if (latestLog?.vomiting != null) chips.push({ label: 'Symptoms', icon: Heart, status: latestLog.vomiting > 1 ? 'bad' : latestLog.vomiting > 0 ? 'warn' : 'good' });
-  if (latestLog?.weight_grams != null) chips.push({ label: 'Weight', icon: Scale, status: 'good' });
+export default function PetCard({ pet, wellness, checkIn, onMarkNormal, onOpenChanged, onSkip, actionPending }) {
+  const isMemorial = pet.is_memorial;
+  const score = wellness?.latest?.score ?? null;
+  const trend = wellness?.trend;
+  const tone = isMemorial ? 'neutral' : getStatusTone(score);
+
+  const checkedInToday = checkIn?.status === 'normal' || checkIn?.status === 'changed';
+  const skippedToday = checkIn?.status === 'skipped';
+
+  let statusLine;
+  if (isMemorial) statusLine = null;
+  else if (checkIn?.status === 'changed') statusLine = checkIn.notes || 'Something changed today';
+  else if (checkIn?.status === 'normal') statusLine = 'Today checked in';
+  else if (skippedToday) statusLine = 'Skipped today';
+  else statusLine = 'Not checked in today';
 
   return (
-    <Link to={`/pet/${pet.id}`} className="block active:scale-[0.98] transition-transform">
-    <div className="flex items-stretch rounded-2xl overflow-hidden border border-white/6" style={{ background: 'rgba(255,255,255,0.05)' }}>
-      {/* Status glow bar */}
-      <div className="w-1 flex-shrink-0" style={{ background: GLOW_COLOR[status], boxShadow: `0 0 12px ${GLOW_COLOR[status]}80` }} />
+    <div className="rounded-2xl overflow-hidden border border-white/6" style={{ background: 'rgba(255,255,255,0.05)' }}>
+      <Link to={`/pet/${pet.id}`} className="flex items-stretch active:scale-[0.99] transition-transform">
+        {/* Status glow bar */}
+        <div className="w-1 flex-shrink-0" style={{ background: GLOW_COLOR[tone], boxShadow: `0 0 12px ${GLOW_COLOR[tone]}80` }} />
 
-      {/* Photo */}
-      <div className="relative w-24 flex-shrink-0" style={{ minHeight: 104 }}>
-        {pet.photo_url ? (
-          <img src={pet.photo_url} alt={pet.name} className={`w-full h-full object-cover ${isMemorial ? 'grayscale opacity-50' : ''}`} style={{ minHeight: 104 }} />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center" style={{ minHeight: 104, background: 'rgba(255,255,255,0.04)' }}>
-            {pet.species === 'Dog' ? <Dog className="h-8 w-8 text-white/50" /> : <Cat className="h-8 w-8 text-white/50" />}
-          </div>
-        )}
-        {isMemorial && (
-          <div className="absolute top-2 right-2 bg-purple-500/70 text-white px-1.5 py-0.5 rounded-full backdrop-blur-sm"><Rainbow className="h-3 w-3" /></div>
-        )}
-      </div>
-
-      {/* Info */}
-      <div className="flex-1 px-4 py-3 min-w-0">
-        <div className="flex items-start justify-between gap-1">
-          <div className="min-w-0">
-            <p className="font-semibold text-white text-[20px] leading-snug truncate">{pet.name}</p>
-            {pet.breed && <p className="text-[13px] text-white/35 mt-0.5 truncate">{pet.breed}</p>}
-          </div>
+        {/* Photo */}
+        <div className="relative w-24 flex-shrink-0" style={{ minHeight: 104 }}>
+          {pet.photo_url ? (
+            <img src={pet.photo_url} alt={pet.name} className={`w-full h-full object-cover ${isMemorial ? 'grayscale opacity-50' : ''}`} style={{ minHeight: 104 }} />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center" style={{ minHeight: 104, background: 'rgba(255,255,255,0.04)' }}>
+              {pet.species === 'Dog' ? <Dog className="h-8 w-8 text-white/50" /> : <Cat className="h-8 w-8 text-white/50" />}
+            </div>
+          )}
+          {isMemorial && (
+            <div className="absolute top-2 right-2 bg-purple-500/70 text-white px-1.5 py-0.5 rounded-full backdrop-blur-sm"><Rainbow className="h-3 w-3" /></div>
+          )}
         </div>
 
-        {pet.conditions?.length > 0 && (
-          <p className="text-[12px] text-white/40 mt-2 font-medium">
-            {pet.conditions.join(' | ')}
-          </p>
-        )}
-
-        {chips.length > 0 && (
-          <div className="flex flex-wrap gap-1 mt-2">
-            {chips.map(chip => {
-              const Icon = chip.icon;
-              return (
-                <span key={chip.label} className={`flex items-center gap-1 text-[11px] font-semibold rounded-md px-2 py-0.5 ${CHIP[chip.status]}`}>
-                  {Icon && <Icon className="h-3 w-3" />}
-                  {chip.label}
-                </span>
-              );
-            })}
+        {/* Info */}
+        <div className="flex-1 px-4 py-3 min-w-0">
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <p className="font-semibold text-white text-[20px] leading-snug truncate">{pet.name}</p>
+              {pet.breed && <p className="text-[13px] text-white/35 mt-0.5 truncate">{pet.breed}</p>}
+            </div>
+            {!isMemorial && (
+              <div className="text-right flex-shrink-0">
+                <p className="text-[22px] font-bold text-white leading-none">{score != null ? score : '—'}</p>
+                {trend && TREND_LABEL[trend] && (
+                  <p className="text-[11px] font-medium mt-0.5" style={{ color: GLOW_COLOR[tone] }}>{TREND_LABEL[trend]}</p>
+                )}
+              </div>
+            )}
           </div>
-        )}
 
-        {!latestLog && !isMemorial && (
-          <p className="text-[11px] text-white/20 mt-2">No logs yet</p>
-        )}
-      </div>
+          {pet.conditions?.length > 0 && (
+            <p className="text-[12px] text-white/40 mt-1.5 font-medium truncate">{pet.conditions.join(' | ')}</p>
+          )}
+
+          {statusLine && <p className="text-[12px] text-white/40 mt-1.5">{statusLine}</p>}
+        </div>
+      </Link>
+
+      {!isMemorial && !checkedInToday && !skippedToday && (
+        <div className="flex items-center gap-2 px-4 pb-3 pt-1">
+          <QuickActionButton label="Normal" primary onClick={onMarkNormal} disabled={actionPending} />
+          <QuickActionButton label="Change" onClick={onOpenChanged} disabled={actionPending} />
+          <QuickActionButton label="Skip" subtle onClick={onSkip} disabled={actionPending} />
+        </div>
+      )}
+      {!isMemorial && (checkedInToday || skippedToday) && (
+        <div className="px-4 pb-3 pt-1">
+          <button
+            type="button"
+            onClick={onOpenChanged}
+            disabled={actionPending}
+            className="text-xs font-semibold text-white/40 disabled:opacity-50"
+          >
+            Edit today's check-in
+          </button>
+        </div>
+      )}
     </div>
-    </Link>
+  );
+}
+
+function QuickActionButton({ label, onClick, primary, subtle, disabled }) {
+  return (
+    <button
+      type="button"
+      onClick={(e) => { e.preventDefault(); e.stopPropagation(); onClick?.(); }}
+      disabled={disabled}
+      className="flex-1 rounded-xl text-[13px] font-semibold py-2.5 min-h-[40px] transition-all active:opacity-70 disabled:opacity-40 flex items-center justify-center gap-1.5"
+      style={primary
+        ? { background: '#4CC7B0', color: '#0D0F12' }
+        : subtle
+          ? { background: 'transparent', color: 'rgba(255,255,255,0.45)', border: '1px solid rgba(255,255,255,0.1)' }
+          : { background: 'rgba(255,255,255,0.08)', color: '#fff', border: '1px solid rgba(255,255,255,0.12)' }}
+    >
+      {disabled ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : label}
+    </button>
   );
 }

@@ -5,6 +5,9 @@ import { Button } from '@/components/ui/button';
 import { ArrowLeft, Printer, Menu } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import CareMenu from '@/components/CareMenu';
+import { loadObservationCatalog } from '@/lib/checkin/checkinClient';
+
+const LBS_TO_KG = 0.453592;
 
 const qualityColor = { Normal: '#16a34a', Soft: '#ca8a04', Loose: '#ea580c', Watery: '#dc2626', Bloody: '#991b1b', Constipated: '#d97706', None: '#6b7280' };
 
@@ -16,6 +19,7 @@ export default function VetExport() {
   const [meds, setMeds] = useState([]);
   const [foods, setFoods] = useState([]);
   const [vaccinations, setVaccinations] = useState([]);
+  const [weightObservations, setWeightObservations] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -26,7 +30,18 @@ export default function VetExport() {
       entities.Medication.filter({ pet_id: petId }, '-start_date'),
       entities.FoodLog.filter({ pet_id: petId }, '-date', 100),
       entities.Vaccination.filter({ pet_id: petId }, '-date_given'),
-    ]).then(([c, l, m, f, v]) => { setPet(c); setLogs(l); setMeds(m); setFoods(f); setVaccinations(v); setLoading(false); });
+      entities.Observation.filter({ pet_id: petId }, '-observed_at', 200),
+      loadObservationCatalog(),
+    ]).then(([c, l, m, f, v, obs, catalog]) => {
+      setPet(c); setLogs(l); setMeds(m); setFoods(f); setVaccinations(v);
+      // Daily Check-In weight entries are stored in lbs (see
+      // src/components/DailyCheckInSheet.jsx) — the vet report converts
+      // to kg for display, per vet-facing convention, while the app
+      // itself always shows lbs to the owner.
+      const weightTypeId = catalog.weight?.type.id;
+      setWeightObservations(obs.filter((o) => o.observation_type_id === weightTypeId && o.numeric_value != null));
+      setLoading(false);
+    });
   }, [petId]);
 
   if (loading) return <div className="fixed inset-0 flex items-center justify-center"><div className="w-8 h-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin" /></div>;
@@ -201,6 +216,31 @@ export default function VetExport() {
                 ))}
               </div>
             )}
+          </section>
+        )}
+
+        {/* Daily Check-In Weight Log — entered in lbs by the owner, shown in kg here for the vet */}
+        {weightObservations.length > 0 && (
+          <section className="mb-6">
+            <h2 className="font-serif text-xl font-semibold mb-3 border-b border-border pb-1">Weight Log ({weightObservations.length} records)</h2>
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="text-left text-muted-foreground border-b border-border">
+                  <th className="pb-1.5 font-medium">Date</th>
+                  <th className="pb-1.5 font-medium">Weight (kg)</th>
+                  <th className="pb-1.5 font-medium">Weight (lbs)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {weightObservations.map((o) => (
+                  <tr key={o.id} className="border-b border-border/30">
+                    <td className="py-1">{format(parseISO(o.observed_at), 'MM/dd/yy')}</td>
+                    <td className="py-1">{(o.numeric_value * LBS_TO_KG).toFixed(2)} kg</td>
+                    <td className="py-1 text-muted-foreground">{o.numeric_value.toFixed(1)} lbs</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </section>
         )}
 

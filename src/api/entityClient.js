@@ -120,6 +120,27 @@ export function createEntityClient(tableName) {
       return data;
     },
 
+    // Insert-or-update in a single round trip against a unique constraint
+    // (e.g. `unique(pet_id, check_in_date)`), instead of the caller doing
+    // its own get-then-create-or-update — the latter is a check-then-act
+    // race: two near-simultaneous calls (a fast double-tap, two tabs)
+    // can both see "no existing row" and both insert, and the second
+    // insert fails on the unique constraint instead of merging cleanly.
+    async upsert(payload, conflictColumns) {
+      const { data: userData } = await supabase.auth.getUser();
+      const row = {
+        ...toDbKeys(payload),
+        created_by: userData?.user?.id,
+      };
+      const { data, error } = await supabase
+        .from(tableName)
+        .upsert(row, { onConflict: conflictColumns })
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    },
+
     async update(id, payload) {
       const { data, error } = await supabase
         .from(tableName)

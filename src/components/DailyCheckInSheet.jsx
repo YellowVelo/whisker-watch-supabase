@@ -1,0 +1,291 @@
+import { useState } from 'react';
+import { X, Loader2 } from 'lucide-react';
+import { CATEGORIES, getOptionsForSpecies, getCategory } from '@/lib/checkin/config';
+import { markNormal, markSkipped, saveChangedCheckIn } from '@/lib/checkin/checkinClient';
+import { track } from '@/lib/analytics';
+import { Textarea } from '@/components/ui/textarea';
+
+// Bottom-sheet Daily Check-In flow: "How is {pet} today?" -> (if changed)
+// category picker -> only the relevant follow-up questions -> save.
+// Deliberately not a multi-page wizard — everything after category
+// selection lives in one scrollable sheet so a changed-day check-in stays
+// fast, per "Minimize typing" / "one interaction over many".
+//
+// `isCatchUp` distinguishes a catch-up-for-a-past-date save from a normal
+// today save purely for analytics attribution (catch_up_completed vs the
+// regular events) — it doesn't change any persistence behavior.
+export default function DailyCheckInSheet({ pet, date, onClose, onSaved, isCatchUp = false }) {
+  const [stage, setStage] = useState('initial'); // initial | categories | details | saving
+  const [selectedCodes, setSelectedCodes] = useState([]);
+  const [answers, setAnswers] = useState({}); // code -> { value, numericValue, notes }
+  const [error, setError] = useState(null);
+
+  const setAnswer = (code, patch) => setAnswers((a) => ({ ...a, [code]: { ...a[code], ...patch } }));
+
+  // Only enum-answer categories require a selected option before the
+  // check-in can be saved — number (weight) and text (other) categories
+  // are optional even once picked, per "Weight ... should not be
+  // required daily". This prevents saving a category the owner tapped
+  // in the picker but never actually answered as a bogus empty
+  // observation.
+  const incompleteCodes = selectedCodes.filter((code) => {
+    const cat = getCategory(code);
+    return cat.answerType === 'enum' && !answers[code]?.value;
+  });
+
+  const handleNormal = async () => {
+    setStage('saving');
+    setError(null);
+    try {
+      track('daily_check_in_marked_normal', { pet_id: pet.id, check_in_date: date });
+      await markNormal(pet.id, date);
+      track('wellness_score_calculated', { pet_id: pet.id, check_in_date: date, score: 100 });
+      onSaved?.();
+    } catch (err) {
+      console.error(err);
+      setError('Unable to save check-in. Please try again.');
+      setStage('initial');
+    }
+  };
+
+  const handleSkip = async () => {
+    setStage('saving');
+    setError(null);
+    try {
+      track('daily_check_in_skipped', { pet_id: pet.id, check_in_date: date });
+      await markSkipped(pet.id, date);
+      onSaved?.();
+    } catch (err) {
+      console.error(err);
+      setError('Unable to save check-in. Please try again.');
+      setStage('initial');
+    }
+  };
+
+  const toggleCategory = (code) => {
+    setSelectedCodes((codes) => {
+      const next = codes.includes(code) ? codes.filter((c) => c !== code) : [...codes, code];
+      if (!codes.includes(code)) track('observation_category_selected', { pet_id: pet.id, category: code });
+      return next;
+    });
+  };
+
+  const handleSaveChanged = async () => {
+    if (incompleteCodes.length > 0) return;
+    setStage('saving');
+    setError(null);
+    try {
+      // Optional (number/text) categories only produce an observation if
+      // the owner actually entered something — an untouched optional
+      // category shouldn't leave a meaningless empty row behind.
+      const selections = selectedCodes
+        .map((code) => ({
+          code,
+          value: answers[code]?.value ?? null,
+          numericValue: answers[code]?.numericValue ?? null,
+          notes: answers[code]?.notes || null,
+        }))
+        .filter((sel) => sel.value != null || sel.numericValue != null || sel.notes);
+
+      await saveChangedCheckIn(pet.id, date, selections);
+      track('observation_saved', { pet_id: pet.id, check_in_date: date, categories: selectedCodes });
+      track('daily_check_in_marked_changed', { pet_id: pet.id, check_in_date: date, categories: selectedCodes });
+      track('wellness_score_calculated', { pet_id: pet.id, check_in_date: date });
+      if (isCatchUp) track('catch_up_completed', { pet_id: pet.id, check_in_date: date, status: 'changed' });
+      onSaved?.();
+    } catch (err) {
+      console.error(err);
+      setError('Unable to save check-in. Please try again.');
+      setStage('details');
+    }
+  };
+
+  const handleClose = () => {
+    if (stage !== 'saving') track('check_in_abandoned', { pet_id: pet.id, check_in_date: date, stage });
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex flex-col justify-end" onClick={handleClose}>
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
+      <div
+        className="relative rounded-t-3xl shadow-2xl max-h-[85vh] flex flex-col"
+        style={{ background: 'rgba(18,20,32,0.98)', border: '1px solid rgba(255,255,255,0.08)' }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="px-5 pt-5 pb-3 flex-shrink-0">
+          <div className="w-10 h-1 bg-white/20 rounded-full mx-auto mb-4" />
+          <div className="flex items-center justify-between">
+            <h3 className="text-xl font-bold text-white">
+              {stage === 'initial' && `How is ${pet.name} today?`}
+              {stage === 'categories' && 'What changed?'}
+              {(stage === 'details' || stage === 'saving') && 'A few details'}
+            </h3>
+            <button onClick={handleClose} aria-label="Close" className="h-9 w-9 rounded-full bg-white/8 flex items-center justify-center flex-shrink-0">
+              <X className="h-4 w-4 text-white" />
+            </button>
+          </div>
+          {error && <p className="text-sm text-red-400 mt-2">{error}</p>}
+        </div>
+
+        <div className="px-5 overflow-y-auto flex-1 pb-2">
+          {stage === 'initial' && (
+            <div className="space-y-3 pb-2">
+              <BigChoiceButton label="Today was normal" onClick={handleNormal} />
+              <BigChoiceButton label="Something changed" onClick={() => setStage('categories')} />
+              <BigChoiceButton label="Skip today" subtle onClick={handleSkip} />
+            </div>
+          )}
+
+          {stage === 'categories' && (
+            <div className="grid grid-cols-2 gap-2 pb-2">
+              {CATEGORIES.map((cat) => {
+                const Icon = cat.icon;
+                const active = selectedCodes.includes(cat.code);
+                return (
+                  <button
+                    key={cat.code}
+                    type="button"
+                    aria-pressed={active}
+                    onClick={() => toggleCategory(cat.code)}
+                    className={`flex items-center gap-2 rounded-2xl px-3.5 py-3 text-sm font-semibold transition-all min-h-[48px] ${active ? 'text-background' : 'text-white/70 border border-white/12'}`}
+                    style={active ? { background: '#6EBBE7', color: '#0D0F1A' } : { background: 'rgba(255,255,255,0.05)' }}
+                  >
+                    <Icon className="h-4 w-4 flex-shrink-0" />
+                    <span className="truncate">{cat.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {(stage === 'details' || stage === 'saving') && (
+            <div className="space-y-6 pb-2">
+              {selectedCodes.map((code) => (
+                <CategoryQuestion
+                  key={code}
+                  category={CATEGORIES.find((c) => c.code === code)}
+                  species={pet.species}
+                  petName={pet.name}
+                  answer={answers[code] || {}}
+                  onChange={(patch) => setAnswer(code, patch)}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="px-5 pt-3 pb-10 flex-shrink-0" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+          {stage === 'categories' && (
+            <button
+              onClick={() => setStage('details')}
+              disabled={selectedCodes.length === 0}
+              className="w-full text-base font-bold rounded-2xl h-14 disabled:opacity-30 transition-opacity"
+              style={{ background: '#6EBBE7', color: '#0D0F1A' }}
+            >
+              Continue
+            </button>
+          )}
+          {(stage === 'details' || stage === 'saving') && (
+            <>
+              {incompleteCodes.length > 0 && stage === 'details' && (
+                <p className="text-xs text-white/40 mb-2 text-center">Answer each selected category to save</p>
+              )}
+              <button
+                onClick={handleSaveChanged}
+                disabled={stage === 'saving' || incompleteCodes.length > 0}
+                className="w-full flex items-center justify-center text-base font-bold rounded-2xl h-14 disabled:opacity-40 transition-opacity"
+                style={{ background: '#6EBBE7', color: '#0D0F1A' }}
+              >
+                {stage === 'saving' ? <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Saving…</> : 'Save check-in'}
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function BigChoiceButton({ label, onClick, subtle }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="w-full text-left rounded-2xl px-5 py-4 text-base font-semibold transition-all active:opacity-70 min-h-[56px]"
+      style={subtle
+        ? { background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.6)' }
+        : { background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', color: '#fff' }}
+    >
+      {label}
+    </button>
+  );
+}
+
+function CategoryQuestion({ category, species, petName, answer, onChange }) {
+  const Icon = category.icon;
+
+  return (
+    <div>
+      <div className="flex items-center gap-2 mb-2.5">
+        <Icon className="h-4 w-4 text-white/50 flex-shrink-0" />
+        <p className="text-sm font-semibold text-white">{category.question(petName, species)}</p>
+      </div>
+
+      {category.answerType === 'enum' && (
+        <div className="flex flex-wrap gap-2">
+          {getOptionsForSpecies(category, species).map((opt) => {
+            const active = answer.value === opt.value;
+            return (
+              <button
+                key={opt.value}
+                type="button"
+                aria-pressed={active}
+                onClick={() => onChange({ value: opt.value })}
+                className={`text-sm px-3.5 py-2 rounded-full border transition-colors min-h-[40px] ${active ? '' : 'text-white/60 border-white/12'}`}
+                style={active ? { background: '#6EBBE7', color: '#0D0F1A', borderColor: '#6EBBE7' } : { background: 'rgba(255,255,255,0.05)' }}
+              >
+                {opt.label}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {category.answerType === 'number' && (
+        <div className="flex items-center gap-3">
+          <input
+            type="number"
+            step="0.1"
+            placeholder="Weight"
+            value={answer.numericValue ?? ''}
+            onChange={(e) => onChange({ numericValue: e.target.value === '' ? null : parseFloat(e.target.value) })}
+            className="w-32 rounded-xl px-3.5 py-2.5 text-sm font-semibold text-white bg-white/8 border border-white/10 focus:outline-none focus:ring-1 focus:ring-primary"
+          />
+          <span className="text-xs text-white/40">lbs (optional)</span>
+        </div>
+      )}
+
+      {category.answerType === 'text' && (
+        <Textarea
+          placeholder="Anything noteworthy..."
+          value={answer.notes || ''}
+          onChange={(e) => onChange({ notes: e.target.value })}
+          rows={3}
+          className="bg-white/5 border-white/10 text-white placeholder:text-white/30"
+        />
+      )}
+
+      {category.hasNote && category.answerType === 'enum' && (
+        <input
+          type="text"
+          placeholder="Add a note (optional)"
+          value={answer.notes || ''}
+          onChange={(e) => onChange({ notes: e.target.value })}
+          className="w-full mt-2 rounded-xl px-3.5 py-2 text-sm text-white bg-white/5 border border-white/10 focus:outline-none focus:ring-1 focus:ring-primary placeholder:text-white/30"
+        />
+      )}
+
+    </div>
+  );
+}

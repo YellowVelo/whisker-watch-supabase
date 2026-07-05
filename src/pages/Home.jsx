@@ -4,17 +4,29 @@ import { PawPrint, Rainbow, Home as HomeIcon, Settings, Sparkles, ChevronRight }
 import { entities } from '@/api/entities';
 import { supabase } from '@/api/supabaseClient';
 import PetCard from '../components/PetCard';
+import DailyCheckInSheet from '../components/DailyCheckInSheet';
 import PageTransition from '../components/PageTransition';
 import usePullToRefresh from '../hooks/usePullToRefresh';
 import PullToRefreshIndicator from '../components/PullToRefreshIndicator';
 import { useToast } from '@/components/ui/use-toast';
+import { getCheckInsForPets, getRecentWellnessForPets, markNormal, markSkipped } from '@/lib/checkin/checkinClient';
+import { track } from '@/lib/analytics';
+
+const toDateStr = (d) => d.toISOString().split('T')[0];
+const todayStr = () => toDateStr(new Date());
+const yesterdayStr = () => toDateStr(new Date(Date.now() - 86400000));
 
 export default function Home() {
   const [pets, setPets] = useState([]);
   const [sharedPets, setSharedPets] = useState([]);
-  const [latestLogs, setLatestLogs] = useState({});
+  const [checkIns, setCheckIns] = useState({}); // pet_id -> today's daily_check_in row
+  const [yesterdayCheckIns, setYesterdayCheckIns] = useState({}); // pet_id -> yesterday's row
+  const [wellness, setWellness] = useState({}); // pet_id -> { latest, trend }
   const [incompleteOnboardingIds, setIncompleteOnboardingIds] = useState(new Set());
   const [loading, setLoading] = useState(true);
+  const [pendingPetId, setPendingPetId] = useState(null);
+  const [checkInSheet, setCheckInSheet] = useState(null); // { pet, date } | null
+  const [dismissedCatchUp, setDismissedCatchUp] = useState(new Set());
   const location = useLocation();
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -64,14 +76,17 @@ export default function Home() {
       setSharedPets([]);
     }
     if (petList.length) {
-      const logs = await entities.SymptomLog.list('-date', 200);
-      const latest = {};
-      for (const log of logs) {
-        if (!latest[log.pet_id] || log.date > latest[log.pet_id].date) {
-          latest[log.pet_id] = log;
-        }
-      }
-      setLatestLogs(latest);
+      const activePets = petList.filter(p => !p.is_memorial);
+      const petIds = activePets.map(p => p.id);
+
+      const [todayRows, yesterdayRows, wellnessByPet] = await Promise.all([
+        getCheckInsForPets(petIds, todayStr()),
+        getCheckInsForPets(petIds, yesterdayStr()),
+        getRecentWellnessForPets(petIds),
+      ]);
+      setCheckIns(todayRows);
+      setYesterdayCheckIns(yesterdayRows);
+      setWellness(wellnessByPet);
 
       // A pet with no onboarding row, or a row that isn't completed yet,
       // still needs "Complete {PetName}'s Profile" surfaced — this is
@@ -88,6 +103,54 @@ export default function Home() {
 
   const { isPulling, pullDistance, isRefreshing } = usePullToRefresh(loadData);
 
+  const runAction = async (petId, action) => {
+    setPendingPetId(petId);
+    try {
+      await action();
+      await loadData();
+    } catch (err) {
+      console.error(err);
+      toast({ description: 'Unable to save check-in. Please try again.' });
+    } finally {
+      setPendingPetId(null);
+    }
+  };
+
+  const handleMarkNormal = (pet) => runAction(pet.id, async () => {
+    track('daily_check_in_started', { pet_id: pet.id, check_in_date: todayStr() });
+    await markNormal(pet.id, todayStr());
+    track('daily_check_in_marked_normal', { pet_id: pet.id, check_in_date: todayStr() });
+    track('wellness_score_calculated', { pet_id: pet.id, check_in_date: todayStr(), score: 100 });
+  });
+
+  const handleSkip = (pet) => runAction(pet.id, async () => {
+    track('daily_check_in_started', { pet_id: pet.id, check_in_date: todayStr() });
+    await markSkipped(pet.id, todayStr());
+    track('daily_check_in_skipped', { pet_id: pet.id, check_in_date: todayStr() });
+  });
+
+  const handleOpenChanged = (pet) => {
+    track('daily_check_in_started', { pet_id: pet.id, check_in_date: todayStr() });
+    setCheckInSheet({ pet, date: todayStr() });
+  };
+
+  const handleCatchUp = (pet, status) => {
+    track('catch_up_started', { pet_id: pet.id, check_in_date: yesterdayStr() });
+    if (status === 'normal') {
+      runAction(pet.id, async () => {
+        await markNormal(pet.id, yesterdayStr());
+        track('catch_up_completed', { pet_id: pet.id, check_in_date: yesterdayStr(), status: 'normal' });
+      });
+    } else if (status === 'skipped') {
+      runAction(pet.id, async () => {
+        await markSkipped(pet.id, yesterdayStr());
+        track('catch_up_completed', { pet_id: pet.id, check_in_date: yesterdayStr(), status: 'skipped' });
+      });
+    } else {
+      setCheckInSheet({ pet, date: yesterdayStr(), isCatchUp: true });
+    }
+  };
+
   if (loading) {
     return (
       <div className="fixed inset-0 flex items-center justify-center">
@@ -95,6 +158,8 @@ export default function Home() {
       </div>
     );
   }
+
+  const activePets = pets.filter(p => !p.is_memorial);
 
   return (
     <PageTransition>
@@ -128,16 +193,39 @@ export default function Home() {
           </div>
         ) : (
           <div className="space-y-6">
-            {pets.filter(p => !p.is_memorial).length > 0 && (
+            {activePets.length > 0 && (
               <div className="space-y-3">
-                {pets.filter(p => !p.is_memorial).map(pet => (
-                  <div key={pet.id} className="space-y-2">
-                    <PetCard pet={pet} latestLog={latestLogs[pet.id]} />
-                    {incompleteOnboardingIds.has(pet.id) && (
-                      <CompleteProfileBanner petId={pet.id} petName={pet.name} />
-                    )}
-                  </div>
-                ))}
+                {activePets.map(pet => {
+                  const yesterdayRow = yesterdayCheckIns[pet.id];
+                  const petCreatedToday = pet.created_at && toDateStr(new Date(pet.created_at)) >= yesterdayStr();
+                  const showCatchUp = !yesterdayRow && !petCreatedToday && !dismissedCatchUp.has(pet.id);
+                  return (
+                    <div key={pet.id} className="space-y-2">
+                      <PetCard
+                        pet={pet}
+                        checkIn={checkIns[pet.id]}
+                        wellness={wellness[pet.id]}
+                        actionPending={pendingPetId === pet.id}
+                        onMarkNormal={() => handleMarkNormal(pet)}
+                        onOpenChanged={() => handleOpenChanged(pet)}
+                        onSkip={() => handleSkip(pet)}
+                      />
+                      {incompleteOnboardingIds.has(pet.id) && (
+                        <CompleteProfileBanner petId={pet.id} petName={pet.name} />
+                      )}
+                      {showCatchUp && (
+                        <CatchUpPrompt
+                          petName={pet.name}
+                          pending={pendingPetId === pet.id}
+                          onNormal={() => handleCatchUp(pet, 'normal')}
+                          onChanged={() => handleCatchUp(pet, 'changed')}
+                          onSkip={() => handleCatchUp(pet, 'skipped')}
+                          onDismiss={() => setDismissedCatchUp((s) => new Set(s).add(pet.id))}
+                        />
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             )}
             {pets.filter(p => p.is_memorial).length > 0 && (
@@ -148,7 +236,7 @@ export default function Home() {
                 </div>
                 <div className="space-y-3">
                   {pets.filter(p => p.is_memorial).map(pet => (
-                    <PetCard key={pet.id} pet={pet} latestLog={latestLogs[pet.id]} />
+                    <PetCard key={pet.id} pet={pet} />
                   ))}
                 </div>
               </div>
@@ -161,7 +249,7 @@ export default function Home() {
                 </div>
                 <div className="space-y-3">
                   {sharedPets.map(pet => (
-                    <PetCard key={pet.id} pet={pet} latestLog={latestLogs[pet.id]} />
+                    <PetCard key={pet.id} pet={pet} />
                   ))}
                 </div>
               </div>
@@ -169,6 +257,16 @@ export default function Home() {
           </div>
         )}
       </main>
+
+      {checkInSheet && (
+        <DailyCheckInSheet
+          pet={checkInSheet.pet}
+          date={checkInSheet.date}
+          isCatchUp={checkInSheet.isCatchUp}
+          onClose={() => setCheckInSheet(null)}
+          onSaved={() => { setCheckInSheet(null); loadData(); }}
+        />
+      )}
     </div>
     </PageTransition>
   );
@@ -189,5 +287,29 @@ function CompleteProfileBanner({ petId, petName }) {
       </div>
       <ChevronRight className="h-4 w-4 text-muted-foreground flex-shrink-0" />
     </Link>
+  );
+}
+
+// Gentle "want to catch up?" prompt for a missed prior day — never a
+// blocking modal, never phrased as a failure to log.
+function CatchUpPrompt({ petName, onNormal, onChanged, onSkip, onDismiss, pending }) {
+  return (
+    <div className="rounded-2xl border border-white/8 bg-white/[0.03] px-4 py-3.5">
+      <div className="flex items-start justify-between gap-2 mb-2.5">
+        <p className="text-sm font-medium text-white/80">Want to catch up on yesterday for {petName}?</p>
+        <button onClick={onDismiss} className="text-xs text-white/30 flex-shrink-0">Not now</button>
+      </div>
+      <div className="flex items-center gap-2">
+        <button disabled={pending} onClick={onNormal} className="flex-1 rounded-xl text-[13px] font-semibold py-2 min-h-[36px] disabled:opacity-40" style={{ background: 'rgba(76,199,176,0.15)', color: '#4CC7B0' }}>
+          Yesterday was normal
+        </button>
+        <button disabled={pending} onClick={onChanged} className="flex-1 rounded-xl text-[13px] font-semibold py-2 min-h-[36px] disabled:opacity-40" style={{ background: 'rgba(255,255,255,0.08)', color: '#fff' }}>
+          Something changed
+        </button>
+        <button disabled={pending} onClick={onSkip} className="rounded-xl text-[13px] font-semibold py-2 px-3 min-h-[36px] disabled:opacity-40 text-white/40 border border-white/10">
+          Skip
+        </button>
+      </div>
+    </div>
   );
 }

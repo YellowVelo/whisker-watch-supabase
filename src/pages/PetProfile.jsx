@@ -1,14 +1,18 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useSearchParams, Link } from 'react-router-dom';
 import { entities } from '@/api/entities';
-import { ArrowLeft, Plus, X, ChevronRight, UtensilsCrossed, Zap, Heart, Scale, Upload, Menu, ClipboardList, Cat, Dog, Rainbow } from 'lucide-react';
+import { ArrowLeft, Plus, X, ChevronRight, UtensilsCrossed, Zap, Heart, Scale, Upload, Menu, ClipboardList, Cat, Dog, Rainbow, Activity } from 'lucide-react';
 import CareMenu from '../components/CareMenu';
 import { format, parseISO, subDays } from 'date-fns';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, ReferenceLine, Tooltip, ResponsiveContainer } from 'recharts';
 import SymptomLogForm from '../components/SymptomLogForm';
+import DailyCheckInSheet from '../components/DailyCheckInSheet';
 import PageTransition from '../components/PageTransition';
 import usePullToRefresh from '../hooks/usePullToRefresh';
 import PullToRefreshIndicator from '../components/PullToRefreshIndicator';
+import { track } from '@/lib/analytics';
+import { getLatestWellness } from '@/lib/checkin/checkinClient';
+import { scoreLabel, explainScore } from '@/lib/checkin/scoring';
 
 // ── Status helpers ─────────────────────────────────────────
 const appetiteStatus = { 'Ate all': 'good', 'Ate most': 'good', 'Ate some': 'warn', 'Ate very little': 'warn', 'Refused': 'bad' };
@@ -50,7 +54,9 @@ function getBloodStatus(marker, value) {
 }
 
 // ── Oura-style score bubble ────────────────────────────────
-function ScoreBubble({ icon, score, label, status, onClick }) {
+// maxScore lets the same bubble represent either a 0–4 quick-log scale
+// (appetite/energy/vomiting) or the 0–100 Wellness Score.
+function ScoreBubble({ icon, score, label, status, onClick, maxScore = 4 }) {
   const color = STATUS_COLOR[status] || '#ffffff';
   return (
     <button
@@ -64,7 +70,7 @@ function ScoreBubble({ icon, score, label, status, onClick }) {
           <circle cx="32" cy="32" r="28" fill="none" stroke={`${color}20`} strokeWidth="3" />
           {score != null && (
             <circle cx="32" cy="32" r="28" fill="none" stroke={color} strokeWidth="3"
-              strokeDasharray={`${(score / 4) * 175.9} 175.9`}
+              strokeDasharray={`${(score / maxScore) * 175.9} 175.9`}
               strokeLinecap="round" />
           )}
         </svg>
@@ -181,25 +187,29 @@ export default function PetProfile() {
   const [bloodwork, setBloodwork] = useState([]);
   const [vaccinations, setVaccinations] = useState([]);
   const [foods, setFoods] = useState([]);
+  const [wellness, setWellness] = useState(null); // { latest, trend } | null
   const [loading, setLoading] = useState(true);
   const [logSheet, setLogSheet] = useState(null);
   const [fullLogOpen, setFullLogOpen] = useState(false);
+  const [checkInOpen, setCheckInOpen] = useState(false);
   const [careOpen, setCareOpen] = useState(false);
 
   const loadData = useCallback(async () => {
     setLoading(true);
-    const [petData, logData, medData, bwData, vacData, foodData] = await Promise.all([
+    const [petData, logData, medData, bwData, vacData, foodData, wellnessData] = await Promise.all([
       entities.Pet.get(petId),
       entities.SymptomLog.filter({ pet_id: petId }, '-date', 200),
       entities.Medication.filter({ pet_id: petId, active: true }, '-start_date', 50),
       entities.Bloodwork.filter({ pet_id: petId }, '-date', 3),
       entities.Vaccination.filter({ pet_id: petId }, '-date_given', 20),
       entities.PetFood.filter({ pet_id: petId, active: true }),
+      getLatestWellness(petId),
     ]);
     const todayStr = new Date().toISOString().split('T')[0];
     setPet(petData); setLogs(logData); setMedications(medData);
     setBloodwork(bwData); setVaccinations(vacData);
     setFoods(foodData.filter(f => f.active && (!f.end_date || f.end_date >= todayStr)));
+    setWellness(wellnessData);
     setLoading(false);
   }, [petId]);
 
@@ -208,7 +218,8 @@ export default function PetProfile() {
 
   useEffect(() => {
     if (searchParams.get('startCheckin') === '1') {
-      setFullLogOpen(true);
+      track('daily_check_in_started', { pet_id: petId, check_in_date: format(new Date(), 'yyyy-MM-dd') });
+      setCheckInOpen(true);
       setSearchParams((prev) => { prev.delete('startCheckin'); return prev; }, { replace: true });
     }
   }, [searchParams, setSearchParams]);
@@ -229,7 +240,15 @@ export default function PetProfile() {
   const vomitScore = latestLog?.vomiting != null ? Math.max(0, 100 - latestLog.vomiting * 25) : null;
   const weightVal = latestLog?.weight_grams ? (latestLog.weight_grams / 1000).toFixed(2) : null;
 
+  const wellnessScore = wellness?.latest?.score ?? null;
+  const wellnessStatus = wellnessScore == null ? 'good' : wellnessScore >= 90 ? 'good' : wellnessScore >= 60 ? 'warn' : 'bad';
+  const todayStr2 = format(new Date(), 'yyyy-MM-dd');
+  const wellnessExplanation = wellness?.latest?.check_in_date === todayStr2
+    ? explainScore(pet.name, wellnessScore, wellness.latest.score_reason_summary)
+    : null;
+
   const scoreItems = [
+    { icon: <Activity className="h-5 w-5 text-white" />, score: wellnessScore, maxScore: 100, label: scoreLabel(wellnessScore) || 'Wellness', status: wellnessStatus, key: 'wellness' },
     { icon: <UtensilsCrossed className="h-5 w-5 text-white" />, score: appetiteScore, label: 'Appetite', status: latestLog?.appetite ? appetiteStatus[latestLog.appetite] : 'good', key: 'appetite' },
     { icon: <Zap className="h-5 w-5 text-white" />, score: energyScore, label: 'Energy', status: latestLog?.energy_level ? energyStatus[latestLog.energy_level] : 'good', key: 'energy' },
     { icon: <Heart className="h-5 w-5 text-white" />, score: vomitScore, label: 'Symptoms', status: latestLog?.vomiting > 1 ? 'bad' : latestLog?.vomiting > 0 ? 'warn' : 'good', key: 'vomiting' },
@@ -310,7 +329,7 @@ export default function PetProfile() {
           <div className="px-5 pt-5 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
             <div className="flex gap-5 pb-1" style={{ width: 'max-content' }}>
               {scoreItems.map(item => (
-                <ScoreBubble key={item.key} {...item} onClick={() => setLogSheet(item.key)} />
+                <ScoreBubble key={item.key} {...item} onClick={() => item.key === 'wellness' ? setCheckInOpen(true) : setLogSheet(item.key)} />
               ))}
               <Link to={`/pet/${petId}/symptoms`} className="flex flex-col items-center justify-center gap-1.5 flex-shrink-0" style={{ minWidth: 72 }}>
                 <div className="w-16 h-16 rounded-full flex items-center justify-center" style={{ background: 'rgba(255,255,255,0.08)', border: '1.5px solid rgba(255,255,255,0.12)' }}>
@@ -319,6 +338,9 @@ export default function PetProfile() {
                 <p className="text-[10px] text-white/40 mt-1 uppercase tracking-wide">All logs</p>
               </Link>
             </div>
+            {wellnessExplanation && (
+              <p className="text-xs text-white/40 mt-3 px-1">{wellnessExplanation}</p>
+            )}
           </div>
         )}
 
@@ -326,11 +348,11 @@ export default function PetProfile() {
 
           {/* ── LOG TODAY BUTTON ── */}
           {!isMemorial && (
-            <button onClick={() => setFullLogOpen(true)}
+            <button onClick={() => { track('daily_check_in_started', { pet_id: petId, check_in_date: format(new Date(), 'yyyy-MM-dd') }); setCheckInOpen(true); }}
               className="w-full flex items-center justify-center gap-2 rounded-2xl py-3.5 text-sm font-semibold transition-all active:opacity-70"
               style={{ background: 'rgba(135,206,235,0.12)', border: '1px solid rgba(135,206,235,0.25)', color: '#6EBBE7' }}
             >
-              <Plus className="h-4 w-4" /> Log today's symptoms
+              <Plus className="h-4 w-4" /> Daily check-in
             </button>
           )}
 
@@ -533,6 +555,15 @@ export default function PetProfile() {
         )}
 
         <CareMenu open={careOpen} onOpenChange={setCareOpen} petId={petId} petName={pet?.name} />
+
+        {checkInOpen && (
+          <DailyCheckInSheet
+            pet={pet}
+            date={format(new Date(), 'yyyy-MM-dd')}
+            onClose={() => setCheckInOpen(false)}
+            onSaved={() => { setCheckInOpen(false); loadData(); }}
+          />
+        )}
 
         {/* Full log sheet */}
         {fullLogOpen && (

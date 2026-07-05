@@ -16,5 +16,11 @@ export const entities = {
   PetSitterAccess: createEntityClient('pet_sitter_access'),
   PetCoOwner: createEntityClient('pet_co_owners'),
   PetOnboarding: createEntityClient('pet_onboarding'),
+  DailyCheckIn: createEntityClient('daily_check_ins'),
+  ObservationType: createEntityClient('observation_types'),
+  ObservationOption: createEntityClient('observation_options'),
+  Observation: createEntityClient('observations'),
+  PetBaseline: createEntityClient('pet_baselines'),
+  WellnessScore: createEntityClient('wellness_scores'),
 };
 
