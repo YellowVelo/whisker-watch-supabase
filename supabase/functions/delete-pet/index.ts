@@ -71,7 +71,6 @@ Deno.serve(async (req) => {
     if (userError || !user) return json({ error: 'Unauthorized' }, 401);
 
     const userId = user.id;
-    const userEmail = user.email ?? 'A co-owner';
 
     // ── Parse & validate request body ──────────────────────────────────
     let petId: string | undefined;
@@ -88,6 +87,16 @@ Deno.serve(async (req) => {
     // All subsequent DB work uses the service-role client so it can
     // write notifications and reassign ownership for another user.
     const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+
+    // Prefer the caller's first name in notifications shown to the
+    // other party — falling back to email only if they never set one
+    // (there's no full profile/settings UI yet for editing this).
+    const { data: callerProfile } = await admin
+      .from('profiles')
+      .select('first_name')
+      .eq('id', userId)
+      .maybeSingle();
+    const actorName = callerProfile?.first_name || user.email || 'A co-owner';
 
     const { data: pet, error: petError } = await admin
       .from('pets')
@@ -136,7 +145,7 @@ Deno.serve(async (req) => {
       await admin.from('notifications').insert({
         user_id: pet.created_by,
         type: 'co_owner_removed',
-        message: `${userEmail} removed themselves from ${pet.name}. You still have full access.`,
+        message: `${actorName} removed themselves from ${pet.name}. You still have full access.`,
       });
 
       return json({ success: true, mode: 'left', pet_name: pet.name });
@@ -191,7 +200,7 @@ Deno.serve(async (req) => {
       await admin.from('notifications').insert({
         user_id: newOwner.co_owner_user_id,
         type: 'ownership_transfer',
-        message: `${userEmail} removed ${pet.name} from their account. You are now the sole owner.`,
+        message: `${actorName} removed ${pet.name} from their account. You are now the sole owner.`,
       });
 
       return json({ success: true, mode: 'transferred', pet_name: pet.name });

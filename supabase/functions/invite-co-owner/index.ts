@@ -78,7 +78,7 @@ Deno.serve(async (req) => {
     // we just skip the actual outbound email.
     const { data: inviterProfile } = await adminClient
       .from('profiles')
-      .select('account_type')
+      .select('account_type, first_name')
       .eq('id', userData.user.id)
       .single();
     if (inviterProfile?.account_type === 'test' || inviterProfile?.account_type === 'demo') {
@@ -103,7 +103,7 @@ Deno.serve(async (req) => {
           // These values are available as {{ .Data.pet_name }} etc. in the
           // Supabase email template editor, so you can personalise the body.
           pet_name: petName,
-          invited_by: userData.user.email,
+          invited_by: inviterProfile?.first_name || userData.user.email,
         },
       },
     );

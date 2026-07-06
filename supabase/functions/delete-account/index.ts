@@ -62,11 +62,20 @@ Deno.serve(async (req) => {
     if (userError || !user) return json({ error: 'Unauthorized' }, 401);
 
     const userId = user.id;
-    const userEmail = user.email ?? 'A former co-owner';
 
     // All subsequent DB work uses the service-role client so it can
     // bypass RLS and act on rows across multiple users.
     const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+
+    // Prefer the caller's first name in notifications shown to the
+    // other party — falling back to email only if they never set one
+    // (there's no full profile/settings UI yet for editing this).
+    const { data: callerProfile } = await admin
+      .from('profiles')
+      .select('first_name')
+      .eq('id', userId)
+      .maybeSingle();
+    const actorName = callerProfile?.first_name || user.email || 'A former co-owner';
 
     // ── 2. Handle pets where this user is the primary owner ──────────────
     const { data: ownedPets, error: petsError } = await admin
@@ -134,7 +143,7 @@ Deno.serve(async (req) => {
       await admin.from('notifications').insert({
         user_id: newOwner.co_owner_user_id,
         type: 'ownership_transfer',
-        message: `${userEmail} deleted their account. You are now the sole owner of ${pet.name}.`,
+        message: `${actorName} deleted their account. You are now the sole owner of ${pet.name}.`,
       });
     }
 
@@ -155,7 +164,7 @@ Deno.serve(async (req) => {
       await admin.from('notifications').insert({
         user_id: row.owner_id,
         type: 'co_owner_removed',
-        message: `${userEmail} deleted their account and no longer has access to ${petName}.`,
+        message: `${actorName} deleted their account and no longer has access to ${petName}.`,
       });
       // The pet_co_owners row itself cascades when the auth row is deleted (step 5).
     }
