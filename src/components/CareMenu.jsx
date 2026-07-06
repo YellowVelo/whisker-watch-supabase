@@ -32,7 +32,7 @@ export default function CareMenu({ open, onOpenChange, petId, petName }) {
       <div className="absolute inset-0 bg-black/50" onClick={close} />
       <div
         className="absolute right-0 top-0 bottom-0 w-80 max-w-[85%] bg-card border-l border-border shadow-2xl flex flex-col"
-        style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}
+        style={{ paddingTop: 'calc(var(--account-banner-height, 0px) + env(safe-area-inset-top))', paddingBottom: 'env(safe-area-inset-bottom)' }}
       >
         <div className="flex items-center justify-between px-5 py-4 border-b border-border">
           <h2 className="font-serif text-2xl">Care</h2>

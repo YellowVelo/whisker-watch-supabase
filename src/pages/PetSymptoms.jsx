@@ -50,8 +50,8 @@ export default function PetSymptoms() {
       <div className="min-h-screen bg-background pb-28">
         {/* Header */}
         <div
-          className="sticky top-0 z-20 bg-background/80 backdrop-blur-xl border-b border-white/8 px-4 py-3 flex items-center justify-between"
-          style={{ paddingTop: 'calc(env(safe-area-inset-top) + 12px)' }}
+          className="sticky z-20 bg-background/80 backdrop-blur-xl border-b border-white/8 px-4 py-3 flex items-center justify-between"
+          style={{ top: 'var(--account-banner-height, 0px)', paddingTop: 'calc(env(safe-area-inset-top) + 12px)' }}
         >
           <Link to={`/pet/${petId}`} className="w-9 h-9 rounded-full flex items-center justify-center bg-white/8">
             <ArrowLeft className="h-5 w-5 text-white" />
@@ -141,8 +141,8 @@ export default function PetSymptoms() {
       {logOpen && (
         <div className="fixed inset-0 z-50 bg-background overflow-y-auto">
           <div
-            className="sticky top-0 z-10 bg-background border-b border-white/8 px-4 py-3 flex items-center justify-between"
-            style={{ paddingTop: 'calc(env(safe-area-inset-top) + 12px)' }}
+            className="sticky z-10 bg-background border-b border-white/8 px-4 py-3 flex items-center justify-between"
+            style={{ top: 'var(--account-banner-height, 0px)', paddingTop: 'calc(env(safe-area-inset-top) + 12px)' }}
           >
             <h2 className="font-bold text-xl text-white">Log Symptoms</h2>
             <button onClick={() => setLogOpen(false)} className="h-9 w-9 rounded-full bg-white/8 flex items-center justify-center">

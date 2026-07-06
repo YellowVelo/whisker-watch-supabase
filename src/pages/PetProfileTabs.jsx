@@ -245,7 +245,7 @@ export default function PetProfileTabs() {
 
       {sheetOpen && (
         <div className="fixed inset-0 z-50 bg-background overflow-y-auto">
-          <div className="sticky top-0 z-10 bg-background border-b border-border px-4 py-3 flex items-center justify-between" style={{ paddingTop: 'calc(env(safe-area-inset-top) + 12px)' }}>
+          <div className="sticky z-10 bg-background border-b border-border px-4 py-3 flex items-center justify-between" style={{ top: 'var(--account-banner-height, 0px)', paddingTop: 'calc(env(safe-area-inset-top) + 12px)' }}>
             <h2 className="font-serif text-xl">Log Symptoms</h2>
             <button onClick={() => setSheetOpen(false)} className="h-9 w-9 rounded-full bg-secondary flex items-center justify-center">
               <X className="h-4 w-4" />

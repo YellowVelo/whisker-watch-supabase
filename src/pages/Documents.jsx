@@ -13,8 +13,8 @@ export default function Documents() {
     <PageTransition>
       <div className="min-h-screen bg-background pb-28">
         <header
-          className="sticky top-0 z-10 bg-background/90 backdrop-blur border-b border-border"
-          style={{ paddingTop: 'env(safe-area-inset-top)' }}
+          className="sticky z-10 bg-background/90 backdrop-blur border-b border-border"
+          style={{ top: 'var(--account-banner-height, 0px)', paddingTop: 'env(safe-area-inset-top)' }}
         >
           <div className="max-w-2xl mx-auto px-4 py-3 flex items-center gap-3">
             <button onClick={() => navigate(-1)} className="h-9 w-9 rounded-full bg-secondary flex items-center justify-center">

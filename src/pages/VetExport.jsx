@@ -60,7 +60,7 @@ export default function VetExport() {
   return (
     <div className="min-h-screen bg-background">
       {/* Print toolbar - hidden when printing */}
-      <div className="no-print border-b border-border bg-card/50 px-4 py-3 flex items-center justify-between sticky top-0 z-10">
+      <div className="no-print border-b border-border bg-card/50 px-4 py-3 flex items-center justify-between sticky z-10" style={{ top: 'var(--account-banner-height, 0px)' }}>
         <Link to={`/pet/${petId}`} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
           <ArrowLeft className="h-4 w-4" /> Back
         </Link>
