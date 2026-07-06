@@ -252,7 +252,7 @@ export default function Pets() {
 function SharedPetRow({ pet }) {
   return (
     <Link
-      to={`/pet/${pet.id}`}
+      to={`/pet/${pet.id}/trends`}
       className="flex items-center gap-3 rounded-2xl px-4 py-3 active:opacity-80 transition-opacity"
       style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)' }}
     >

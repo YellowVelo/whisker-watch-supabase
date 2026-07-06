@@ -16,7 +16,7 @@ export default function WellnessCard({ pet, wellness }) {
 
   return (
     <Link
-      to={`/pet/${pet.id}/profile?tab=trends`}
+      to={`/pet/${pet.id}/trends`}
       className="flex-shrink-0 w-[140px] rounded-2xl px-4 py-4 flex flex-col items-center text-center active:opacity-80 transition-opacity"
       style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}
     >

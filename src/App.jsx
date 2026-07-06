@@ -14,6 +14,7 @@ import Home from './pages/Home';
 import Notifications from './pages/Notifications';
 import Pets from './pages/Pets';
 import PetProfile from './pages/PetProfile';
+import PetTrends from './pages/PetTrends';
 import Timeline from './pages/Timeline';
 import PetProfileTabs from './pages/PetProfileTabs';
 import PetOnboarding from './pages/PetOnboarding';
@@ -24,6 +25,7 @@ import Documents from './pages/Documents';
 import About from './pages/About';
 import VetExport from './pages/VetExport';
 import Settings from './pages/Settings';
+import PetProfilesMenu from './pages/PetProfilesMenu';
 import Account from './pages/Account';
 import Privacy from './pages/Privacy';
 import Preferences from './pages/Preferences';
@@ -68,6 +70,7 @@ const AuthenticatedApp = () => {
             <Route path="/notifications" element={<Notifications />} />
             <Route path="/pets" element={<Pets />} />
             <Route path="/pet/:petId" element={<PetProfile />} />
+            <Route path="/pet/:petId/trends" element={<PetTrends />} />
             <Route path="/pet/:petId/timeline" element={<Timeline />} />
             <Route path="/pet/:petId/profile" element={<PetProfileTabs />} />
             <Route path="/pet/:petId/onboarding" element={<PetOnboarding />} />
@@ -78,6 +81,7 @@ const AuthenticatedApp = () => {
             <Route path="/pet/:petId/export" element={<VetExport />} />
             <Route path="/about" element={<About />} />
             <Route path="/settings" element={<Settings />} />
+            <Route path="/settings/pet-profiles" element={<PetProfilesMenu />} />
             <Route path="/account" element={<Account />} />
             <Route path="/privacy" element={<Privacy />} />
             <Route path="/preferences" element={<Preferences />} />

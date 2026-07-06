@@ -12,7 +12,7 @@ export default function CareMenu({ open, onOpenChange, petId, petName }) {
 
   const tabItems = petId ? [
     { label: 'History', icon: ClipboardList, path: `/pet/${petId}/profile?tab=history` },
-    { label: 'Trends', icon: TrendingUp, path: `/pet/${petId}/profile?tab=trends` },
+    { label: 'Trends', icon: TrendingUp, path: `/pet/${petId}/trends` },
     { label: 'Meds', icon: Pill, path: `/pet/${petId}/profile?tab=medications` },
     { label: 'Baseline', icon: Heart, path: `/pet/${petId}/profile?tab=baseline` },
     { label: 'Food', icon: UtensilsCrossed, path: `/pet/${petId}/profile?tab=food` },

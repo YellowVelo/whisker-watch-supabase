@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  User, Bell, ShieldCheck, Settings as SettingsIcon, HelpCircle,
+  User, Bell, ShieldCheck, Settings as SettingsIcon, HelpCircle, PawPrint,
   LogOut, Trash2, Lock, ChevronRight, Sprout, RotateCcw,
 } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
@@ -23,7 +23,7 @@ const ACCOUNT_TYPE_BADGES = {
 };
 
 const MENU_ITEMS = [
-  { key: 'account', to: '/account', icon: User, iconClassName: 'text-blue-300', iconBg: 'rgba(96,165,250,0.14)', title: 'Account', subtitle: 'Manage your account details', event: 'menu_account_selected' },
+  { key: 'pet_profiles', to: '/settings/pet-profiles', icon: PawPrint, iconClassName: 'text-blue-300', iconBg: 'rgba(96,165,250,0.14)', title: 'Pet Profiles', subtitle: "View each pet's full profile", event: 'menu_pet_profiles_selected' },
   { key: 'notifications', to: '/notifications', icon: Bell, iconClassName: 'text-amber-300', iconBg: 'rgba(251,191,36,0.14)', title: 'Notifications', subtitle: 'Manage your notification preferences', event: 'menu_notifications_selected' },
   { key: 'privacy', to: '/privacy', icon: ShieldCheck, iconClassName: 'text-emerald-300', iconBg: 'rgba(52,211,153,0.14)', title: 'Privacy', subtitle: 'Manage your data and privacy', event: 'menu_privacy_selected' },
   { key: 'preferences', to: '/preferences', icon: SettingsIcon, iconClassName: 'text-purple-300', iconBg: 'rgba(196,181,253,0.14)', title: 'Settings', subtitle: 'App preferences and defaults', event: 'menu_settings_selected' },

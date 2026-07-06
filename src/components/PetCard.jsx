@@ -63,7 +63,7 @@ export default function PetCard({ pet, medicationCount = 0, wellness, checkIn, o
     return (
       <Link
         ref={cardRef}
-        to={`/pet/${pet.id}`}
+        to={`/pet/${pet.id}/trends`}
         aria-label={`${pet.name}, in memory. View profile.`}
         className="block rounded-2xl px-4 py-4 active:opacity-80 transition-opacity"
         style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)' }}
@@ -100,7 +100,7 @@ export default function PetCard({ pet, medicationCount = 0, wellness, checkIn, o
   return (
     <Link
       ref={cardRef}
-      to={`/pet/${pet.id}`}
+      to={`/pet/${pet.id}/trends`}
       aria-label={`${pet.name}. View profile.`}
       className="block rounded-2xl px-4 py-4 active:opacity-80 transition-opacity"
       style={{
