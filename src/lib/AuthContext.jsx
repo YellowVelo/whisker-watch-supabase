@@ -51,6 +51,16 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   const loadUserWithProfile = async (authUser) => {
+    // Link any co-owner invites sent to this email before an account
+    // existed (or before this device's last login) to this user, so
+    // shared pets actually become visible and delete-pet's ownership
+    // transfer can find them. Safe to call every time — it's a no-op
+    // once already linked.
+    const { error: claimError } = await supabase.rpc('claim_pending_co_owner_invites');
+    if (claimError) {
+      console.error('Failed to link pending co-owner invites:', claimError);
+    }
+
     const { data: profile, error } = await supabase
       .from('profiles')
       .select('*')
