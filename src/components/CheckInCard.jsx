@@ -13,7 +13,7 @@ function formatTime(iso) {
 // launches the Daily Check-In flow via the parent-supplied handler.
 export default function CheckInCard({ pet, checkIn, observations = [], onStartCheckIn, pending = false }) {
   const status = checkIn?.status;
-  const trendsHref = `/pet/${pet.id}/profile?tab=trends`;
+  const trendsHref = `/pet/${pet.id}/trends`;
   const visibleObservations = observations.slice(0, MAX_OBSERVATIONS);
   const extraCount = Math.max(0, observations.length - MAX_OBSERVATIONS);
 

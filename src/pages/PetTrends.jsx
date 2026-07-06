@@ -1,17 +1,24 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useSearchParams, useNavigate, Link } from 'react-router-dom';
 import { ArrowLeft, MoreHorizontal, UtensilsCrossed, Droplets, Zap, Rainbow } from 'lucide-react';
 import { entities } from '@/api/entities';
 import CareMenu from '../components/CareMenu';
 import ExportCalendarButton from '../components/ExportCalendarButton';
 import PageTransition from '../components/PageTransition';
+import SymptomTrends from '../components/SymptomTrends';
 import WellnessScoreCard from '../components/trends/WellnessScoreCard';
 import ObservationCard from '../components/trends/ObservationCard';
 import WeightCard from '../components/trends/WeightCard';
 import InsightSummaryCard from '../components/trends/InsightSummaryCard';
 import { RANGE_OPTIONS } from '@/lib/checkin/trendsClient';
 import { getPetLabel } from '@/lib/speciesConfig';
+import { track } from '@/lib/analytics';
 
+// "Trends" here is the legacy per-metric symptom_logs charts (previously
+// PetProfileTabs' own "Trends" tab) — kept alive as a sub-tab of this
+// screen rather than deleted, since the new Overview cards read from
+// observations/wellness_scores, not symptom_logs (see Data Model_V2.md
+// §7). Overview's content is unchanged.
 const SECTIONS = [
   { key: 'overview', label: 'Overview' },
   { key: 'trends', label: 'Trends' },
@@ -26,6 +33,7 @@ export default function PetTrends() {
   const activeSection = searchParams.get('section') || 'overview';
 
   const [pet, setPet] = useState(null);
+  const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [careOpen, setCareOpen] = useState(false);
@@ -55,11 +63,51 @@ export default function PetTrends() {
 
   useEffect(() => { if (petId) loadPet(); }, [petId, loadPet]);
 
-  const setSection = (key) => setSearchParams((prev) => {
-    const next = new URLSearchParams(prev);
-    next.set('section', key);
-    return next;
-  }, { replace: true });
+  useEffect(() => { if (pet) track('trends_viewed', { pet_id: pet.id }); }, [pet]);
+
+  // Lazy — only fetch symptom_logs (used solely by the legacy "Trends"
+  // sub-tab) the first time someone actually opens that sub-tab, not on
+  // every visit to Overview. `logsFetching` prevents a duplicate request
+  // if the user taps away and back before the first one resolves, and a
+  // rejected fetch surfaces as a real error rather than silently looking
+  // like "this pet has no logs."
+  const [logsLoaded, setLogsLoaded] = useState(false);
+  const [logsFetching, setLogsFetching] = useState(false);
+  const [logsError, setLogsError] = useState(false);
+  useEffect(() => {
+    // logsError blocks automatic re-fetching once a failure has occurred —
+    // otherwise, logsFetching flipping back to false after a failed
+    // attempt would immediately re-satisfy this effect's guard and retry
+    // in an infinite loop. The Retry button explicitly clears logsError
+    // to opt back in to a single new attempt.
+    if (activeSection !== 'trends' || logsLoaded || logsFetching || logsError) return;
+    setLogsFetching(true);
+    entities.SymptomLog.filter({ pet_id: petId }, '-date', 200)
+      .then((rows) => {
+        setLogs(rows);
+        setLogsLoaded(true);
+      })
+      .catch(() => setLogsError(true))
+      .finally(() => setLogsFetching(false));
+  }, [activeSection, logsLoaded, logsFetching, logsError, petId]);
+
+  const setSection = (key) => {
+    track('trends_section_changed', { pet_id: petId, section: key });
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set('section', key);
+      return next;
+    }, { replace: true });
+  };
+
+  // Tracked off the debounced value (not on every tap) so rapid range
+  // switching doesn't write a burst of analytics_events rows — the same
+  // mitigation already applied to the data fetches below.
+  const isFirstRangeTrack = useRef(true);
+  useEffect(() => {
+    if (isFirstRangeTrack.current) { isFirstRangeTrack.current = false; return; }
+    track('trends_range_changed', { pet_id: petId, range: debouncedRange });
+  }, [debouncedRange, petId]);
 
   if (loading) {
     return (
@@ -131,7 +179,20 @@ export default function PetTrends() {
         </div>
 
         <main className="max-w-2xl mx-auto px-4 pt-4">
-          {activeSection !== 'overview' ? (
+          {activeSection === 'trends' ? (
+            <div className="bg-card rounded-2xl border border-border p-4 shadow-sm">
+              {logsFetching && !logsLoaded ? (
+                <div className="py-8 text-center text-sm text-muted-foreground" aria-busy="true">Loading…</div>
+              ) : logsError ? (
+                <div className="py-8 text-center">
+                  <p className="text-sm text-muted-foreground mb-2">Unable to load trend.</p>
+                  <button onClick={() => setLogsError(false)} className="text-primary underline text-sm">Retry</button>
+                </div>
+              ) : (
+                <SymptomTrends logs={logs} />
+              )}
+            </div>
+          ) : activeSection === 'patterns' || activeSection === 'compare' ? (
             <div className="py-16 text-center">
               <p className="text-[15px] font-semibold text-white/60">{SECTIONS.find((s) => s.key === activeSection)?.label} coming soon</p>
               <p className="text-[13px] text-white/35 mt-1">This view isn't available yet.</p>

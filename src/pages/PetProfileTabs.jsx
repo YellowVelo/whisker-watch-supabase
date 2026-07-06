@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useParams, Link, useSearchParams, useNavigate } from 'react-router-dom';
+import { useParams, Link, Navigate, useSearchParams, useNavigate } from 'react-router-dom';
 import { entities } from '@/api/entities';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -7,7 +7,6 @@ import { ArrowLeft, Plus, FileText, X, Rainbow, Calendar, Cat, Dog, Sparkles, Me
 import SymptomLogForm from '../components/SymptomLogForm';
 import MemorialDialog from '../components/MemorialDialog';
 import CareMenu from '../components/CareMenu';
-import SymptomTrends from '../components/SymptomTrends';
 import LogHistory from '../components/LogHistory';
 import MedicationSection from '../components/MedicationSection';
 import BaselineSection from '../components/BaselineSection';
@@ -159,9 +158,10 @@ export default function PetProfileTabs() {
             </div>
           </TabsContent>
           <TabsContent value="trends" className="mt-0">
-            <div className="bg-card rounded-2xl border border-border p-4 shadow-sm">
-              <SymptomTrends logs={logs} />
-            </div>
+            {/* This tab's own charts moved to the dedicated Trends screen's
+                "Trends" sub-tab — redirect there instead of keeping two
+                separate copies of the same legacy symptom_logs charts. */}
+            <Navigate to={`/pet/${petId}/trends?section=trends`} replace />
           </TabsContent>
           <TabsContent value="medications" className="mt-0">
             <div className="bg-card rounded-2xl border border-border p-4 shadow-sm">
