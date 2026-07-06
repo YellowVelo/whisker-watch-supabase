@@ -13,6 +13,7 @@ import { useToast } from '@/components/ui/use-toast';
 import { track } from '@/lib/analytics';
 import { useAuth } from '@/lib/AuthContext';
 import { isTestAccount } from '@/lib/accountType';
+import { getDisplayName } from '@/lib/profileName';
 import { SEED_SCENARIOS } from '@/lib/seedTestData';
 import { deleteAccount, resetTestAccount, signOutBestEffort } from '@/lib/accountClient';
 
@@ -197,7 +198,7 @@ export default function Settings() {
 
   const accountType = ACCOUNT_TYPE_BADGES[user?.account_type] ? user.account_type : 'production';
   const badge = ACCOUNT_TYPE_BADGES[accountType];
-  const displayName = user?.first_name || user?.email || 'Email unavailable';
+  const displayName = getDisplayName(user) || 'Email unavailable';
   const email = user?.email || 'Email unavailable';
 
   return (

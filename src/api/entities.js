@@ -4,6 +4,7 @@ import { createEntityClient } from './entityClient';
 // (Pet, PetFood, etc.), mapped to their underlying Supabase tables.
 
 export const entities = {
+  Profile: createEntityClient('profiles'),
   Pet: createEntityClient('pets'),
   PetFood: createEntityClient('pet_foods'),
   FoodLog: createEntityClient('food_logs'),

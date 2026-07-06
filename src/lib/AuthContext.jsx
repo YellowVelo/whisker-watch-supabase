@@ -1,5 +1,8 @@
-import React, { createContext, useState, useContext, useEffect } from 'react';
+import React, { createContext, useState, useContext, useEffect, useRef } from 'react';
 import { supabase } from '@/api/supabaseClient';
+import { entities } from '@/api/entities';
+import { detectTimezone, shouldAutoPopulateTimezone } from '@/lib/timezone';
+import { track } from '@/lib/analytics';
 
 const AuthContext = createContext();
 
@@ -30,6 +33,15 @@ export const AuthProvider = ({ children }) => {
   // "your account info didn't load" retry instead of treating it as
   // logged-out.
   const [profileLoadError, setProfileLoadError] = useState(false);
+  // supabase-js fires onAuthStateChange immediately for an existing
+  // session (in addition to the mount-time checkUserAuth() call), so
+  // two overlapping loadUserWithProfile calls for the same user are
+  // routine on first load. Without de-duping, both can read
+  // timezone IS NULL before either write lands, causing a double
+  // timezone auto-detect write (and a duplicate timezone_auto_detected
+  // event). Keyed by user id so concurrent calls for the same user
+  // share one in-flight request instead of racing.
+  const loadInFlightRef = useRef(new Map());
 
   useEffect(() => {
     checkUserAuth();
@@ -50,7 +62,19 @@ export const AuthProvider = ({ children }) => {
     };
   }, []);
 
-  const loadUserWithProfile = async (authUser) => {
+  const loadUserWithProfile = (authUser) => {
+    const key = authUser.id;
+    const existing = loadInFlightRef.current.get(key);
+    if (existing) return existing;
+
+    const promise = doLoadUserWithProfile(authUser).finally(() => {
+      loadInFlightRef.current.delete(key);
+    });
+    loadInFlightRef.current.set(key, promise);
+    return promise;
+  };
+
+  const doLoadUserWithProfile = async (authUser) => {
     // Link any co-owner invites sent to this email before an account
     // existed (or before this device's last login) to this user, so
     // shared pets actually become visible and delete-pet's ownership
@@ -61,11 +85,35 @@ export const AuthProvider = ({ children }) => {
       console.error('Failed to link pending co-owner invites:', claimError);
     }
 
-    const { data: profile, error } = await supabase
+    let { data: profile, error } = await supabase
       .from('profiles')
       .select('*')
       .eq('id', authUser.id)
       .single();
+
+    // First authenticated load with no stored timezone: capture the
+    // device/browser timezone (no location permission involved) and
+    // persist it. Never runs again once a timezone is stored — manual
+    // or auto — per the "auto-detection never overwrites" rule.
+    if (profile && shouldAutoPopulateTimezone(profile)) {
+      const detected = detectTimezone();
+      if (detected) {
+        const { data: updated, error: updateError } = await supabase
+          .from('profiles')
+          .update({ timezone: detected, timezone_is_manual: false })
+          .eq('id', authUser.id)
+          .select()
+          .single();
+        if (!updateError) {
+          profile = updated;
+          track('timezone_auto_detected', { timezone: detected });
+        } else {
+          track('timezone_detection_failed', { reason: updateError.message });
+        }
+      } else {
+        track('timezone_detection_failed', { reason: 'unavailable' });
+      }
+    }
 
     setProfileLoadError(!!error);
     setUser({
@@ -75,6 +123,18 @@ export const AuthProvider = ({ children }) => {
       ...profile,
     });
     setIsAuthenticated(true);
+  };
+
+  // Re-fetches the profiles row and merges it into `user`, without
+  // re-running the co-owner-invite claim or timezone auto-detection —
+  // used after the owner saves changes in Profile Settings so the rest
+  // of the app (Menu's name display, etc.) reflects the edit immediately.
+  const refreshProfile = async () => {
+    const { data: authData } = await supabase.auth.getUser();
+    const authUser = authData?.user;
+    if (!authUser) return;
+    const profile = await entities.Profile.get(authUser.id);
+    setUser((prev) => ({ ...prev, ...profile }));
   };
 
   const checkUserAuth = async () => {
@@ -126,6 +186,7 @@ export const AuthProvider = ({ children }) => {
       logout,
       navigateToLogin,
       checkUserAuth,
+      refreshProfile,
     }}>
       {children}
     </AuthContext.Provider>
