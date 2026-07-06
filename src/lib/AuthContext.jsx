@@ -25,6 +25,11 @@ export const AuthProvider = ({ children }) => {
   const [isLoadingAuth, setIsLoadingAuth] = useState(true);
   const [authError, setAuthError] = useState(null);
   const [authChecked, setAuthChecked] = useState(false);
+  // Distinct from authError: the session is valid but the profiles row
+  // fetch itself failed (e.g. a network hiccup), so consumers can show a
+  // "your account info didn't load" retry instead of treating it as
+  // logged-out.
+  const [profileLoadError, setProfileLoadError] = useState(false);
 
   useEffect(() => {
     checkUserAuth();
@@ -46,12 +51,13 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   const loadUserWithProfile = async (authUser) => {
-    const { data: profile } = await supabase
+    const { data: profile, error } = await supabase
       .from('profiles')
       .select('*')
       .eq('id', authUser.id)
       .single();
 
+    setProfileLoadError(!!error);
     setUser({
       id: authUser.id,
       email: authUser.email,
@@ -106,6 +112,7 @@ export const AuthProvider = ({ children }) => {
       isLoadingPublicSettings: isLoadingAuth,
       authError,
       authChecked,
+      profileLoadError,
       logout,
       navigateToLogin,
       checkUserAuth,

@@ -24,6 +24,10 @@ import Documents from './pages/Documents';
 import About from './pages/About';
 import VetExport from './pages/VetExport';
 import Settings from './pages/Settings';
+import Account from './pages/Account';
+import Privacy from './pages/Privacy';
+import Preferences from './pages/Preferences';
+import Support from './pages/Support';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import ForgotPassword from './pages/ForgotPassword';
@@ -74,6 +78,10 @@ const AuthenticatedApp = () => {
             <Route path="/pet/:petId/export" element={<VetExport />} />
             <Route path="/about" element={<About />} />
             <Route path="/settings" element={<Settings />} />
+            <Route path="/account" element={<Account />} />
+            <Route path="/privacy" element={<Privacy />} />
+            <Route path="/preferences" element={<Preferences />} />
+            <Route path="/support" element={<Support />} />
           </Route>
           <Route path="*" element={<PageNotFound />} />
         </Routes>

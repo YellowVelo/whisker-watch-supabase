@@ -1,45 +1,104 @@
-import { useState } from 'react';
-import { supabase } from '@/api/supabaseClient';
+import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
+import {
+  User, Bell, ShieldCheck, Settings as SettingsIcon, HelpCircle,
+  LogOut, Trash2, Lock, ChevronRight, Sprout, RotateCcw,
+} from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { Settings as SettingsIcon, Trash2, LogOut, RotateCcw, Sprout } from 'lucide-react';
+import MenuListRow from '../components/MenuListRow';
+import MenuIllustration from '../components/MenuIllustration';
 import PageTransition from '../components/PageTransition';
+import { useToast } from '@/components/ui/use-toast';
 import { track } from '@/lib/analytics';
 import { useAuth } from '@/lib/AuthContext';
 import { isTestAccount } from '@/lib/accountType';
 import { SEED_SCENARIOS } from '@/lib/seedTestData';
+import { deleteAccount, resetTestAccount, signOutBestEffort } from '@/lib/accountClient';
 
-// Menu — owner-level functionality only (Account, About, Test Tools).
-// Pet management (Edit/Share/Delete Pet, Add a Pet) lives in the Pets
-// page and the Pet Profile now, not here.
+const ACCOUNT_TYPE_BADGES = {
+  production: { label: 'Production', className: 'text-emerald-400 bg-emerald-400/10' },
+  test: { label: 'Test', className: 'text-amber-400 bg-amber-400/10' },
+  demo: { label: 'Demo', className: 'text-violet-400 bg-violet-400/10' },
+};
+
+const MENU_ITEMS = [
+  { key: 'account', to: '/account', icon: User, iconClassName: 'text-blue-300', iconBg: 'rgba(96,165,250,0.14)', title: 'Account', subtitle: 'Manage your account details', event: 'menu_account_selected' },
+  { key: 'notifications', to: '/notifications', icon: Bell, iconClassName: 'text-amber-300', iconBg: 'rgba(251,191,36,0.14)', title: 'Notifications', subtitle: 'Manage your notification preferences', event: 'menu_notifications_selected' },
+  { key: 'privacy', to: '/privacy', icon: ShieldCheck, iconClassName: 'text-emerald-300', iconBg: 'rgba(52,211,153,0.14)', title: 'Privacy', subtitle: 'Manage your data and privacy', event: 'menu_privacy_selected' },
+  { key: 'preferences', to: '/preferences', icon: SettingsIcon, iconClassName: 'text-purple-300', iconBg: 'rgba(196,181,253,0.14)', title: 'Settings', subtitle: 'App preferences and defaults', event: 'menu_settings_selected' },
+  { key: 'support', to: '/support', icon: HelpCircle, iconClassName: 'text-sky-300', iconBg: 'rgba(125,211,252,0.14)', title: 'Support', subtitle: 'Help center and contact support', event: 'menu_support_selected' },
+];
+
+// Single source of truth for "which dialog is open" so two confirmation
+// dialogs can never be visible at once (a user rapidly tapping Sign Out
+// then Reset Test Account, etc. just replaces which one is showing,
+// rather than stacking both).
+const DIALOG = {
+  NONE: null,
+  SIGN_OUT: 'sign-out',
+  DELETE_WARNING: 'delete-warning',
+  DELETE_CONFIRM: 'delete-confirm',
+  RESET: 'reset',
+  SEED: 'seed',
+};
+
 export default function Settings() {
-  const { user } = useAuth();
+  const { user, isLoadingAuth, logout, profileLoadError, checkUserAuth } = useAuth();
+  const { toast } = useToast();
+
+  const [activeDialog, setActiveDialog] = useState(DIALOG.NONE);
+
+  const [signingOut, setSigningOut] = useState(false);
+
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState('');
-  const [deleteStep, setDeleteStep] = useState(0); // 0=closed 1=warning 2=confirm
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
 
   // Test-account tools (reset + seed data) — only ever shown/usable
   // when the signed-in account's profile.account_type is 'test'.
-  const [resetOpen, setResetOpen] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [resetError, setResetError] = useState('');
-  const [seedOpen, setSeedOpen] = useState(false);
   const [seeding, setSeeding] = useState(false);
   const [seedError, setSeedError] = useState('');
 
-  const openDeleteFlow = () => { setDeleteError(''); setDeleteConfirmText(''); setDeleteStep(1); };
-  const closeDeleteFlow = () => { if (!deleting) { setDeleteStep(0); setDeleteConfirmText(''); setDeleteError(''); } };
+  useEffect(() => {
+    track('menu_opened', {});
+  }, []);
+
+  const isBusy = signingOut || deleting || resetting || seeding;
+
+  const closeDialog = () => { if (!isBusy) setActiveDialog(DIALOG.NONE); };
+
+  const openDeleteFlow = () => {
+    track('delete_account_selected', {});
+    setDeleteError('');
+    setDeleteConfirmText('');
+    setActiveDialog(DIALOG.DELETE_WARNING);
+  };
+
+  const handleSignOutSelected = () => {
+    track('sign_out_selected', {});
+    setActiveDialog(DIALOG.SIGN_OUT);
+  };
+
+  const handleConfirmSignOut = async () => {
+    setSigningOut(true);
+    track('sign_out_confirmed', {});
+    try {
+      await logout();
+    } catch (e) {
+      setSigningOut(false);
+      setActiveDialog(DIALOG.NONE);
+      toast({ description: 'Unable to sign out. Please try again.' });
+    }
+  };
 
   const handleResetTestAccount = async () => {
     setResetting(true);
     setResetError('');
     try {
-      const { data: sessionData } = await supabase.auth.getSession();
-      const token = sessionData?.session?.access_token;
-      const { data, error } = await supabase.functions.invoke('reset-test-account', {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
+      const { data, error } = await resetTestAccount();
       if (error || !data?.success) {
         setResetError(error?.message ?? data?.error ?? 'Reset failed. Please try again.');
         setResetting(false);
@@ -47,7 +106,7 @@ export default function Settings() {
       }
       track('test_account_reset', {});
       setResetting(false);
-      setResetOpen(false);
+      setActiveDialog(DIALOG.NONE);
       window.location.href = '/';
     } catch (e) {
       setResetError('Reset failed. Please try again.');
@@ -61,11 +120,7 @@ export default function Settings() {
     try {
       // Seeding scenarios add pets on top of whatever's already there —
       // clear existing test data first so each scenario starts clean.
-      const { data: sessionData } = await supabase.auth.getSession();
-      const token = sessionData?.session?.access_token;
-      const { data, error } = await supabase.functions.invoke('reset-test-account', {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
+      const { data, error } = await resetTestAccount();
       if (error || !data?.success) {
         setSeedError(error?.message ?? data?.error ?? 'Could not clear existing test data before seeding.');
         setSeeding(false);
@@ -74,7 +129,7 @@ export default function Settings() {
       await scenario.run();
       track('test_account_seeded', { scenario: scenario.key });
       setSeeding(false);
-      setSeedOpen(false);
+      setActiveDialog(DIALOG.NONE);
       window.location.href = '/';
     } catch (e) {
       setSeedError('Seeding failed. Please try again.');
@@ -85,138 +140,193 @@ export default function Settings() {
   const handleDeleteAccount = async () => {
     setDeleting(true);
     setDeleteError('');
+    track('delete_account_confirmed', {});
     try {
-      const { data: sessionData } = await supabase.auth.getSession();
-      const token = sessionData?.session?.access_token;
-      const { data, error } = await supabase.functions.invoke('delete-account', {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
+      const { data, error } = await deleteAccount();
       if (error || !data?.success) {
-        setDeleteError(error?.message ?? data?.error ?? 'Something went wrong. Please try again.');
+        setDeleteError(error?.message ?? data?.error ?? 'Unable to delete account. Please try again later.');
         setDeleting(false);
         return;
       }
-      // Success — sign out and redirect. The auth row is already gone server-side
-      // so signOut() is best-effort; navigate regardless.
-      await supabase.auth.signOut().catch(() => {});
+      // Success — sign out and redirect. The auth row is already gone
+      // server-side, so signOutBestEffort() is fire-and-forget; navigate
+      // regardless of whether it succeeds.
+      await signOutBestEffort();
       window.location.href = '/login?deleted=1';
     } catch (e) {
-      setDeleteError('Something went wrong. Please try again.');
+      setDeleteError('Unable to delete account. Please try again later.');
       setDeleting(false);
     }
   };
 
-  const rows = [
-    ...(isTestAccount(user) ? [{
-      section: 'Test Tools',
-      items: [
-        {
-          label: 'Seed Test Data',
-          icon: Sprout,
-          color: 'text-primary',
-          action: () => { setSeedError(''); setSeedOpen(true); },
-          destructive: false,
-        },
-        {
-          label: 'Reset Test Account',
-          icon: RotateCcw,
-          color: 'text-destructive',
-          action: () => { setResetError(''); setResetOpen(true); },
-          destructive: false,
-        },
-      ],
-    }] : []),
-    {
-      section: 'Account',
-      items: [
-        {
-          label: 'Sign Out',
-          icon: LogOut,
-          color: 'text-foreground',
-          action: () => { supabase.auth.signOut().then(() => { window.location.href = '/login'; }); },
-          destructive: false,
-        },
-        {
-          label: 'Delete Account & All Data',
-          icon: Trash2,
-          color: 'text-destructive',
-          action: openDeleteFlow,
-          destructive: false,
-        },
-      ],
-    },
-    {
-      section: 'About',
-      items: [
-        { label: 'Wysker Watch', sublabel: 'Pet Health Tracker', icon: SettingsIcon, color: 'text-muted-foreground', static: true },
-      ],
-    },
-  ];
+  if (isLoadingAuth) {
+    return (
+      <PageTransition>
+        <div className="min-h-screen pb-28">
+          <header style={{ paddingTop: 'env(safe-area-inset-top)' }}>
+            <div className="max-w-2xl mx-auto px-5 py-6">
+              <div className="h-4 w-56 rounded-full animate-pulse" style={{ background: 'rgba(255,255,255,0.06)' }} />
+              <div className="h-8 w-32 rounded-full animate-pulse mt-2" style={{ background: 'rgba(255,255,255,0.08)' }} />
+            </div>
+          </header>
+          <main className="max-w-2xl mx-auto px-4 space-y-4" aria-busy="true" aria-label="Loading menu">
+            <div className="h-24 rounded-2xl animate-pulse" style={{ background: 'rgba(255,255,255,0.05)' }} />
+            <div className="rounded-2xl overflow-hidden">
+              {[0, 1, 2, 3, 4].map((i) => (
+                <div key={i} className="h-16 animate-pulse" style={{ background: 'rgba(255,255,255,0.04)', marginBottom: 1 }} />
+              ))}
+            </div>
+          </main>
+        </div>
+      </PageTransition>
+    );
+  }
+
+  if (!user || profileLoadError) {
+    return (
+      <PageTransition>
+        <div className="min-h-screen pb-28 flex items-center justify-center">
+          <div className="text-center px-6">
+            <p className="text-sm text-muted-foreground mb-4">Unable to load your account information.</p>
+            <button onClick={() => checkUserAuth()} className="text-sm font-medium text-primary underline">Retry</button>
+          </div>
+        </div>
+      </PageTransition>
+    );
+  }
+
+  const accountType = ACCOUNT_TYPE_BADGES[user?.account_type] ? user.account_type : 'production';
+  const badge = ACCOUNT_TYPE_BADGES[accountType];
+  const displayName = user?.first_name || user?.email || 'Email unavailable';
+  const email = user?.email || 'Email unavailable';
 
   return (
     <PageTransition>
-      <div className="min-h-screen pb-24">
-        <header
-          className="border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-10"
-          style={{ paddingTop: 'env(safe-area-inset-top)' }}
-        >
-          <div className="max-w-2xl mx-auto px-4 py-4 flex items-center gap-3">
-            <h1 className="font-serif text-xl flex-1">Menu</h1>
+      <div className="min-h-screen pb-28">
+        <header style={{ paddingTop: 'env(safe-area-inset-top)' }}>
+          <div className="max-w-2xl mx-auto px-5 py-6 flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <h1 className="text-[28px] font-bold text-foreground tracking-tight leading-tight">Menu</h1>
+              <p className="text-[14px] text-white/45 mt-1">Manage your account and app settings.</p>
+            </div>
+            <MenuIllustration />
           </div>
         </header>
 
-        <main className="max-w-2xl mx-auto px-4 py-6 space-y-6">
-          {rows.map(({ section, items }) => (
-            <div key={section}>
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 px-1">{section}</p>
-              <div className="bg-card border border-border rounded-xl overflow-hidden divide-y divide-border">
-                {items.map((item, i) => {
-                  const Icon = item.icon;
-                  if (item.static) {
-                    return (
-                      <div key={i} className="flex items-center gap-3 px-4 py-3.5">
-                        <Icon className={`h-4.5 w-4.5 ${item.color}`} />
-                        <div>
-                          <p className="text-sm font-medium">{item.label}</p>
-                          {item.sublabel && <p className="text-xs text-muted-foreground">{item.sublabel}</p>}
-                        </div>
-                      </div>
-                    );
-                  }
-                  if (item.color === 'text-destructive') {
-                    return (
-                      <button
-                        key={i}
-                        onClick={item.action}
-                        disabled={item.disabled}
-                        className={`w-full flex items-center gap-3 px-4 py-3.5 text-left transition-colors hover:bg-destructive/5 min-h-[52px] disabled:opacity-40 disabled:hover:bg-transparent ${item.color}`}
-                      >
-                        <Icon className="h-4.5 w-4.5" />
-                        <div>
-                          <span className="text-sm font-medium block">{item.label}</span>
-                          {item.sublabel && <span className="text-xs text-muted-foreground">{item.sublabel}</span>}
-                        </div>
-                      </button>
-                    );
-                  }
-                  return (
-                    <button
-                      key={i}
-                      onClick={item.action}
-                      className={`w-full flex items-center gap-3 px-4 py-3.5 text-left transition-colors hover:bg-secondary/50 min-h-[52px] ${item.color}`}
-                    >
-                      <Icon className="h-4.5 w-4.5" />
-                      <span className="text-sm font-medium">{item.label}</span>
-                    </button>
-                  );
-                })}
-              </div>
+        <main className="max-w-2xl mx-auto px-4 space-y-4">
+          {/* User summary card */}
+          <Link
+            to="/account"
+            className="w-full flex items-center gap-3 rounded-2xl px-4 py-4 active:opacity-80 transition-opacity"
+            style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}
+          >
+            <div
+              className="h-14 w-14 rounded-full flex items-center justify-center flex-shrink-0"
+              style={{ background: 'rgba(255,255,255,0.06)' }}
+            >
+              <User className="h-6 w-6 text-blue-300" aria-hidden="true" />
             </div>
-          ))}
+            <div className="min-w-0 flex-1">
+              <p className="text-[17px] font-bold text-white truncate">{displayName}</p>
+              <p className="text-[13px] text-white/45 truncate">{email}</p>
+              <span className={`inline-flex items-center gap-1 mt-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${badge.className}`}>
+                {badge.label}
+              </span>
+            </div>
+            <ChevronRight className="h-5 w-5 text-white/30 flex-shrink-0" aria-hidden="true" />
+          </Link>
+
+          {/* Primary menu */}
+          <div className="rounded-2xl overflow-hidden divide-y" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderColor: 'rgba(255,255,255,0.08)' }}>
+            {MENU_ITEMS.map((item) => (
+              <MenuListRow
+                key={item.key}
+                to={item.to}
+                icon={item.icon}
+                iconClassName={item.iconClassName}
+                iconBg={item.iconBg}
+                title={item.title}
+                subtitle={item.subtitle}
+                onClick={() => track(item.event, {})}
+              />
+            ))}
+          </div>
+
+          {isTestAccount(user) && (
+            <div className="rounded-2xl overflow-hidden divide-y" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderColor: 'rgba(255,255,255,0.08)' }}>
+              <MenuListRow
+                icon={Sprout}
+                iconClassName="text-primary"
+                title="Seed Test Data"
+                subtitle="Load a sample data scenario"
+                onClick={() => { setSeedError(''); setActiveDialog(DIALOG.SEED); }}
+              />
+              <MenuListRow
+                icon={RotateCcw}
+                iconClassName="text-destructive"
+                title="Reset Test Account"
+                subtitle="Clear all pets and test data"
+                onClick={() => { setResetError(''); setActiveDialog(DIALOG.RESET); }}
+              />
+            </div>
+          )}
+
+          {/* Account actions */}
+          <div className="rounded-2xl overflow-hidden divide-y" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderColor: 'rgba(255,255,255,0.08)' }}>
+            <MenuListRow
+              icon={LogOut}
+              iconClassName="text-blue-300"
+              iconBg="rgba(96,165,250,0.14)"
+              title="Sign Out"
+              subtitle="Sign out of Wysker Watch"
+              onClick={handleSignOutSelected}
+            />
+            <MenuListRow
+              icon={Trash2}
+              iconClassName="text-destructive"
+              iconBg="rgba(248,113,113,0.14)"
+              destructive
+              title="Delete Account"
+              subtitle="Permanently delete your account and all data"
+              onClick={openDeleteFlow}
+            />
+          </div>
+
+          {/* Security footer */}
+          <div className="flex items-start gap-2 justify-center text-center px-4 py-2">
+            <Lock className="h-3.5 w-3.5 text-white/30 flex-shrink-0 mt-0.5" aria-hidden="true" />
+            <p className="text-[12px] text-white/35 leading-snug">
+              Your data is encrypted and securely stored.
+              <br />
+              We never share your information.
+            </p>
+          </div>
         </main>
 
-        {/* Step 1 — Warning */}
-        <Dialog open={deleteStep === 1} onOpenChange={(v) => !v && closeDeleteFlow()}>
+        {/* Sign Out confirmation */}
+        <Dialog open={activeDialog === DIALOG.SIGN_OUT} onOpenChange={(v) => !v && closeDialog()}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle className="font-serif text-xl">Sign Out?</DialogTitle>
+            </DialogHeader>
+            <DialogDescription asChild>
+              <p className="text-sm text-muted-foreground">You'll need to sign in again to access your pets.</p>
+            </DialogDescription>
+            <DialogFooter className="mt-2 gap-2">
+              <button onClick={closeDialog} disabled={signingOut} className="flex-1 h-10 rounded-lg border border-border text-sm font-medium hover:bg-secondary transition-colors disabled:opacity-50">Cancel</button>
+              <button
+                onClick={handleConfirmSignOut}
+                disabled={signingOut}
+                className="flex-1 h-10 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-40"
+              >
+                {signingOut ? 'Signing Out…' : 'Sign Out'}
+              </button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Delete Account — Step 1: Warning */}
+        <Dialog open={activeDialog === DIALOG.DELETE_WARNING} onOpenChange={(v) => !v && closeDialog()}>
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
               <DialogTitle className="font-serif text-xl text-destructive">Delete Account?</DialogTitle>
@@ -233,9 +343,9 @@ export default function Settings() {
               </div>
             </DialogDescription>
             <DialogFooter className="mt-2 gap-2">
-              <button onClick={closeDeleteFlow} className="flex-1 h-10 rounded-lg border border-border text-sm font-medium hover:bg-secondary transition-colors">Cancel</button>
+              <button onClick={closeDialog} className="flex-1 h-10 rounded-lg border border-border text-sm font-medium hover:bg-secondary transition-colors">Cancel</button>
               <button
-                onClick={() => setDeleteStep(2)}
+                onClick={() => setActiveDialog(DIALOG.DELETE_CONFIRM)}
                 className="flex-1 h-10 rounded-lg bg-destructive text-destructive-foreground text-sm font-medium hover:bg-destructive/90 transition-colors"
               >
                 Continue
@@ -244,8 +354,8 @@ export default function Settings() {
           </DialogContent>
         </Dialog>
 
-        {/* Step 2 — Type DELETE to confirm */}
-        <Dialog open={deleteStep === 2} onOpenChange={(v) => !v && closeDeleteFlow()}>
+        {/* Delete Account — Step 2: Type DELETE to confirm */}
+        <Dialog open={activeDialog === DIALOG.DELETE_CONFIRM} onOpenChange={(v) => !v && closeDialog()}>
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
               <DialogTitle className="font-serif text-xl text-destructive">Confirm Deletion</DialogTitle>
@@ -266,7 +376,7 @@ export default function Settings() {
             />
             {deleteError && <p className="text-sm text-destructive">{deleteError}</p>}
             <DialogFooter className="mt-2 gap-2">
-              <button onClick={closeDeleteFlow} disabled={deleting} className="flex-1 h-10 rounded-lg border border-border text-sm font-medium hover:bg-secondary transition-colors disabled:opacity-50">Cancel</button>
+              <button onClick={closeDialog} disabled={deleting} className="flex-1 h-10 rounded-lg border border-border text-sm font-medium hover:bg-secondary transition-colors disabled:opacity-50">Cancel</button>
               <button
                 onClick={handleDeleteAccount}
                 disabled={deleteConfirmText !== 'DELETE' || deleting}
@@ -279,7 +389,7 @@ export default function Settings() {
         </Dialog>
 
         {/* Reset Test Account — internal/test-only, guarded server-side too */}
-        <Dialog open={resetOpen} onOpenChange={(v) => !v && !resetting && setResetOpen(false)}>
+        <Dialog open={activeDialog === DIALOG.RESET} onOpenChange={(v) => !v && closeDialog()}>
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
               <DialogTitle className="font-serif text-xl text-destructive">Reset Test Account?</DialogTitle>
@@ -292,7 +402,7 @@ export default function Settings() {
             </DialogDescription>
             {resetError && <p className="text-sm text-destructive">{resetError}</p>}
             <DialogFooter className="mt-2 gap-2">
-              <button onClick={() => setResetOpen(false)} disabled={resetting} className="flex-1 h-10 rounded-lg border border-border text-sm font-medium hover:bg-secondary transition-colors disabled:opacity-50">Cancel</button>
+              <button onClick={closeDialog} disabled={resetting} className="flex-1 h-10 rounded-lg border border-border text-sm font-medium hover:bg-secondary transition-colors disabled:opacity-50">Cancel</button>
               <button
                 onClick={handleResetTestAccount}
                 disabled={resetting}
@@ -305,7 +415,7 @@ export default function Settings() {
         </Dialog>
 
         {/* Seed Test Data */}
-        <Dialog open={seedOpen} onOpenChange={(v) => !v && !seeding && setSeedOpen(false)}>
+        <Dialog open={activeDialog === DIALOG.SEED} onOpenChange={(v) => !v && closeDialog()}>
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
               <DialogTitle className="font-serif text-xl">Seed Test Data</DialogTitle>
@@ -330,7 +440,7 @@ export default function Settings() {
             </div>
             {seedError && <p className="text-sm text-destructive">{seedError}</p>}
             <DialogFooter className="mt-2">
-              <button onClick={() => setSeedOpen(false)} disabled={seeding} className="flex-1 h-10 rounded-lg border border-border text-sm font-medium hover:bg-secondary transition-colors disabled:opacity-50">
+              <button onClick={closeDialog} disabled={seeding} className="flex-1 h-10 rounded-lg border border-border text-sm font-medium hover:bg-secondary transition-colors disabled:opacity-50">
                 {seeding ? 'Seeding…' : 'Cancel'}
               </button>
             </DialogFooter>
