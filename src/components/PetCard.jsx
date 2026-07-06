@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import { Cat, Dog, Heart, Pill, CalendarDays, ChevronRight, Rainbow } from 'lucide-react';
 import { getCategory } from '@/lib/checkin/config';
+import { getChipState } from '@/lib/checkin/chipLabels';
 import { getPetLabel } from '@/lib/speciesConfig';
 import { computeDetailedAge } from '@/lib/lifeStage';
 
@@ -24,38 +25,6 @@ const LOG_SLOTS = [
   { code: 'mobility', label: 'Activity' },
   { code: 'other', label: 'Other' },
 ];
-
-// Short chip words for each category's enum values — distinct from
-// checkinClient's full-sentence summaries (used on Home), since these
-// cards show one word per fixed slot rather than a variable list.
-const VALUE_LABELS = {
-  appetite: { normal: 'Normal', ate_little_less: 'Low', ate_much_less: 'Low', did_not_eat: 'None', ate_more: 'High' },
-  water_intake: { normal: 'Normal', less_than_usual: 'Low', more_than_usual: 'High', much_more_than_usual: 'High' },
-  energy: { normal: 'Normal', slightly_lower: 'Lower', much_lower: 'Lower', higher_than_usual: 'Higher' },
-  stool: { normal: 'Normal', softer_than_usual: 'Soft', diarrhea: 'Loose', constipated: 'Hard', blood_noticed: 'Blood' },
-  mobility: { normal: 'Normal' },
-};
-
-function getLogChipState(code, status, values, logsUnavailable) {
-  // Fetch failure (distinct from "no check-in today"): the Pets Feature
-  // Spec calls for "Unavailable" here, not "Unknown" — the pet still has
-  // data, it just couldn't be loaded this time.
-  if (logsUnavailable) return { label: 'Unavailable', tone: 'unknown' };
-
-  // No check-in today, or today was explicitly skipped: genuinely unknown,
-  // never presented as "Normal" (Product Principle #6: Unknown ≠ Normal).
-  if (!status || status === 'skipped') return { label: 'Unknown', tone: 'unknown' };
-
-  if (code === 'other') {
-    return values?.other?.notes ? { label: 'Noted', tone: 'good' } : { label: 'None', tone: 'good' };
-  }
-
-  const observed = values?.[code];
-  if (!observed) return { label: 'Normal', tone: 'good' };
-  const label = VALUE_LABELS[code]?.[observed.value] ?? 'Changed';
-  const tone = observed.severityScore != null && observed.severityScore < 0 ? 'warn' : 'good';
-  return { label, tone };
-}
 
 function PetPhoto({ pet, size, memorial }) {
   return (
@@ -202,7 +171,7 @@ export default function PetCard({ pet, medicationCount = 0, wellness, checkIn, o
         <div className="grid grid-cols-3 gap-2">
           {LOG_SLOTS.map(({ code, label }) => {
             const Icon = getCategory(code)?.icon;
-            const { label: value, tone } = getLogChipState(code, status, observationValues, logsUnavailable);
+            const { label: value, tone } = getChipState(code, status, observationValues, { unavailable: logsUnavailable });
             return (
               <div key={code} className="rounded-xl px-2.5 py-2 flex items-center gap-1.5" style={{ background: 'rgba(255,255,255,0.04)' }}>
                 {Icon && <Icon className="h-3.5 w-3.5 text-white/40 flex-shrink-0" aria-hidden="true" />}

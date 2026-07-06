@@ -6,8 +6,9 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { uploadFile } from '@/api/storageClient';
 import { entities } from '@/api/entities';
-import { Loader2, X, Plus } from 'lucide-react';
+import { Loader2, X, Plus, UserPlus } from 'lucide-react';
 import { getConditions } from '@/lib/speciesConfig';
+import InviteCoOwnerDialog from './InviteCoOwnerDialog';
 
 export default function EditPetSheet({ pet, open, onOpenChange, onSuccess }) {
   const [saving, setSaving] = useState(false);
@@ -25,6 +26,7 @@ export default function EditPetSheet({ pet, open, onOpenChange, onSuccess }) {
   });
   const [newNickname, setNewNickname] = useState('');
   const [newActivity, setNewActivity] = useState('');
+  const [coOwnerOpen, setCoOwnerOpen] = useState(false);
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
@@ -170,11 +172,24 @@ export default function EditPetSheet({ pet, open, onOpenChange, onSuccess }) {
             <Textarea value={form.notes} onChange={e => set('notes', e.target.value)} rows={3} placeholder="Personality, quirks, care notes…" />
           </div>
 
+          {/* Co-owner sharing lives here rather than as a Pet Profile
+              overflow-menu item — the Pet Profile Feature Spec enumerates
+              that menu exhaustively (Edit Pet / Delete Pet / Move to
+              Rainbow Bridge) and doesn't include it. */}
+          {pet?.id && (
+            <Button type="button" variant="outline" className="w-full" onClick={() => setCoOwnerOpen(true)}>
+              <UserPlus className="h-4 w-4 mr-2" /> Invite Co-Owner
+            </Button>
+          )}
+
           <Button className="w-full" onClick={handleSave} disabled={saving || !form.name.trim()}>
             {saving ? <><Loader2 className="h-4 w-4 animate-spin mr-2" />Saving…</> : 'Save Changes'}
           </Button>
         </div>
       </SheetContent>
+      {pet?.id && (
+        <InviteCoOwnerDialog petId={pet.id} petName={pet.name} open={coOwnerOpen} onOpenChange={setCoOwnerOpen} />
+      )}
     </Sheet>
   );
 }
