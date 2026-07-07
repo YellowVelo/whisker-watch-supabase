@@ -5,6 +5,7 @@ import { ArrowLeft, Plus, X, UtensilsCrossed, Zap, Heart, Activity, Droplets, Dr
 import { format, parseISO } from 'date-fns';
 import SymptomLogForm from '../components/SymptomLogForm';
 import PageTransition from '../components/PageTransition';
+import { PALETTE } from '@/lib/toneColors';
 
 function Chip({ icon: Icon, label, danger }) {
   return (
@@ -56,13 +57,13 @@ export default function PetSymptoms() {
           <Link to={`/pet/${petId}`} className="w-9 h-9 rounded-full flex items-center justify-center bg-white/8">
             <ArrowLeft className="h-5 w-5 text-white" />
           </Link>
-          <h1 className="text-base font-semibold text-white">Symptom Timeline</h1>
+          <h1 className="text-[28px] font-semibold text-white">Symptom Timeline</h1>
           <button
             onClick={() => setLogOpen(true)}
             className="w-9 h-9 rounded-full flex items-center justify-center"
-            style={{ background: 'rgba(0,212,170,0.15)' }}
+            style={{ background: 'rgba(76,199,176,0.15)' }}
           >
-            <Plus className="h-5 w-5" style={{ color: '#00D4AA' }} />
+            <Plus className="h-5 w-5" style={{ color: PALETTE.teal }} />
           </button>
         </div>
 
@@ -75,14 +76,14 @@ export default function PetSymptoms() {
             <div className="mx-auto mb-4 w-16 h-16 rounded-full flex items-center justify-center bg-white/6">
               <ClipboardList className="h-7 w-7 text-white/40" />
             </div>
-            <h2 className="text-lg font-semibold text-white mb-1">No logs yet</h2>
-            <p className="text-sm text-white/40 mb-6 max-w-xs mx-auto">
+            <h2 className="text-2xl font-semibold text-white mb-1">No logs yet</h2>
+            <p className="text-base text-white/40 mb-6 max-w-xs mx-auto">
               Start tracking daily symptoms to build a timeline you can review and share with your vet.
             </p>
             <button
               onClick={() => setLogOpen(true)}
               className="inline-flex items-center gap-2 rounded-2xl px-5 h-12 font-semibold text-sm"
-              style={{ background: '#00D4AA', color: '#0D0F1A' }}
+              style={{ background: PALETTE.teal, color: 'hsl(var(--background))' }}
             >
               <Plus className="h-4 w-4" /> Log symptoms
             </button>
@@ -102,7 +103,7 @@ export default function PetSymptoms() {
                         <div key={log.id} className="relative">
                           <div
                             className="absolute -left-6 top-3.5 w-3.5 h-3.5 rounded-full"
-                            style={{ background: '#00D4AA', boxShadow: '0 0 8px rgba(0,212,170,0.5)' }}
+                            style={{ background: PALETTE.teal, boxShadow: '0 0 8px rgba(76,199,176,0.5)' }}
                           />
                           <div
                             className="rounded-2xl p-4"
@@ -124,7 +125,7 @@ export default function PetSymptoms() {
                               {log.medication_given && <Chip icon={Pill} label="Meds given" />}
                               {log.nausea_symptoms?.length > 0 && <Chip icon={AlertCircle} label={`Nausea: ${log.nausea_symptoms.join(', ')}`} danger />}
                             </div>
-                            {log.notes && <p className="text-xs text-white/50 mt-3 italic">{log.notes}</p>}
+                            {log.notes && <p className="text-base text-white/50 mt-3 italic">{log.notes}</p>}
                           </div>
                         </div>
                       );
@@ -144,7 +145,7 @@ export default function PetSymptoms() {
             className="sticky z-10 bg-background border-b border-white/8 px-4 py-3 flex items-center justify-between"
             style={{ top: 'var(--account-banner-height, 0px)', paddingTop: 'calc(env(safe-area-inset-top) + 12px)' }}
           >
-            <h2 className="font-bold text-xl text-white">Log Symptoms</h2>
+            <h2 className="font-bold text-2xl text-white">Log Symptoms</h2>
             <button onClick={() => setLogOpen(false)} className="h-9 w-9 rounded-full bg-white/8 flex items-center justify-center">
               <X className="h-4 w-4 text-white" />
             </button>

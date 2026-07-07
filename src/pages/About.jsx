@@ -16,7 +16,7 @@ export default function About() {
             <button onClick={() => navigate(-1)} className="h-9 w-9 rounded-full bg-secondary flex items-center justify-center">
               <ArrowLeft className="h-5 w-5" />
             </button>
-            <h1 className="font-serif text-2xl">About</h1>
+            <h1 className="font-serif text-[28px]">About</h1>
           </div>
         </header>
         <div className="max-w-2xl mx-auto px-4 py-10">
@@ -25,11 +25,11 @@ export default function About() {
               <Heart className="h-8 w-8 text-primary" />
             </div>
             <h2 className="font-serif text-3xl mb-2">Wysker Watch</h2>
-            <p className="text-sm text-muted-foreground max-w-sm mx-auto">
+            <p className="text-base text-muted-foreground max-w-sm mx-auto">
               Track daily symptoms for your cats and dogs with chronic conditions. Spot patterns and share insights with your vet.
             </p>
           </div>
-          <div className="space-y-4 text-sm text-muted-foreground">
+          <div className="space-y-4 text-base text-muted-foreground">
             <p>
               Wysker Watch helps pet parents caring for animals with chronic conditions like IBD, CKD, diabetes, and hyperthyroidism.
               Log appetite, energy, symptoms, and weight daily to visualize trends and catch flare-ups early.

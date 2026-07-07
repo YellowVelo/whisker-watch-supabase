@@ -3,6 +3,7 @@ import { Scale, ArrowDown, ArrowUp } from 'lucide-react';
 import MetricCardShell from './MetricCardShell';
 import TrendChart from './TrendChart';
 import { getWeightTrend } from '@/lib/checkin/trendsClient';
+import { PALETTE } from '@/lib/toneColors';
 
 const RANGE_PERIOD_LABEL = { '24H': 'Today', '7D': 'Last 7 Days', '30D': 'Last 30 Days', '90D': 'Last 90 Days', '1Y': 'Last Year' };
 
@@ -39,13 +40,13 @@ export default function WeightCard({ petId, range }) {
             <span className="text-[14px] text-white/40">lbs</span>
           </div>
           {data.deltaLbs != null && (
-            <p className="text-[13px] font-medium mt-0.5 flex items-center gap-1" style={{ color: data.deltaLbs === 0 ? '#A9AEB5' : '#F4C76B' }}>
+            <p className="text-[13px] font-medium mt-0.5 flex items-center gap-1" style={{ color: data.deltaLbs === 0 ? PALETTE.gray : PALETTE.amber }}>
               {data.deltaLbs < 0 ? <ArrowDown className="h-3.5 w-3.5" /> : data.deltaLbs > 0 ? <ArrowUp className="h-3.5 w-3.5" /> : null}
               {data.deltaLbs === 0 ? 'Steady' : `${data.deltaLbs < 0 ? 'Down' : 'Up'} ${Math.abs(data.deltaLbs)} lbs`}
             </p>
           )}
           <div className="mt-3">
-            <TrendChart variant="line" series={data.series} range={range} color="#6FB7FF" />
+            <TrendChart variant="line" series={data.series} range={range} color={PALETTE.sky} />
           </div>
         </>
       )}

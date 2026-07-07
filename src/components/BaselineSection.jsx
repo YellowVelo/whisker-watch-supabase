@@ -58,7 +58,7 @@ export default function BaselineSection({ petId, petName, species }) {
       {!row.completed_at && (
         <div className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-primary/10 border border-primary/25">
           <Sparkles className="h-3.5 w-3.5 text-primary flex-shrink-0" />
-          <p className="text-xs text-foreground">
+          <p className="text-sm text-foreground">
             Onboarding is still in progress.{' '}
             <Link to={`/pet/${petId}/onboarding`} className="text-primary font-medium">Continue it</Link>
           </p>

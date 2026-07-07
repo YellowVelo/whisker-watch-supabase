@@ -47,14 +47,14 @@ export default function Timeline() {
             <button onClick={() => navigate(-1)} className="h-9 w-9 rounded-full bg-secondary flex items-center justify-center">
               <ArrowLeft className="h-5 w-5" />
             </button>
-            <h1 className="font-serif text-2xl">Timeline</h1>
+            <h1 className="font-serif text-[28px]">Timeline</h1>
           </div>
         </header>
 
         <div className="max-w-2xl mx-auto px-4 py-6">
           {loadError ? (
             <div className="text-center py-20">
-              <p className="text-sm text-muted-foreground mb-4">Unable to load timeline.</p>
+              <p className="text-base text-muted-foreground mb-4">Unable to load timeline.</p>
               <button onClick={loadData} className="text-sm font-medium text-primary underline">Retry</button>
             </div>
           ) : loading ? (
@@ -69,7 +69,7 @@ export default function Timeline() {
                 <Clock className="h-8 w-8 text-primary" />
               </div>
               <h2 className="font-serif text-2xl mb-2">No events yet</h2>
-              <p className="text-sm text-muted-foreground max-w-sm mx-auto">
+              <p className="text-base text-muted-foreground max-w-sm mx-auto">
                 Events will appear as your pet's health history grows.
               </p>
             </div>
@@ -84,7 +84,7 @@ export default function Timeline() {
                     </div>
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-medium text-white truncate">{event.title}</p>
-                      <p className="text-xs text-white/40">{format(parseISO(event.date), 'MMM d, yyyy')}</p>
+                      <p className="text-sm text-white/40">{format(parseISO(event.date), 'MMM d, yyyy')}</p>
                     </div>
                   </div>
                 );

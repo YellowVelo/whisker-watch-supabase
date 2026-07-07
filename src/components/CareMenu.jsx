@@ -40,7 +40,7 @@ export default function CareMenu({ open, onOpenChange, petId, petName }) {
             <X className="h-4 w-4" />
           </button>
         </div>
-        {petName && <p className="px-5 pt-3 text-xs text-muted-foreground">For {petName}</p>}
+        {petName && <p className="px-5 pt-3 text-sm text-muted-foreground">For {petName}</p>}
         <div className="flex-1 overflow-y-auto px-3 py-3">
           {tabItems.map((item) => (
             <MenuItem key={item.label} label={item.label} icon={item.icon} onClick={() => go(item.path)} />

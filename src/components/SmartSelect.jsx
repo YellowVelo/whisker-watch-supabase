@@ -38,7 +38,7 @@ export default function SmartSelect({ value, onValueChange, placeholder = 'Selec
       <Drawer open={open} onOpenChange={setOpen}>
         <DrawerContent>
           <DrawerHeader>
-            <DrawerTitle className="font-serif text-lg">{placeholder}</DrawerTitle>
+            <DrawerTitle className="font-serif text-2xl">{placeholder}</DrawerTitle>
           </DrawerHeader>
           <div className="px-4 pb-6" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 1.5rem)' }}>
             {options.map(o => (

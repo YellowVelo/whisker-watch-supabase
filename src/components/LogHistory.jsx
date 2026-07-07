@@ -33,7 +33,7 @@ export default function LogHistory({ logs }) {
               )}
             </div>
           </div>
-          <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+          <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
             {log.appetite && <span>Appetite: <strong className="text-foreground">{log.appetite}</strong></span>}
             {log.energy_level && <span>Energy: <strong className="text-foreground">{log.energy_level}</strong></span>}
             {log.stool_quality && <span>Stool: <strong className={qualityColor[log.stool_quality] || ''}>{log.stool_quality}</strong></span>}
@@ -43,9 +43,9 @@ export default function LogHistory({ logs }) {
             {log.weight_grams && <span>Weight: <strong className="text-foreground">{(log.weight_grams / 453.592).toFixed(2)} lbs</strong></span>}
           </div>
           {log.nausea_symptoms?.length > 0 && (
-            <p className="text-xs text-muted-foreground">Nausea: <span className="text-foreground">{log.nausea_symptoms.join(', ')}</span></p>
+            <p className="text-sm text-muted-foreground">Nausea: <span className="text-foreground">{log.nausea_symptoms.join(', ')}</span></p>
           )}
-          {log.notes && <p className="text-xs text-muted-foreground italic">{log.notes}</p>}
+          {log.notes && <p className="text-base text-muted-foreground italic">{log.notes}</p>}
         </div>
       ))}
     </div>

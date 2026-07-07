@@ -17,14 +17,14 @@ export default function Preferences() {
             <button onClick={() => navigate(-1)} aria-label="Back" className="h-9 w-9 rounded-full bg-white/8 flex items-center justify-center flex-shrink-0">
               <ChevronLeft className="h-5 w-5 text-white" />
             </button>
-            <h1 className="font-serif text-xl">Settings</h1>
+            <h1 className="font-serif text-[28px]">Settings</h1>
           </div>
         </header>
         <main className="max-w-2xl mx-auto px-4 py-16 text-center">
           <div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
             <SettingsIcon className="h-8 w-8 text-primary" />
           </div>
-          <p className="text-sm text-muted-foreground">App preferences and defaults are coming soon.</p>
+          <p className="text-base text-muted-foreground">App preferences and defaults are coming soon.</p>
         </main>
       </div>
     </PageTransition>

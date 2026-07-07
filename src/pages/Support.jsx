@@ -16,14 +16,14 @@ export default function Support() {
             <button onClick={() => navigate(-1)} aria-label="Back" className="h-9 w-9 rounded-full bg-white/8 flex items-center justify-center flex-shrink-0">
               <ChevronLeft className="h-5 w-5 text-white" />
             </button>
-            <h1 className="font-serif text-xl">Support</h1>
+            <h1 className="font-serif text-[28px]">Support</h1>
           </div>
         </header>
         <main className="max-w-2xl mx-auto px-4 py-16 text-center">
           <div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
             <HelpCircle className="h-8 w-8 text-primary" />
           </div>
-          <p className="text-sm text-muted-foreground">Help center and contact support are coming soon.</p>
+          <p className="text-base text-muted-foreground">Help center and contact support are coming soon.</p>
         </main>
       </div>
     </PageTransition>

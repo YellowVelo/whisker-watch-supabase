@@ -72,7 +72,7 @@ export default function SymptomTrends({ logs }) {
       {/* Appetite & Energy */}
       <div className="bg-card border border-border rounded-xl p-4">
         <h4 className="text-sm font-medium mb-1">{"Appetite & Energy"}</h4>
-        <p className="text-xs text-muted-foreground mb-3">0 = worst, 4 = best</p>
+        <p className="text-sm text-muted-foreground mb-3">0 = worst, 4 = best</p>
         <ResponsiveContainer width="100%" height={180}>
           <LineChart data={data}>
             <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
@@ -105,7 +105,7 @@ export default function SymptomTrends({ logs }) {
       {/* Stool */}
       <div className="bg-card border border-border rounded-xl p-4">
         <h4 className="text-sm font-medium mb-1">Stool Quality</h4>
-        <p className="text-xs text-muted-foreground mb-3">0 = abnormal, 3 = normal</p>
+        <p className="text-sm text-muted-foreground mb-3">0 = abnormal, 3 = normal</p>
         <ResponsiveContainer width="100%" height={140}>
           <LineChart data={data}>
             <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />

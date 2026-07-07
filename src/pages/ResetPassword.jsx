@@ -40,9 +40,9 @@ export default function ResetPassword() {
   return (
     <div className="min-h-screen flex items-center justify-center px-4 bg-background">
       <div className="w-full max-w-sm space-y-6">
-        <h1 className="font-serif text-2xl">Set New Password</h1>
+        <h1 className="font-serif text-[28px]">Set New Password</h1>
         <form onSubmit={handleSubmit} className="space-y-4">
-          {error && <p className="text-sm text-destructive text-center">{error}</p>}
+          {error && <p className="text-base text-destructive text-center">{error}</p>}
           <div className="space-y-1.5"><Label>New Password</Label><Input type="password" value={password} onChange={e => setPassword(e.target.value)} required /></div>
           <div className="space-y-1.5"><Label>Confirm Password</Label><Input type="password" value={confirm} onChange={e => setConfirm(e.target.value)} required /></div>
           <Button type="submit" className="w-full" disabled={loading || !sessionReady}>{loading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Reset Password'}</Button>

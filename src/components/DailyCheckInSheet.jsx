@@ -4,6 +4,7 @@ import { CATEGORIES, getOptionsForSpecies, getCategory } from '@/lib/checkin/con
 import { markNormal, markSkipped, saveChangedCheckIn } from '@/lib/checkin/checkinClient';
 import { track } from '@/lib/analytics';
 import { Textarea } from '@/components/ui/textarea';
+import { PALETTE } from '@/lib/toneColors';
 
 const FOCUSABLE = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
 
@@ -200,7 +201,7 @@ export default function DailyCheckInSheet({ pet, date, onClose, onSaved, isCatch
                     aria-pressed={active}
                     onClick={() => toggleCategory(cat.code)}
                     className={`flex items-center gap-2 rounded-2xl px-3.5 py-3 text-sm font-semibold transition-all min-h-[48px] ${active ? 'text-background' : 'text-white/70 border border-white/12'}`}
-                    style={active ? { background: '#6EBBE7', color: '#0D0F1A' } : { background: 'rgba(255,255,255,0.05)' }}
+                    style={active ? { background: PALETTE.sky, color: 'hsl(var(--background))' } : { background: 'rgba(255,255,255,0.05)' }}
                   >
                     <Icon className="h-4 w-4 flex-shrink-0" />
                     <span className="truncate">{cat.label}</span>
@@ -233,7 +234,7 @@ export default function DailyCheckInSheet({ pet, date, onClose, onSaved, isCatch
               onClick={() => setStage('details')}
               disabled={selectedCodes.length === 0}
               className="w-full text-base font-bold rounded-2xl h-14 disabled:opacity-30 transition-opacity"
-              style={{ background: '#6EBBE7', color: '#0D0F1A' }}
+              style={{ background: PALETTE.sky, color: 'hsl(var(--background))' }}
             >
               Continue
             </button>
@@ -247,7 +248,7 @@ export default function DailyCheckInSheet({ pet, date, onClose, onSaved, isCatch
                 onClick={handleSaveChanged}
                 disabled={stage === 'saving' || incompleteCodes.length > 0}
                 className="w-full flex items-center justify-center text-base font-bold rounded-2xl h-14 disabled:opacity-40 transition-opacity"
-                style={{ background: '#6EBBE7', color: '#0D0F1A' }}
+                style={{ background: PALETTE.sky, color: 'hsl(var(--background))' }}
               >
                 {stage === 'saving' ? <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Saving…</> : 'Save check-in'}
               </button>
@@ -295,7 +296,7 @@ function CategoryQuestion({ category, species, petName, dayWord, answer, onChang
                 aria-pressed={active}
                 onClick={() => onChange({ value: opt.value })}
                 className={`text-sm px-3.5 py-2 rounded-full border transition-colors min-h-[40px] ${active ? '' : 'text-white/60 border-white/12'}`}
-                style={active ? { background: '#6EBBE7', color: '#0D0F1A', borderColor: '#6EBBE7' } : { background: 'rgba(255,255,255,0.05)' }}
+                style={active ? { background: PALETTE.sky, color: 'hsl(var(--background))', borderColor: PALETTE.sky } : { background: 'rgba(255,255,255,0.05)' }}
               >
                 {opt.label}
               </button>

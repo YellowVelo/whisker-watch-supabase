@@ -12,6 +12,7 @@ import { invokeAI } from '@/api/aiClient';
 import { computeTrend } from './scoring';
 import { loadObservationCatalog } from './checkinClient';
 import { getCategory } from './config';
+import { PALETTE } from '@/lib/toneColors';
 
 export const RANGE_DAYS = { '24H': 5, '7D': 7, '30D': 30, '90D': 90, '1Y': 365 };
 export const RANGE_OPTIONS = ['24H', '7D', '30D', '90D', '1Y'];
@@ -40,7 +41,7 @@ export const OBSERVATION_LEVELS = {
   energy: { normal: 0, slightly_lower: -1, much_lower: -2, higher_than_usual: 1 },
 };
 export const LEVEL_LABEL = { '-2': 'Much Less', '-1': 'Less', 0: 'Normal', 1: 'More', 2: 'Much More' };
-export const LEVEL_COLOR = { '-2': '#E57373', '-1': '#F4C76B', 0: '#A9AEB5', 1: '#4CC7B0', 2: '#4CC7B0' };
+export const LEVEL_COLOR = { '-2': PALETTE.red, '-1': PALETTE.amber, 0: PALETTE.gray, 1: PALETTE.teal, 2: PALETTE.teal };
 
 // Wellness Score card + chart. `series` is oldest-first for charting;
 // current/delta/statusLabel describe "today" (or the latest scored day).

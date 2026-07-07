@@ -118,7 +118,7 @@ export default function PetProfileTabs() {
           <h1 className={`font-serif text-4xl ${pet?.photo_url ? 'text-white drop-shadow' : 'text-foreground'}`}>{pet?.name}</h1>
           {pet?.breed && <p className={`text-sm mt-0.5 ${pet?.photo_url ? 'text-white/80' : 'text-muted-foreground'}`}>{pet?.breed}</p>}
           {pet?.nicknames?.length > 0 && (
-            <p className={`text-xs mt-0.5 italic ${pet?.photo_url ? 'text-white/70' : 'text-muted-foreground'}`}>
+            <p className={`text-sm mt-0.5 italic ${pet?.photo_url ? 'text-white/70' : 'text-muted-foreground'}`}>
               also known as {pet?.nicknames.join(', ')}
             </p>
           )}
@@ -226,7 +226,7 @@ export default function PetProfileTabs() {
               <Rainbow className="h-4 w-4" />
               <div>
                 <p className="text-sm font-medium">Crossed the Rainbow Bridge</p>
-                <p className="text-xs text-muted-foreground">Convert to a memorial profile</p>
+                <p className="text-sm text-muted-foreground">Convert to a memorial profile</p>
               </div>
             </button>
           </div>
@@ -237,7 +237,7 @@ export default function PetProfileTabs() {
             <div className="px-4 py-4 bg-purple-50 border border-purple-200 rounded-xl text-center">
               <Rainbow className="h-7 w-7 mx-auto mb-1 text-purple-300" />
               <p className="text-sm font-medium text-purple-800">Forever in our hearts</p>
-              {pet?.memorial_date && <p className="text-xs text-purple-600 mt-0.5">{new Date(pet?.memorial_date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</p>}
+              {pet?.memorial_date && <p className="text-sm text-purple-600 mt-0.5">{new Date(pet?.memorial_date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</p>}
             </div>
           </div>
         )}
@@ -246,7 +246,7 @@ export default function PetProfileTabs() {
       {sheetOpen && (
         <div className="fixed inset-0 z-50 bg-background overflow-y-auto">
           <div className="sticky z-10 bg-background border-b border-border px-4 py-3 flex items-center justify-between" style={{ top: 'var(--account-banner-height, 0px)', paddingTop: 'calc(env(safe-area-inset-top) + 12px)' }}>
-            <h2 className="font-serif text-xl">Log Symptoms</h2>
+            <h2 className="font-serif text-2xl">Log Symptoms</h2>
             <button onClick={() => setSheetOpen(false)} className="h-9 w-9 rounded-full bg-secondary flex items-center justify-center">
               <X className="h-4 w-4" />
             </button>

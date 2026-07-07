@@ -11,6 +11,7 @@ import InsightSummaryCard from '../components/trends/InsightSummaryCard';
 import { RANGE_OPTIONS } from '@/lib/checkin/trendsClient';
 import { getPetLabel } from '@/lib/speciesConfig';
 import { track } from '@/lib/analytics';
+import { PALETTE } from '@/lib/toneColors';
 
 // "Trends" here is the legacy per-metric symptom_logs charts (previously
 // PetProfileTabs' own "Trends" tab) — kept alive as a sub-tab of this
@@ -139,7 +140,7 @@ export default function PetTrends() {
               {pet.photo_url && <img src={pet.photo_url} alt={pet.name} className={`w-full h-full object-cover ${pet.is_memorial ? 'grayscale' : ''}`} />}
             </div>
             <div className="min-w-0">
-              <p className="text-[18px] font-bold text-white truncate flex items-center gap-1.5">
+              <p className="text-[20px] font-bold text-white truncate flex items-center gap-1.5">
                 {pet.name}
                 {pet.is_memorial && <Rainbow className="h-3.5 w-3.5 text-purple-400 flex-shrink-0" aria-label="In memory" />}
               </p>
@@ -160,8 +161,8 @@ export default function PetTrends() {
               onClick={() => setSection(s.key)}
               className="pb-2.5 text-[15px] font-medium transition-colors"
               style={{
-                color: activeSection === s.key ? '#6FB7FF' : 'rgba(255,255,255,0.4)',
-                borderBottom: activeSection === s.key ? '2px solid #6FB7FF' : '2px solid transparent',
+                color: activeSection === s.key ? PALETTE.sky : 'rgba(255,255,255,0.4)',
+                borderBottom: activeSection === s.key ? `2px solid ${PALETTE.sky}` : '2px solid transparent',
               }}
             >
               {s.label}
@@ -198,7 +199,7 @@ export default function PetTrends() {
                     aria-pressed={range === r}
                     onClick={() => setRange(r)}
                     className="flex-1 py-1.5 rounded-full text-[13px] font-semibold transition-colors"
-                    style={range === r ? { background: '#6FB7FF', color: '#0D0F12' } : { color: 'rgba(255,255,255,0.5)' }}
+                    style={range === r ? { background: PALETTE.sky, color: 'hsl(var(--background))' } : { color: 'rgba(255,255,255,0.5)' }}
                   >
                     {r}
                   </button>

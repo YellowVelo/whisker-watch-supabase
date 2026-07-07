@@ -101,7 +101,7 @@ export default function VetExport() {
         {/* Vaccinations */}
         {vaccinations.length > 0 && (
           <section className="mb-6">
-            <h2 className="font-serif text-xl font-semibold mb-3 border-b border-border pb-1">Vaccination Records</h2>
+            <h2 className="font-serif text-2xl font-semibold mb-3 border-b border-border pb-1">Vaccination Records</h2>
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-left text-muted-foreground border-b border-border">
@@ -130,7 +130,7 @@ export default function VetExport() {
         {/* Active Medications */}
         {activeMeds.length > 0 && (
           <section className="mb-6">
-            <h2 className="font-serif text-xl font-semibold mb-3 border-b border-border pb-1">Current Medications</h2>
+            <h2 className="font-serif text-2xl font-semibold mb-3 border-b border-border pb-1">Current Medications</h2>
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-left text-muted-foreground border-b border-border">
@@ -159,7 +159,7 @@ export default function VetExport() {
         {/* Foods */}
         {Object.keys(foodSummary).length > 0 && (
           <section className="mb-6">
-            <h2 className="font-serif text-xl font-semibold mb-3 border-b border-border pb-1">Diet</h2>
+            <h2 className="font-serif text-2xl font-semibold mb-3 border-b border-border pb-1">Diet</h2>
             <div className="flex flex-wrap gap-2">
               {Object.entries(foodSummary).map(([name, info]) => (
                 <div key={name} className="border border-border rounded px-2.5 py-1.5 text-sm">
@@ -175,7 +175,7 @@ export default function VetExport() {
         {/* Symptom Log Table */}
         {sortedLogs.length > 0 && (
           <section className="mb-6">
-            <h2 className="font-serif text-xl font-semibold mb-3 border-b border-border pb-1">Symptom History ({sortedLogs.length} records)</h2>
+            <h2 className="font-serif text-2xl font-semibold mb-3 border-b border-border pb-1">Symptom History ({sortedLogs.length} records)</h2>
             <table className="w-full text-xs">
               <thead>
                 <tr className="text-left text-muted-foreground border-b border-border">
@@ -222,7 +222,7 @@ export default function VetExport() {
         {/* Daily Check-In Weight Log — entered in lbs by the owner, shown in kg here for the vet */}
         {weightObservations.length > 0 && (
           <section className="mb-6">
-            <h2 className="font-serif text-xl font-semibold mb-3 border-b border-border pb-1">Weight Log ({weightObservations.length} records)</h2>
+            <h2 className="font-serif text-2xl font-semibold mb-3 border-b border-border pb-1">Weight Log ({weightObservations.length} records)</h2>
             <table className="w-full text-xs">
               <thead>
                 <tr className="text-left text-muted-foreground border-b border-border">

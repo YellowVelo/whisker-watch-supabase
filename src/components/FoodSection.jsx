@@ -101,7 +101,7 @@ export default function FoodSection({ petId }) {
         <div>
           <button
             onClick={() => setShowInactive(!showInactive)}
-            className="text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
+            className="text-sm text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
           >
             {showInactive ? '▾' : '▸'} Past foods ({inactive.length})
           </button>
@@ -151,14 +151,14 @@ export default function FoodSection({ petId }) {
             <div className="flex items-center justify-between p-3 bg-secondary rounded-lg">
               <div>
                 <p className="text-sm font-medium">Prescription Diet</p>
-                <p className="text-xs text-muted-foreground">Vet-prescribed food</p>
+                <p className="text-sm text-muted-foreground">Vet-prescribed food</p>
               </div>
               <Switch checked={form.prescription} onCheckedChange={v => set('prescription', v)} />
             </div>
             <div className="flex items-center justify-between p-3 bg-secondary rounded-lg">
               <div>
                 <p className="text-sm font-medium">Currently Feeding</p>
-                <p className="text-xs text-muted-foreground">Show as active in diet</p>
+                <p className="text-sm text-muted-foreground">Show as active in diet</p>
               </div>
               <Switch checked={form.active} onCheckedChange={v => set('active', v)} />
             </div>
@@ -184,7 +184,7 @@ function FoodCard({ food, onEdit, onDelete, onToggle, typeColors }) {
           <div className="flex items-start justify-between gap-2">
             <div>
               <p className="font-medium text-sm leading-snug">{food.name}</p>
-              {food.brand && <p className="text-xs text-muted-foreground">{food.brand}</p>}
+              {food.brand && <p className="text-sm text-muted-foreground">{food.brand}</p>}
             </div>
             <div className="flex gap-1 flex-shrink-0">
               <button onClick={() => onEdit(food)} className="text-muted-foreground hover:text-foreground transition-colors p-1">
@@ -206,12 +206,12 @@ function FoodCard({ food, onEdit, onDelete, onToggle, typeColors }) {
             )}
           </div>
           {(food.start_date || food.end_date) && (
-            <p className="text-xs text-muted-foreground mt-1">
+            <p className="text-sm text-muted-foreground mt-1">
               {food.start_date && format(parseISO(food.start_date), 'MMM d, yyyy')}
               {food.end_date && ` → ${format(parseISO(food.end_date), 'MMM d, yyyy')}`}
             </p>
           )}
-          {food.notes && <p className="text-xs text-muted-foreground italic mt-1">{food.notes}</p>}
+          {food.notes && <p className="text-base text-muted-foreground italic mt-1">{food.notes}</p>}
         </div>
       </div>
     </div>

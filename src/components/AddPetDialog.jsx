@@ -13,6 +13,7 @@ import { computeLifeStage } from '@/lib/lifeStage';
 import { getOrCreatePetOnboarding } from '@/lib/onboardingClient';
 import { Loader2, Camera } from 'lucide-react';
 import { getPetEmoji, getPetLabel } from '@/lib/speciesConfig';
+import { PALETTE } from '@/lib/toneColors';
 
 const PRECISION_OPTIONS = [
   { value: 'EXACT', label: 'Exact date' },
@@ -274,7 +275,7 @@ export default function AddPetDialog({ open, onOpenChange, onSuccess, returnTo =
       <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
         {step !== 'success' && (
           <DialogHeader>
-            <DialogTitle className="font-serif text-xl">
+            <DialogTitle className="font-serif text-2xl">
               {species ? `Add a ${label}` : 'Add a Pet'}
             </DialogTitle>
           </DialogHeader>
@@ -306,7 +307,7 @@ export default function AddPetDialog({ open, onOpenChange, onSuccess, returnTo =
 
         {step === 'form' && (
           <form onSubmit={handleSubmit} className="space-y-4">
-            <button type="button" onClick={() => setStep('species')} className="text-xs text-muted-foreground hover:text-foreground -mt-2">
+            <button type="button" onClick={() => setStep('species')} className="text-sm text-muted-foreground hover:text-foreground -mt-2">
               &larr; change species
             </button>
 
@@ -371,10 +372,10 @@ export default function AddPetDialog({ open, onOpenChange, onSuccess, returnTo =
                 onPartsChange={p => setForm(f => ({ ...f, birthDate: p.exact, birthMonthYear: p.monthYear, birthYear: p.year }))}
               />
               {form.birthPrecision && !birthValid && (
-                <p className="text-xs text-red-600">Please enter a valid, non-future date.</p>
+                <p className="text-base" style={{ color: PALETTE.red }}>Please enter a valid, non-future date.</p>
               )}
               {lifeStage && (
-                <p className="text-xs text-muted-foreground">Life stage: <span className="font-medium text-foreground">{lifeStage}</span></p>
+                <p className="text-sm text-muted-foreground">Life stage: <span className="font-medium text-foreground">{lifeStage}</span></p>
               )}
             </div>
 
@@ -388,7 +389,7 @@ export default function AddPetDialog({ open, onOpenChange, onSuccess, returnTo =
                 onPartsChange={p => setForm(f => ({ ...f, gotchaDate: p.exact, gotchaMonthYear: p.monthYear, gotchaYear: p.year }))}
               />
               {gotchaBeforeBirth && (
-                <p className="text-xs text-red-600">Gotcha day can't be before the birth date.</p>
+                <p className="text-base" style={{ color: PALETTE.red }}>Gotcha day can't be before the birth date.</p>
               )}
             </div>
 
@@ -442,10 +443,10 @@ export default function AddPetDialog({ open, onOpenChange, onSuccess, returnTo =
             <div className="space-y-1.5">
               <Label htmlFor="pet-notes">Notes</Label>
               <Textarea id="pet-notes" maxLength={500} rows={2} value={form.notes} onChange={e => set('notes', e.target.value)} placeholder="Anything important..." />
-              <p className="text-xs text-muted-foreground text-right">{form.notes.length}/500</p>
+              <p className="text-sm text-muted-foreground text-right">{form.notes.length}/500</p>
             </div>
 
-            {error && <p className="text-sm text-red-600" role="alert">{error}</p>}
+            {error && <p className="text-sm" style={{ color: PALETTE.red }} role="alert">{error}</p>}
 
             <div className="flex gap-3">
               <Button type="button" variant="outline" className="flex-1" onClick={handleCancel}>
@@ -461,11 +462,11 @@ export default function AddPetDialog({ open, onOpenChange, onSuccess, returnTo =
         {step === 'success' && (
           <div className="py-6 flex flex-col items-center gap-3 text-center">
             <span className="text-5xl">🐾</span>
-            <p className="font-serif text-xl">{createdPetName} has been added!</p>
+            <p className="font-serif text-2xl">{createdPetName} has been added!</p>
             <p className="text-sm text-muted-foreground max-w-xs">
               Let's spend a few minutes teaching Wysker Watch about {createdPetName}. This helps us recognize meaningful changes over time.
             </p>
-            <p className="text-xs text-muted-foreground">About 3 minutes.</p>
+            <p className="text-sm text-muted-foreground">About 3 minutes.</p>
             <div className="flex flex-col gap-3 w-full mt-2">
               <Button className="w-full" onClick={handleContinueSetup}>
                 Complete {createdPetName}'s Profile

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import MetricCardShell from './MetricCardShell';
 import TrendChart, { ObservationLegend } from './TrendChart';
 import { getObservationTrend } from '@/lib/checkin/trendsClient';
+import { PALETTE } from '@/lib/toneColors';
 
 // One generic card, instantiated for Appetite/Water Intake/Energy in
 // PetTrends.jsx (Product Principle 19/20: "Favor Reusable Models" /
@@ -34,7 +35,7 @@ export default function ObservationCard({ petId, range, code, label, icon }) {
     >
       {data && (
         <>
-          <p className="text-[20px] font-bold" style={{ color: data.currentLabel === 'Normal' || !data.currentLabel ? '#fff' : '#F4C76B' }}>
+          <p className="text-[20px] font-bold" style={{ color: data.currentLabel === 'Normal' || !data.currentLabel ? '#fff' : PALETTE.amber }}>
             {data.currentLabel || 'No Data'}
           </p>
           <p className="text-[13px] text-white/40 mb-2">

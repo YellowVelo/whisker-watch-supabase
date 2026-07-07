@@ -95,7 +95,7 @@ export default function InviteCoOwnerDialog({ petId, petName, open, onOpenChange
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle className="font-serif text-xl">Share {petName ? `${petName}'s` : 'Pet'} Profile</DialogTitle>
+          <DialogTitle className="font-serif text-2xl">Share {petName ? `${petName}'s` : 'Pet'} Profile</DialogTitle>
         </DialogHeader>
         <p className="text-sm text-muted-foreground -mt-1">
           A co-owner gets full access — they can log symptoms, edit details, and manage everything for {petName || 'this pet'}, just like you.

@@ -15,7 +15,7 @@ export default function PetFood() {
           <Link to={`/pet/${petId}`} className="w-9 h-9 rounded-full flex items-center justify-center bg-white/8">
             <ArrowLeft className="h-5 w-5 text-white" />
           </Link>
-          <h1 className="text-base font-semibold text-white">Food History</h1>
+          <h1 className="text-[28px] font-semibold text-white">Food History</h1>
         </div>
         <div className="max-w-2xl mx-auto px-4 py-5">
           <FoodSection petId={petId} />

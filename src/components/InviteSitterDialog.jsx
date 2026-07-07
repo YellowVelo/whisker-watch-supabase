@@ -63,7 +63,7 @@ export default function InviteSitterDialog({ petSitId, open, onOpenChange }) {
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle className="font-serif text-xl">Share with Sitter</DialogTitle>
+          <DialogTitle className="font-serif text-2xl">Share with Sitter</DialogTitle>
         </DialogHeader>
         <p className="text-sm text-muted-foreground -mt-1">
           The sitter will receive an invitation and can see all pets on this sitting period.

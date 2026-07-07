@@ -78,7 +78,7 @@ export default function MedicationEntryCard({ petId, petName, onContinue, onSkip
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-medium text-foreground truncate">{m.name}</p>
                 {(m.dosage || m.frequency) && (
-                  <p className="text-xs text-muted-foreground">{[m.dosage, m.frequency].filter(Boolean).join(' · ')}</p>
+                  <p className="text-sm text-muted-foreground">{[m.dosage, m.frequency].filter(Boolean).join(' · ')}</p>
                 )}
               </div>
             </div>
@@ -106,7 +106,7 @@ export default function MedicationEntryCard({ petId, petName, onContinue, onSkip
             <Pill className="h-4 w-4 text-muted-foreground" />
             <div>
               <p className="text-sm font-medium">Reminder</p>
-              <p className="text-xs text-muted-foreground">Get notified when it's due</p>
+              <p className="text-sm text-muted-foreground">Get notified when it's due</p>
             </div>
           </div>
           <Switch checked={form.reminder_enabled} onCheckedChange={(v) => set('reminder_enabled', v)} />

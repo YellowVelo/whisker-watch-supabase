@@ -52,7 +52,7 @@ export default function InsightSummaryCard({ petId, petName, range }) {
       ) : !summary ? (
         <p className="text-[13px] text-white/40">Complete more check-ins to unlock AI insights.</p>
       ) : (
-        <p className="text-[14px] text-white/70 leading-relaxed">{summary}</p>
+        <p className="text-base text-white/70 leading-relaxed">{summary}</p>
       )}
     </div>
   );

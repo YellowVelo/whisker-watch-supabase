@@ -55,19 +55,19 @@ export default function Register() {
           <div className="h-12 w-12 rounded-xl bg-primary/10 flex items-center justify-center mx-auto mb-3">
             <Heart className="h-6 w-6 text-primary" />
           </div>
-          <h1 className="font-serif text-2xl">Create Account</h1>
+          <h1 className="font-serif text-[28px]">Create Account</h1>
         </div>
         {sent ? (
           <div className="text-center space-y-3">
             <MailCheck className="h-10 w-10 text-primary mx-auto" />
-            <p className="text-sm text-muted-foreground">
+            <p className="text-base text-muted-foreground">
               We sent a confirmation link to <span className="font-medium">{email}</span>.
               Click it to finish creating your account.
             </p>
           </div>
         ) : (
           <form onSubmit={handleRegister} className="space-y-4">
-            {error && <p className="text-sm text-destructive text-center">{error}</p>}
+            {error && <p className="text-base text-destructive text-center">{error}</p>}
             <div className="space-y-1.5"><Label>First Name</Label><Input type="text" value={firstName} onChange={e => setFirstName(e.target.value)} maxLength={100} required /></div>
             <div className="space-y-1.5"><Label>Email</Label><Input type="email" value={email} onChange={e => setEmail(e.target.value)} required /></div>
             <div className="space-y-1.5"><Label>Password</Label><Input type="password" value={password} onChange={e => setPassword(e.target.value)} required /></div>

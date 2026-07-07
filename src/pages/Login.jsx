@@ -41,8 +41,8 @@ export default function Login() {
           <div className="h-12 w-12 rounded-xl bg-primary/10 flex items-center justify-center mx-auto mb-3">
             <Heart className="h-6 w-6 text-primary" />
           </div>
-          <h1 className="font-serif text-2xl">Wysker Watch</h1>
-          <p className="text-sm text-muted-foreground mt-1">Sign in to track your pet's health</p>
+          <h1 className="font-serif text-[28px]">Wysker Watch</h1>
+          <p className="text-base text-muted-foreground mt-1">Sign in to track your pet's health</p>
         </div>
         {accountDeleted && (
           <div className="flex items-start gap-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 px-3 py-2.5 text-sm text-emerald-500">
@@ -51,7 +51,7 @@ export default function Login() {
           </div>
         )}
         <form onSubmit={handleSubmit} className="space-y-4">
-          {error && <p className="text-sm text-destructive text-center">{error}</p>}
+          {error && <p className="text-base text-destructive text-center">{error}</p>}
           <div className="space-y-1.5">
             <Label>Email</Label>
             <Input type="email" value={email} onChange={e => setEmail(e.target.value)} required />

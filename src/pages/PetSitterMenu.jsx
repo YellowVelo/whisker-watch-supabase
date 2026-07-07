@@ -27,7 +27,7 @@ export default function PetSitterMenu() {
           <button onClick={() => navigate(-1)} aria-label="Back" className="w-9 h-9 rounded-full flex items-center justify-center" style={{ background: 'rgba(255,255,255,0.06)' }}>
             <ArrowLeft className="h-5 w-5 text-white" />
           </button>
-          <h1 className="text-[22px] font-bold text-foreground">Pet Sitter</h1>
+          <h1 className="text-[28px] font-bold text-foreground">Pet Sitter</h1>
         </header>
 
         <main className="max-w-2xl mx-auto px-4 pt-4 space-y-3">
@@ -59,7 +59,7 @@ export default function PetSitterMenu() {
                   )}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-[15px] font-semibold text-white truncate">{pet.name}</p>
+                  <p className="text-base font-semibold text-white truncate">{pet.name}</p>
                   <p className="text-[13px] text-white/40 truncate">{pet.breed || pet.species}</p>
                 </div>
                 <ChevronRight className="h-4 w-4 text-white/25 flex-shrink-0" />

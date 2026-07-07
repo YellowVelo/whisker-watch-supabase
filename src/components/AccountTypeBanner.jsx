@@ -72,7 +72,7 @@ const Banner = forwardRef(function Banner({ icon: Icon, className, title, messag
   return (
     <div
       ref={ref}
-      className={`sticky top-0 z-[70] flex items-center justify-center gap-2 px-4 py-1.5 text-xs font-medium ${className}`}
+      className={`sticky top-0 z-[70] flex items-center justify-center gap-2 px-4 py-1.5 text-sm font-medium ${className}`}
       style={{ paddingTop: 'calc(env(safe-area-inset-top) + 0.375rem)' }}
     >
       <Icon className="h-3.5 w-3.5 shrink-0" />

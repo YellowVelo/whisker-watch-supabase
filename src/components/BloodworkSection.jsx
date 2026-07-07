@@ -193,7 +193,7 @@ export default function BloodworkSection({ petId }) {
               <Line type="monotone" dataKey="value" stroke={currentField?.color} strokeWidth={2} dot={{ r: 3 }} />
             </LineChart>
           </ResponsiveContainer>
-          {currentField && <p className="text-xs text-muted-foreground text-center">Reference range: {currentField.normal} {currentField.unit}</p>}
+          {currentField && <p className="text-sm text-muted-foreground text-center">Reference range: {currentField.normal} {currentField.unit}</p>}
         </div>
       )}
 
@@ -201,7 +201,7 @@ export default function BloodworkSection({ petId }) {
         <div className="text-center py-12">
           <FlaskConical className="h-10 w-10 text-muted-foreground/30 mx-auto mb-3" />
           <p className="text-sm text-muted-foreground">No bloodwork records yet.</p>
-          <p className="text-xs text-muted-foreground/70 mt-1">Add results to track trends over time.</p>
+          <p className="text-sm text-muted-foreground/70 mt-1">Add results to track trends over time.</p>
         </div>
       ) : (
         <div className="space-y-2">
@@ -214,7 +214,7 @@ export default function BloodworkSection({ petId }) {
                 <div>
                   <p className="font-medium text-sm">{format(parseISO(r.date), 'MMMM d, yyyy')}</p>
                   {(r.lab_name || r.vet_name) && (
-                    <p className="text-xs text-muted-foreground">{[r.lab_name, r.vet_name].filter(Boolean).join(' · ')}</p>
+                    <p className="text-sm text-muted-foreground">{[r.lab_name, r.vet_name].filter(Boolean).join(' · ')}</p>
                   )}
                 </div>
                 <div className="flex items-center gap-2">
@@ -231,17 +231,17 @@ export default function BloodworkSection({ petId }) {
                 <div className="border-t border-border px-4 py-3 grid grid-cols-2 gap-x-6 gap-y-1.5">
                   {FIELDS.filter(f => r[f.key] != null).map(f => (
                     <div key={f.key} className="flex justify-between items-center text-sm">
-                      <span className="text-muted-foreground text-xs">{f.label}</span>
-                      <span className="font-medium text-xs">{r[f.key]} <span className="text-muted-foreground font-normal">{f.unit}</span></span>
+                      <span className="text-muted-foreground text-sm">{f.label}</span>
+                      <span className="font-medium text-sm">{r[f.key]} <span className="text-muted-foreground font-normal">{f.unit}</span></span>
                     </div>
                   ))}
                   {URINE_FIELDS.filter(f => r[f.key]).map(f => (
                     <div key={f.key} className="flex justify-between items-center text-sm">
-                      <span className="text-muted-foreground text-xs">{f.label}</span>
-                      <span className="font-medium text-xs">{r[f.key]}</span>
+                      <span className="text-muted-foreground text-sm">{f.label}</span>
+                      <span className="font-medium text-sm">{r[f.key]}</span>
                     </div>
                   ))}
-                  {r.notes && <div className="col-span-2 text-xs text-muted-foreground mt-1 pt-1 border-t border-border">{r.notes}</div>}
+                  {r.notes && <div className="col-span-2 text-sm text-muted-foreground mt-1 pt-1 border-t border-border">{r.notes}</div>}
                 </div>
               )}
             </div>
@@ -252,7 +252,7 @@ export default function BloodworkSection({ petId }) {
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="font-serif text-xl">{editing ? 'Edit' : 'Add'} Bloodwork</DialogTitle>
+            <DialogTitle className="font-serif text-2xl">{editing ? 'Edit' : 'Add'} Bloodwork</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 mt-2">
             <div className="grid grid-cols-2 gap-3">
@@ -274,7 +274,7 @@ export default function BloodworkSection({ petId }) {
             <div className="grid grid-cols-2 gap-3">
               {FIELDS.map(f => (
                 <div key={f.key} className="space-y-1">
-                  <Label className="text-xs">{f.label} <span className="text-muted-foreground font-normal">({f.unit})</span></Label>
+                  <Label className="text-sm">{f.label} <span className="text-muted-foreground font-normal">({f.unit})</span></Label>
                   <Input
                     type="number"
                     step="any"
@@ -289,11 +289,11 @@ export default function BloodworkSection({ petId }) {
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider pt-1">Urinalysis</p>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <Label className="text-xs">Urine Specific Gravity</Label>
+                <Label className="text-sm">Urine Specific Gravity</Label>
                 <Input value={form.urine_specific_gravity} onChange={e => set('urine_specific_gravity', e.target.value)} placeholder="e.g. 1.020" />
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs">Urine Protein</Label>
+                <Label className="text-sm">Urine Protein</Label>
                 <select
                   value={form.urine_protein}
                   onChange={e => set('urine_protein', e.target.value)}

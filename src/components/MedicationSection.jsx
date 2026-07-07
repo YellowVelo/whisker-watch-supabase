@@ -117,7 +117,7 @@ export default function MedicationSection({ petId }) {
         <div>
           <button
             onClick={() => setShowInactive(!showInactive)}
-            className="text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
+            className="text-sm text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
           >
             {showInactive ? '▾' : '▸'} Past medications ({inactive.length})
           </button>
@@ -202,7 +202,7 @@ export default function MedicationSection({ petId }) {
               <div className="space-y-1.5">
                 <Label className="text-sm">Next Due Date</Label>
                 <Input type="date" value={form.next_due_date} onChange={e => set('next_due_date', e.target.value)} />
-                <p className="text-xs text-muted-foreground">Auto-calculated — adjust if needed.</p>
+                <p className="text-sm text-muted-foreground">Auto-calculated — adjust if needed.</p>
               </div>
             )}
             <div className="space-y-1.5">
@@ -216,21 +216,21 @@ export default function MedicationSection({ petId }) {
             <div className="flex items-center justify-between p-3 bg-secondary rounded-lg">
               <div>
                 <p className="text-sm font-medium">Prescribed by Vet</p>
-                <p className="text-xs text-muted-foreground">Vet-prescribed medication</p>
+                <p className="text-sm text-muted-foreground">Vet-prescribed medication</p>
               </div>
               <Switch checked={form.prescribed} onCheckedChange={v => set('prescribed', v)} />
             </div>
             <div className="flex items-center justify-between p-3 bg-secondary rounded-lg">
               <div>
                 <p className="text-sm font-medium">Currently Active</p>
-                <p className="text-xs text-muted-foreground">Still being administered</p>
+                <p className="text-sm text-muted-foreground">Still being administered</p>
               </div>
               <Switch checked={form.active} onCheckedChange={v => set('active', v)} />
             </div>
             <div className="flex items-center justify-between p-3 bg-secondary rounded-lg">
               <div>
                 <p className="text-sm font-medium">Reminder</p>
-                <p className="text-xs text-muted-foreground">Get notified when it's due</p>
+                <p className="text-sm text-muted-foreground">Get notified when it's due</p>
               </div>
               <Switch checked={form.reminder_enabled} onCheckedChange={v => set('reminder_enabled', v)} />
             </div>
@@ -271,12 +271,12 @@ function MedButton({ med, given, onGive, onEdit, onDelete, past }) {
                               )}
                             </div>
             <div className="flex flex-wrap gap-x-2 gap-y-0.5 mt-0.5">
-              {med.dosage && <p className="text-xs text-muted-foreground">{med.dosage}</p>}
-              {med.frequency && <p className="text-xs text-muted-foreground">{med.frequency}</p>}
-              {med.timing_instructions && <p className="text-xs text-muted-foreground">{med.timing_instructions}</p>}
+              {med.dosage && <p className="text-sm text-muted-foreground">{med.dosage}</p>}
+              {med.frequency && <p className="text-sm text-muted-foreground">{med.frequency}</p>}
+              {med.timing_instructions && <p className="text-sm text-muted-foreground">{med.timing_instructions}</p>}
             </div>
           </div>
-          <span className={`text-xs font-medium flex-shrink-0 ${given ? 'text-primary' : 'text-muted-foreground'}`}>
+          <span className={`text-sm font-medium flex-shrink-0 ${given ? 'text-primary' : 'text-muted-foreground'}`}>
             {given ? 'Given ✓' : 'Tap to log'}
           </span>
         </button>
@@ -294,7 +294,7 @@ function MedButton({ med, given, onGive, onEdit, onDelete, past }) {
               )}
             </div>
             {(med.dosage || med.frequency) && (
-              <p className="text-xs text-muted-foreground">{[med.dosage, med.frequency].filter(Boolean).join(' · ')}</p>
+              <p className="text-sm text-muted-foreground">{[med.dosage, med.frequency].filter(Boolean).join(' · ')}</p>
             )}
           </div>
         </div>
@@ -304,12 +304,12 @@ function MedButton({ med, given, onGive, onEdit, onDelete, past }) {
       <div className="flex items-center justify-between px-4 py-1.5 border-t border-border/50 bg-muted/30">
         <div className="flex items-center gap-2 flex-wrap">
           {med.next_due_date && (
-            <p className="text-xs font-medium text-accent">
+            <p className="text-sm font-medium text-accent">
               📅 Due {format(parseISO(med.next_due_date), 'MMM d, yyyy')}
             </p>
           )}
           {!med.next_due_date && (med.start_date || med.end_date) && (
-            <p className="text-xs text-muted-foreground">
+            <p className="text-sm text-muted-foreground">
               {med.start_date && format(parseISO(med.start_date), 'MMM d, yyyy')}
               {med.end_date && ` → ${format(parseISO(med.end_date), 'MMM d, yyyy')}`}
             </p>

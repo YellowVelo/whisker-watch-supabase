@@ -169,13 +169,13 @@ export default function Account() {
             <button onClick={() => navigate(-1)} aria-label="Back" className="h-9 w-9 rounded-full bg-white/8 flex items-center justify-center flex-shrink-0">
               <ChevronLeft className="h-5 w-5 text-white" />
             </button>
-            <h1 className="font-serif text-xl">Profile</h1>
+            <h1 className="font-serif text-[28px]">Profile</h1>
           </div>
         </header>
 
         <main className="max-w-2xl mx-auto px-4">
           {isLoadingAuth && !baseline && (
-            <p className="text-sm text-muted-foreground text-center py-16">Loading profile...</p>
+            <p className="text-base text-muted-foreground text-center py-16">Loading profile...</p>
           )}
 
           {!isLoadingAuth && profileLoadError && !baseline && (
@@ -183,8 +183,8 @@ export default function Account() {
               <div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
                 <User className="h-8 w-8 text-primary" />
               </div>
-              <p className="text-sm text-muted-foreground">Unable to load your profile.</p>
-              <p className="text-sm text-muted-foreground">Please try again.</p>
+              <p className="text-base text-muted-foreground">Unable to load your profile.</p>
+              <p className="text-base text-muted-foreground">Please try again.</p>
             </div>
           )}
 
@@ -229,8 +229,8 @@ export default function Account() {
                 <Label id="timezone-label" htmlFor="timezone-select">Timezone</Label>
                 {detectionFailed && !timezone ? (
                   <div>
-                    <p className="text-sm text-muted-foreground mb-2">Unable to determine your timezone.</p>
-                    <p className="text-sm text-muted-foreground mb-3">Please choose your timezone.</p>
+                    <p className="text-base text-muted-foreground mb-2">Unable to determine your timezone.</p>
+                    <p className="text-base text-muted-foreground mb-3">Please choose your timezone.</p>
                   </div>
                 ) : null}
                 <Select value={timezone} onValueChange={handleTimezoneChange} disabled={saving}>

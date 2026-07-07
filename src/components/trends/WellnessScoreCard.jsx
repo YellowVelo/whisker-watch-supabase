@@ -4,6 +4,7 @@ import { Activity, ArrowDown, ArrowUp } from 'lucide-react';
 import MetricCardShell from './MetricCardShell';
 import TrendChart from './TrendChart';
 import { getWellnessScoreTrend } from '@/lib/checkin/trendsClient';
+import { PALETTE } from '@/lib/toneColors';
 
 export default function WellnessScoreCard({ petId, range, isMemorial }) {
   const [state, setState] = useState({ loading: true, error: false, data: null });
@@ -42,14 +43,14 @@ export default function WellnessScoreCard({ petId, range, isMemorial }) {
             <span className="text-[32px] font-bold text-white leading-none">{data.current ?? '—'}</span>
             <span className="text-[15px] text-white/40">/{data.max}</span>
           </div>
-          <p className="text-[13px] font-medium mt-0.5" style={{ color: data.statusLabel ? '#F4C76B' : 'rgba(255,255,255,0.4)' }}>
+          <p className="text-[13px] font-medium mt-0.5" style={{ color: data.statusLabel ? PALETTE.amber : 'rgba(255,255,255,0.4)' }}>
             {data.statusLabel || 'Not checked in today'}
           </p>
           <div className="mt-3">
-            <TrendChart variant="line" series={data.series} range={range} yDomain={[0, 100]} color="#F4C76B" highlightExtremes />
+            <TrendChart variant="line" series={data.series} range={range} yDomain={[0, 100]} color={PALETTE.amber} highlightExtremes />
           </div>
           {data.deltaFromYesterday != null && (
-            <p className="text-[12px] text-white/40 mt-1 flex items-center gap-1">
+            <p className="text-[13px] text-white/40 mt-1 flex items-center gap-1">
               {data.deltaFromYesterday < 0 ? <ArrowDown className="h-3 w-3" /> : data.deltaFromYesterday > 0 ? <ArrowUp className="h-3 w-3" /> : null}
               {data.deltaFromYesterday === 0
                 ? 'No change from yesterday'

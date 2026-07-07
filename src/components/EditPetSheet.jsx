@@ -71,7 +71,7 @@ export default function EditPetSheet({ pet, open, onOpenChange, onSuccess }) {
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="overflow-y-auto">
         <SheetHeader>
-          <SheetTitle className="font-serif text-xl">Edit Profile</SheetTitle>
+          <SheetTitle className="font-serif text-2xl">Edit Profile</SheetTitle>
         </SheetHeader>
         <div className="mt-5 space-y-5">
 

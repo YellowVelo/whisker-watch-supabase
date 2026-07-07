@@ -21,8 +21,8 @@ export default function MemorialDialog({ pet, open, onOpenChange, onSuccess }) {
     <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle className="font-serif text-xl">🌈 Crossed the Rainbow Bridge</AlertDialogTitle>
-          <AlertDialogDescription className="text-sm leading-relaxed">
+          <AlertDialogTitle className="font-serif text-2xl">🌈 Crossed the Rainbow Bridge</AlertDialogTitle>
+          <AlertDialogDescription className="text-base leading-relaxed">
             Mark <strong>{pet?.name}</strong>'s profile as a memorial. Their health history and memories will be lovingly preserved.
           </AlertDialogDescription>
         </AlertDialogHeader>

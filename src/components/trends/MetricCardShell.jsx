@@ -14,7 +14,7 @@ export default function MetricCardShell({ icon: Icon, title, periodLabel, loadin
           <p className="text-[12px] font-semibold text-white/50 uppercase tracking-wide">{title}</p>
         </div>
         <div className="flex items-center gap-1 text-white/30">
-          <span className="text-[12px]">{periodLabel}</span>
+          <span className="text-[13px]">{periodLabel}</span>
           <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
         </div>
       </div>

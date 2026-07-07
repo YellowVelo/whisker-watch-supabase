@@ -303,7 +303,7 @@ export default function Settings() {
           {/* Security footer */}
           <div className="flex items-start gap-2 justify-center text-center px-4 py-2">
             <Lock className="h-3.5 w-3.5 text-white/30 flex-shrink-0 mt-0.5" aria-hidden="true" />
-            <p className="text-[12px] text-white/35 leading-snug">
+            <p className="text-sm text-white/35 leading-snug">
               Your data is encrypted and securely stored.
               <br />
               We never share your information.
@@ -315,10 +315,10 @@ export default function Settings() {
         <Dialog open={activeDialog === DIALOG.SIGN_OUT} onOpenChange={(v) => !v && closeDialog()}>
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
-              <DialogTitle className="font-serif text-xl">Sign Out?</DialogTitle>
+              <DialogTitle className="font-serif text-2xl">Sign Out?</DialogTitle>
             </DialogHeader>
             <DialogDescription asChild>
-              <p className="text-sm text-muted-foreground">You'll need to sign in again to access your pets.</p>
+              <p className="text-base text-muted-foreground">You'll need to sign in again to access your pets.</p>
             </DialogDescription>
             <DialogFooter className="mt-2 gap-2">
               <button onClick={closeDialog} disabled={signingOut} className="flex-1 h-10 rounded-lg border border-border text-sm font-medium hover:bg-secondary transition-colors disabled:opacity-50">Cancel</button>
@@ -337,10 +337,10 @@ export default function Settings() {
         <Dialog open={activeDialog === DIALOG.DELETE_WARNING} onOpenChange={(v) => !v && closeDialog()}>
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
-              <DialogTitle className="font-serif text-xl text-destructive">Delete Account?</DialogTitle>
+              <DialogTitle className="font-serif text-2xl text-destructive">Delete Account?</DialogTitle>
             </DialogHeader>
             <DialogDescription asChild>
-              <div className="space-y-3 text-sm text-muted-foreground">
+              <div className="space-y-3 text-base text-muted-foreground">
                 <p>This will permanently delete your account and remove your access to all pets.</p>
                 <ul className="list-disc pl-4 space-y-1">
                   <li>Pets you <strong className="text-foreground">solely own</strong> will be permanently deleted along with all their health records.</li>
@@ -366,10 +366,10 @@ export default function Settings() {
         <Dialog open={activeDialog === DIALOG.DELETE_CONFIRM} onOpenChange={(v) => !v && closeDialog()}>
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
-              <DialogTitle className="font-serif text-xl text-destructive">Confirm Deletion</DialogTitle>
+              <DialogTitle className="font-serif text-2xl text-destructive">Confirm Deletion</DialogTitle>
             </DialogHeader>
             <DialogDescription asChild>
-              <div className="space-y-3 text-sm text-muted-foreground">
+              <div className="space-y-3 text-base text-muted-foreground">
                 <p>Type <strong className="text-foreground font-mono">DELETE</strong> to permanently delete your account.</p>
               </div>
             </DialogDescription>
@@ -400,10 +400,10 @@ export default function Settings() {
         <Dialog open={activeDialog === DIALOG.RESET} onOpenChange={(v) => !v && closeDialog()}>
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
-              <DialogTitle className="font-serif text-xl text-destructive">Reset {accountLabel} Account?</DialogTitle>
+              <DialogTitle className="font-serif text-2xl text-destructive">Reset {accountLabel} Account?</DialogTitle>
             </DialogHeader>
             <DialogDescription asChild>
-              <div className="space-y-3 text-sm text-muted-foreground">
+              <div className="space-y-3 text-base text-muted-foreground">
                 <p>This deletes all pets and pet data on this {accountLabel.toLowerCase()} account. Your login is not affected.</p>
                 <p className="font-medium text-foreground">This cannot be undone.</p>
               </div>
@@ -426,10 +426,10 @@ export default function Settings() {
         <Dialog open={activeDialog === DIALOG.SEED} onOpenChange={(v) => !v && closeDialog()}>
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
-              <DialogTitle className="font-serif text-xl">Seed Test Data</DialogTitle>
+              <DialogTitle className="font-serif text-2xl">Seed Test Data</DialogTitle>
             </DialogHeader>
             <DialogDescription asChild>
-              <div className="space-y-2 text-sm text-muted-foreground">
+              <div className="space-y-2 text-base text-muted-foreground">
                 <p>Choose a scenario. This replaces any existing test data on this account.</p>
               </div>
             </DialogDescription>
@@ -442,7 +442,7 @@ export default function Settings() {
                   className="w-full text-left px-4 py-3 rounded-lg border border-border hover:bg-secondary/50 transition-colors disabled:opacity-40"
                 >
                   <p className="text-sm font-medium">{s.label}</p>
-                  <p className="text-xs text-muted-foreground">{s.description}</p>
+                  <p className="text-sm text-muted-foreground">{s.description}</p>
                 </button>
               ))}
             </div>

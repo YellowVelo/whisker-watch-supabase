@@ -190,7 +190,7 @@ export default function PetSittingSection({ petId }) {
         <div className="text-center py-12">
           <Home className="h-10 w-10 text-muted-foreground/30 mx-auto mb-3" />
           <p className="text-sm text-muted-foreground">No pet sitting periods yet.</p>
-          <p className="text-xs text-muted-foreground/70 mt-1">Create one to generate sitter instructions and a daily checklist.</p>
+          <p className="text-sm text-muted-foreground/70 mt-1">Create one to generate sitter instructions and a daily checklist.</p>
         </div>
       ) : (
         <div className="space-y-2">
@@ -214,9 +214,9 @@ export default function PetSittingSection({ petId }) {
                         : 'Dates not set'}
                     </p>
                     <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                      {sit.sitter_name && <p className="text-xs text-muted-foreground">Sitter: {sit.sitter_name}</p>}
+                      {sit.sitter_name && <p className="text-sm text-muted-foreground">Sitter: {sit.sitter_name}</p>}
                       {sitPets.length > 0 && (
-                        <p className="text-xs text-muted-foreground">
+                        <p className="text-sm text-muted-foreground">
                           🐾 {sitPets.map(c => c.name).join(', ')}
                         </p>
                       )}
@@ -254,24 +254,24 @@ export default function PetSittingSection({ petId }) {
                             <p className="font-semibold text-sm">🐾 {pet.name}</p>
                             {foods.length > 0 && (
                               <div>
-                                <p className="font-medium text-xs">🍽 Food:</p>
-                                <ul className="ml-3 text-muted-foreground text-xs space-y-0.5">
+                                <p className="font-medium text-sm">🍽 Food:</p>
+                                <ul className="ml-3 text-muted-foreground text-sm space-y-0.5">
                                   {foods.map(f => <li key={f.id}>• {f.name}{f.brand ? ` (${f.brand})` : ''}{f.food_type ? ` — ${f.food_type}` : ''}</li>)}
                                 </ul>
                               </div>
                             )}
                             {meds.length > 0 && (
                               <div>
-                                <p className="font-medium text-xs">💊 Medications:</p>
-                                <ul className="ml-3 text-muted-foreground text-xs space-y-0.5">
+                                <p className="font-medium text-sm">💊 Medications:</p>
+                                <ul className="ml-3 text-muted-foreground text-sm space-y-0.5">
                                   {meds.map(m => <li key={m.id}>• {m.name}{m.dosage ? ` — ${m.dosage}` : ''}{m.frequency ? `, ${m.frequency}` : ''}{m.timing_instructions ? ` (${m.timing_instructions})` : ''}</li>)}
                                 </ul>
                               </div>
                             )}
                             {vacs.length > 0 && (
                               <div>
-                                <p className="font-medium text-xs">💉 Vaccinations on file:</p>
-                                <ul className="ml-3 text-muted-foreground text-xs space-y-0.5">
+                                <p className="font-medium text-sm">💉 Vaccinations on file:</p>
+                                <ul className="ml-3 text-muted-foreground text-sm space-y-0.5">
                                   {vacs.map(v => <li key={v.id}>• {v.vaccine_name}{v.next_due_date ? ` · due ${v.next_due_date}` : ''}</li>)}
                                 </ul>
                               </div>
@@ -281,16 +281,16 @@ export default function PetSittingSection({ petId }) {
                       })}
                       {customTasks.length > 0 && (
                         <div>
-                          <p className="font-medium text-xs">📋 Daily Tasks:</p>
-                          <ul className="ml-3 text-muted-foreground text-xs space-y-0.5">{customTasks.map((t, i) => <li key={i}>• {t}</li>)}</ul>
+                          <p className="font-medium text-sm">📋 Daily Tasks:</p>
+                          <ul className="ml-3 text-muted-foreground text-sm space-y-0.5">{customTasks.map((t, i) => <li key={i}>• {t}</li>)}</ul>
                         </div>
                       )}
-                      {sit.emergency_contact && <p className="text-xs"><span className="font-medium">🚨 Emergency:</span> <span className="text-muted-foreground">{sit.emergency_contact}</span></p>}
-                      {sit.vet_contact && <p className="text-xs"><span className="font-medium">🏥 Vet:</span> <span className="text-muted-foreground">{sit.vet_contact}</span></p>}
+                      {sit.emergency_contact && <p className="text-sm"><span className="font-medium">🚨 Emergency:</span> <span className="text-muted-foreground">{sit.emergency_contact}</span></p>}
+                      {sit.vet_contact && <p className="text-sm"><span className="font-medium">🏥 Vet:</span> <span className="text-muted-foreground">{sit.vet_contact}</span></p>}
                       {sit.additional_instructions && (
                         <div>
-                          <p className="font-medium text-xs">📝 Additional Notes:</p>
-                          <p className="text-muted-foreground text-xs ml-3">{sit.additional_instructions}</p>
+                          <p className="font-medium text-sm">📝 Additional Notes:</p>
+                          <p className="text-muted-foreground text-sm ml-3">{sit.additional_instructions}</p>
                         </div>
                       )}
                     </div>
@@ -304,11 +304,11 @@ export default function PetSittingSection({ petId }) {
                             const dateStr = format(day, 'yyyy-MM-dd');
                             const log = logs.find(l => l.date === dateStr);
                             if (!log) return (
-                              <div key={dateStr} className="text-xs text-muted-foreground py-1">{format(day, 'EEE M/d')} — loading...</div>
+                              <div key={dateStr} className="text-sm text-muted-foreground py-1">{format(day, 'EEE M/d')} — loading...</div>
                             );
                             return (
                               <div key={dateStr} className="space-y-2">
-                                <p className="text-xs font-medium text-muted-foreground">{format(day, 'EEEE, MMMM d')}</p>
+                                <p className="text-sm font-medium text-muted-foreground">{format(day, 'EEEE, MMMM d')}</p>
                                 <div className="flex gap-2 flex-wrap">
                                   <CheckBtn label="AM Food" checked={!!log.am_food_given} onToggle={() => toggleBoolField(sit, log, 'am_food_given')} />
                                   <CheckBtn label="PM Food" checked={!!log.pm_food_given} onToggle={() => toggleBoolField(sit, log, 'pm_food_given')} />
@@ -348,7 +348,7 @@ export default function PetSittingSection({ petId }) {
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="sm:max-w-md max-h-[85vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="font-serif text-xl">{editing ? 'Edit' : 'New'} Pet Sitting Period</DialogTitle>
+            <DialogTitle className="font-serif text-2xl">{editing ? 'Edit' : 'New'} Pet Sitting Period</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 mt-2">
 

@@ -171,9 +171,9 @@ export default function VaccinationSection({ petId, species }) {
                       </span>
                     )}
                   </div>
-                  {v.date_given && <p className="text-xs text-muted-foreground mt-0.5">Given: {format(parseISO(v.date_given), 'MMM d, yyyy')}</p>}
-                  {v.administered_by && <p className="text-xs text-muted-foreground">By: {v.administered_by}</p>}
-                  {v.notes && <p className="text-xs text-muted-foreground italic mt-0.5">{v.notes}</p>}
+                  {v.date_given && <p className="text-sm text-muted-foreground mt-0.5">Given: {format(parseISO(v.date_given), 'MMM d, yyyy')}</p>}
+                  {v.administered_by && <p className="text-sm text-muted-foreground">By: {v.administered_by}</p>}
+                  {v.notes && <p className="text-sm text-muted-foreground italic mt-0.5">{v.notes}</p>}
                 </div>
                 <div className="flex items-center gap-1.5 shrink-0">
                   <button onClick={() => openEdit(v)} className="text-muted-foreground hover:text-foreground p-1">
@@ -192,7 +192,7 @@ export default function VaccinationSection({ petId, species }) {
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle className="font-serif text-xl">{editing ? 'Edit' : 'Add'} Vaccination</DialogTitle>
+            <DialogTitle className="font-serif text-2xl">{editing ? 'Edit' : 'Add'} Vaccination</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 mt-2">
             <div className="space-y-1.5">

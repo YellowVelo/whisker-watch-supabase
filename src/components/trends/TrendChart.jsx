@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { LineChart, Line, BarChart, Bar, Cell, XAxis, YAxis, ResponsiveContainer, Tooltip } from 'recharts';
 import { format, parseISO } from 'date-fns';
 import { LEVEL_LABEL, LEVEL_COLOR } from '@/lib/checkin/trendsClient';
+import { PALETTE } from '@/lib/toneColors';
 
 // One reusable chart, two variants (Trends Feature Spec: "Charts should
 // share one reusable chart component. Only data configuration changes.").
@@ -15,7 +16,7 @@ function formatTick(dateStr, range) {
 
 // variant="line" — Wellness Score / Weight. Highlights current/min/max
 // when highlightExtremes is set (Wellness Score spec requirement).
-function LineVariant({ series, range, yDomain, color = '#6FB7FF', highlightExtremes }) {
+function LineVariant({ series, range, yDomain, color = PALETTE.sky, highlightExtremes }) {
   const data = series.map((p) => ({ ...p, label: formatTick(p.date, range) }));
   const { minIdx, maxIdx } = useMemo(() => {
     if (!highlightExtremes || data.length === 0) return { minIdx: -1, maxIdx: -1 };
@@ -30,7 +31,7 @@ function LineVariant({ series, range, yDomain, color = '#6FB7FF', highlightExtre
     const isMin = index === minIdx && minIdx !== maxIdx;
     const isMax = index === maxIdx && minIdx !== maxIdx;
     if (!isLast && !isMin && !isMax) return null;
-    const dotColor = isLast ? color : isMax ? '#4CC7B0' : '#E57373';
+    const dotColor = isLast ? color : isMax ? PALETTE.teal : PALETTE.red;
     return <circle key={`dot-${index}`} cx={cx} cy={cy} r={4} fill={dotColor} stroke="rgba(0,0,0,0.3)" strokeWidth={1} />;
   };
 
@@ -75,7 +76,7 @@ function ObservationVariant({ series, range }) {
         />
         <Bar dataKey="height" radius={[3, 3, 3, 3]} maxBarSize={14}>
           {data.map((d, i) => (
-            <Cell key={i} fill={d.state === 'skipped' ? 'rgba(255,255,255,0.15)' : LEVEL_COLOR[d.level] ?? '#A9AEB5'} />
+            <Cell key={i} fill={d.state === 'skipped' ? 'rgba(255,255,255,0.15)' : LEVEL_COLOR[d.level] ?? PALETTE.gray} />
           ))}
         </Bar>
       </BarChart>
@@ -83,7 +84,7 @@ function ObservationVariant({ series, range }) {
   );
 }
 
-export default function TrendChart({ variant, series, range, yDomain = null, color = '#6FB7FF', highlightExtremes = false }) {
+export default function TrendChart({ variant, series, range, yDomain = null, color = PALETTE.sky, highlightExtremes = false }) {
   if (!series || series.length === 0) return null;
   if (variant === 'observation') return <ObservationVariant series={series} range={range} />;
   return <LineVariant series={series} range={range} yDomain={yDomain} color={color} highlightExtremes={highlightExtremes} />;

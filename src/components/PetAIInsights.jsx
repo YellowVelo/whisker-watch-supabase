@@ -86,7 +86,7 @@ Respond in JSON with this structure:
             <Sparkles className="h-8 w-8 text-primary" />
           </div>
           <p className="text-sm font-medium mb-1">AI Health Insights</p>
-          <p className="text-xs text-muted-foreground mb-4 max-w-xs mx-auto">
+          <p className="text-base text-muted-foreground mb-4 max-w-xs mx-auto">
             Get a veterinary perspective on {pet.name}'s recent health trends and patterns.
           </p>
           <Button onClick={generateInsights} className="gap-2">
@@ -121,7 +121,7 @@ Respond in JSON with this structure:
               return (
                 <div key={i} className={`p-3.5 rounded-xl border ${style.bg}`}>
                   <p className={`text-sm font-semibold ${style.text} mb-0.5`}>{style.icon} {item.title}</p>
-                  <p className={`text-xs ${style.text} opacity-90 leading-relaxed`}>{item.detail}</p>
+                  <p className={`text-base ${style.text} opacity-90 leading-relaxed`}>{item.detail}</p>
                 </div>
               );
             })}
@@ -130,7 +130,7 @@ Respond in JSON with this structure:
           {insights.disclaimer && (
             <div className="flex gap-2 p-3 bg-muted/40 rounded-xl border border-border/50">
               <AlertTriangle className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
-              <p className="text-xs text-muted-foreground leading-relaxed">{insights.disclaimer}</p>
+              <p className="text-base text-muted-foreground leading-relaxed">{insights.disclaimer}</p>
             </div>
           )}
         </div>
