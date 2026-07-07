@@ -22,7 +22,7 @@ import { CATEGORIES, getCategory } from './config';
 // summary line, even though they're stored as real observations.
 const BASELINE_VALUES = new Set(['normal', 'none', 'no_change']);
 
-const todayStr = () => new Date().toISOString().split('T')[0];
+export const todayStr = () => new Date().toISOString().split('T')[0];
 
 // observation_types + observation_options rarely change — cache for the
 // lifetime of the tab instead of refetching on every check-in.
@@ -98,43 +98,6 @@ export async function getRecentWellnessForPets(petIds, limitPerPet = 14) {
   return result;
 }
 
-// Batched "what changed" summary for a set of today's check-ins, keyed
-// by pet_id -> array of human-readable observation labels (e.g. "Ate
-// less than usual"), oldest-logged first. Used by Home's Today's
-// Check-Ins cards; the UI decides how many of these to show and
-// whether to render a "+N more" tail.
-export async function getObservationSummariesForCheckIns(checkInsByPetId) {
-  const checkInIds = Object.values(checkInsByPetId).filter(Boolean).map((c) => c.id);
-  if (checkInIds.length === 0) return {};
-
-  const [{ data, error }, catalog] = await Promise.all([
-    supabase
-      .from('observations')
-      .select('*')
-      .in('daily_check_in_id', checkInIds)
-      .order('observed_at', { ascending: true }),
-    loadObservationCatalog(),
-  ]);
-  if (error) throw error;
-
-  const typeIdToCode = {};
-  for (const [code, entry] of Object.entries(catalog)) typeIdToCode[entry.type.id] = code;
-
-  const observationsByCheckIn = {};
-  for (const obs of data) {
-    (observationsByCheckIn[obs.daily_check_in_id] ||= []).push(obs);
-  }
-
-  const result = {};
-  for (const [petId, checkIn] of Object.entries(checkInsByPetId)) {
-    if (!checkIn) continue;
-    result[petId] = (observationsByCheckIn[checkIn.id] || [])
-      .map((obs) => describeObservation(obs, typeIdToCode))
-      .filter(Boolean);
-  }
-  return result;
-}
-
 // Exported (rather than kept module-private) so it can be unit tested
 // directly — it's the one piece of business logic in this file that
 // doesn't need a network call to verify.
@@ -156,11 +119,8 @@ export function describeObservation(obs, typeIdToCode) {
 }
 
 // Batched "raw values per category" read for a set of today's check-ins,
-// keyed by pet_id -> { [categoryCode]: { value, severityScore } }. Unlike
-// getObservationSummariesForCheckIns (full sentences for Home's Today's
-// Check-Ins card), this preserves the raw enum value and severity so the
-// Pets screen can render short chip labels (Normal/Low/High/etc.) per
-// fixed category slot.
+// keyed by pet_id -> { [categoryCode]: { value, severityScore } } — used to
+// render short chip labels (Normal/Low/High/etc.) per fixed category slot.
 export async function getObservationValuesForCheckIns(checkInsByPetId) {
   const checkInIds = Object.values(checkInsByPetId).filter(Boolean).map((c) => c.id);
   if (checkInIds.length === 0) return {};

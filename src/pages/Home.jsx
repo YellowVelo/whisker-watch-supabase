@@ -2,19 +2,19 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { PawPrint, Sparkles, ChevronRight, CalendarClock } from 'lucide-react';
 import { entities } from '@/api/entities';
-import WellnessCard from '../components/WellnessCard';
-import CheckInCard from '../components/CheckInCard';
+import PetSummaryCard from '../components/PetSummaryCard';
+import CheckInStatusBanner from '../components/CheckInStatusBanner';
 import NotificationBell from '../components/NotificationBell';
-import DailyCheckInSheet from '../components/DailyCheckInSheet';
+import DailyCheckInModal from '../components/DailyCheckInModal';
 import PageTransition from '../components/PageTransition';
 import usePullToRefresh from '../hooks/usePullToRefresh';
 import PullToRefreshIndicator from '../components/PullToRefreshIndicator';
 import { useToast } from '@/components/ui/use-toast';
 import {
-  getCheckInsForPets, getRecentWellnessForPets, getObservationSummariesForCheckIns,
+  getCheckInsForPets, getRecentWellnessForPets, getObservationValuesForCheckIns,
   getCheckIn, getLatestWellness,
 } from '@/lib/checkin/checkinClient';
-import { orderCheckInCards } from '@/lib/checkin/ordering';
+import { getActiveMedicationCountsForPets } from '@/lib/petsClient';
 import { getUnreadCount } from '@/lib/notifications/notificationClient';
 import { buildGreeting } from '@/lib/greeting';
 import { useAuth } from '@/lib/AuthContext';
@@ -30,7 +30,13 @@ export default function Home() {
   const [checkIns, setCheckIns] = useState({}); // pet_id -> today's daily_check_in row
   const [yesterdayCheckIns, setYesterdayCheckIns] = useState({}); // pet_id -> yesterday's row
   const [wellness, setWellness] = useState({}); // pet_id -> { latest, trend }
-  const [observationSummaries, setObservationSummaries] = useState({}); // pet_id -> string[]
+  const [observationValues, setObservationValues] = useState({}); // pet_id -> { code: value }
+  const [logsUnavailable, setLogsUnavailable] = useState(false);
+  // Distinct from a hard pets-list failure (loadError) — a failed
+  // check-ins fetch alone must not take down the whole page, just show
+  // a per-card "unable to load"/"retry" state (Loading States spec).
+  const [checkInsUnavailable, setCheckInsUnavailable] = useState(false);
+  const [medicationCounts, setMedicationCounts] = useState({}); // pet_id -> count
   const [incompleteOnboardingIds, setIncompleteOnboardingIds] = useState(new Set());
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -38,6 +44,7 @@ export default function Home() {
   const [stale, setStale] = useState(false);
   const [checkInSheet, setCheckInSheet] = useState(null); // { pet, date, isCatchUp? } | null
   const hasLoadedOnceRef = useRef(false);
+  const hasAutoLaunchedRef = useRef(false);
   const location = useLocation();
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -62,17 +69,45 @@ export default function Home() {
       const petIds = activePets.map((p) => p.id);
 
       if (petIds.length) {
-        const [todayRows, yesterdayRows, wellnessByPet, unread] = await Promise.all([
+        const [todayRowsR, yesterdayRowsR, wellnessByPetR, unreadR, medCountsR] = await Promise.allSettled([
           getCheckInsForPets(petIds, todayStr()),
           getCheckInsForPets(petIds, yesterdayStr()),
           getRecentWellnessForPets(petIds),
           getUnreadCount(),
+          getActiveMedicationCountsForPets(petIds),
         ]);
-        setCheckIns(todayRows);
-        setYesterdayCheckIns(yesterdayRows);
-        setWellness(wellnessByPet);
-        setUnreadCount(unread);
-        setObservationSummaries(await getObservationSummariesForCheckIns(todayRows));
+
+        let todayRows = {};
+        if (todayRowsR.status === 'fulfilled') {
+          todayRows = todayRowsR.value;
+          setCheckIns(todayRows);
+          setCheckInsUnavailable(false);
+        } else {
+          console.error(todayRowsR.reason);
+          setCheckIns({});
+          setCheckInsUnavailable(true);
+        }
+
+        setYesterdayCheckIns(yesterdayRowsR.status === 'fulfilled' ? yesterdayRowsR.value : {});
+        if (yesterdayRowsR.status === 'rejected') console.error(yesterdayRowsR.reason);
+
+        setWellness(wellnessByPetR.status === 'fulfilled' ? wellnessByPetR.value : {});
+        if (wellnessByPetR.status === 'rejected') console.error(wellnessByPetR.reason);
+
+        if (unreadR.status === 'fulfilled') setUnreadCount(unreadR.value);
+        else console.error(unreadR.reason);
+
+        setMedicationCounts(medCountsR.status === 'fulfilled' ? medCountsR.value : {});
+        if (medCountsR.status === 'rejected') console.error(medCountsR.reason);
+
+        try {
+          setObservationValues(await getObservationValuesForCheckIns(todayRows));
+          setLogsUnavailable(false);
+        } catch (err) {
+          console.error(err);
+          setObservationValues({});
+          setLogsUnavailable(true);
+        }
 
         // A pet with no onboarding row, or a row that isn't completed yet,
         // still needs "Complete {PetName}'s Profile" surfaced.
@@ -83,7 +118,10 @@ export default function Home() {
         setCheckIns({});
         setYesterdayCheckIns({});
         setWellness({});
-        setObservationSummaries({});
+        setObservationValues({});
+        setLogsUnavailable(false);
+        setCheckInsUnavailable(false);
+        setMedicationCounts({});
         setIncompleteOnboardingIds(new Set());
         setUnreadCount(await getUnreadCount());
       }
@@ -113,18 +151,20 @@ export default function Home() {
   // merges it into state, rather than re-running loadData() for every
   // pet on the screen.
   const refreshPetCard = useCallback(async (pet) => {
-    const [todayRow, yesterdayRow, wellnessResult, onboardingRows] = await Promise.all([
+    const [todayRow, yesterdayRow, wellnessResult, onboardingRows, medCounts] = await Promise.all([
       getCheckIn(pet.id, todayStr()),
       getCheckIn(pet.id, yesterdayStr()),
       getLatestWellness(pet.id),
       entities.PetOnboarding.filter({ pet_id: pet.id }),
+      getActiveMedicationCountsForPets([pet.id]),
     ]);
-    const summaries = await getObservationSummariesForCheckIns({ [pet.id]: todayRow });
+    const values = await getObservationValuesForCheckIns({ [pet.id]: todayRow });
 
     setCheckIns((prev) => ({ ...prev, [pet.id]: todayRow }));
     setYesterdayCheckIns((prev) => ({ ...prev, [pet.id]: yesterdayRow }));
     setWellness((prev) => ({ ...prev, [pet.id]: wellnessResult }));
-    setObservationSummaries((prev) => ({ ...prev, [pet.id]: summaries[pet.id] || [] }));
+    setObservationValues((prev) => ({ ...prev, [pet.id]: values[pet.id] }));
+    setMedicationCounts((prev) => ({ ...prev, [pet.id]: medCounts[pet.id] || 0 }));
     setIncompleteOnboardingIds((prev) => {
       const next = new Set(prev);
       const completed = onboardingRows.some((r) => r.completed_at);
@@ -154,7 +194,23 @@ export default function Home() {
   });
 
   const greeting = buildGreeting(user?.first_name);
-  const orderedCheckInPets = orderCheckInCards(activePets, checkIns);
+
+  // Launch the Daily Check-In pop-up automatically the moment Home first
+  // loads with an incomplete check-in for the day (Nav + Daily Check-In UX
+  // Refresh spec: "launched when a user logs in when they have NOT
+  // completed it for the day"). Only the oldest such pet is auto-opened,
+  // and only once per session — subsequent pets still get their one-line
+  // prompt nested under their card for the owner to tap manually.
+  useEffect(() => {
+    if (loading || hasAutoLaunchedRef.current || checkInSheet || checkInsUnavailable) return;
+    hasAutoLaunchedRef.current = true;
+    const pending = activePets.find((pet) => !checkIns[pet.id]);
+    if (pending) {
+      track('daily_check_in_started', { pet_id: pending.id, check_in_date: todayStr(), source: 'auto_launch' });
+      setCheckInSheet({ pet: pending, date: todayStr() });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading]);
 
   if (loading) {
     return (
@@ -170,9 +226,9 @@ export default function Home() {
             </div>
           </header>
           <main className="max-w-2xl mx-auto px-4 py-2 space-y-6">
-            <div className="flex gap-3 overflow-x-auto">
+            <div className="space-y-3">
               {[0, 1, 2].map((i) => (
-                <div key={i} className="flex-shrink-0 w-[140px] h-[160px] rounded-2xl animate-pulse" style={{ background: 'rgba(255,255,255,0.05)' }} />
+                <div key={i} className="h-44 rounded-2xl animate-pulse" style={{ background: 'rgba(255,255,255,0.05)' }} />
               ))}
             </div>
             <div className="space-y-3">
@@ -225,31 +281,29 @@ export default function Home() {
             )}
 
             {activePets.length > 0 && (
-              <div className="flex gap-3 overflow-x-auto -mx-4 px-4 pb-1">
+              <div className="space-y-3">
                 {activePets.map((pet) => (
-                  <WellnessCard key={pet.id} pet={pet} wellness={wellness[pet.id]} />
+                  <div key={pet.id} className="space-y-2">
+                    <PetSummaryCard
+                      pet={pet}
+                      wellness={wellness[pet.id]}
+                      checkIn={checkIns[pet.id]}
+                      observationValues={observationValues[pet.id]}
+                      logsUnavailable={logsUnavailable}
+                      medicationCount={medicationCounts[pet.id] || 0}
+                    />
+                    <CheckInStatusBanner
+                      pet={pet}
+                      checkIn={checkIns[pet.id]}
+                      onStartCheckIn={() => handleStartCheckIn(pet)}
+                      error={checkInsUnavailable}
+                      onRetry={loadData}
+                    />
+                    {incompleteOnboardingIds.has(pet.id) && (
+                      <CompleteProfileBanner petId={pet.id} petName={pet.name} />
+                    )}
+                  </div>
                 ))}
-              </div>
-            )}
-
-            {activePets.length > 0 && (
-              <div>
-                <h2 className="text-[20px] font-bold text-white mb-3">Today's Check-Ins</h2>
-                <div className="space-y-3">
-                  {orderedCheckInPets.map((pet) => (
-                    <div key={pet.id} className="space-y-2">
-                      <CheckInCard
-                        pet={pet}
-                        checkIn={checkIns[pet.id]}
-                        observations={observationSummaries[pet.id] || []}
-                        onStartCheckIn={() => handleStartCheckIn(pet)}
-                      />
-                      {incompleteOnboardingIds.has(pet.id) && (
-                        <CompleteProfileBanner petId={pet.id} petName={pet.name} />
-                      )}
-                    </div>
-                  ))}
-                </div>
               </div>
             )}
 
@@ -261,12 +315,12 @@ export default function Home() {
       </main>
 
       {checkInSheet && (
-        <DailyCheckInSheet
+        <DailyCheckInModal
           pet={checkInSheet.pet}
-          date={checkInSheet.date}
-          isCatchUp={checkInSheet.isCatchUp}
+          checkInDate={checkInSheet.date}
+          existingCheckIn={(checkInSheet.isCatchUp ? yesterdayCheckIns : checkIns)[checkInSheet.pet.id] || null}
           onClose={() => setCheckInSheet(null)}
-          onSaved={() => {
+          onComplete={() => {
             const savedPet = checkInSheet.pet;
             setCheckInSheet(null);
             refreshPetCard(savedPet).catch((err) => {

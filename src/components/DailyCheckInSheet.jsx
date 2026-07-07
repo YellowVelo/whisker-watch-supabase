@@ -1,9 +1,11 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { X, Loader2 } from 'lucide-react';
 import { CATEGORIES, getOptionsForSpecies, getCategory } from '@/lib/checkin/config';
 import { markNormal, markSkipped, saveChangedCheckIn } from '@/lib/checkin/checkinClient';
 import { track } from '@/lib/analytics';
 import { Textarea } from '@/components/ui/textarea';
+
+const FOCUSABLE = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
 
 // Bottom-sheet Daily Check-In flow: "How is {pet} today?" -> (if changed)
 // category picker -> only the relevant follow-up questions -> save.
@@ -14,7 +16,8 @@ import { Textarea } from '@/components/ui/textarea';
 // `isCatchUp` distinguishes a catch-up-for-a-past-date save from a normal
 // today save purely for analytics attribution (catch_up_completed vs the
 // regular events) — it doesn't change any persistence behavior.
-export default function DailyCheckInSheet({ pet, date, onClose, onSaved, isCatchUp = false }) {
+export default function DailyCheckInSheet({ pet, date, onClose, onSaved, isCatchUp = false, existingCheckIn = null }) {
+  const dialogRef = useRef(null);
   // isCatchUp doesn't just change analytics attribution — it drives the
   // "today" vs "yesterday" wording throughout this sheet, since a
   // catch-up save is for a past date and showing "today" language would
@@ -111,10 +114,47 @@ export default function DailyCheckInSheet({ pet, date, onClose, onSaved, isCatch
     onClose();
   };
 
+  // Accessibility: modal traps focus and is dismissible via Escape (Nav +
+  // Daily Check-In UX Refresh spec — "Modal must trap focus" / "Modal must
+  // be dismissible using expected keyboard behavior").
+  useEffect(() => {
+    const node = dialogRef.current;
+    const focusables = () => Array.from(node?.querySelectorAll(FOCUSABLE) || []).filter((el) => !el.disabled);
+    focusables()[0]?.focus();
+
+    const onKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        handleClose();
+        return;
+      }
+      if (e.key !== 'Tab') return;
+      const items = focusables();
+      if (items.length === 0) return;
+      const first = items[0];
+      const last = items[items.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stage]);
+
   return (
     <div className="fixed inset-0 z-50 flex flex-col justify-end" onClick={handleClose}>
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
       <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="daily-check-in-title"
         className="relative rounded-t-3xl shadow-2xl max-h-[85vh] flex flex-col"
         style={{ background: 'rgba(18,20,32,0.98)', border: '1px solid rgba(255,255,255,0.08)' }}
         onClick={(e) => e.stopPropagation()}
@@ -122,7 +162,7 @@ export default function DailyCheckInSheet({ pet, date, onClose, onSaved, isCatch
         <div className="px-5 pt-5 pb-3 flex-shrink-0">
           <div className="w-10 h-1 bg-white/20 rounded-full mx-auto mb-4" />
           <div className="flex items-center justify-between">
-            <h3 className="text-xl font-bold text-white">
+            <h3 id="daily-check-in-title" className="text-xl font-bold text-white">
               {stage === 'initial' && (isCatchUp ? `How was ${pet.name} yesterday?` : `How is ${pet.name} today?`)}
               {stage === 'categories' && 'What changed?'}
               {(stage === 'details' || stage === 'saving') && 'A few details'}
@@ -132,6 +172,11 @@ export default function DailyCheckInSheet({ pet, date, onClose, onSaved, isCatch
             </button>
           </div>
           {error && <p className="text-sm text-red-400 mt-2">{error}</p>}
+          {!error && stage === 'initial' && existingCheckIn?.status && (
+            <p className="text-xs text-white/40 mt-2">
+              Already logged as {existingCheckIn.status} for {dayWord} — saving again will update it.
+            </p>
+          )}
         </div>
 
         <div className="px-5 overflow-y-auto flex-1 pb-2">

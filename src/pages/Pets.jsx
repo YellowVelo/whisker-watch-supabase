@@ -1,37 +1,36 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { PawPrint, Plus, Activity, Rainbow, Home as HomeIcon, Cat, Dog } from 'lucide-react';
 import { entities } from '@/api/entities';
-import { getCheckInsForPets, getRecentWellnessForPets, getObservationValuesForCheckIns } from '@/lib/checkin/checkinClient';
-import { getActiveMedicationCountsForPets, getSharedPetsForUser } from '@/lib/petsClient';
-import PetCard from '../components/PetCard';
+import { getSharedPetsForUser } from '@/lib/petsClient';
+import ExpandablePetProfileCard from '../components/ExpandablePetProfileCard';
 import AddPetDialog from '../components/AddPetDialog';
 import PageTransition from '../components/PageTransition';
 import usePullToRefresh from '../hooks/usePullToRefresh';
 import PullToRefreshIndicator from '../components/PullToRefreshIndicator';
 
-const todayStr = () => new Date().toISOString().split('T')[0];
-
 export default function Pets() {
   const [pets, setPets] = useState([]);
   const [sharedPets, setSharedPets] = useState([]);
-  const [wellness, setWellness] = useState({});
-  const [checkIns, setCheckIns] = useState({});
-  const [observationValues, setObservationValues] = useState({});
-  const [medicationCounts, setMedicationCounts] = useState({});
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
-  // Wellness score and today's-logs each have their own spec'd degraded
-  // state ("Unable to load wellness score" / "Unable to load today's
-  // logs") distinct from a hard pets-list failure — a hiccup in either
-  // must not take down the whole list, and the pet must stay selectable.
-  const [logsUnavailable, setLogsUnavailable] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
   const [highlightedPetId, setHighlightedPetId] = useState(null);
   const cardRefs = useRef({});
   const highlightTimeoutRef = useRef(null);
+  const location = useLocation();
+  const navigate = useNavigate();
+  // Cards start collapsed unless opened via a deep link/route state (e.g.
+  // returning from a pet's full profile page, or right after adding a pet).
+  const [expandedPetId, setExpandedPetId] = useState(location.state?.expandPetId || null);
 
   useEffect(() => () => clearTimeout(highlightTimeoutRef.current), []);
+
+  useEffect(() => {
+    if (!location.state?.expandPetId) return;
+    setExpandedPetId(location.state.expandPetId);
+    navigate('.', { replace: true, state: {} });
+  }, [location.state, navigate]);
 
   const loadData = useCallback(async () => {
     let petList;
@@ -55,59 +54,6 @@ export default function Pets() {
       setSharedPets([]);
     }
 
-    const activePets = petList.filter((p) => !p.is_memorial);
-    const petIds = activePets.map((p) => p.id);
-
-    if (petIds.length) {
-      const [wellnessResult, checkInsResult, medCountsResult] = await Promise.allSettled([
-        getRecentWellnessForPets(petIds),
-        getCheckInsForPets(petIds, todayStr()),
-        getActiveMedicationCountsForPets(petIds),
-      ]);
-
-      // Wellness failure: PetCard already renders "--" and hides the trend
-      // whenever there's no score for this pet, so clearing to {} on
-      // failure reuses that same empty-state rendering without a separate
-      // error flag — the pet stays fully selectable either way.
-      if (wellnessResult.status === 'fulfilled') {
-        setWellness(wellnessResult.value);
-      } else {
-        console.error(wellnessResult.reason);
-        setWellness({});
-      }
-
-      if (medCountsResult.status === 'fulfilled') {
-        setMedicationCounts(medCountsResult.value);
-      } else {
-        console.error(medCountsResult.reason);
-        setMedicationCounts({});
-      }
-
-      if (checkInsResult.status === 'fulfilled') {
-        const todayRows = checkInsResult.value;
-        setCheckIns(todayRows);
-        try {
-          setObservationValues(await getObservationValuesForCheckIns(todayRows));
-          setLogsUnavailable(false);
-        } catch (err) {
-          console.error(err);
-          setObservationValues({});
-          setLogsUnavailable(true);
-        }
-      } else {
-        console.error(checkInsResult.reason);
-        setCheckIns({});
-        setObservationValues({});
-        setLogsUnavailable(true);
-      }
-    } else {
-      setWellness({});
-      setCheckIns({});
-      setMedicationCounts({});
-      setObservationValues({});
-      setLogsUnavailable(false);
-    }
-
     setLoading(false);
   }, []);
 
@@ -118,6 +64,7 @@ export default function Pets() {
     loadData().then(() => {
       if (!newPetId) return;
       setHighlightedPetId(newPetId);
+      setExpandedPetId(newPetId);
       requestAnimationFrame(() => {
         cardRefs.current[newPetId]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       });
@@ -188,15 +135,11 @@ export default function Pets() {
                   <p className="text-[13px] text-white/40 mb-3">Pets you monitor every day</p>
                   <div className="space-y-3">
                     {activePets.map((pet) => (
-                      <PetCard
+                      <ExpandablePetProfileCard
                         key={pet.id}
                         pet={pet}
-                        wellness={wellness[pet.id]}
-                        checkIn={checkIns[pet.id]}
-                        observationValues={observationValues[pet.id]}
-                        logsUnavailable={logsUnavailable}
-                        medicationCount={medicationCounts[pet.id] || 0}
                         highlighted={highlightedPetId === pet.id}
+                        defaultExpanded={expandedPetId === pet.id}
                         cardRef={(el) => { cardRefs.current[pet.id] = el; }}
                       />
                     ))}
@@ -227,9 +170,10 @@ export default function Pets() {
                   <p className="text-[13px] text-white/40 mb-3">Pets who will always be with us</p>
                   <div className="space-y-3">
                     {memorialPets.map((pet) => (
-                      <PetCard
+                      <ExpandablePetProfileCard
                         key={pet.id}
                         pet={pet}
+                        defaultExpanded={expandedPetId === pet.id}
                         cardRef={(el) => { cardRefs.current[pet.id] = el; }}
                       />
                     ))}
@@ -274,19 +218,13 @@ function PetsSkeleton() {
   return (
     <div className="space-y-3" aria-busy="true" aria-label="Loading pets">
       {[0, 1, 2].map((i) => (
-        <div key={i} className="rounded-2xl px-4 py-4" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}>
-          <div className="flex items-start gap-3.5">
-            <div className="rounded-full flex-shrink-0 animate-pulse" style={{ width: 72, height: 72, background: 'rgba(255,255,255,0.08)' }} />
-            <div className="flex-1 min-w-0 space-y-2 pt-1">
-              <div className="h-4 w-28 rounded-full animate-pulse" style={{ background: 'rgba(255,255,255,0.08)' }} />
-              <div className="h-3 w-40 rounded-full animate-pulse" style={{ background: 'rgba(255,255,255,0.06)' }} />
-              <div className="h-5 w-24 rounded-full animate-pulse" style={{ background: 'rgba(255,255,255,0.06)' }} />
-            </div>
-            <div className="h-14 w-14 rounded-full flex-shrink-0 animate-pulse" style={{ background: 'rgba(255,255,255,0.08)' }} />
-          </div>
-          <div className="mt-3.5 pt-3 grid grid-cols-3 gap-2" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
-            {[0, 1, 2, 3, 4, 5].map((j) => (
-              <div key={j} className="h-9 rounded-xl animate-pulse" style={{ background: 'rgba(255,255,255,0.04)' }} />
+        <div key={i} className="rounded-2xl px-4 py-6 flex flex-col items-center" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}>
+          <div className="rounded-full flex-shrink-0 animate-pulse" style={{ width: 96, height: 96, background: 'rgba(255,255,255,0.08)' }} />
+          <div className="h-5 w-32 rounded-full animate-pulse mt-3" style={{ background: 'rgba(255,255,255,0.08)' }} />
+          <div className="h-3 w-40 rounded-full animate-pulse mt-2" style={{ background: 'rgba(255,255,255,0.06)' }} />
+          <div className="flex gap-2 mt-4 w-full justify-center">
+            {[0, 1, 2, 3, 4].map((j) => (
+              <div key={j} className="rounded-full flex-shrink-0 animate-pulse" style={{ width: 56, height: 56, background: 'rgba(255,255,255,0.06)' }} />
             ))}
           </div>
         </div>

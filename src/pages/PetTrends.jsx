@@ -1,9 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useSearchParams, useNavigate, Link } from 'react-router-dom';
-import { ArrowLeft, MoreHorizontal, UtensilsCrossed, Droplets, Zap, Rainbow } from 'lucide-react';
+import { ArrowLeft, UtensilsCrossed, Droplets, Zap, Rainbow } from 'lucide-react';
 import { entities } from '@/api/entities';
-import CareMenu from '../components/CareMenu';
-import ExportCalendarButton from '../components/ExportCalendarButton';
 import PageTransition from '../components/PageTransition';
 import SymptomTrends from '../components/SymptomTrends';
 import WellnessScoreCard from '../components/trends/WellnessScoreCard';
@@ -36,7 +34,6 @@ export default function PetTrends() {
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
-  const [careOpen, setCareOpen] = useState(false);
   const [range, setRange] = useState('24H');
   // Debounced separately from the selected-range UI state so rapid
   // switching (spec edge case) doesn't fire a full query fan-out — and,
@@ -151,12 +148,6 @@ export default function PetTrends() {
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-2 flex-shrink-0">
-            <ExportCalendarButton petId={petId} petName={pet.name} iconOnly />
-            <button onClick={() => setCareOpen(true)} aria-label="More options" className="w-9 h-9 rounded-full flex items-center justify-center" style={{ background: 'rgba(255,255,255,0.06)' }}>
-              <MoreHorizontal className="h-5 w-5 text-white" />
-            </button>
-          </div>
         </header>
 
         {/* ── SUB-TABS: Overview / Trends / Patterns / Compare ── */}
@@ -225,8 +216,6 @@ export default function PetTrends() {
             </>
           )}
         </main>
-
-        <CareMenu open={careOpen} onOpenChange={setCareOpen} petId={petId} petName={pet.name} />
       </div>
     </PageTransition>
   );

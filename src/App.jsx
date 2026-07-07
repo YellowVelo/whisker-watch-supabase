@@ -25,7 +25,6 @@ import Documents from './pages/Documents';
 import About from './pages/About';
 import VetExport from './pages/VetExport';
 import Settings from './pages/Settings';
-import PetProfilesMenu from './pages/PetProfilesMenu';
 import PetSitterMenu from './pages/PetSitterMenu';
 import AIMenu from './pages/AIMenu';
 import Account from './pages/Account';
@@ -83,7 +82,6 @@ const AuthenticatedApp = () => {
             <Route path="/pet/:petId/export" element={<VetExport />} />
             <Route path="/about" element={<About />} />
             <Route path="/settings" element={<Settings />} />
-            <Route path="/settings/pet-profiles" element={<PetProfilesMenu />} />
             <Route path="/settings/pet-sitter" element={<PetSitterMenu />} />
             <Route path="/settings/ai" element={<AIMenu />} />
             <Route path="/account" element={<Account />} />

@@ -5,10 +5,11 @@ import { getChipState } from '@/lib/checkin/chipLabels';
 import { getPetLabel } from '@/lib/speciesConfig';
 import { computeDetailedAge } from '@/lib/lifeStage';
 
-// Pets screen card (Pets Feature Spec #3/#4). One card per pet — full
-// identity + status chips + medication count, plus (for active pets)
-// today's Wellness Score and a fixed 6-slot Today's Logs summary. Memorial
-// pets swap the score/logs for an "In Memory" marker instead.
+// Home's primary per-pet card (Nav + Daily Check-In UX Refresh spec #2).
+// One card per pet — full identity + status chips + medication count, plus
+// (for active pets) today's Wellness Score and a fixed 6-slot Today's Logs
+// summary. Tapping the card opens that pet's Trends. Memorial pets swap the
+// score/logs for an "In Memory" marker instead.
 
 const TONE_COLOR = { good: '#4CC7B0', warn: '#F4C76B', bad: '#E57373', unknown: '#A9AEB5' };
 const TREND_COLOR = { stable: '#4CC7B0', improving: '#6FB7FF', monitor: '#F4C76B', declining: '#E57373', unknown: '#A9AEB5' };
@@ -47,7 +48,7 @@ function PetPhoto({ pet, size, memorial }) {
   );
 }
 
-export default function PetCard({ pet, medicationCount = 0, wellness, checkIn, observationValues, logsUnavailable = false, highlighted = false, cardRef }) {
+export default function PetSummaryCard({ pet, medicationCount = 0, wellness, checkIn, observationValues, logsUnavailable = false, highlighted = false, cardRef }) {
   const identity = (
     <>
       <p className="text-[19px] font-bold text-white leading-tight truncate">{pet.name}</p>
