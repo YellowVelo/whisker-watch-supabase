@@ -206,6 +206,13 @@ async function seedMultiPetHousehold() {
 // looking at, plus a few medication/food/vaccination records for
 // variety. Reuses the same seedCheckInHistory/plan helpers as the
 // Insights Trends test scenario above — same scoring, same code path.
+// Fixed, permanent images uploaded to a path outside any user's own
+// storage folder (`shared/`), so reset-sandbox-account's per-user
+// storage sweep never deletes them — every reseed points back at the
+// same files.
+const DEMO_CAT_PHOTO_URL = 'https://upvtbwienebfxznnagsg.supabase.co/storage/v1/object/public/uploads/shared/maple.jpg';
+const DEMO_DOG_PHOTO_URL = 'https://upvtbwienebfxznnagsg.supabase.co/storage/v1/object/public/uploads/shared/cooper.jpg';
+
 async function seedDemoShowcase() {
   // Independent of each other, so both pets are created in parallel.
   const [cat, dog] = await Promise.all([
@@ -214,12 +221,14 @@ async function seedDemoShowcase() {
       birth_date: daysAgo(365 * 9), birth_date_precision: 'YEAR',
       sex: 'Female', altered_status: 'Yes',
       conditions: ['CKD'],
+      photo_url: DEMO_CAT_PHOTO_URL,
       notes: `Seeded demo pet — senior cat, declining wellness trend (${HISTORY_DAYS} days).`,
     }),
     entities.Pet.create({
       species: 'Dog', name: 'Cooper', breed: 'Golden Retriever',
       birth_date: daysAgo(365 * 3), birth_date_precision: 'EXACT',
       sex: 'Male', altered_status: 'Yes',
+      photo_url: DEMO_DOG_PHOTO_URL,
       notes: `Seeded demo pet — healthy adult dog, stable wellness trend (${HISTORY_DAYS} days).`,
     }),
   ]);
