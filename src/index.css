@@ -8,6 +8,14 @@
   :root {
     --font-sans: 'Inter', sans-serif;
     --font-serif: 'DM Serif Display', serif;
+    /* Design System §1 semantic palette — single source of truth for the
+       tone/trend colors duplicated across PetSummaryCard, PetProfileContent,
+       CheckInStatusBanner, and NotificationBell. */
+    --tone-good: #4CC7B0;
+    --tone-warn: #F4C76B;
+    --tone-bad: #E57373;
+    --tone-neutral: #A9AEB5;
+    --accent-sky: #6FB7FF;
     --background: 228 9% 10%;
     --foreground: 240 5% 96%;
     --card: 228 10% 15%;

@@ -249,8 +249,8 @@ export default function Home() {
       <header style={{ paddingTop: 'env(safe-area-inset-top)' }}>
         <div className="max-w-2xl mx-auto px-5 py-6 flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-[15px] text-white/50">{greeting}</p>
-            <h1 className="text-[26px] font-bold text-foreground tracking-tight leading-tight mt-0.5">How are your pets today?</h1>
+            <p className="text-[14px] text-white/50">{greeting}</p>
+            <h1 className="text-[28px] font-bold text-foreground tracking-tight leading-tight mt-0.5">How are your pets today?</h1>
           </div>
           <NotificationBell unreadCount={unreadCount} />
         </div>
@@ -259,8 +259,8 @@ export default function Home() {
       <main className="max-w-2xl mx-auto px-4 py-2">
         {loadError ? (
           <div className="text-center py-20">
-            <p className="text-sm text-muted-foreground mb-1">Unable to load your pets.</p>
-            <p className="text-sm text-muted-foreground mb-4">Pull down to try again.</p>
+            <p className="text-base text-muted-foreground mb-1">Unable to load your pets.</p>
+            <p className="text-base text-muted-foreground mb-4">Pull down to try again.</p>
             <button onClick={loadData} className="text-sm font-medium text-primary underline">Retry</button>
           </div>
         ) : pets.length === 0 ? (
@@ -277,7 +277,7 @@ export default function Home() {
         ) : (
           <div className="space-y-6">
             {stale && (
-              <p className="text-xs text-center text-muted-foreground">Some information may be out of date.</p>
+              <p className="text-sm text-center text-muted-foreground">Some information may be out of date.</p>
             )}
 
             {activePets.length > 0 && (
@@ -346,7 +346,7 @@ function CompleteProfileBanner({ petId, petName }) {
       </div>
       <div className="min-w-0 flex-1">
         <p className="text-sm font-semibold text-foreground">Complete {petName}'s Profile</p>
-        <p className="text-xs text-muted-foreground">Help Wysker Watch learn {petName}'s normal.</p>
+        <p className="text-sm text-muted-foreground">Help Wysker Watch learn {petName}'s normal.</p>
       </div>
       <ChevronRight className="h-4 w-4 text-muted-foreground flex-shrink-0" />
     </Link>

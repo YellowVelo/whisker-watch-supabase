@@ -4,6 +4,7 @@ import { getCategory } from '@/lib/checkin/config';
 import { getChipState } from '@/lib/checkin/chipLabels';
 import { getPetLabel } from '@/lib/speciesConfig';
 import { computeDetailedAge } from '@/lib/lifeStage';
+import { TONE_COLOR, TREND_COLOR } from '@/lib/toneColors';
 
 // Home's primary per-pet card (Nav + Daily Check-In UX Refresh spec #2).
 // One card per pet — full identity + status chips + medication count, plus
@@ -11,8 +12,6 @@ import { computeDetailedAge } from '@/lib/lifeStage';
 // summary. Tapping the card opens that pet's Trends. Memorial pets swap the
 // score/logs for an "In Memory" marker instead.
 
-const TONE_COLOR = { good: '#4CC7B0', warn: '#F4C76B', bad: '#E57373', unknown: '#A9AEB5' };
-const TREND_COLOR = { stable: '#4CC7B0', improving: '#6FB7FF', monitor: '#F4C76B', declining: '#E57373', unknown: '#A9AEB5' };
 const TREND_LABEL = { stable: 'Stable', improving: 'Improving', monitor: 'Monitor', declining: 'Declining', unknown: null };
 
 // Fixed Today's Logs slots (Pets Feature Spec #3: "Current design supports:
@@ -51,7 +50,7 @@ function PetPhoto({ pet, size, memorial }) {
 export default function PetSummaryCard({ pet, medicationCount = 0, wellness, checkIn, observationValues, logsUnavailable = false, highlighted = false, cardRef }) {
   const identity = (
     <>
-      <p className="text-[19px] font-bold text-white leading-tight truncate">{pet.name}</p>
+      <p className="text-[28px] font-bold text-white leading-tight truncate">{pet.name}</p>
       <p className="text-[13px] text-white/45 mt-0.5 truncate">
         {getPetLabel(pet.species)}{pet.breed ? ` · ${pet.breed}` : ''}{pet.sex ? ` · ${pet.sex}` : ''}
       </p>
@@ -74,7 +73,7 @@ export default function PetSummaryCard({ pet, medicationCount = 0, wellness, che
           <div className="flex-1 min-w-0">
             {identity}
             {(birthYear || memorialYear) && (
-              <p className="text-[12px] text-white/35 mt-1.5 flex items-center gap-1.5">
+              <p className="text-[13px] text-white/35 mt-1.5 flex items-center gap-1.5">
                 <CalendarDays className="h-3.5 w-3.5" aria-hidden="true" />
                 {birthYear && memorialYear ? `${birthYear} – ${memorialYear}` : birthYear || memorialYear}
               </p>
@@ -82,7 +81,7 @@ export default function PetSummaryCard({ pet, medicationCount = 0, wellness, che
           </div>
           <div className="flex flex-col items-center gap-1 flex-shrink-0">
             <Rainbow className="h-6 w-6 text-purple-400" aria-hidden="true" />
-            <p className="text-[12px] font-semibold text-purple-400 whitespace-nowrap">In Memory</p>
+            <p className="text-[13px] font-semibold text-purple-400 whitespace-nowrap">In Memory</p>
           </div>
           <ChevronRight className="h-4 w-4 text-white/25 flex-shrink-0" aria-hidden="true" />
         </div>
@@ -116,7 +115,7 @@ export default function PetSummaryCard({ pet, medicationCount = 0, wellness, che
         <div className="flex-1 min-w-0">
           {identity}
           {age && (
-            <p className="text-[12px] text-white/40 mt-1 flex items-center gap-1.5">
+            <p className="text-[13px] text-white/40 mt-1 flex items-center gap-1.5">
               <CalendarDays className="h-3.5 w-3.5 flex-shrink-0" aria-hidden="true" />
               {age}
             </p>
@@ -124,17 +123,17 @@ export default function PetSummaryCard({ pet, medicationCount = 0, wellness, che
           <div className="flex flex-wrap gap-1.5 mt-2">
             {conditions ? (
               conditions.map((c) => (
-                <span key={c} className="text-[11px] font-medium px-2.5 py-1 rounded-full" style={{ background: 'rgba(255,255,255,0.08)', color: '#fff' }}>
+                <span key={c} className="text-[13px] font-medium px-2.5 py-1 rounded-full" style={{ background: 'rgba(255,255,255,0.08)', color: '#fff' }}>
                   {c}
                 </span>
               ))
             ) : (
-              <span className="text-[11px] font-medium px-2.5 py-1 rounded-full flex items-center gap-1" style={{ background: 'rgba(76,199,176,0.15)', color: TONE_COLOR.good }}>
+              <span className="text-[13px] font-medium px-2.5 py-1 rounded-full flex items-center gap-1" style={{ background: 'rgba(76,199,176,0.15)', color: TONE_COLOR.good }}>
                 <Heart className="h-3 w-3" aria-hidden="true" /> Healthy
               </span>
             )}
             {medicationCount > 0 && (
-              <span className="text-[11px] font-medium px-2.5 py-1 rounded-full flex items-center gap-1" style={{ background: 'rgba(255,255,255,0.06)', color: '#fff' }}>
+              <span className="text-[13px] font-medium px-2.5 py-1 rounded-full flex items-center gap-1" style={{ background: 'rgba(255,255,255,0.06)', color: '#fff' }}>
                 <Pill className="h-3 w-3" aria-hidden="true" /> {medicationCount} Medication{medicationCount === 1 ? '' : 's'}
               </span>
             )}
@@ -159,16 +158,16 @@ export default function PetSummaryCard({ pet, medicationCount = 0, wellness, che
               <span className="text-[18px] font-bold text-white">{score != null ? score : '—'}</span>
             </div>
             {score != null && TREND_LABEL[trend] && (
-              <p className="text-[12px] font-semibold mt-1 whitespace-nowrap" style={{ color: TREND_COLOR[trend] }}>{TREND_LABEL[trend]}</p>
+              <p className="text-[13px] font-semibold mt-1 whitespace-nowrap" style={{ color: TREND_COLOR[trend] }}>{TREND_LABEL[trend]}</p>
             )}
-            {score != null && <p className="text-[11px] text-white/35">Today</p>}
+            {score != null && <p className="text-[13px] text-white/35">Today</p>}
           </div>
           <ChevronRight className="h-4 w-4 text-white/25" aria-hidden="true" />
         </div>
       </div>
 
       <div className="mt-3.5 pt-3" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
-        <p className="text-[10px] font-semibold tracking-widest uppercase text-white/30 mb-2">Today's Logs</p>
+        <p className="text-[13px] font-semibold tracking-widest uppercase text-white/30 mb-2">Today's Logs</p>
         <div className="grid grid-cols-3 gap-2">
           {LOG_SLOTS.map(({ code, label }) => {
             const Icon = getCategory(code)?.icon;
@@ -177,8 +176,8 @@ export default function PetSummaryCard({ pet, medicationCount = 0, wellness, che
               <div key={code} className="rounded-xl px-2.5 py-2 flex items-center gap-1.5" style={{ background: 'rgba(255,255,255,0.04)' }}>
                 {Icon && <Icon className="h-3.5 w-3.5 text-white/40 flex-shrink-0" aria-hidden="true" />}
                 <div className="min-w-0">
-                  <p className="text-[11px] text-white/40 truncate">{label}</p>
-                  <p className="text-[12px] font-semibold truncate" style={{ color: TONE_COLOR[tone] }}>{value}</p>
+                  <p className="text-[13px] text-white/40 truncate">{label}</p>
+                  <p className="text-[13px] font-semibold truncate" style={{ color: TONE_COLOR[tone] }}>{value}</p>
                 </div>
               </div>
             );

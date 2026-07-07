@@ -102,8 +102,8 @@ export default function Pets() {
         <main className="max-w-2xl mx-auto px-4 space-y-6">
           {loadError ? (
             <div className="text-center py-20">
-              <p className="text-sm text-muted-foreground mb-1">Unable to load pets.</p>
-              <p className="text-sm text-muted-foreground mb-4">Please check your connection and try again.</p>
+              <p className="text-base text-muted-foreground mb-1">Unable to load pets.</p>
+              <p className="text-base text-muted-foreground mb-4">Please check your connection and try again.</p>
               <button onClick={loadData} className="text-sm font-medium text-primary underline">Retry</button>
             </div>
           ) : loading ? (
@@ -209,7 +209,7 @@ function SharedPetRow({ pet }) {
           <Cat className="h-5 w-5 text-white/40" />
         )}
       </div>
-      <p className="text-[15px] font-semibold text-white truncate">{pet.name}</p>
+      <p className="text-base font-semibold text-white truncate">{pet.name}</p>
     </Link>
   );
 }

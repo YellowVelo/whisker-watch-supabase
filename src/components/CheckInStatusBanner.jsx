@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import { Check, Minus, AlertTriangle, Clock } from 'lucide-react';
+import { PALETTE } from '@/lib/toneColors';
 
 // One-line Daily Check-In status row nested directly under a pet's card on
 // Home (Nav + Daily Check-In UX Refresh spec #2/#4) — a single compact row
@@ -8,8 +9,8 @@ import { Check, Minus, AlertTriangle, Clock } from 'lucide-react';
 // (links to Trends), and error — never collapses these into one generic
 // "done" state.
 const CONFIG = {
-  normal: { Icon: Check, color: '#4CC7B0', text: (name) => `${name} checked in today` },
-  changed: { Icon: AlertTriangle, color: '#F4C76B', text: (name) => `${name}: something changed today` },
+  normal: { Icon: Check, color: PALETTE.teal, text: (name) => `${name} checked in today` },
+  changed: { Icon: AlertTriangle, color: PALETTE.amber, text: (name) => `${name}: something changed today` },
   skipped: { Icon: Minus, color: 'rgba(255,255,255,0.4)', text: (name) => `${name} skipped today` },
 };
 
@@ -37,7 +38,7 @@ export default function CheckInStatusBanner({ pet, checkIn, onStartCheckIn, erro
         className="w-full flex items-center gap-2.5 rounded-xl px-3.5 py-2.5 active:opacity-80 transition-opacity min-h-[44px] text-left"
         style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)' }}
       >
-        <Clock className="h-3.5 w-3.5 flex-shrink-0" style={{ color: '#F4C76B' }} aria-hidden="true" />
+        <Clock className="h-3.5 w-3.5 flex-shrink-0" style={{ color: PALETTE.amber }} aria-hidden="true" />
         <span className="text-[13px] font-semibold text-white/85 truncate">Start {pet.name}'s Daily Check-In</span>
       </button>
     );

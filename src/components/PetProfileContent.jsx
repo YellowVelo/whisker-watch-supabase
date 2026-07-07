@@ -21,10 +21,8 @@ import {
 } from '@/lib/checkin/petProfileClient';
 import { getPetLabel } from '@/lib/speciesConfig';
 import { computeDetailedAge } from '@/lib/lifeStage';
+import { PALETTE, RING_COLOR } from '@/lib/toneColors';
 
-// Design System §1 core/semantic palette only — no ad hoc accent hues.
-const PALETTE = { sky: '#6FB7FF', teal: '#4CC7B0', amber: '#F4C76B', red: '#E57373', gray: '#A9AEB5' };
-const RING_COLOR = { good: PALETTE.teal, warn: PALETTE.amber, bad: PALETTE.red, unknown: PALETTE.gray };
 const STATUS_TONE = { Stable: 'good', Improving: 'good', Lower: 'warn', Monitor: 'warn' };
 
 const todayStr = () => new Date().toISOString().split('T')[0];
@@ -62,8 +60,8 @@ function WellnessRing({ icon: Icon, score, maxScore, label, statusLabel }) {
         <Icon className="absolute h-4 w-4 text-white/25" style={{ top: 6 }} aria-hidden="true" />
         <span className="text-[17px] font-bold text-white">{score != null ? score : '—'}</span>
       </div>
-      <p className="text-[11px] font-medium text-white/50">{label}</p>
-      <p className="text-[11px] font-semibold" style={{ color: statusLabel ? color : 'rgba(255,255,255,0.35)' }}>
+      <p className="text-[13px] font-medium text-white/50">{label}</p>
+      <p className="text-[13px] font-semibold" style={{ color: statusLabel ? color : 'rgba(255,255,255,0.35)' }}>
         {statusLabel || 'No Data'}
       </p>
     </div>
@@ -88,7 +86,7 @@ function NavCard({ icon: Icon, iconBg, iconColor, title, subtitle, value, valueC
           </p>
         </div>
         {!error && value != null && (
-          <span className="text-[15px] font-semibold flex-shrink-0" style={{ color: valueColor || '#fff' }}>{value}</span>
+          <span className="text-base font-semibold flex-shrink-0" style={{ color: valueColor || '#fff' }}>{value}</span>
         )}
         {(to || onClick) && <ChevronRight className="h-4 w-4 text-white/25 flex-shrink-0" />}
       </div>
@@ -160,7 +158,7 @@ function WeightQuickLogSheet({ petId, onClose, onSaved }) {
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
       <div className="relative rounded-t-3xl px-5 pt-5 pb-10 shadow-2xl" style={{ background: 'rgba(18,20,32,0.98)', border: '1px solid rgba(255,255,255,0.08)' }} onClick={(e) => e.stopPropagation()}>
         <div className="w-10 h-1 bg-white/20 rounded-full mx-auto mb-5" />
-        <h3 className="text-xl font-bold text-white mb-1">Log Weight</h3>
+        <h3 className="text-2xl font-bold text-white mb-1">Log Weight</h3>
         <p className="text-sm text-white/40 mb-5">Today · {format(new Date(), 'MMM d')}</p>
         <input
           type="number" step="0.1" placeholder="e.g. 9.8" inputMode="decimal" aria-label="Weight in pounds"
@@ -168,7 +166,7 @@ function WeightQuickLogSheet({ petId, onClose, onSaved }) {
           className="w-full rounded-2xl px-4 py-3 text-xl text-center font-bold text-white focus:outline-none focus:ring-1 focus:ring-primary border border-white/10 mb-2"
           style={{ background: 'rgba(255,255,255,0.08)' }}
         />
-        <p className="text-xs text-center text-white/30 mb-5">pounds</p>
+        <p className="text-sm text-center text-white/30 mb-5">pounds</p>
         <button onClick={save} disabled={!value || saving}
           className="w-full text-base font-bold rounded-2xl h-14 disabled:opacity-30 transition-opacity flex items-center justify-center gap-2"
           style={{ background: PALETTE.sky, color: '#0D0F1A' }}
@@ -523,7 +521,7 @@ export default function PetProfileContent({ petId, onReload, expanded = true, on
             <Cat className="h-10 w-10 text-white/40" />
           )}
         </div>
-        <h2 className="text-[22px] font-bold text-white mt-3 leading-tight">{pet.name}</h2>
+        <h2 className="text-[28px] font-bold text-white mt-3 leading-tight">{pet.name}</h2>
         <p className="text-[14px] text-white/45 mt-0.5">
           {getPetLabel(pet.species)}{pet.breed ? ` · ${pet.breed}` : ''}{pet.sex ? ` · ${pet.sex}` : ''}
         </p>
@@ -532,7 +530,7 @@ export default function PetProfileContent({ petId, onReload, expanded = true, on
         {pet.conditions?.length > 0 && (
           <div className="flex flex-wrap justify-center gap-2 mt-3">
             {pet.conditions.map((c) => (
-              <span key={c} className="inline-flex items-center gap-1.5 text-[12px] font-medium px-3 py-1.5 rounded-full" style={{ background: 'rgba(244,199,107,0.12)', border: '1px solid rgba(244,199,107,0.3)', color: PALETTE.amber }}>
+              <span key={c} className="inline-flex items-center gap-1.5 text-[13px] font-medium px-3 py-1.5 rounded-full" style={{ background: 'rgba(244,199,107,0.12)', border: '1px solid rgba(244,199,107,0.3)', color: PALETTE.amber }}>
                 <ShieldCheck className="h-3.5 w-3.5" /> {c}
               </span>
             ))}
@@ -563,7 +561,7 @@ export default function PetProfileContent({ petId, onReload, expanded = true, on
                 expanded. */}
             <div className="rounded-2xl px-4 pt-5 pb-4" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}>
               {errors.wellness ? (
-                <p className="text-sm text-white/40 text-center py-4">Unable to load wellness summary.</p>
+                <p className="text-base text-white/40 text-center py-4">Unable to load wellness summary.</p>
               ) : (
                 <div className="flex items-start justify-between gap-1">
                   <button onClick={() => setCheckInOpen(true)} aria-label="Open Daily Check-In">
@@ -585,7 +583,7 @@ export default function PetProfileContent({ petId, onReload, expanded = true, on
               )}
               <div className="flex items-center gap-1.5 mt-4 pt-3" style={{ borderTop: '1px solid rgba(255,255,255,0.07)' }}>
                 <Calendar className="h-3.5 w-3.5 text-white/30" />
-                <p className="text-[12px] text-white/35">
+                <p className="text-[13px] text-white/35">
                   {lastUpdated ? `Last updated ${lastUpdated}` : 'No wellness data yet'}
                 </p>
               </div>
@@ -603,7 +601,7 @@ export default function PetProfileContent({ petId, onReload, expanded = true, on
             <ActionPill icon={Pencil} label="Edit Pet" onClick={() => setEditOpen(true)} />
             <ActionPill icon={Trash2} label="Delete Pet" danger onClick={openDeletePetFlow} disabled={!isOnline} />
             {shareFeedback && (
-              <p role="status" className="text-center text-xs text-white/50 w-full">{shareFeedback}</p>
+              <p role="status" className="text-center text-sm text-white/50 w-full">{shareFeedback}</p>
             )}
           </div>
         )}
@@ -618,7 +616,7 @@ export default function PetProfileContent({ petId, onReload, expanded = true, on
               <ActionPill icon={Trash2} label="Delete Pet" danger onClick={openDeletePetFlow} disabled={!isOnline} />
             </div>
             {shareFeedback && (
-              <p role="status" className="text-center text-xs text-white/50">{shareFeedback}</p>
+              <p role="status" className="text-center text-sm text-white/50">{shareFeedback}</p>
             )}
 
             {/* ── BASELINE ── */}
@@ -696,8 +694,8 @@ export default function PetProfileContent({ petId, onReload, expanded = true, on
                     return (
                       <div key={code} className="rounded-xl px-1.5 py-2 flex flex-col items-center gap-1 text-center" style={{ background: 'rgba(255,255,255,0.04)' }}>
                         <Icon className="h-3.5 w-3.5 text-white/40" />
-                        <p className="text-[10px] text-white/40 truncate w-full">{label}</p>
-                        <p className="text-[11px] font-semibold truncate w-full" style={{ color: RING_COLOR[tone] }}>{value}</p>
+                        <p className="text-[13px] text-white/40 truncate w-full">{label}</p>
+                        <p className="text-[13px] font-semibold truncate w-full" style={{ color: RING_COLOR[tone] }}>{value}</p>
                       </div>
                     );
                   })}
@@ -759,10 +757,10 @@ export default function PetProfileContent({ petId, onReload, expanded = true, on
       <Dialog open={deletePetStep === 1} onOpenChange={(v) => !v && closeDeletePetFlow()}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle className="font-serif text-xl text-destructive">Delete {pet.name}?</DialogTitle>
+            <DialogTitle className="font-serif text-2xl text-destructive">Delete {pet.name}?</DialogTitle>
           </DialogHeader>
           <DialogDescription asChild>
-            <div className="space-y-3 text-sm text-muted-foreground">
+            <div className="space-y-3 text-base text-muted-foreground">
               {isPrimaryOwner && hasLinkedCoOwner ? (
                 <>
                   <p>
@@ -803,10 +801,10 @@ export default function PetProfileContent({ petId, onReload, expanded = true, on
       <Dialog open={deletePetStep === 2} onOpenChange={(v) => !v && closeDeletePetFlow()}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle className="font-serif text-xl text-destructive">Confirm Deletion</DialogTitle>
+            <DialogTitle className="font-serif text-2xl text-destructive">Confirm Deletion</DialogTitle>
           </DialogHeader>
           <DialogDescription asChild>
-            <div className="space-y-3 text-sm text-muted-foreground">
+            <div className="space-y-3 text-base text-muted-foreground">
               <p>Type <strong className="text-foreground font-mono">{pet.name}</strong> to confirm.</p>
             </div>
           </DialogDescription>
@@ -819,7 +817,7 @@ export default function PetProfileContent({ petId, onReload, expanded = true, on
             autoCorrect="off"
             disabled={deletingPet}
           />
-          {deletePetError && <p className="text-sm text-destructive">{deletePetError}</p>}
+          {deletePetError && <p className="text-base text-destructive">{deletePetError}</p>}
           <DialogFooter className="mt-2 gap-2">
             <button onClick={closeDeletePetFlow} disabled={deletingPet} className="flex-1 h-10 rounded-lg border border-border text-sm font-medium hover:bg-secondary transition-colors disabled:opacity-50">Cancel</button>
             <button

@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import { Bell } from 'lucide-react';
+import { PALETTE } from '@/lib/toneColors';
 
 // Notification entry point for Home. Badge only renders when unread
 // notifications exist; hidden otherwise (per Home Feature Spec #2).
@@ -15,7 +16,7 @@ export default function NotificationBell({ unreadCount }) {
       {unreadCount > 0 && (
         <span
           className="absolute top-1.5 right-1.5 h-2.5 w-2.5 rounded-full"
-          style={{ background: '#6FB7FF', boxShadow: '0 0 0 2px #0D0F12' }}
+          style={{ background: PALETTE.sky, boxShadow: '0 0 0 2px hsl(var(--background))' }}
           aria-hidden="true"
         />
       )}
