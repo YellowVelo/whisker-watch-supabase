@@ -1,13 +1,19 @@
-// Supabase Edge Function: reset-test-account
+// Supabase Edge Function: reset-sandbox-account
 //
 // Wipes all pets and pet-related data for the CALLING user, but only
-// if that user's profile is account_type = 'test'. Never deletes the
-// login/auth row, never touches any other user's data (production or
-// demo), and refuses outright for non-test accounts.
+// if that user's profile is account_type = 'test' or 'demo'. Never
+// deletes the login/auth row, never touches any other user's data,
+// and refuses outright for production accounts. Demo accounts use
+// this same wipe before reseeding via SEED_SCENARIOS (see
+// src/lib/seedTestData.js), same as test accounts do.
+//
+// Named "sandbox" (not "test") because it now covers both internal
+// account types — a name that only mentioned "test" would be
+// actively misleading about what it does for demo accounts.
 //
 // This is a separate code path from both delete-account and
 // delete-pet — it's a bulk "start fresh" action for internal test
-// accounts, not a real user-facing deletion.
+// and demo accounts, not a real user-facing deletion.
 //
 // Request body: none — always acts on the caller's own account.
 
@@ -52,7 +58,7 @@ Deno.serve(async (req) => {
     const userId = user.id;
     const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-    // ── Guard: only account_type = 'test' may run this ──────────────────
+    // ── Guard: only account_type = 'test' or 'demo' may run this ────────
     const { data: profile, error: profileError } = await admin
       .from('profiles')
       .select('account_type')
@@ -62,8 +68,8 @@ Deno.serve(async (req) => {
     if (profileError || !profile) {
       return json({ error: 'Failed to look up account' }, 500);
     }
-    if (profile.account_type !== 'test') {
-      return json({ error: 'This action is only available for test accounts.' }, 403);
+    if (profile.account_type !== 'test' && profile.account_type !== 'demo') {
+      return json({ error: 'This action is only available for test or demo accounts.' }, 403);
     }
 
     // ── Delete all pets this user solely or co-owns as primary ──────────
@@ -97,9 +103,9 @@ Deno.serve(async (req) => {
       return json({ error: 'Failed to delete pets' }, 500);
     }
 
-    // ── Remove this test account as a co-owner on anyone else's pet ─────
-    // (Edge case — a test account shouldn't normally be linked to a real
-    // pet, but clean it up if it happened during testing.)
+    // ── Remove this account as a co-owner on anyone else's pet ──────────
+    // (Edge case — a test/demo account shouldn't normally be linked to a
+    // real pet, but clean it up if it happened during testing.)
     const { error: coOwnerError } = await admin
       .from('pet_co_owners')
       .delete()
@@ -140,7 +146,7 @@ Deno.serve(async (req) => {
     return json({ success: true });
 
   } catch (err) {
-    console.error('reset-test-account unexpected error:', err);
+    console.error('reset-sandbox-account unexpected error:', err);
     return json({ error: (err as Error).message ?? 'Unknown error' }, 500);
   }
 });

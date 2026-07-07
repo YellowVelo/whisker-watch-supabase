@@ -12,10 +12,10 @@ import PageTransition from '../components/PageTransition';
 import { useToast } from '@/components/ui/use-toast';
 import { track } from '@/lib/analytics';
 import { useAuth } from '@/lib/AuthContext';
-import { isTestAccount } from '@/lib/accountType';
+import { isDemoAccount, isInternalAccount } from '@/lib/accountType';
 import { getDisplayName } from '@/lib/profileName';
 import { SEED_SCENARIOS } from '@/lib/seedTestData';
-import { deleteAccount, resetTestAccount, signOutBestEffort } from '@/lib/accountClient';
+import { deleteAccount, resetSandboxAccount, signOutBestEffort } from '@/lib/accountClient';
 
 const ACCOUNT_TYPE_BADGES = {
   production: { label: 'Production', className: 'text-emerald-400 bg-emerald-400/10' },
@@ -58,12 +58,18 @@ export default function Settings() {
   const [deleteError, setDeleteError] = useState('');
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
 
-  // Test-account tools (reset + seed data) — only ever shown/usable
-  // when the signed-in account's profile.account_type is 'test'.
+  // Internal-account tools (reset + seed data) — only ever shown/usable
+  // when isInternalAccount(user) is true (every test account, or a demo
+  // account explicitly flagged admin — see src/lib/accountType.js).
   const [resetting, setResetting] = useState(false);
   const [resetError, setResetError] = useState('');
   const [seeding, setSeeding] = useState(false);
   const [seedError, setSeedError] = useState('');
+
+  // Single source of truth for how the internal tools refer to this
+  // account in user-facing copy, instead of repeating the
+  // isDemoAccount(user) ternary at every call site.
+  const accountLabel = isDemoAccount(user) ? 'Demo' : 'Test';
 
   useEffect(() => {
     track('menu_opened', {});
@@ -97,17 +103,17 @@ export default function Settings() {
     }
   };
 
-  const handleResetTestAccount = async () => {
+  const handleResetSandboxAccount = async () => {
     setResetting(true);
     setResetError('');
     try {
-      const { data, error } = await resetTestAccount();
+      const { data, error } = await resetSandboxAccount();
       if (error || !data?.success) {
         setResetError(error?.message ?? data?.error ?? 'Reset failed. Please try again.');
         setResetting(false);
         return;
       }
-      track('test_account_reset', {});
+      track('sandbox_account_reset', {});
       setResetting(false);
       setActiveDialog(DIALOG.NONE);
       window.location.href = '/';
@@ -122,15 +128,15 @@ export default function Settings() {
     setSeedError('');
     try {
       // Seeding scenarios add pets on top of whatever's already there —
-      // clear existing test data first so each scenario starts clean.
-      const { data, error } = await resetTestAccount();
+      // clear existing sample data first so each scenario starts clean.
+      const { data, error } = await resetSandboxAccount();
       if (error || !data?.success) {
-        setSeedError(error?.message ?? data?.error ?? 'Could not clear existing test data before seeding.');
+        setSeedError(error?.message ?? data?.error ?? 'Could not clear existing sample data before seeding.');
         setSeeding(false);
         return;
       }
       await scenario.run();
-      track('test_account_seeded', { scenario: scenario.key });
+      track('sandbox_account_seeded', { scenario: scenario.key });
       setSeeding(false);
       setActiveDialog(DIALOG.NONE);
       window.location.href = '/';
@@ -255,7 +261,7 @@ export default function Settings() {
             ))}
           </div>
 
-          {isTestAccount(user) && (
+          {isInternalAccount(user) && (
             <div className="rounded-2xl overflow-hidden divide-y" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderColor: 'rgba(255,255,255,0.08)' }}>
               <MenuListRow
                 icon={Sprout}
@@ -267,8 +273,8 @@ export default function Settings() {
               <MenuListRow
                 icon={RotateCcw}
                 iconClassName="text-destructive"
-                title="Reset Test Account"
-                subtitle="Clear all pets and test data"
+                title={`Reset ${accountLabel} Account`}
+                subtitle="Clear all pets and sample data"
                 onClick={() => { setResetError(''); setActiveDialog(DIALOG.RESET); }}
               />
             </div>
@@ -391,15 +397,15 @@ export default function Settings() {
           </DialogContent>
         </Dialog>
 
-        {/* Reset Test Account — internal/test-only, guarded server-side too */}
+        {/* Reset Test/Demo Account — internal-only, guarded server-side too */}
         <Dialog open={activeDialog === DIALOG.RESET} onOpenChange={(v) => !v && closeDialog()}>
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
-              <DialogTitle className="font-serif text-xl text-destructive">Reset Test Account?</DialogTitle>
+              <DialogTitle className="font-serif text-xl text-destructive">Reset {accountLabel} Account?</DialogTitle>
             </DialogHeader>
             <DialogDescription asChild>
               <div className="space-y-3 text-sm text-muted-foreground">
-                <p>This deletes all pets and pet data on this test account. Your login is not affected.</p>
+                <p>This deletes all pets and pet data on this {accountLabel.toLowerCase()} account. Your login is not affected.</p>
                 <p className="font-medium text-foreground">This cannot be undone.</p>
               </div>
             </DialogDescription>
@@ -407,11 +413,11 @@ export default function Settings() {
             <DialogFooter className="mt-2 gap-2">
               <button onClick={closeDialog} disabled={resetting} className="flex-1 h-10 rounded-lg border border-border text-sm font-medium hover:bg-secondary transition-colors disabled:opacity-50">Cancel</button>
               <button
-                onClick={handleResetTestAccount}
+                onClick={handleResetSandboxAccount}
                 disabled={resetting}
                 className="flex-1 h-10 rounded-lg bg-destructive text-destructive-foreground text-sm font-medium hover:bg-destructive/90 transition-colors disabled:opacity-40"
               >
-                {resetting ? 'Resetting…' : 'Reset Test Account'}
+                {resetting ? 'Resetting…' : `Reset ${accountLabel} Account`}
               </button>
             </DialogFooter>
           </DialogContent>
@@ -429,7 +435,7 @@ export default function Settings() {
               </div>
             </DialogDescription>
             <div className="space-y-2">
-              {SEED_SCENARIOS.map(s => (
+              {SEED_SCENARIOS.filter(s => s.audience.includes(accountLabel.toLowerCase())).map(s => (
                 <button
                   key={s.key}
                   onClick={() => handleSeed(s)}

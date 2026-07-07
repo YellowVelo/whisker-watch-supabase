@@ -201,14 +201,90 @@ async function seedMultiPetHousehold() {
   return [dog, cat, kitten];
 }
 
+// Demo account showcase: a senior cat trending down and a healthy dog
+// staying stable, so the Home/Insights screens have something worth
+// looking at, plus a few medication/food/vaccination records for
+// variety. Reuses the same seedCheckInHistory/plan helpers as the
+// Insights Trends test scenario above — same scoring, same code path.
+async function seedDemoShowcase() {
+  // Independent of each other, so both pets are created in parallel.
+  const [cat, dog] = await Promise.all([
+    entities.Pet.create({
+      species: 'Cat', name: 'Maple', breed: 'Domestic Shorthair',
+      birth_date: daysAgo(365 * 9), birth_date_precision: 'YEAR',
+      sex: 'Female', altered_status: 'Yes',
+      conditions: ['CKD'],
+      notes: `Seeded demo pet — senior cat, declining wellness trend (${HISTORY_DAYS} days).`,
+    }),
+    entities.Pet.create({
+      species: 'Dog', name: 'Cooper', breed: 'Golden Retriever',
+      birth_date: daysAgo(365 * 3), birth_date_precision: 'EXACT',
+      sex: 'Male', altered_status: 'Yes',
+      notes: `Seeded demo pet — healthy adult dog, stable wellness trend (${HISTORY_DAYS} days).`,
+    }),
+  ]);
+
+  // Flavor records reference cat/dog ids but not each other, so these
+  // and the check-in histories below all run as independent batches.
+  await Promise.all([
+    entities.Medication.create({
+      pet_id: cat.id,
+      name: 'Benazepril',
+      med_type: 'General',
+      prescribed: true,
+      dosage: '2.5mg',
+      frequency: 'Once daily',
+      route: 'Oral',
+      start_date: daysAgo(60),
+      prescribing_vet: 'Dr. Alvarez, DVM',
+      active: true,
+    }),
+    entities.Vaccination.create({
+      pet_id: dog.id,
+      vaccine_name: 'Rabies',
+      date_given: daysAgo(120),
+      next_due_date: daysAgo(-245),
+      administered_by: 'Dr. Kim, DVM',
+    }),
+    entities.FoodLog.create({
+      pet_id: dog.id,
+      date: daysAgo(1),
+      food_name: 'Adult Formula',
+      food_type: 'Dry food',
+      amount_eaten: 'All',
+      reaction: 'Good',
+    }),
+  ]);
+
+  // Independent pets, so their histories can seed in parallel; each
+  // pet's own history is still written strictly oldest-to-newest.
+  await Promise.all([
+    seedCheckInHistory(cat, HISTORY_DAYS, decliningPlan),
+    seedCheckInHistory(dog, HISTORY_DAYS, stablePlan),
+  ]);
+
+  return [cat, dog];
+}
+
+// `audience` scopes which account type(s) see a scenario in Settings'
+// Seed Data picker (src/pages/Settings.jsx) — 'test'-flavored scenarios
+// aren't meaningful on the demo account and vice versa.
 export const SEED_SCENARIOS = [
-  { key: 'empty', label: 'Empty Account', description: 'No pets — clears existing test data only.', run: async () => [] },
-  { key: 'healthy_dog', label: 'Healthy Dog', description: 'One healthy adult dog with routine logs.', run: seedHealthyDog },
-  { key: 'multi_pet', label: 'Multi-Pet Household', description: 'A dog, an adult cat, and a kitten.', run: seedMultiPetHousehold },
+  { key: 'empty', label: 'Empty Account', description: 'No pets — clears existing sample data only.', run: async () => [], audience: ['test', 'demo'] },
+  { key: 'healthy_dog', label: 'Healthy Dog', description: 'One healthy adult dog with routine logs.', run: seedHealthyDog, audience: ['test'] },
+  { key: 'multi_pet', label: 'Multi-Pet Household', description: 'A dog, an adult cat, and a kitten.', run: seedMultiPetHousehold, audience: ['test'] },
   {
     key: 'insights_trends',
     label: 'Insights Trends (Harper / Tribble / Auggie)',
     description: `${HISTORY_DAYS} days of Daily Check-In history across 3 pets with stable, declining, and improving wellness trends — for testing Insights charts.`,
     run: seedInsightsTrends,
+    audience: ['test'],
+  },
+  {
+    key: 'demo_showcase',
+    label: 'Demo Showcase (Maple & Cooper)',
+    description: `${HISTORY_DAYS} days of history across a senior cat (declining trend) and a healthy dog (stable trend), plus sample medication/food/vaccination records — for the Demo account.`,
+    run: seedDemoShowcase,
+    audience: ['demo'],
   },
 ];
