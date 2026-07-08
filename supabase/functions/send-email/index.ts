@@ -1,8 +1,8 @@
 // Supabase Edge Function: send-email
 //
 // Thin HTTP entry point over the shared sendEmail service
-// (../_shared/email/sendEmail.ts). Callers must present the Supabase
-// **service role key** as the bearer token — this endpoint is
+// (../_shared/email/sendEmail.ts). Callers must present a Supabase
+// **service_role** JWT as the bearer token — this endpoint is
 // server-to-server/ops-only, not something a logged-in user's own
 // session token can call.
 //
@@ -11,15 +11,27 @@
 // `to` and an arbitrary CTA URL, so allowing a regular user session to
 // invoke this would let any account send Wysker-Watch-branded email
 // (with an attacker-controlled link) to any third-party address — a
-// phishing primitive. Only trusted backend code holds the service role
-// key, so gating on it closes that off entirely.
+// phishing primitive. Only trusted backend code holds a service_role
+// credential, so gating on it closes that off entirely.
+//
+// Auth check works by trusting Supabase's own gateway rather than
+// comparing against a locally-stored copy of the key: every deployed
+// Edge Function sits behind Supabase's JWT verification by default
+// (a request with a malformed/invalid/unsigned JWT never reaches this
+// code at all — Supabase's gateway rejects it first). So by the time
+// Deno.serve's handler runs, the Authorization header is already a
+// signature-verified Supabase JWT; this code only needs to read its
+// `role` claim and require `service_role`. This avoids the brittleness
+// of string-comparing against SUPABASE_SERVICE_ROLE_KEY, whose exact
+// value/format can differ from what a given project's dashboard hands
+// you (legacy JWT-format keys vs. the newer opaque sb_secret_/
+// sb_publishable_ key format) — see getJwtRole below.
 //
 // Other Edge Functions that need to send email should generally prefer
 // importing `sendEmail` from ../_shared/email/sendEmail.ts directly
-// (no network hop, no need to pass the service role key over HTTP).
-// Use this HTTP endpoint instead when the caller isn't itself an Edge
-// Function with module access — e.g. a scheduled job, an external
-// worker, or manual QA via curl.
+// (no network hop). Use this HTTP endpoint when the caller isn't
+// itself an Edge Function with module access — e.g. a scheduled job,
+// an external worker, or manual QA via curl.
 //
 // This function does not itself implement any product workflow (no
 // invitation creation, no token generation) — callers pass fully-formed
@@ -45,7 +57,23 @@
 import { sendEmail } from '../_shared/email/sendEmail.ts';
 import { EmailServiceError } from '../_shared/email/types.ts';
 
-const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+// Decodes (without re-verifying — see header comment) the `role` claim
+// out of a Supabase-issued JWT. Returns null for anything that isn't a
+// well-formed JWT (e.g. one of the newer opaque sb_secret_/
+// sb_publishable_ keys), which safely falls through to "unauthorized"
+// below rather than throwing.
+function getJwtRole(token: string): string | null {
+  try {
+    const payloadSegment = token.split('.')[1];
+    if (!payloadSegment) return null;
+    const base64 = payloadSegment.replace(/-/g, '+').replace(/_/g, '/');
+    const padded = base64 + '='.repeat((4 - (base64.length % 4)) % 4);
+    const payload = JSON.parse(atob(padded));
+    return typeof payload?.role === 'string' ? payload.role : null;
+  } catch {
+    return null;
+  }
+}
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -73,15 +101,16 @@ Deno.serve(async (req) => {
 
   try {
     // ── Auth check ──────────────────────────────────────────────────────
-    // Service role key only — see header comment for why a regular user
-    // session is not accepted here.
+    // service_role JWTs only — see header comment for why a regular
+    // user session is not accepted here, and why this reads the JWT's
+    // role claim rather than string-comparing against a stored key.
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
       return json({ error: { code: 'unauthorized', message: 'Missing Authorization header' } }, 401);
     }
 
     const bearerToken = authHeader.replace(/^Bearer\s+/i, '');
-    if (bearerToken !== SUPABASE_SERVICE_ROLE_KEY) {
+    if (getJwtRole(bearerToken) !== 'service_role') {
       return json({ error: { code: 'unauthorized', message: 'Unauthorized' } }, 401);
     }
 
