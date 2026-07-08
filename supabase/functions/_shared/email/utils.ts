@@ -13,12 +13,15 @@ export function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
 }
 
-// Wysker Watch's own domains — CTA links in transactional email must
+// Wysker Watch's own domain — CTA links in transactional email must
 // only ever point back into the product, never to an arbitrary
-// caller-supplied host. Override/extend via the EMAIL_LINK_ALLOWED_HOSTS
-// secret (comma-separated) if a workflow legitimately needs another
-// first-party host (e.g. a separate marketing/docs domain).
-const DEFAULT_ALLOWED_URL_HOSTS = ['wyskerwatch.app', 'wyskerwatch.com'];
+// caller-supplied host. www.wyskerwatch.com is the only domain
+// currently owned/hosting the app (confirmed 2026-07-08 — an earlier
+// version of this list also allowed wyskerwatch.app, which is not
+// actually owned and was caught via a bad CTA link in a test email).
+// Override/extend via the EMAIL_LINK_ALLOWED_HOSTS secret
+// (comma-separated) if another first-party host is added later.
+const DEFAULT_ALLOWED_URL_HOSTS = ['www.wyskerwatch.com'];
 
 // Validates a URL variable (accept_url, verify_url, reset_url, app_url)
 // before it's inserted into an href. Rejects non-http(s) schemes
