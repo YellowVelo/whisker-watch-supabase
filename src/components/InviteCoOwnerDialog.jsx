@@ -70,12 +70,22 @@ export default function InviteCoOwnerDialog({ petId, petName, open, onOpenChange
     });
 
     if (fnResp.error) {
-      // Access record is already saved; just warn rather than block.
+      // Access record is already saved; just warn rather than block. Note:
+      // by this point the invite-co-owner function may have already
+      // created the invitee's auth account (via generateLink) before the
+      // email send itself failed, so they can't just "log in next time" —
+      // point to a retry or Forgot Password instead of implying it'll
+      // resolve on its own.
       console.error('invite-co-owner function error:', fnResp.error);
-      setSuccessMsg(`${cleanEmail} added as co-owner. Invite email could not be sent — they'll see ${petName || 'the pet'} on their next login.`);
+      setSuccessMsg(`${cleanEmail} added as co-owner, but the invite email could not be sent. Try inviting them again — if it keeps failing, they can also use "Forgot password" on the login screen with this email.`);
     } else if (fnResp.data?.reason === 'test_or_demo_account') {
       setSuccessMsg(`${cleanEmail} added as co-owner. No real email was sent (test/demo accounts don't send production email) — they'll see ${petName || 'the pet'} on their next login.`);
     } else if (fnResp.data?.sent === false) {
+      // By this point invite-co-owner has already checked
+      // email_has_password() and confirmed this is a genuinely
+      // registered account, not just a stuck pending invite (those now
+      // get a real re-invite email sent automatically instead of
+      // landing here — see the Edge Function's header comment).
       setSuccessMsg(`${cleanEmail} already has a Whisker Watch account and can now see ${petName || 'this pet'}.`);
     } else {
       setSuccessMsg(`Invite sent to ${cleanEmail}!`);
