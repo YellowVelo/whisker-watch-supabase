@@ -30,6 +30,8 @@ import AIMenu from './pages/AIMenu';
 import Account from './pages/Account';
 import Privacy from './pages/Privacy';
 import PrivacyPolicySection from './pages/PrivacyPolicySection';
+import Terms from './pages/Terms';
+import TermsOfServiceSection from './pages/TermsOfServiceSection';
 import Preferences from './pages/Preferences';
 import Support from './pages/Support';
 import Login from './pages/Login';
@@ -90,6 +92,8 @@ const AuthenticatedApp = () => {
             <Route path="/account" element={<Account />} />
             <Route path="/privacy" element={<Privacy />} />
             <Route path="/privacy/:sectionId" element={<PrivacyPolicySection />} />
+            <Route path="/terms" element={<Terms />} />
+            <Route path="/terms/:sectionId" element={<TermsOfServiceSection />} />
             <Route path="/preferences" element={<Preferences />} />
             <Route path="/support" element={<Support />} />
           </Route>

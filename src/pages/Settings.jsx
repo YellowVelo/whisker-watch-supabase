@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   User, Bell, ShieldCheck, Settings as SettingsIcon, HelpCircle,
-  LogOut, Trash2, Lock, ChevronRight, Sprout, RotateCcw, UsersRound, Sparkles,
+  LogOut, Trash2, Lock, ChevronRight, Sprout, RotateCcw, UsersRound, Sparkles, FileText,
 } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -28,6 +28,7 @@ const MENU_ITEMS = [
   { key: 'ai', to: '/settings/ai', icon: Sparkles, iconClassName: 'text-fuchsia-300', iconBg: 'rgba(232,121,249,0.14)', title: 'AI', subtitle: 'Insights and answers about your pets', event: 'menu_ai_selected' },
   { key: 'notifications', to: '/notifications', icon: Bell, iconClassName: 'text-amber-300', iconBg: 'rgba(251,191,36,0.14)', title: 'Notifications', subtitle: 'Manage your notification preferences', event: 'menu_notifications_selected' },
   { key: 'privacy', to: '/privacy', icon: ShieldCheck, iconClassName: 'text-emerald-300', iconBg: 'rgba(52,211,153,0.14)', title: 'Privacy', subtitle: 'Read our Privacy Policy', event: 'menu_privacy_selected' },
+  { key: 'terms', to: '/terms', icon: FileText, iconClassName: 'text-orange-300', iconBg: 'rgba(253,186,116,0.14)', title: 'Terms of Service', subtitle: 'Read our Terms of Service', event: 'menu_terms_selected' },
   { key: 'preferences', to: '/preferences', icon: SettingsIcon, iconClassName: 'text-purple-300', iconBg: 'rgba(196,181,253,0.14)', title: 'Settings', subtitle: 'App preferences and defaults', event: 'menu_settings_selected' },
   { key: 'support', to: '/support', icon: HelpCircle, iconClassName: 'text-sky-300', iconBg: 'rgba(125,211,252,0.14)', title: 'Support', subtitle: 'Help center and contact support', event: 'menu_support_selected' },
 ];

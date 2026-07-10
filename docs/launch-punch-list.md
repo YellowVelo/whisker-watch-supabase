@@ -22,7 +22,7 @@ Nothing below this line can go to either store without the native shell existing
 - [ ] **Capacitor wrapping for iOS/Android.** Not started — no `ios`/`android` folders, no `capacitor.config`. This is the root blocker; everything else in this tier and P2's deep-linking item cascade from this decision.
 - [ ] **Universal Links / App Links (mobile deep linking).** `https://www.wyskerwatch.com/accept-invite?...` links need to open the app directly, not a browser, once it's a real app — reviewers will test the invite flow. Needs: `apple-app-site-association` + `assetlinks.json` hosted at `www.wyskerwatch.com/.well-known/`, iOS Associated Domains capability, Android `intent-filter` with `autoVerify="true"`, and Capacitor's `@capacitor/app` `appUrlOpen` listener wired to route the incoming URL. Requires an Apple Developer account.
 - [ ] **Store submission assets don't exist.** App icons (all required sizes), screenshots, store listing copy, privacy manifest, permissions justification — none of this exists since there's no native project to hold them yet.
-- [ ] **No in-app Terms of Service**, and no in-app link to the Privacy Policy. `privacy-policy.md` exists in the repo but both stores require these reachable *from within the app*, not just a repo file.
+- [x] **No in-app Terms of Service**, and no in-app link to the Privacy Policy. `privacy-policy.md` exists in the repo but both stores require these reachable *from within the app*, not just a repo file. Resolved: Menu → Terms of Service (`/terms`) and Menu → Privacy (`/privacy`) are both live, each with a list screen and per-section detail screens (`src/pages/Terms.jsx`, `src/pages/TermsOfServiceSection.jsx`, `src/lib/termsOfServiceContent.js`; `src/pages/Privacy.jsx` et al.).
 - [ ] **`manifest.json` is missing.** `index.html:7` references `/manifest.json`; no such file exists anywhere in the repo (no `public/` directory either). Currently 404s. Matters if any PWA/TWA install path is part of the plan.
 
 ## P2 — Security / trust issues
@@ -54,6 +54,7 @@ Real issues, not launch-blocking, but should land before or shortly after launch
 - [ ] Home screen: no tap-target audit confirmation on full-card assumption, and no request-race guard in `Home.jsx`'s `loadData()` — both explicitly marked non-blocking when raised.
 - [ ] Demo pet photos live outside the normal per-user storage path as a manual workaround so `reset-sandbox-account`'s cleanup sweep won't delete them — fragile if that sweep logic ever changes.
 - [ ] Legacy pet photos (Harper/Auggie/Tribble) may still point at `base44.app` hosting — unconfirmed whether those URLs still resolve, flagged after the account-recovery incident.
+- [ ] **No explicit Terms of Service / Privacy Policy acceptance at signup.** `/terms` and `/privacy` are readable in-app (Menu), but Register (`src/pages/Register.jsx`) has no "I agree to the Terms of Service and Privacy Policy" checkbox linking to them. Not a store requirement (neither Apple nor Google mandates a checkbox for non-subscription apps), so fine to land after launch — but worth adding for the liability/indemnification language in Terms §19-20 to be provably agreed-to.
 
 ## P5 — Technical debt
 
