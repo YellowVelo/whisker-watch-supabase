@@ -7,17 +7,17 @@ import { PALETTE } from '@/lib/toneColors';
 // One generic card, instantiated for Appetite/Water Intake/Energy in
 // PetTrends.jsx (Product Principle 19/20: "Favor Reusable Models" /
 // "Build for Reuse") instead of three near-duplicate components.
-export default function ObservationCard({ petId, range, code, label, icon }) {
+export default function ObservationCard({ petId, range, code, label, icon, timezone }) {
   const [state, setState] = useState({ loading: true, error: false, data: null });
 
   useEffect(() => {
     let cancelled = false;
     setState((s) => ({ ...s, loading: true, error: false }));
-    getObservationTrend(petId, code, range)
+    getObservationTrend(petId, code, range, timezone)
       .then((data) => { if (!cancelled) setState({ loading: false, error: false, data }); })
       .catch(() => { if (!cancelled) setState({ loading: false, error: true, data: null }); });
     return () => { cancelled = true; };
-  }, [petId, code, range]);
+  }, [petId, code, range, timezone]);
 
   const { loading, error, data } = state;
   const empty = !loading && !error && (!data || data.series.length === 0);

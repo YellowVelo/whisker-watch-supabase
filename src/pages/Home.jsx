@@ -11,27 +11,57 @@ import usePullToRefresh from '../hooks/usePullToRefresh';
 import PullToRefreshIndicator from '../components/PullToRefreshIndicator';
 import { useToast } from '@/components/ui/use-toast';
 import {
-  getCheckInsForPets, getRecentWellnessForPets, getObservationValuesForCheckIns,
-  getCheckIn, getLatestWellness,
+  getCheckInsForPets, getRecentWellnessForPets, getCheckIn,
+  getHealthAttributeDirectionsForPets,
+  todayStr as todayStrTz, yesterdayStr as yesterdayStrTz,
 } from '@/lib/checkin/checkinClient';
+import { getWeightSummariesForPets } from '@/lib/checkin/petProfileClient';
 import { getActiveMedicationCountsForPets } from '@/lib/petsClient';
 import { getUnreadCount } from '@/lib/notifications/notificationClient';
 import { buildGreeting } from '@/lib/greeting';
 import { useAuth } from '@/lib/AuthContext';
+import { detectTimezone } from '@/lib/timezone';
 import { track } from '@/lib/analytics';
 
+// Health Score Revision V2 — day boundaries must use the signed-in user's
+// stored timezone, not UTC midnight (spec: "Use the user's stored timezone
+// when resolving today and yesterday"). Falls back to the device timezone,
+// then UTC, if the profile hasn't captured one yet.
 const toDateStr = (d) => d.toISOString().split('T')[0];
-const todayStr = () => toDateStr(new Date());
-const yesterdayStr = () => toDateStr(new Date(Date.now() - 86400000));
+
+// Builds Home's Weight chip state from petProfileClient's
+// getWeightSummariesForPets (batched — Weight stays on symptom_logs per
+// spec). Comparison text
+// is "versus previous entry" unless the two most recent entries actually
+// fall on consecutive calendar days (spec §4.4/§9.3).
+function buildWeightState(summary) {
+  if (!summary || summary.deltaLbs == null || !summary.sparkline || summary.sparkline.length < 2) {
+    return { direction: null, comparisonLabel: 'Not enough data' };
+  }
+  const direction = summary.deltaLbs > 0 ? 'up' : summary.deltaLbs < 0 ? 'down' : 'equal';
+  const { sparkline } = summary;
+  const prevDate = new Date(sparkline[sparkline.length - 2].date);
+  const currDate = new Date(sparkline[sparkline.length - 1].date);
+  const consecutive = (currDate - prevDate) === 86400000;
+  return { direction, comparisonLabel: consecutive ? 'versus yesterday' : 'versus previous entry' };
+}
 
 export default function Home() {
   const { user } = useAuth();
+  // Falls back to the device timezone, then UTC, only until the profile's
+  // stored timezone has been captured (AuthContext auto-populates it on
+  // first authenticated load).
+  const timezone = user?.timezone || detectTimezone() || 'UTC';
+  const todayStr = () => todayStrTz(timezone);
+  const yesterdayStr = () => yesterdayStrTz(timezone);
+
   const [pets, setPets] = useState([]);
   const [checkIns, setCheckIns] = useState({}); // pet_id -> today's daily_check_in row
   const [yesterdayCheckIns, setYesterdayCheckIns] = useState({}); // pet_id -> yesterday's row
-  const [wellness, setWellness] = useState({}); // pet_id -> { latest, trend }
-  const [observationValues, setObservationValues] = useState({}); // pet_id -> { code: value }
-  const [logsUnavailable, setLogsUnavailable] = useState(false);
+  const [wellness, setWellness] = useState({}); // pet_id -> { latest, trend } (V2 health_score lives on the same row)
+  const [attributeDirections, setAttributeDirections] = useState({}); // pet_id -> { [code]: direction }
+  const [attributesUnavailable, setAttributesUnavailable] = useState(false);
+  const [weightStates, setWeightStates] = useState({}); // pet_id -> { direction, comparisonLabel, unavailable }
   // Distinct from a hard pets-list failure (loadError) — a failed
   // check-ins fetch alone must not take down the whole page, just show
   // a per-card "unable to load"/"retry" state (Loading States spec).
@@ -72,7 +102,7 @@ export default function Home() {
         const [todayRowsR, yesterdayRowsR, wellnessByPetR, unreadR, medCountsR] = await Promise.allSettled([
           getCheckInsForPets(petIds, todayStr()),
           getCheckInsForPets(petIds, yesterdayStr()),
-          getRecentWellnessForPets(petIds),
+          getRecentWellnessForPets(petIds, 14, todayStr()),
           getUnreadCount(),
           getActiveMedicationCountsForPets(petIds),
         ]);
@@ -88,7 +118,8 @@ export default function Home() {
           setCheckInsUnavailable(true);
         }
 
-        setYesterdayCheckIns(yesterdayRowsR.status === 'fulfilled' ? yesterdayRowsR.value : {});
+        const yesterdayRows = yesterdayRowsR.status === 'fulfilled' ? yesterdayRowsR.value : {};
+        setYesterdayCheckIns(yesterdayRows);
         if (yesterdayRowsR.status === 'rejected') console.error(yesterdayRowsR.reason);
 
         setWellness(wellnessByPetR.status === 'fulfilled' ? wellnessByPetR.value : {});
@@ -101,12 +132,20 @@ export default function Home() {
         if (medCountsR.status === 'rejected') console.error(medCountsR.reason);
 
         try {
-          setObservationValues(await getObservationValuesForCheckIns(todayRows));
-          setLogsUnavailable(false);
+          setAttributeDirections(await getHealthAttributeDirectionsForPets(petIds, todayRows, yesterdayRows));
+          setAttributesUnavailable(false);
         } catch (err) {
           console.error(err);
-          setObservationValues({});
-          setLogsUnavailable(true);
+          setAttributeDirections({});
+          setAttributesUnavailable(true);
+        }
+
+        try {
+          const weightSummaries = await getWeightSummariesForPets(petIds);
+          setWeightStates(Object.fromEntries(activePets.map((p) => [p.id, buildWeightState(weightSummaries[p.id])])));
+        } catch (err) {
+          console.error(err);
+          setWeightStates(Object.fromEntries(activePets.map((p) => [p.id, { direction: null, comparisonLabel: 'Not enough data', unavailable: true }])));
         }
 
         // A pet with no onboarding row, or a row that isn't completed yet,
@@ -118,8 +157,9 @@ export default function Home() {
         setCheckIns({});
         setYesterdayCheckIns({});
         setWellness({});
-        setObservationValues({});
-        setLogsUnavailable(false);
+        setAttributeDirections({});
+        setAttributesUnavailable(false);
+        setWeightStates({});
         setCheckInsUnavailable(false);
         setMedicationCounts({});
         setIncompleteOnboardingIds(new Set());
@@ -138,7 +178,7 @@ export default function Home() {
       hasLoadedOnceRef.current = true;
       setLoading(false);
     }
-  }, []);
+  }, [timezone]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
@@ -151,19 +191,23 @@ export default function Home() {
   // merges it into state, rather than re-running loadData() for every
   // pet on the screen.
   const refreshPetCard = useCallback(async (pet) => {
-    const [todayRow, yesterdayRow, wellnessResult, onboardingRows, medCounts] = await Promise.all([
+    const [todayRow, yesterdayRow, wellnessByPet, onboardingRows, medCounts, weightSummaries] = await Promise.all([
       getCheckIn(pet.id, todayStr()),
       getCheckIn(pet.id, yesterdayStr()),
-      getLatestWellness(pet.id),
+      getRecentWellnessForPets([pet.id], 14, todayStr()),
       entities.PetOnboarding.filter({ pet_id: pet.id }),
       getActiveMedicationCountsForPets([pet.id]),
+      getWeightSummariesForPets([pet.id]),
     ]);
-    const values = await getObservationValuesForCheckIns({ [pet.id]: todayRow });
+    const wellnessResult = wellnessByPet[pet.id];
+    const weightSummary = weightSummaries[pet.id];
+    const directions = await getHealthAttributeDirectionsForPets([pet.id], { [pet.id]: todayRow }, { [pet.id]: yesterdayRow });
 
     setCheckIns((prev) => ({ ...prev, [pet.id]: todayRow }));
     setYesterdayCheckIns((prev) => ({ ...prev, [pet.id]: yesterdayRow }));
     setWellness((prev) => ({ ...prev, [pet.id]: wellnessResult }));
-    setObservationValues((prev) => ({ ...prev, [pet.id]: values[pet.id] }));
+    setAttributeDirections((prev) => ({ ...prev, [pet.id]: directions[pet.id] }));
+    setWeightStates((prev) => ({ ...prev, [pet.id]: buildWeightState(weightSummary) }));
     setMedicationCounts((prev) => ({ ...prev, [pet.id]: medCounts[pet.id] || 0 }));
     setIncompleteOnboardingIds((prev) => {
       const next = new Set(prev);
@@ -171,7 +215,7 @@ export default function Home() {
       if (completed) next.delete(pet.id); else next.add(pet.id);
       return next;
     });
-  }, []);
+  }, [timezone]);
 
   const handleStartCheckIn = (pet) => {
     track('daily_check_in_started', { pet_id: pet.id, check_in_date: todayStr() });
@@ -286,10 +330,11 @@ export default function Home() {
                   <div key={pet.id} className="space-y-2">
                     <PetSummaryCard
                       pet={pet}
-                      wellness={wellness[pet.id]}
+                      healthScore={wellness[pet.id]?.healthScore}
                       checkIn={checkIns[pet.id]}
-                      observationValues={observationValues[pet.id]}
-                      logsUnavailable={logsUnavailable}
+                      attributeDirections={attributeDirections[pet.id]}
+                      attributesUnavailable={attributesUnavailable}
+                      weight={weightStates[pet.id]}
                       medicationCount={medicationCounts[pet.id] || 0}
                     />
                     <CheckInStatusBanner
@@ -318,6 +363,7 @@ export default function Home() {
         <DailyCheckInModal
           pet={checkInSheet.pet}
           checkInDate={checkInSheet.date}
+          isCatchUp={!!checkInSheet.isCatchUp}
           existingCheckIn={(checkInSheet.isCatchUp ? yesterdayCheckIns : checkIns)[checkInSheet.pet.id] || null}
           onClose={() => setCheckInSheet(null)}
           onComplete={() => {

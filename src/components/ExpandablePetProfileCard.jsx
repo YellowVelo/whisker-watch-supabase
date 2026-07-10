@@ -23,6 +23,7 @@ export default function ExpandablePetProfileCard({ pet, highlighted = false, car
     >
       <PetProfileContent
         petId={pet.id}
+        context="pets"
         expanded={expanded}
         onToggleExpanded={() => setExpanded((v) => !v)}
       />

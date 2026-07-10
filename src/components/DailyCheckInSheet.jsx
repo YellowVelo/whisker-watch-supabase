@@ -48,8 +48,13 @@ export default function DailyCheckInSheet({ pet, date, onClose, onSaved, isCatch
     setError(null);
     try {
       track('daily_check_in_marked_normal', { pet_id: pet.id, check_in_date: date });
-      await markNormal(pet.id, date);
+      const { healthScoreResult } = await markNormal(pet.id, date);
       track('wellness_score_calculated', { pet_id: pet.id, check_in_date: date, score: 100 });
+      track('health_score_calculated', {
+        pet_id: pet.id, check_in_date: date, health_score: healthScoreResult.score, max_score: 10,
+        total_deductions: healthScoreResult.totalDeduction, deductions_by_attribute: healthScoreResult.deductionsByAttribute,
+        score_version: 'health_score_v2',
+      });
       onSaved?.();
     } catch (err) {
       console.error(err);
@@ -97,10 +102,15 @@ export default function DailyCheckInSheet({ pet, date, onClose, onSaved, isCatch
         }))
         .filter((sel) => sel.value != null || sel.numericValue != null || sel.notes);
 
-      await saveChangedCheckIn(pet.id, date, selections);
+      const { healthScoreResult } = await saveChangedCheckIn(pet.id, date, selections);
       track('observation_saved', { pet_id: pet.id, check_in_date: date, categories: selectedCodes });
       track('daily_check_in_marked_changed', { pet_id: pet.id, check_in_date: date, categories: selectedCodes });
       track('wellness_score_calculated', { pet_id: pet.id, check_in_date: date });
+      track('health_score_calculated', {
+        pet_id: pet.id, check_in_date: date, health_score: healthScoreResult.score, max_score: 10,
+        total_deductions: healthScoreResult.totalDeduction, deductions_by_attribute: healthScoreResult.deductionsByAttribute,
+        score_version: 'health_score_v2',
+      });
       if (isCatchUp) track('catch_up_completed', { pet_id: pet.id, check_in_date: date, status: 'changed' });
       onSaved?.();
     } catch (err) {

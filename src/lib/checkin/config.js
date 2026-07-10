@@ -198,6 +198,31 @@ export const CATEGORIES = [
   },
 ];
 
+// Health Score Revision V2 — the single source of truth for which
+// categories may affect the 0-10 Health Score, which are display-only
+// "Wellbeing" chips, and which are tracked separately (Weight). Anything
+// that groups categories for scoring/chip purposes must import these
+// rather than re-deriving its own list (spec §12.5: "Do not duplicate
+// these lists across pages or components").
+export const HEALTH_SCORE_ATTRIBUTES = [
+  'appetite',
+  'water_intake',
+  'bathroom',
+  'stool',
+  'vomiting',
+];
+
+export const WELLBEING_ATTRIBUTES = [
+  'energy',
+  'mobility',
+  'breathing',
+  'itching',
+];
+
+export const SEPARATE_TRACKED_ATTRIBUTES = [
+  'weight',
+];
+
 export function getCategory(code) {
   return CATEGORIES.find((c) => c.code === code);
 }

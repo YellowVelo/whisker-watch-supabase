@@ -71,3 +71,27 @@ export function isManualTimezoneChange({ timezoneIsManual, timezone, previousTim
   const justBecameManual = !previousTimezoneIsManual;
   return valueChanged || justBecameManual;
 }
+
+// Health Score V2 — daily date-boundary helpers (spec: "Use the user's
+// stored timezone when resolving today and yesterday" / "Daily date
+// boundaries must use the user's stored timezone, not UTC midnight").
+// Pure and dependency-free like the rest of this file; falls back to UTC
+// when no valid timezone is supplied so callers that haven't threaded a
+// timezone through yet keep their previous (UTC-based) behavior.
+const SAFE_TIMEZONE = 'UTC';
+
+// en-CA locale formats as YYYY-MM-DD directly, avoiding a manual
+// day/month/year re-assembly from Intl.DateTimeFormat's part list.
+export function dateStrInTimezone(timezone, offsetDays = 0) {
+  const tz = isValidIanaTimezone(timezone) ? timezone : SAFE_TIMEZONE;
+  const instant = new Date(Date.now() + offsetDays * 86400000);
+  return new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).format(instant);
+}
+
+export function todayInTimezone(timezone) {
+  return dateStrInTimezone(timezone, 0);
+}
+
+export function yesterdayInTimezone(timezone) {
+  return dateStrInTimezone(timezone, -1);
+}

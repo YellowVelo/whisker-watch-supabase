@@ -9,23 +9,26 @@
 import { supabase } from '@/api/supabaseClient';
 import { entities } from '@/api/entities';
 import { invokeAI } from '@/api/aiClient';
-import { computeTrend } from './scoring';
+import { computeTrend, computeHealthScoreDirection } from './scoring';
 import { loadObservationCatalog } from './checkinClient';
 import { getCategory } from './config';
 import { PALETTE } from '@/lib/toneColors';
+import { dateStrInTimezone } from '@/lib/timezone';
 
 export const RANGE_DAYS = { '24H': 5, '7D': 7, '30D': 30, '90D': 90, '1Y': 365 };
 export const RANGE_OPTIONS = ['24H', '7D', '30D', '90D', '1Y'];
 
-const todayStr = () => new Date().toISOString().split('T')[0];
+// `timezone` is threaded through from the caller (PetTrends.jsx, via the
+// signed-in user's stored timezone) so "today"/"yesterday" here agree with
+// Home's — a plain UTC comparison would disagree with a check-in saved
+// under the user's local date in the evening (spec §24: "Daily date
+// boundaries must use the user's stored timezone, not UTC midnight").
+// Falls back to UTC (dateStrInTimezone's own default) if omitted.
+const todayStr = (timezone) => dateStrInTimezone(timezone, 0);
 
-function cutoffDateStr(days) {
-  const d = new Date();
-  d.setDate(d.getDate() - days);
-  return d.toISOString().split('T')[0];
+function cutoffDateStr(days, timezone) {
+  return dateStrInTimezone(timezone, -days);
 }
-
-const TREND_STATUS_LABEL = { stable: 'Stable', improving: 'Improving', monitor: 'Monitor', declining: 'Declining', unknown: 'Unknown' };
 
 // Behavioral scale shared by every ObservationCard (Appetite/Water
 // Intake/Energy), per the spec's 5-point legend (Much More/More/Normal/
@@ -43,17 +46,22 @@ export const OBSERVATION_LEVELS = {
 export const LEVEL_LABEL = { '-2': 'Much Less', '-1': 'Less', 0: 'Normal', 1: 'More', 2: 'Much More' };
 export const LEVEL_COLOR = { '-2': PALETTE.red, '-1': PALETTE.amber, 0: PALETTE.gray, 1: PALETTE.teal, 2: PALETTE.teal };
 
-// Wellness Score card + chart. `series` is oldest-first for charting;
-// current/delta/statusLabel describe "today" (or the latest scored day).
-export async function getWellnessScoreTrend(petId, range) {
+// Health Score V2 card + chart (spec §22). `series` is oldest-first for
+// charting and only ever includes V2-scored rows (health_score_version ===
+// 'health_score_v2') — legacy 0-100 rows are never mixed into this line,
+// even though they live in the same `wellness_scores` table (spec §12.4:
+// "Begin the V2 Health Score chart on the first V2 score date" / "Do not
+// mix legacy 0-100 and V2 0-10 values in one chart line").
+export async function getWellnessScoreTrend(petId, range, timezone) {
   const days = RANGE_DAYS[range] ?? RANGE_DAYS['24H'];
   const rows = await entities.WellnessScore.filter({ pet_id: petId }, '-check_in_date', Math.max(days, 14));
-  const hasAnyData = rows.length > 0;
-  const cutoff = cutoffDateStr(days);
-  const inRange = rows.filter((r) => r.check_in_date >= cutoff).slice().reverse();
+  const v2Rows = rows.filter((r) => r.health_score_version === 'health_score_v2' && r.health_score != null);
+  const hasAnyData = v2Rows.length > 0;
+  const cutoff = cutoffDateStr(days, timezone);
+  const inRange = v2Rows.filter((r) => r.check_in_date >= cutoff).slice().reverse();
 
   if (inRange.length === 0) {
-    return { hasAnyData, series: [], current: null, max: 100, statusLabel: null, deltaFromYesterday: null };
+    return { hasAnyData, series: [], current: null, max: 10, direction: 'unknown', directionReason: hasAnyData ? null : 'no_checkin_today' };
   }
 
   // "Current"/"Today" values only surface when the most recent row is
@@ -63,20 +71,41 @@ export async function getWellnessScoreTrend(petId, range) {
   // Principle 10 ("Honest Uncertainty"). The chart's `series` still shows
   // whatever history exists in range regardless — only the "current"
   // headline is gated.
-  const latest = rows[0];
-  const isLatestToday = latest.check_in_date === todayStr();
-  const yesterdayStr = cutoffDateStr(1);
-  const yesterdayRow = rows.find((r) => r.check_in_date === yesterdayStr);
-  const deltaFromYesterday = isLatestToday && yesterdayRow ? latest.score - yesterdayRow.score : null;
-  const trend = computeTrend(rows);
+  const latest = v2Rows[0];
+  const isLatestToday = latest.check_in_date === todayStr(timezone);
+  if (!isLatestToday) {
+    return { hasAnyData, series: inRange.map((r) => ({ date: r.check_in_date, value: r.health_score })), current: null, max: 10, direction: 'unknown', directionReason: 'no_checkin_today' };
+  }
+
+  const yesterdayCutoff = cutoffDateStr(1, timezone);
+  const yesterdayRow = v2Rows.find((r) => r.check_in_date === yesterdayCutoff);
+  const direction = computeHealthScoreDirection(latest.health_score, yesterdayRow?.health_score ?? null, 'normal', yesterdayRow ? 'normal' : null);
+  let directionReason = null;
+  if (direction === 'unknown') {
+    // `rows` is bounded to Math.max(days, 14) entries, so "no V2 row for
+    // yesterday in that window" doesn't by itself distinguish a genuinely
+    // first-ever scored day (spec: "First day logged") from a pet with
+    // real but sparse history further back (spec: "Not enough data") — a
+    // single targeted existence check resolves it rather than trusting
+    // the bounded window's row count.
+    const { data: earlierRows, error: earlierError } = await supabase
+      .from('wellness_scores')
+      .select('id')
+      .eq('pet_id', petId)
+      .eq('health_score_version', 'health_score_v2')
+      .lt('check_in_date', latest.check_in_date)
+      .limit(1);
+    if (earlierError) throw earlierError;
+    directionReason = earlierRows.length > 0 ? 'missing_yesterday' : 'first_day';
+  }
 
   return {
     hasAnyData,
-    series: inRange.map((r) => ({ date: r.check_in_date, value: r.score })),
-    current: isLatestToday ? latest.score : null,
-    max: 100,
-    statusLabel: isLatestToday ? (TREND_STATUS_LABEL[trend] || 'Unknown') : null,
-    deltaFromYesterday,
+    series: inRange.map((r) => ({ date: r.check_in_date, value: r.health_score })),
+    current: latest.health_score,
+    max: 10,
+    direction,
+    directionReason,
   };
 }
 
@@ -89,10 +118,10 @@ export async function getWellnessScoreTrend(petId, range) {
 //   - status === 'skipped' -> "skipped" (visually distinct from missing)
 //   - a scorable check-in with no observation for this code -> "normal"/baseline
 //   - a scorable check-in with an observation for this code -> that option's bucket
-export async function getObservationTrend(petId, code, range) {
+export async function getObservationTrend(petId, code, range, timezone) {
   const days = RANGE_DAYS[range] ?? RANGE_DAYS['24H'];
   const category = getCategory(code);
-  const cutoff = cutoffDateStr(days);
+  const cutoff = cutoffDateStr(days, timezone);
 
   const [catalog, checkIns] = await Promise.all([
     loadObservationCatalog(),
@@ -131,7 +160,7 @@ export async function getObservationTrend(petId, code, range) {
   // Same "must actually be today" rule as getWellnessScoreTrend — a stale
   // in-range point must never be presented as today's current state.
   const latest = series[series.length - 1];
-  const isLatestToday = latest?.date === todayStr();
+  const isLatestToday = latest?.date === todayStr(timezone);
   const { currentLabel, currentSubtitle } = isLatestToday
     ? describeCurrentState(category, entry, latest)
     : { currentLabel: null, currentSubtitle: null };
@@ -153,11 +182,11 @@ function describeCurrentState(category, catalogEntry, latestPoint) {
 // weight is written (Data Model §3.8). Delta compares the two most recent
 // entries (no true baseline exists yet), same documented limitation as
 // the existing Pet Profile Weight card.
-export async function getWeightTrend(petId, range) {
+export async function getWeightTrend(petId, range, timezone) {
   const days = RANGE_DAYS[range] ?? RANGE_DAYS['24H'];
   const logs = await entities.SymptomLog.filter({ pet_id: petId }, '-date', 400);
   const hasAnyData = logs.some((l) => l.weight_grams != null);
-  const cutoff = cutoffDateStr(days);
+  const cutoff = cutoffDateStr(days, timezone);
 
   const toLbs = (grams) => Math.round((grams / 453.59237) * 10) / 10;
   const withWeight = logs
@@ -193,7 +222,7 @@ export async function getInsightSummary(petId, petName, { wellness, appetite, wa
   const describe = (label, obs) => `${label}: ${obs?.currentLabel || 'No Data'}${obs?.currentSubtitle ? ` (${obs.currentSubtitle})` : ''}`;
   const context = [
     `Pet: ${petName}`,
-    `Wellness Score: ${wellness?.current ?? 'No Data'} / 100, status ${wellness?.statusLabel || 'Unknown'}`,
+    `Health Score: ${wellness?.current ?? 'No Data'} / 10`,
     describe('Appetite', appetite),
     describe('Water Intake', waterIntake),
     describe('Energy', energy),

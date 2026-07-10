@@ -12,6 +12,8 @@ import { RANGE_OPTIONS } from '@/lib/checkin/trendsClient';
 import { getPetLabel } from '@/lib/speciesConfig';
 import { track } from '@/lib/analytics';
 import { PALETTE } from '@/lib/toneColors';
+import { useAuth } from '@/lib/AuthContext';
+import { detectTimezone } from '@/lib/timezone';
 
 // "Trends" here is the legacy per-metric symptom_logs charts (previously
 // PetProfileTabs' own "Trends" tab) — kept alive as a sub-tab of this
@@ -30,6 +32,13 @@ export default function PetTrends() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const activeSection = searchParams.get('section') || 'overview';
+  const { user } = useAuth();
+  // Health Score Revision V2 — "today"/cutoff dates for every card on this
+  // screen must agree with Home's, which uses the user's stored timezone
+  // (spec §24). Without this, a check-in saved under the local evening
+  // date would show as "not checked in today" here once UTC has already
+  // rolled to the next calendar day.
+  const timezone = user?.timezone || detectTimezone() || 'UTC';
 
   const [pet, setPet] = useState(null);
   const [logs, setLogs] = useState([]);
@@ -207,12 +216,12 @@ export default function PetTrends() {
               </div>
 
               <div className="space-y-3">
-                <WellnessScoreCard petId={petId} range={debouncedRange} isMemorial={pet.is_memorial} />
-                <ObservationCard petId={petId} range={debouncedRange} code="appetite" label="Appetite" icon={UtensilsCrossed} />
-                <ObservationCard petId={petId} range={debouncedRange} code="water_intake" label="Water Intake" icon={Droplets} />
-                <ObservationCard petId={petId} range={debouncedRange} code="energy" label="Energy" icon={Zap} />
-                <WeightCard petId={petId} range={debouncedRange} />
-                <InsightSummaryCard petId={petId} petName={pet.name} range={debouncedRange} />
+                <WellnessScoreCard petId={petId} range={debouncedRange} isMemorial={pet.is_memorial} timezone={timezone} />
+                <ObservationCard petId={petId} range={debouncedRange} code="appetite" label="Appetite" icon={UtensilsCrossed} timezone={timezone} />
+                <ObservationCard petId={petId} range={debouncedRange} code="water_intake" label="Water Intake" icon={Droplets} timezone={timezone} />
+                <ObservationCard petId={petId} range={debouncedRange} code="energy" label="Energy" icon={Zap} timezone={timezone} />
+                <WeightCard petId={petId} range={debouncedRange} timezone={timezone} />
+                <InsightSummaryCard petId={petId} petName={pet.name} range={debouncedRange} timezone={timezone} />
               </div>
             </>
           )}

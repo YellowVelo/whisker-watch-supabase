@@ -14,7 +14,10 @@ import EditPetSheet from './EditPetSheet';
 import MemorialDialog from './MemorialDialog';
 import DailyCheckInModal from './DailyCheckInModal';
 import { track } from '@/lib/analytics';
-import { getLatestWellness, getObservationValuesForCheckIns, getCheckIn } from '@/lib/checkin/checkinClient';
+import {
+  getLatestWellness, getObservationValuesForCheckIns, getCheckIn, getWellbeingDirections,
+  yesterdayStr as yesterdayStrTz,
+} from '@/lib/checkin/checkinClient';
 import { getChipState } from '@/lib/checkin/chipLabels';
 import {
   getWellnessRingScores, getWeightSummary, getVaccinationSummary, getTimelineEvents, getHealthRecordsCount,
@@ -22,10 +25,24 @@ import {
 import { getPetLabel } from '@/lib/speciesConfig';
 import { computeDetailedAge } from '@/lib/lifeStage';
 import { PALETTE, RING_COLOR } from '@/lib/toneColors';
+import { useAuth } from '@/lib/AuthContext';
+import { detectTimezone, dateStrInTimezone } from '@/lib/timezone';
+import AttributeTrendChip from '@/components/AttributeTrendChip';
+import { WELLBEING_ATTRIBUTES } from '@/lib/checkin/config';
+
+// Health Score Revision V2 (spec §10) — the Pets-tab card's Wellbeing
+// chips, always Energy/Mobility/Breathing/Itching in this order.
+const WELLBEING_CHIP_LABELS = { energy: 'Energy', mobility: 'Mobility', breathing: 'Breathing', itching: 'Skin / Itching' };
 
 const STATUS_TONE = { Stable: 'good', Improving: 'good', Lower: 'warn', Monitor: 'warn' };
 
-const todayStr = () => new Date().toISOString().split('T')[0];
+// `timezone` threaded through from the main component below (the signed-in
+// user's stored timezone, spec §24). WeightQuickLogSheet doesn't have
+// access to that context and keeps the UTC fallback — a late-night weight
+// log landing on the "wrong" UTC date is a pre-existing, lower-stakes gap
+// than the Wellness/Check-In "is this today" comparisons below, which this
+// feature's V2 chips on Home now get right.
+const todayStr = (timezone) => dateStrInTimezone(timezone, 0);
 
 // Fixed Observations chip slots (Feature Spec §9) — labels/state come from
 // the shared chipLabels module so this screen and the Pets screen's
@@ -215,9 +232,11 @@ function ActionPill({ icon: Icon, label, onClick, danger, disabled }) {
 // standalone `/pet/:petId` route (PetProfile.jsx) and the expandable Pets-
 // tab card (ExpandablePetProfileCard) render the exact same data-loading
 // and business logic instead of keeping two copies in sync.
-export default function PetProfileContent({ petId, onReload, expanded = true, onToggleExpanded }) {
+export default function PetProfileContent({ petId, onReload, expanded = true, onToggleExpanded, context = 'profile' }) {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
+  const { user } = useAuth();
+  const timezone = user?.timezone || detectTimezone() || 'UTC';
 
   const [pet, setPet] = useState(null);
   const [petError, setPetError] = useState(false);
@@ -226,6 +245,9 @@ export default function PetProfileContent({ petId, onReload, expanded = true, on
 
   const [wellness, setWellness] = useState(null);
   const [ringScores, setRingScores] = useState({ appetite: {}, energy: {}, symptoms: {} });
+  // Health Score Revision V2 — only populated in context="pets" (spec §10).
+  const [wellbeingDirections, setWellbeingDirections] = useState(null);
+  const [wellbeingUnavailable, setWellbeingUnavailable] = useState(false);
   const [weightSummary, setWeightSummary] = useState(null);
   const [medications, setMedications] = useState([]);
   const [foods, setFoods] = useState([]);
@@ -295,9 +317,9 @@ export default function PetProfileContent({ petId, onReload, expanded = true, on
 
     const [wellnessR, ringScoresR, weightR, checkInR] = await Promise.allSettled([
       getLatestWellness(petId),
-      getWellnessRingScores(petId),
+      getWellnessRingScores(petId, 14, timezone),
       getWeightSummary(petId),
-      getCheckIn(petId, todayStr()),
+      getCheckIn(petId, todayStr(timezone)),
     ]);
 
     const nextErrors = {};
@@ -316,12 +338,28 @@ export default function PetProfileContent({ petId, onReload, expanded = true, on
     setWeightSummary(weightR.status === 'fulfilled' ? weightR.value : null);
     if (weightR.status === 'rejected') { console.error(weightR.reason); nextErrors.weight = true; }
 
+    // Wellbeing chips (Energy/Mobility/Breathing/Itching, spec §10.2) are
+    // only rendered in the Pets-tab collapsed card, so this extra fetch is
+    // skipped entirely for the standalone Pet Profile route.
+    if (context === 'pets') {
+      try {
+        const todayCheckIn = checkInR.status === 'fulfilled' ? checkInR.value : null;
+        const yesterdayCheckIn = await getCheckIn(petId, yesterdayStrTz(timezone));
+        setWellbeingDirections(await getWellbeingDirections(petId, todayCheckIn, yesterdayCheckIn));
+        setWellbeingUnavailable(false);
+      } catch (err) {
+        console.error(err);
+        setWellbeingDirections(null);
+        setWellbeingUnavailable(true);
+      }
+    }
+
     setTodayCheckIn(checkInR.status === 'fulfilled' ? checkInR.value : null);
     if (checkInR.status === 'rejected') { console.error(checkInR.reason); nextErrors.observations = true; }
 
     setErrors((prev) => ({ ...prev, ...nextErrors }));
     setDetailsLoading(false);
-  }, [petId]);
+  }, [petId, timezone, context]);
 
   const loadFullDetails = useCallback(async () => {
     setFullDetailsLoading(true);
@@ -335,7 +373,7 @@ export default function PetProfileContent({ petId, onReload, expanded = true, on
       entities.PetOnboarding.filter({ pet_id: petId }),
       getTimelineEvents(petId),
       getHealthRecordsCount(petId),
-      getCheckIn(petId, todayStr()),
+      getCheckIn(petId, todayStr(timezone)),
     ]);
 
     const [medsR, foodsR, vaxR, onboardingR, timelineR, healthRecordsR, checkInR] = results;
@@ -345,7 +383,7 @@ export default function PetProfileContent({ petId, onReload, expanded = true, on
     setMedications(medsR.status === 'fulfilled' ? medsR.value : []);
     if (medsR.status === 'rejected') { console.error(medsR.reason); nextErrors.medications = true; }
 
-    const todayStrVal = todayStr();
+    const todayStrVal = todayStr(timezone);
     setFoods(foodsR.status === 'fulfilled' ? foodsR.value.filter((f) => f.active && (!f.end_date || f.end_date >= todayStrVal)) : []);
     if (foodsR.status === 'rejected') { console.error(foodsR.reason); nextErrors.food = true; }
 
@@ -380,7 +418,7 @@ export default function PetProfileContent({ petId, onReload, expanded = true, on
     setErrors((prev) => ({ ...prev, ...nextErrors }));
     setFullDetailsLoading(false);
     setFullDetailsLoaded(true);
-  }, [petId]);
+  }, [petId, timezone]);
 
   // Reloads whatever this instance currently has loaded — used for pull-
   // to-refresh and after a save (check-in/edit/memorial/weight) so an
@@ -400,7 +438,7 @@ export default function PetProfileContent({ petId, onReload, expanded = true, on
 
   useEffect(() => {
     if (searchParams.get('startCheckin') === '1') {
-      track('daily_check_in_started', { pet_id: petId, check_in_date: todayStr() });
+      track('daily_check_in_started', { pet_id: petId, check_in_date: todayStr(timezone) });
       setCheckInOpen(true);
       setSearchParams((prev) => { prev.delete('startCheckin'); return prev; }, { replace: true });
     }
@@ -477,14 +515,14 @@ export default function PetProfileContent({ petId, onReload, expanded = true, on
   const isPrimaryOwner = currentUserId && pet.created_by === currentUserId;
   const hasLinkedCoOwner = petCoOwners.some((c) => c.co_owner_user_id);
   const age = computeDetailedAge(pet);
-  const checkedInToday = todayCheckIn?.check_in_date === todayStr();
+  const checkedInToday = todayCheckIn?.check_in_date === todayStr(timezone);
 
-  const wellnessScore = wellness?.latest?.check_in_date === todayStr() ? wellness.latest.score : null;
-  const wellnessStatus = wellness?.latest?.check_in_date === todayStr()
+  const wellnessScore = wellness?.latest?.check_in_date === todayStr(timezone) ? wellness.latest.score : null;
+  const wellnessStatus = wellness?.latest?.check_in_date === todayStr(timezone)
     ? { stable: 'Stable', improving: 'Improving', monitor: 'Monitor', declining: 'Lower', unknown: null }[wellness.trend]
     : null;
   const lastUpdated = wellness?.latest
-    ? (wellness.latest.check_in_date === todayStr()
+    ? (wellness.latest.check_in_date === todayStr(timezone)
         ? `Today at ${format(parseISO(wellness.latest.created_at || new Date().toISOString()), 'h:mm a')}`
         : format(parseISO(wellness.latest.check_in_date), 'MMM d'))
     : pet.updated_at ? format(parseISO(pet.updated_at), 'MMM d') : null;
@@ -553,41 +591,67 @@ export default function PetProfileContent({ petId, onReload, expanded = true, on
           <PetProfileDetailsSkeleton />
         ) : (
           <>
-            {/* ── WELLNESS SUMMARY ── */}
+            {/* ── WELLNESS SUMMARY / WELLBEING CHIPS ── */}
             {/* Always visible — this and the identity block above are the
                 Pets-tab card's collapsed state (Nav + Daily Check-In UX
                 Refresh spec #6: "Collapse info after the top circles").
                 Everything below (actions + nav cards) only renders when
-                expanded. */}
-            <div className="rounded-2xl px-4 pt-5 pb-4" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}>
-              {errors.wellness ? (
-                <p className="text-base text-white/40 text-center py-4">Unable to load wellness summary.</p>
-              ) : (
-                <div className="flex items-start justify-between gap-1">
-                  <button onClick={() => setCheckInOpen(true)} aria-label="Open Daily Check-In">
-                    <WellnessRing icon={Activity} score={wellnessScore} maxScore={100} label="Wellness" statusLabel={wellnessStatus} />
-                  </button>
-                  <button onClick={() => setCheckInOpen(true)} aria-label="Open Daily Check-In">
-                    <WellnessRing icon={UtensilsCrossed} score={ringScores.appetite.score} maxScore={100} label="Appetite" statusLabel={ringScores.appetite.statusLabel} />
-                  </button>
-                  <button onClick={() => setCheckInOpen(true)} aria-label="Open Daily Check-In">
-                    <WellnessRing icon={Zap} score={ringScores.energy.score} maxScore={100} label="Energy" statusLabel={ringScores.energy.statusLabel} />
-                  </button>
-                  <button onClick={() => setCheckInOpen(true)} aria-label="Open Daily Check-In">
-                    <WellnessRing icon={Heart} score={ringScores.symptoms.score} maxScore={100} label="Symptoms" statusLabel={ringScores.symptoms.statusLabel} />
-                  </button>
-                  <button onClick={() => setWeightLogOpen(true)} aria-label="Log weight">
-                    <WellnessRing icon={Scale} score={weightSummary?.score} maxScore={100} label="Weight" statusLabel={weightSummary?.statusLabel} />
-                  </button>
-                </div>
-              )}
-              <div className="flex items-center gap-1.5 mt-4 pt-3" style={{ borderTop: '1px solid rgba(255,255,255,0.07)' }}>
-                <Calendar className="h-3.5 w-3.5 text-white/30" />
-                <p className="text-[13px] text-white/35">
-                  {lastUpdated ? `Last updated ${lastUpdated}` : 'No wellness data yet'}
-                </p>
+                expanded.
+                Health Score Revision V2 (spec §10): the Pets-tab card
+                (context="pets") shows four Wellbeing directional chips
+                instead of the legacy 0-100 rings + Stable/Monitor wording
+                — no Health Score is ever shown here. The standalone Pet
+                Profile route (context="profile", the default) keeps the
+                original rings unchanged; that page is explicitly out of
+                scope for this feature. */}
+            {context === 'pets' ? (
+              <div className="rounded-2xl px-4 py-4" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                {wellbeingUnavailable ? (
+                  <p className="text-base text-white/40 text-center py-4">Unable to load wellbeing.</p>
+                ) : (
+                  <div className="grid grid-cols-2 gap-2">
+                    {WELLBEING_ATTRIBUTES.map((code) => (
+                      <AttributeTrendChip
+                        key={code}
+                        label={WELLBEING_CHIP_LABELS[code]}
+                        direction={wellbeingDirections?.[code]}
+                        state={!wellbeingDirections ? 'loading' : !checkedInToday ? 'no-checkin' : 'ready'}
+                      />
+                    ))}
+                  </div>
+                )}
               </div>
-            </div>
+            ) : (
+              <div className="rounded-2xl px-4 pt-5 pb-4" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                {errors.wellness ? (
+                  <p className="text-base text-white/40 text-center py-4">Unable to load wellness summary.</p>
+                ) : (
+                  <div className="flex items-start justify-between gap-1">
+                    <button onClick={() => setCheckInOpen(true)} aria-label="Open Daily Check-In">
+                      <WellnessRing icon={Activity} score={wellnessScore} maxScore={100} label="Wellness" statusLabel={wellnessStatus} />
+                    </button>
+                    <button onClick={() => setCheckInOpen(true)} aria-label="Open Daily Check-In">
+                      <WellnessRing icon={UtensilsCrossed} score={ringScores.appetite.score} maxScore={100} label="Appetite" statusLabel={ringScores.appetite.statusLabel} />
+                    </button>
+                    <button onClick={() => setCheckInOpen(true)} aria-label="Open Daily Check-In">
+                      <WellnessRing icon={Zap} score={ringScores.energy.score} maxScore={100} label="Energy" statusLabel={ringScores.energy.statusLabel} />
+                    </button>
+                    <button onClick={() => setCheckInOpen(true)} aria-label="Open Daily Check-In">
+                      <WellnessRing icon={Heart} score={ringScores.symptoms.score} maxScore={100} label="Symptoms" statusLabel={ringScores.symptoms.statusLabel} />
+                    </button>
+                    <button onClick={() => setWeightLogOpen(true)} aria-label="Log weight">
+                      <WellnessRing icon={Scale} score={weightSummary?.score} maxScore={100} label="Weight" statusLabel={weightSummary?.statusLabel} />
+                    </button>
+                  </div>
+                )}
+                <div className="flex items-center gap-1.5 mt-4 pt-3" style={{ borderTop: '1px solid rgba(255,255,255,0.07)' }}>
+                  <Calendar className="h-3.5 w-3.5 text-white/30" />
+                  <p className="text-[13px] text-white/35">
+                    {lastUpdated ? `Last updated ${lastUpdated}` : 'No wellness data yet'}
+                  </p>
+                </div>
+              </div>
+            )}
 
             <ExpandToggle expanded={expanded} onToggleExpanded={onToggleExpanded} />
           </>
@@ -735,7 +799,8 @@ export default function PetProfileContent({ petId, onReload, expanded = true, on
       {checkInOpen && (
         <DailyCheckInModal
           pet={pet}
-          checkInDate={todayStr()}
+          checkInDate={todayStr(timezone)}
+          isCatchUp={false}
           existingCheckIn={todayCheckIn}
           onClose={() => setCheckInOpen(false)}
           onComplete={() => { setCheckInOpen(false); reloadAll(); }}

@@ -12,7 +12,7 @@ import { getInsightSummary, getWellnessScoreTrend, getObservationTrend, getWeigh
 // cards' state) so a failure/slow fetch in one metric card can never
 // block or couple to this one — per spec, "Other cards continue
 // functioning" if any one card (including this one) fails.
-export default function InsightSummaryCard({ petId, petName, range }) {
+export default function InsightSummaryCard({ petId, petName, range, timezone }) {
   const [state, setState] = useState({ loading: true, error: false, summary: null });
 
   useEffect(() => {
@@ -20,18 +20,18 @@ export default function InsightSummaryCard({ petId, petName, range }) {
     setState({ loading: true, error: false, summary: null });
     (async () => {
       const [wellness, appetite, waterIntake, energy, weight] = await Promise.all([
-        getWellnessScoreTrend(petId, range),
-        getObservationTrend(petId, 'appetite', range),
-        getObservationTrend(petId, 'water_intake', range),
-        getObservationTrend(petId, 'energy', range),
-        getWeightTrend(petId, range),
+        getWellnessScoreTrend(petId, range, timezone),
+        getObservationTrend(petId, 'appetite', range, timezone),
+        getObservationTrend(petId, 'water_intake', range, timezone),
+        getObservationTrend(petId, 'energy', range, timezone),
+        getWeightTrend(petId, range, timezone),
       ]);
       return getInsightSummary(petId, petName, { wellness, appetite, waterIntake, energy, weight });
     })()
       .then((summary) => { if (!cancelled) setState({ loading: false, error: false, summary }); })
       .catch(() => { if (!cancelled) setState({ loading: false, error: true, summary: null }); });
     return () => { cancelled = true; };
-  }, [petId, petName, range]);
+  }, [petId, petName, range, timezone]);
 
   const { loading, error, summary } = state;
 

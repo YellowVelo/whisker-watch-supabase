@@ -15,6 +15,7 @@ import { supabase } from '@/api/supabaseClient';
 import { entities } from '@/api/entities';
 import { computeDayScore, computeTrend } from './scoring';
 import { loadObservationCatalog } from './checkinClient';
+import { dateStrInTimezone } from '@/lib/timezone';
 
 // "Symptoms" rolls up every Daily Check-In category except the ones with
 // their own ring (appetite/energy) or no ring (weight/other) — mirrors
@@ -24,7 +25,9 @@ const RING_GROUPS = { appetite: ['appetite'], energy: ['energy'], symptoms: SYMP
 
 const TREND_STATUS_LABEL = { stable: 'Stable', improving: 'Improving', monitor: 'Monitor', declining: 'Lower', unknown: null };
 
-const todayStr = () => new Date().toISOString().split('T')[0];
+// `timezone` threaded through from the caller (PetProfileContent.jsx) so
+// "today" here agrees with Home's timezone-aware date (spec §24).
+const todayStr = (timezone) => dateStrInTimezone(timezone, 0);
 
 // Single fetch of the pet's recent daily_check_ins + observations, then
 // scored per ring group client-side — one round trip total instead of one
@@ -35,7 +38,7 @@ const todayStr = () => new Date().toISOString().split('T')[0];
 // scorable day isn't today reports no data rather than silently surfacing
 // a days-old number next to a Wellness ring that would show "No Data" for
 // the same gap.
-export async function getWellnessRingScores(petId, days = 14) {
+export async function getWellnessRingScores(petId, days = 14, timezone) {
   const empty = { score: null, statusLabel: null };
   const result = { appetite: empty, energy: empty, symptoms: empty };
 
@@ -58,7 +61,7 @@ export async function getWellnessRingScores(petId, days = 14) {
   const byCheckIn = {};
   for (const obs of data) (byCheckIn[obs.daily_check_in_id] ||= []).push(obs);
 
-  const isToday = scorableCheckIns[0].check_in_date === todayStr();
+  const isToday = scorableCheckIns[0].check_in_date === todayStr(timezone);
 
   for (const [ring, codes] of Object.entries(RING_GROUPS)) {
     const typeIds = new Set(codes.map((code) => catalog[code]?.type.id).filter(Boolean));
@@ -74,15 +77,11 @@ export async function getWellnessRingScores(petId, days = 14) {
   return result;
 }
 
-// Weight ring + card data, from symptom_logs.weight_grams — the only place
-// weight is currently written (Data Model §3.8). Score is a deterministic
-// deduction from the day-over-day percent change, not a stored value;
-// there's no baseline-weight field yet, so "trend" compares the two most
-// recent entries rather than a true baseline (documented limitation,
-// carried over from the previous Pet Profile implementation).
-export async function getWeightSummary(petId, days = 30) {
-  const logs = await entities.SymptomLog.filter({ pet_id: petId }, '-date', 200);
-  const withWeight = logs.filter((l) => l.weight_grams != null).slice(0, days).reverse();
+// Shared by getWeightSummary/getWeightSummariesForPets — turns a pet's
+// weight-bearing symptom_logs rows (already sorted oldest-first, already
+// capped to `days`) into the ring/card shape. Kept pure/sync so the batched
+// path below can reuse it without a second round trip per pet.
+function summarizeWeightLogs(withWeight) {
   if (withWeight.length === 0) {
     return { currentLbs: null, deltaLbs: null, score: null, statusLabel: null, sparkline: [] };
   }
@@ -103,6 +102,46 @@ export async function getWeightSummary(petId, days = 30) {
   const statusLabel = Math.abs(pctChange) >= 0.02 ? 'Monitor' : 'Stable';
 
   return { currentLbs, deltaLbs, score, statusLabel, sparkline };
+}
+
+// Weight ring + card data, from symptom_logs.weight_grams — the only place
+// weight is currently written (Data Model §3.8). Score is a deterministic
+// deduction from the day-over-day percent change, not a stored value;
+// there's no baseline-weight field yet, so "trend" compares the two most
+// recent entries rather than a true baseline (documented limitation,
+// carried over from the previous Pet Profile implementation).
+export async function getWeightSummary(petId, days = 30) {
+  const logs = await entities.SymptomLog.filter({ pet_id: petId }, '-date', 200);
+  const withWeight = logs.filter((l) => l.weight_grams != null).slice(0, days).reverse();
+  return summarizeWeightLogs(withWeight);
+}
+
+// Batched equivalent of calling getWeightSummary per pet — one
+// symptom_logs query instead of N (Health Score Revision V2, Home's
+// Weight chip needs this for every active pet on every load/pull-to-
+// refresh, so the same batching discipline as getCheckInsForPets/
+// getRecentWellnessForPets applies here too).
+export async function getWeightSummariesForPets(petIds, days = 30) {
+  const result = {};
+  for (const petId of petIds) result[petId] = summarizeWeightLogs([]);
+  if (petIds.length === 0) return result;
+
+  const { data, error } = await supabase
+    .from('symptom_logs')
+    .select('pet_id, date, weight_grams')
+    .in('pet_id', petIds)
+    .not('weight_grams', 'is', null)
+    .order('date', { ascending: false });
+  if (error) throw error;
+
+  const byPet = {};
+  for (const row of data) (byPet[row.pet_id] ||= []).push(row);
+
+  for (const petId of petIds) {
+    const withWeight = (byPet[petId] || []).slice(0, days).reverse();
+    result[petId] = summarizeWeightLogs(withWeight);
+  }
+  return result;
 }
 
 // Vaccination completion summary. `vaccinations` is the pet's full shot

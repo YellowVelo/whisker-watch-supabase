@@ -7,17 +7,17 @@ import { PALETTE } from '@/lib/toneColors';
 
 const RANGE_PERIOD_LABEL = { '24H': 'Today', '7D': 'Last 7 Days', '30D': 'Last 30 Days', '90D': 'Last 90 Days', '1Y': 'Last Year' };
 
-export default function WeightCard({ petId, range }) {
+export default function WeightCard({ petId, range, timezone }) {
   const [state, setState] = useState({ loading: true, error: false, data: null });
 
   useEffect(() => {
     let cancelled = false;
     setState((s) => ({ ...s, loading: true, error: false }));
-    getWeightTrend(petId, range)
+    getWeightTrend(petId, range, timezone)
       .then((data) => { if (!cancelled) setState({ loading: false, error: false, data }); })
       .catch(() => { if (!cancelled) setState({ loading: false, error: true, data: null }); });
     return () => { cancelled = true; };
-  }, [petId, range]);
+  }, [petId, range, timezone]);
 
   const { loading, error, data } = state;
   const empty = !loading && !error && (!data || data.series.length === 0);

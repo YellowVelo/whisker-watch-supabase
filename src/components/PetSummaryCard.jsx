@@ -1,29 +1,34 @@
 import { Link } from 'react-router-dom';
 import { Cat, Dog, Heart, Pill, CalendarDays, ChevronRight, Rainbow } from 'lucide-react';
-import { getCategory } from '@/lib/checkin/config';
-import { getChipState } from '@/lib/checkin/chipLabels';
+import AttributeTrendChip, { DirectionIcon, DIRECTION_CONFIG } from '@/components/AttributeTrendChip';
 import { getPetLabel } from '@/lib/speciesConfig';
 import { computeDetailedAge } from '@/lib/lifeStage';
-import { TONE_COLOR, TREND_COLOR } from '@/lib/toneColors';
 
-// Home's primary per-pet card (Nav + Daily Check-In UX Refresh spec #2).
-// One card per pet — full identity + status chips + medication count, plus
-// (for active pets) today's Wellness Score and a fixed 6-slot Today's Logs
-// summary. Tapping the card opens that pet's Trends. Memorial pets swap the
-// score/logs for an "In Memory" marker instead.
+// Home's primary per-pet card (Health Score Revision V2, spec §9). One card
+// per pet — full identity + medication count, plus (for active pets)
+// today's 0-10 Health Score and exactly six directional chips (Appetite,
+// Water, Bathroom, Stool, Vomiting, Weight). Tapping the card opens that
+// pet's Trends. Memorial pets swap the score/chips for an "In Memory"
+// marker instead. No Stable/Improving/Monitor/Declining wording remains —
+// only up/equal/down/unknown direction (spec §8.3).
 
-const TREND_LABEL = { stable: 'Stable', improving: 'Improving', monitor: 'Monitor', declining: 'Declining', unknown: null };
+// Copy for each reason the score comparison can't show a direction
+// (spec §9.2/§16).
+const DIRECTION_REASON_COPY = {
+  no_checkin_today: 'Check in today',
+  missing_yesterday: 'Not enough data',
+  skipped_yesterday: 'Not enough data',
+  first_day: 'First day logged',
+};
 
-// Fixed Today's Logs slots (Pets Feature Spec #3: "Current design supports:
-// Appetite, Water, Energy, Stool, Activity, Other"). "Activity" maps to the
-// Daily Check-In's `mobility` category — same data, screen-specific label.
-const LOG_SLOTS = [
+// Home's six required chips (spec §9.3) — five Health Attributes plus
+// Weight. Order matches the approved Home screenshot.
+const HOME_CHIP_SLOTS = [
   { code: 'appetite', label: 'Appetite' },
   { code: 'water_intake', label: 'Water' },
-  { code: 'energy', label: 'Energy' },
+  { code: 'bathroom', label: 'Bathroom' },
   { code: 'stool', label: 'Stool' },
-  { code: 'mobility', label: 'Activity' },
-  { code: 'other', label: 'Other' },
+  { code: 'vomiting', label: 'Vomiting' },
 ];
 
 function PetPhoto({ pet, size, memorial }) {
@@ -47,7 +52,10 @@ function PetPhoto({ pet, size, memorial }) {
   );
 }
 
-export default function PetSummaryCard({ pet, medicationCount = 0, wellness, checkIn, observationValues, logsUnavailable = false, highlighted = false, cardRef }) {
+export default function PetSummaryCard({
+  pet, medicationCount = 0, checkIn, healthScore, attributeDirections, attributesUnavailable = false,
+  weight, chipsLoading = false, highlighted = false, cardRef,
+}) {
   const identity = (
     <>
       <p className="text-[28px] font-bold text-white leading-tight truncate">{pet.name}</p>
@@ -91,11 +99,14 @@ export default function PetSummaryCard({ pet, medicationCount = 0, wellness, che
 
   const age = computeDetailedAge(pet);
   const conditions = pet.conditions?.length > 0 ? pet.conditions : null;
-  const status = checkIn?.status;
-  const todayStr = new Date().toISOString().split('T')[0];
-  const hasTodayScore = wellness?.latest?.check_in_date === todayStr;
-  const score = hasTodayScore ? wellness.latest.score : null;
-  const trend = hasTodayScore ? (wellness?.trend ?? 'unknown') : null;
+  const hasCheckedInToday = !!checkIn && checkIn.status !== 'skipped';
+  const score = hasCheckedInToday ? (healthScore?.score ?? null) : null;
+  const direction = hasCheckedInToday ? (healthScore?.direction ?? 'unknown') : 'unknown';
+  const comparisonText = !checkIn
+    ? 'Check in today'
+    : checkIn.status === 'skipped'
+      ? 'Not enough data'
+      : (DIRECTION_REASON_COPY[healthScore?.directionReason] || 'versus yesterday');
 
   return (
     <Link
@@ -128,7 +139,7 @@ export default function PetSummaryCard({ pet, medicationCount = 0, wellness, che
                 </span>
               ))
             ) : (
-              <span className="text-[13px] font-medium px-2.5 py-1 rounded-full flex items-center gap-1" style={{ background: 'rgba(76,199,176,0.15)', color: TONE_COLOR.good }}>
+              <span className="text-[13px] font-medium px-2.5 py-1 rounded-full flex items-center gap-1" style={{ background: 'rgba(76,199,176,0.15)', color: DIRECTION_CONFIG.up.color }}>
                 <Heart className="h-3 w-3" aria-hidden="true" /> Healthy
               </span>
             )}
@@ -148,40 +159,40 @@ export default function PetSummaryCard({ pet, medicationCount = 0, wellness, che
                 {score != null && (
                   <circle
                     cx="28" cy="28" r="24" fill="none"
-                    stroke={TREND_COLOR[trend] || TREND_COLOR.unknown}
+                    stroke={DIRECTION_CONFIG[direction]?.color || DIRECTION_CONFIG.unknown.color}
                     strokeWidth="4"
-                    strokeDasharray={`${(score / 100) * 150.8} 150.8`}
+                    strokeDasharray={`${(score / 10) * 150.8} 150.8`}
                     strokeLinecap="round"
                   />
                 )}
               </svg>
-              <span className="text-[18px] font-bold text-white">{score != null ? score : '—'}</span>
+              <span className="text-[15px] font-bold text-white">{score != null ? score : '—'}<span className="text-[11px] font-semibold text-white/40">/10</span></span>
             </div>
-            {score != null && TREND_LABEL[trend] && (
-              <p className="text-[13px] font-semibold mt-1 whitespace-nowrap" style={{ color: TREND_COLOR[trend] }}>{TREND_LABEL[trend]}</p>
-            )}
-            {score != null && <p className="text-[13px] text-white/35">Today</p>}
+            <p className="text-[13px] font-semibold mt-1 whitespace-nowrap flex items-center gap-1" style={{ color: score != null ? DIRECTION_CONFIG[direction]?.color : 'rgba(255,255,255,0.4)' }}>
+              {score != null && <DirectionIcon direction={direction} className="h-3 w-3" />}
+              {comparisonText}
+            </p>
           </div>
           <ChevronRight className="h-4 w-4 text-white/25" aria-hidden="true" />
         </div>
       </div>
 
       <div className="mt-3.5 pt-3" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
-        <p className="text-[13px] font-semibold tracking-widest uppercase text-white/30 mb-2">Today's Logs</p>
-        <div className="grid grid-cols-3 gap-2">
-          {LOG_SLOTS.map(({ code, label }) => {
-            const Icon = getCategory(code)?.icon;
-            const { label: value, tone } = getChipState(code, status, observationValues, { unavailable: logsUnavailable });
-            return (
-              <div key={code} className="rounded-xl px-2.5 py-2 flex items-center gap-1.5" style={{ background: 'rgba(255,255,255,0.04)' }}>
-                {Icon && <Icon className="h-3.5 w-3.5 text-white/40 flex-shrink-0" aria-hidden="true" />}
-                <div className="min-w-0">
-                  <p className="text-[13px] text-white/40 truncate">{label}</p>
-                  <p className="text-[13px] font-semibold truncate" style={{ color: TONE_COLOR[tone] }}>{value}</p>
-                </div>
-              </div>
-            );
-          })}
+        <div className="grid grid-cols-2 gap-2">
+          {HOME_CHIP_SLOTS.map(({ code, label }) => (
+            <AttributeTrendChip
+              key={code}
+              label={label}
+              direction={attributeDirections?.[code]}
+              state={chipsLoading ? 'loading' : attributesUnavailable ? 'unavailable' : !hasCheckedInToday ? 'no-checkin' : 'ready'}
+            />
+          ))}
+          <AttributeTrendChip
+            label="Weight"
+            direction={weight?.direction}
+            comparisonLabel={weight?.comparisonLabel || 'Not enough data'}
+            state={chipsLoading ? 'loading' : weight?.unavailable ? 'unavailable' : 'ready'}
+          />
         </div>
       </div>
     </Link>
