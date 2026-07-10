@@ -17,9 +17,11 @@
 // password was ever set). Those two cases need different handling: a
 // real existing user just needs the access record (already created by
 // the client); a stuck pending invite needs a fresh, redeemable link
-// resent. See email_has_password() (migration 0020) for how we tell
-// them apart, and resendPendingInvite() below for the recovery-link path
-// used to re-invite the latter.
+// resent — using a 'recovery'-type generateLink() call (see below) and
+// the 'co-owner-invitation-reminder' template instead, so the email
+// reads as a nudge rather than a confusing duplicate first-time invite.
+// See email_has_password() (migration 0020) for how the two cases are
+// told apart.
 //
 // Why not just use generateLink's ready-made action_link? That link
 // points at the Supabase project's own auth domain, which the email
@@ -238,6 +240,10 @@ Deno.serve(async (req) => {
     // 'recovery' when re-inviting a stuck pending co-owner (see above).
     const acceptUrl = `${acceptPageUrl}?token_hash=${encodeURIComponent(tokenHash)}&type=${tokenType}&petId=${encodeURIComponent(petId)}`;
 
+    // A re-invite (tokenType === 'recovery') reads as a reminder rather
+    // than a first-time ask — see co-owner-invitation-reminder.ts.
+    const emailTemplate = tokenType === 'recovery' ? 'co-owner-invitation-reminder' : 'co-owner-invitation';
+
     // The pet_co_owners row was already created by the client before this
     // function ran (see InviteCoOwnerDialog.jsx) — look up its own id so
     // email_logs.related_entity_id actually correlates to that row rather
@@ -255,7 +261,7 @@ Deno.serve(async (req) => {
     try {
       const emailResult = await sendEmail({
         to: coOwnerEmail,
-        template: 'co-owner-invitation',
+        template: emailTemplate,
         variables: {
           owner_name: inviterProfile?.first_name || userData.user.email,
           pet_name: petName,
