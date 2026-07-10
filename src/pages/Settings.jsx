@@ -27,7 +27,7 @@ const MENU_ITEMS = [
   { key: 'pet_sitter', to: '/settings/pet-sitter', icon: UsersRound, iconClassName: 'text-teal-300', iconBg: 'rgba(45,212,191,0.14)', title: 'Pet Sitter', subtitle: 'Manage sitter access and instructions', event: 'menu_pet_sitter_selected' },
   { key: 'ai', to: '/settings/ai', icon: Sparkles, iconClassName: 'text-fuchsia-300', iconBg: 'rgba(232,121,249,0.14)', title: 'AI', subtitle: 'Insights and answers about your pets', event: 'menu_ai_selected' },
   { key: 'notifications', to: '/notifications', icon: Bell, iconClassName: 'text-amber-300', iconBg: 'rgba(251,191,36,0.14)', title: 'Notifications', subtitle: 'Manage your notification preferences', event: 'menu_notifications_selected' },
-  { key: 'privacy', to: '/privacy', icon: ShieldCheck, iconClassName: 'text-emerald-300', iconBg: 'rgba(52,211,153,0.14)', title: 'Privacy', subtitle: 'Manage your data and privacy', event: 'menu_privacy_selected' },
+  { key: 'privacy', to: '/privacy', icon: ShieldCheck, iconClassName: 'text-emerald-300', iconBg: 'rgba(52,211,153,0.14)', title: 'Privacy', subtitle: 'Read our Privacy Policy', event: 'menu_privacy_selected' },
   { key: 'preferences', to: '/preferences', icon: SettingsIcon, iconClassName: 'text-purple-300', iconBg: 'rgba(196,181,253,0.14)', title: 'Settings', subtitle: 'App preferences and defaults', event: 'menu_settings_selected' },
   { key: 'support', to: '/support', icon: HelpCircle, iconClassName: 'text-sky-300', iconBg: 'rgba(125,211,252,0.14)', title: 'Support', subtitle: 'Help center and contact support', event: 'menu_support_selected' },
 ];
