@@ -5,7 +5,7 @@ import { supabase } from '@/api/supabaseClient';
 import {
   ChevronRight, ChevronDown, Share2, Pencil, Trash2, Rainbow,
   Cat, Dog, Activity, UtensilsCrossed, Zap, Heart, Scale, HeartPulse, ClipboardList,
-  Pill, Utensils, ShieldCheck, TrendingUp, Calendar, Clock, FileText, Droplets, Footprints, Loader2,
+  Pill, Utensils, ShieldCheck, TrendingUp, Calendar, Clock, FileText, FileDown, Droplets, Footprints, Loader2,
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
@@ -775,6 +775,13 @@ export default function PetProfileContent({ petId, onReload, expanded = true, on
                 onClick={() => setCheckInOpen(true)} error={errors.observations}
               />
             )}
+
+            {/* ── VET EXPORT ── */}
+            <NavCard
+              icon={FileDown} iconBg="rgba(244,199,107,0.15)" iconColor={PALETTE.amber}
+              title="Vet Report" subtitle="Download a clinic-ready health report"
+              to={`/pet/${petId}/export`}
+            />
 
             {/* ── TIMELINE ── */}
             <NavCard
