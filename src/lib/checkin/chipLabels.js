@@ -30,8 +30,11 @@ export function getChipState(code, status, values, { unavailable = false } = {})
   }
 
   const observed = values?.[code];
-  if (!observed) return { label: 'Normal', tone: 'good' };
-  const label = CHIP_VALUE_LABELS[code]?.[observed.value] ?? 'Changed';
-  const tone = observed.severityScore != null && observed.severityScore < 0 ? 'warn' : 'good';
-  return { label, tone };
+  const symptomValues = observed?.values || [];
+  if (symptomValues.length === 0) return { label: 'Normal', tone: 'good' };
+  // Multi-select: a single symptom shows its specific word (e.g. "Loose");
+  // 2+ symptoms the same day fall back to the existing generic "Changed"
+  // label rather than inventing copy for every combination.
+  const label = symptomValues.length === 1 ? (CHIP_VALUE_LABELS[code]?.[symptomValues[0]] ?? 'Changed') : 'Changed';
+  return { label, tone: 'warn' };
 }

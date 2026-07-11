@@ -1,108 +1,94 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import {
-  computeHealthScore, resolveDailyAttributeState, computeAttributeDirection,
+  computeHealthScore, resolveDailyAttributeCount, computeAttributeDirection,
   computeHealthScoreDirection, computeWeightDirection,
 } from './scoring';
 
-// Health Score Revision V2 — required-tests #1-4, #6, #8-10, #14 from the
-// feature spec, plus the direction-state edge cases.
+// Health Score — equal-weight, multi-select symptom counts (supersedes the
+// per-option severity_score/health_score_deduction grading).
 describe('computeHealthScore', () => {
-  it('a normal day (no observations) produces 10/10', () => {
-    expect(computeHealthScore([])).toEqual({ score: 10, totalDeduction: 0, deductionsByAttribute: {}, reasonSummary: null });
+  it('a normal day (no symptoms) produces 10/10', () => {
+    expect(computeHealthScore({})).toEqual({ score: 10, totalDeduction: 0, deductionsByAttribute: {}, reasonSummary: null });
   });
 
-  it('three deductions across different attributes produce 7/10', () => {
-    const result = computeHealthScore([
-      { code: 'appetite', health_score_deduction: 1 },
-      { code: 'vomiting', health_score_deduction: 2 },
-    ]);
-    expect(result.score).toBe(7);
-    expect(result.totalDeduction).toBe(3);
-    expect(result.deductionsByAttribute).toEqual({ appetite: 1, vomiting: 2 });
+  it('one symptom per attribute across two attributes produces 8/10', () => {
+    const result = computeHealthScore({ appetite: 1, vomiting: 1 });
+    expect(result.score).toBe(8);
+    expect(result.totalDeduction).toBe(2);
+    expect(result.deductionsByAttribute).toEqual({ appetite: 1, vomiting: 1 });
   });
 
-  it('one attribute cannot deduct more than 2, even from duplicate observations', () => {
-    const result = computeHealthScore([
-      { code: 'stool', health_score_deduction: 2 },
-      { code: 'stool', health_score_deduction: 2 },
-    ]);
+  it('one attribute cannot deduct more than 2, even with 3+ distinct symptoms logged', () => {
+    const result = computeHealthScore({ stool: 3 });
     expect(result.deductionsByAttribute.stool).toBe(2);
     expect(result.score).toBe(8);
   });
 
   it('all five Health Attributes at max deduction produce 0/10', () => {
-    const result = computeHealthScore([
-      { code: 'appetite', health_score_deduction: 2 },
-      { code: 'water_intake', health_score_deduction: 2 },
-      { code: 'bathroom', health_score_deduction: 2 },
-      { code: 'stool', health_score_deduction: 2 },
-      { code: 'vomiting', health_score_deduction: 2 },
-    ]);
+    const result = computeHealthScore({
+      appetite: 2, water_intake: 2, bathroom: 2, stool: 2, vomiting: 2,
+    });
     expect(result.score).toBe(0);
     expect(result.totalDeduction).toBe(10);
   });
 
-  it('Wellbeing/Weight/unknown attributes never affect the score, and log a warning', () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const result = computeHealthScore([
-      { code: 'energy', health_score_deduction: 2 },
-      { code: 'mobility', health_score_deduction: 1 },
-      { code: 'breathing', health_score_deduction: 1 },
-      { code: 'itching', health_score_deduction: 1 },
-      { code: 'weight', health_score_deduction: 2 },
-      { code: 'some_unknown_code', health_score_deduction: 1 },
-    ]);
+  it('Wellbeing/Weight/unknown attributes never affect the score, even if counts are passed in', () => {
+    const result = computeHealthScore({
+      energy: 2, mobility: 1, breathing: 1, itching: 1, weight: 2, some_unknown_code: 1,
+    });
     expect(result.score).toBe(10);
     expect(result.totalDeduction).toBe(0);
-    expect(warn).toHaveBeenCalledTimes(6);
-    warn.mockRestore();
+    expect(result.deductionsByAttribute).toEqual({});
   });
 
   it('builds a reason summary only from attributes with a deduction greater than zero', () => {
-    const result = computeHealthScore([
-      { code: 'appetite', health_score_deduction: 0 },
-      { code: 'vomiting', health_score_deduction: 1 },
-    ]);
+    const result = computeHealthScore({ appetite: 0, vomiting: 1 });
     expect(result.reasonSummary).toBe('Vomiting');
   });
 });
 
-describe('resolveDailyAttributeState', () => {
-  it('a missing check-in is unknown, never baseline', () => {
-    expect(resolveDailyAttributeState({ status: undefined, observation: null })).toEqual({ ordinal: null, known: false });
+describe('resolveDailyAttributeCount', () => {
+  it('a missing check-in is unknown, never zero', () => {
+    expect(resolveDailyAttributeCount({ status: undefined, count: 0 })).toEqual({ count: null, known: false });
   });
 
-  it('a skipped check-in is unknown, never baseline', () => {
-    expect(resolveDailyAttributeState({ status: 'skipped', observation: null })).toEqual({ ordinal: null, known: false });
+  it('a skipped check-in is unknown, never zero', () => {
+    expect(resolveDailyAttributeCount({ status: 'skipped', count: 0 })).toEqual({ count: null, known: false });
   });
 
-  it('a completed check-in with no observation for the attribute inherits baseline (ordinal 0)', () => {
-    expect(resolveDailyAttributeState({ status: 'normal', observation: null })).toEqual({ ordinal: 0, known: true });
-    expect(resolveDailyAttributeState({ status: 'changed', observation: null })).toEqual({ ordinal: 0, known: true });
+  it('a completed check-in with no symptoms for the attribute is a known zero count', () => {
+    expect(resolveDailyAttributeCount({ status: 'normal', count: 0 })).toEqual({ count: 0, known: true });
+    expect(resolveDailyAttributeCount({ status: 'changed', count: 0 })).toEqual({ count: 0, known: true });
   });
 
-  it('a completed check-in with an observation uses that option\'s direction_ordinal', () => {
-    expect(resolveDailyAttributeState({ status: 'changed', observation: { direction_ordinal: 2 } })).toEqual({ ordinal: 2, known: true });
+  it('a completed check-in with symptoms uses the real count', () => {
+    expect(resolveDailyAttributeCount({ status: 'changed', count: 2 })).toEqual({ count: 2, known: true });
   });
 });
 
 describe('computeAttributeDirection', () => {
   it('unknown when yesterday is missing', () => {
-    const today = { ordinal: 1, known: true };
-    const yesterdayMissing = { ordinal: null, known: false };
+    const today = { count: 1, known: true };
+    const yesterdayMissing = { count: null, known: false };
     expect(computeAttributeDirection(today, yesterdayMissing)).toBe('unknown');
   });
 
   it('unknown when yesterday was skipped', () => {
-    const today = { ordinal: 0, known: true };
-    const yesterdaySkipped = { ordinal: null, known: false };
+    const today = { count: 0, known: true };
+    const yesterdaySkipped = { count: null, known: false };
     expect(computeAttributeDirection(today, yesterdaySkipped)).toBe('unknown');
   });
 
-  it('up/down/equal from ordinal comparison when both days are known', () => {
-    expect(computeAttributeDirection({ ordinal: 2, known: true }, { ordinal: 0, known: true })).toBe('up');
-    expect(computeAttributeDirection({ ordinal: -1, known: true }, { ordinal: 0, known: true })).toBe('down');
-    expect(computeAttributeDirection({ ordinal: 0, known: true }, { ordinal: 0, known: true })).toBe('equal');
+  it('fewer symptoms today than yesterday is up (better)', () => {
+    expect(computeAttributeDirection({ count: 0, known: true }, { count: 2, known: true })).toBe('up');
+  });
+
+  it('more symptoms today than yesterday is down (worse)', () => {
+    expect(computeAttributeDirection({ count: 1, known: true }, { count: 0, known: true })).toBe('down');
+  });
+
+  it('same count both days is equal', () => {
+    expect(computeAttributeDirection({ count: 1, known: true }, { count: 1, known: true })).toBe('equal');
   });
 });
 

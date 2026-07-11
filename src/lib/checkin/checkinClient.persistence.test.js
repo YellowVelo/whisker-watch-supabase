@@ -37,17 +37,25 @@ describe('checkinClient persistence (Health Score V2)', () => {
     expect(callOrder).toEqual(['delete:ws-1', 'upsert']);
   });
 
-  it('markNormal persists a 10/10 V2 health score alongside the legacy 100 score', async () => {
+  it('markNormal persists a 10/10 V2 health score and writes explicit baseline rows', async () => {
+    const appetiteTypeId = 'type-appetite';
     const wellnessUpsertMock = vi.fn().mockResolvedValue({});
     const checkInUpsertMock = vi.fn().mockResolvedValue({ id: 'ci-1', pet_id: 'pet-1', check_in_date: '2026-01-01', status: 'normal' });
+    const observationBulkCreateMock = vi.fn().mockResolvedValue([]);
 
     vi.doMock('@/api/entities', () => ({
       entities: {
         DailyCheckIn: { upsert: checkInUpsertMock },
+        Observation: { bulkCreate: observationBulkCreateMock },
         WellnessScore: { filter: vi.fn().mockResolvedValue([]), upsert: wellnessUpsertMock },
+        ObservationType: { list: vi.fn().mockResolvedValue([{ id: appetiteTypeId, code: 'appetite' }]) },
+        ObservationOption: { list: vi.fn().mockResolvedValue([]) },
       },
     }));
-    vi.doMock('@/api/supabaseClient', () => ({ supabase: {} }));
+    const deleteEqMock = vi.fn().mockResolvedValue({ error: null });
+    vi.doMock('@/api/supabaseClient', () => ({
+      supabase: { from: vi.fn(() => ({ delete: vi.fn(() => ({ eq: deleteEqMock })) })) },
+    }));
 
     const { markNormal } = await import('./checkinClient');
     const { healthScoreResult } = await markNormal('pet-1', '2026-01-01', 'app');
@@ -57,22 +65,32 @@ describe('checkinClient persistence (Health Score V2)', () => {
       expect.objectContaining({ score: 100, health_score: 10, health_score_version: 'health_score_v2', total_deductions: 0 }),
       'pet_id,check_in_date',
     );
+    // Deletes any prior observations first (editing a previously-'changed'
+    // day back to 'normal' must not leave stale symptom rows behind), then
+    // writes an explicit confirmed-normal row per multi-select category
+    // present in the catalog, rather than leaving no row at all — as a
+    // single bulk insert, not N individual creates.
+    expect(deleteEqMock).toHaveBeenCalledWith('daily_check_in_id', 'ci-1');
+    expect(observationBulkCreateMock).toHaveBeenCalledWith([
+      expect.objectContaining({ observation_type_id: appetiteTypeId, value: 'normal', severity_score: 0 }),
+    ]);
   });
 
-  it('saveChangedCheckIn recalculates the complete day from the current selections, not an incremental patch (spec #12)', async () => {
+  it('saveChangedCheckIn recalculates the complete day from the current selections, not an incremental patch', async () => {
     const appetiteTypeId = 'type-appetite';
     const options = {
-      normal: { observation_type_id: appetiteTypeId, value: 'normal', severity_score: 0, health_score_deduction: 0, direction_ordinal: 0 },
-      ate_much_less: { observation_type_id: appetiteTypeId, value: 'ate_much_less', severity_score: -15, health_score_deduction: 2, direction_ordinal: -2 },
+      normal: { observation_type_id: appetiteTypeId, value: 'normal', severity_score: 0 },
+      ate_much_less: { observation_type_id: appetiteTypeId, value: 'ate_much_less', severity_score: -15 },
+      did_not_eat: { observation_type_id: appetiteTypeId, value: 'did_not_eat', severity_score: -30 },
     };
     const wellnessUpsertMock = vi.fn().mockResolvedValue({});
     const checkInUpsertMock = vi.fn().mockResolvedValue({ id: 'ci-1', pet_id: 'pet-1', check_in_date: '2026-01-01', status: 'changed' });
-    const observationCreateMock = vi.fn().mockResolvedValue({});
+    const observationBulkCreateMock = vi.fn().mockResolvedValue([]);
 
     vi.doMock('@/api/entities', () => ({
       entities: {
         DailyCheckIn: { upsert: checkInUpsertMock },
-        Observation: { create: observationCreateMock },
+        Observation: { bulkCreate: observationBulkCreateMock },
         WellnessScore: { filter: vi.fn().mockResolvedValue([]), upsert: wellnessUpsertMock },
         ObservationType: { list: vi.fn().mockResolvedValue([{ id: appetiteTypeId, code: 'appetite' }]) },
         ObservationOption: { list: vi.fn().mockResolvedValue(Object.values(options)) },
@@ -89,19 +107,22 @@ describe('checkinClient persistence (Health Score V2)', () => {
 
     const { saveChangedCheckIn } = await import('./checkinClient');
 
-    // First save: "ate much less" -> 2 points off -> 8/10.
-    const first = await saveChangedCheckIn('pet-1', '2026-01-01', [{ code: 'appetite', value: 'ate_much_less' }]);
+    // First save: two distinct appetite symptoms logged the same day —
+    // equal weight, capped at -2 for the attribute regardless of count -> 8/10.
+    const first = await saveChangedCheckIn('pet-1', '2026-01-01', [{ code: 'appetite', values: ['ate_much_less', 'did_not_eat'] }]);
     expect(first.healthScoreResult.score).toBe(8);
+    expect(first.healthScoreResult.deductionsByAttribute).toEqual({ appetite: 2 });
 
-    // Edit: re-saving with the full current selection set back at "normal"
-    // must recompute from scratch (10/10), not subtract/add deltas.
-    const second = await saveChangedCheckIn('pet-1', '2026-01-01', [{ code: 'appetite', value: 'normal' }]);
+    // Edit: re-saving with the full current selection set back to no
+    // symptoms (confirmed normal) must recompute from scratch (10/10), not
+    // subtract/add deltas.
+    const second = await saveChangedCheckIn('pet-1', '2026-01-01', [{ code: 'appetite', values: [] }]);
     expect(second.healthScoreResult.score).toBe(10);
     expect(second.healthScoreResult.deductionsByAttribute).toEqual({});
 
     // Both saves must have cleared the check-in's prior observations first
-    // — otherwise the stale "ate_much_less" row from the first save would
-    // still exist for direction/observation reads to pick up.
+    // — otherwise the stale symptom rows from the first save would still
+    // exist for direction/observation reads to pick up.
     expect(deleteEqMock).toHaveBeenCalledTimes(2);
     expect(deleteEqMock).toHaveBeenCalledWith('daily_check_in_id', 'ci-1');
   });

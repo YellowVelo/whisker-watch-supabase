@@ -16,7 +16,7 @@ import { entities } from '@/api/entities';
 import { supabase } from '@/api/supabaseClient';
 import {
   computeDayScore, computeTrend, computeHealthScore,
-  resolveDailyAttributeState, computeAttributeDirection, computeHealthScoreDirection,
+  resolveDailyAttributeCount, computeAttributeDirection, computeHealthScoreDirection,
 } from './scoring';
 import { CATEGORIES, getCategory, HEALTH_SCORE_ATTRIBUTES, WELLBEING_ATTRIBUTES } from './config';
 import { todayInTimezone, yesterdayInTimezone } from '@/lib/timezone';
@@ -24,7 +24,26 @@ import { todayInTimezone, yesterdayInTimezone } from '@/lib/timezone';
 // Answer values that represent "no change from normal" across every
 // enum category — these are never worth surfacing as an observation
 // summary line, even though they're stored as real observations.
-const BASELINE_VALUES = new Set(['normal', 'none', 'no_change']);
+//
+// supabase/migrations/0022_health_score_equal_weight_multiselect.sql's
+// one-time backfill independently hardcodes this same normal/none mapping
+// and the 9-category list below in raw SQL (applied migrations aren't
+// rewritten after the fact). If either changes here, check whether a new
+// migration is needed to keep historical backfills consistent — there is
+// no shared source of truth between this file and that SQL.
+export const BASELINE_VALUES = new Set(['normal', 'none', 'no_change']);
+
+// The 9 categories (5 Health + 4 Wellbeing) that allow more than one
+// symptom per day (equal weight — product decision, not clinical
+// grading). Every one of these always gets an explicit row per day, per
+// category — a baseline row when nothing was selected, one row per
+// distinct symptom otherwise — so "no row" never needs to be interpreted
+// as an assumption.
+const MULTI_SELECT_CODES = CATEGORIES.filter((c) => c.multiSelect).map((c) => c.code);
+
+function baselineValueFor(category) {
+  return category.options?.find((o) => BASELINE_VALUES.has(o.value))?.value ?? 'normal';
+}
 
 // `timezone` is optional (spec: "use the user's stored timezone when
 // resolving today and yesterday") — callers that haven't threaded the
@@ -176,8 +195,11 @@ export function describeObservation(obs, typeIdToCode) {
 }
 
 // Batched "raw values per category" read for a set of today's check-ins,
-// keyed by pet_id -> { [categoryCode]: { value, severityScore } } — used to
-// render short chip labels (Normal/Low/High/etc.) per fixed category slot.
+// keyed by pet_id -> { [categoryCode]: { values, notes, severityScore } } —
+// `values` is every non-baseline symptom logged for that category that day
+// (0+, multi-select categories can have more than one), used to render
+// chip labels (Normal/Low/High/"Changed" for 2+/etc.) per fixed category
+// slot.
 export async function getObservationValuesForCheckIns(checkInsByPetId) {
   const checkInIds = Object.values(checkInsByPetId).filter(Boolean).map((c) => c.id);
   if (checkInIds.length === 0) return {};
@@ -187,10 +209,6 @@ export async function getObservationValuesForCheckIns(checkInsByPetId) {
       .from('observations')
       .select('*')
       .in('daily_check_in_id', checkInIds)
-      // Oldest first, so if a stale duplicate row for the same check-in/
-      // type ever exists (see saveChangedCheckIn), the most recently
-      // created one is assigned last below and wins deterministically,
-      // rather than depending on Postgres's unspecified default order.
       .order('created_at', { ascending: true }),
     loadObservationCatalog(),
   ]);
@@ -211,7 +229,11 @@ export async function getObservationValuesForCheckIns(checkInsByPetId) {
     for (const obs of observationsByCheckIn[checkIn.id] || []) {
       const code = typeIdToCode[obs.observation_type_id];
       if (!code) continue;
-      values[code] = { value: obs.value, notes: obs.notes, severityScore: obs.severity_score };
+      const entry = values[code] || { values: [], notes: null, severityScore: 0 };
+      if (obs.value != null && !BASELINE_VALUES.has(obs.value)) entry.values.push(obs.value);
+      if (obs.notes && !entry.notes) entry.notes = obs.notes;
+      if (obs.severity_score) entry.severityScore += obs.severity_score;
+      values[code] = entry;
     }
     result[petId] = values;
   }
@@ -221,9 +243,11 @@ export async function getObservationValuesForCheckIns(checkInsByPetId) {
 // Shared by getHealthAttributeDirectionsForPets/getWellbeingDirections:
 // fetches today+yesterday observations for the given codes across a set
 // of pets in one query, then resolves each pet/code's up/equal/down/
-// unknown direction via resolveDailyAttributeState + computeAttributeDirection
-// (scoring.js). `checkInsByPetId` maps pet_id -> that day's daily_check_ins
-// row (or null); a pet missing from the map is treated as no check-in.
+// unknown direction from a same-day symptom *count* comparison
+// (resolveDailyAttributeCount + computeAttributeDirection, scoring.js —
+// fewer symptoms today than yesterday = up, more = down, same = equal).
+// `checkInsByPetId` maps pet_id -> that day's daily_check_ins row (or
+// null); a pet missing from the map is treated as no check-in.
 async function getAttributeDirectionsForPets(codes, petIds, todayCheckInsByPetId, yesterdayCheckInsByPetId) {
   const result = {};
   for (const petId of petIds) result[petId] = Object.fromEntries(codes.map((c) => [c, 'unknown']));
@@ -239,41 +263,33 @@ async function getAttributeDirectionsForPets(codes, petIds, todayCheckInsByPetId
   }
   if (checkInIds.length === 0 || relevantTypeIds.length === 0) return result;
 
-  // observation_options isn't FK-linked from observations (options are
-  // looked up by `value`, not by id), so the option's direction_ordinal is
-  // resolved afterward from the already-cached catalog rather than via a
-  // PostgREST embed.
-  //
-  // saveChangedCheckIn deletes a check-in's prior observations before
-  // inserting the current selection set, so under normal operation there's
-  // only ever one row per (daily_check_in_id, observation_type_id). This
-  // ordering + "first match wins" is defense-in-depth for the narrow
-  // window where two co-owners save the same check-in concurrently (spec
-  // edge case: "Two co-owners edit the same check-in") — it guarantees the
-  // most-recently-created row is used rather than depending on whatever
-  // order Postgres happens to return.
   const { data, error } = await supabase
     .from('observations')
-    .select('daily_check_in_id, observation_type_id, value, created_at')
+    .select('daily_check_in_id, observation_type_id, value')
     .in('daily_check_in_id', checkInIds)
-    .in('observation_type_id', relevantTypeIds)
-    .order('created_at', { ascending: false });
+    .in('observation_type_id', relevantTypeIds);
   if (error) throw error;
-  const observationsByCheckIn = {};
-  for (const obs of data) (observationsByCheckIn[obs.daily_check_in_id] ||= []).push(obs);
+
+  // Multiple rows for the same (check-in, type) are expected now
+  // (multi-select) — every non-baseline row is a distinct symptom and
+  // counts, rather than the previous "one row wins" resolution.
+  const countsByCheckInType = {};
+  for (const obs of data) {
+    if (obs.value == null || BASELINE_VALUES.has(obs.value)) continue;
+    const key = `${obs.daily_check_in_id}:${obs.observation_type_id}`;
+    countsByCheckInType[key] = (countsByCheckInType[key] || 0) + 1;
+  }
 
   for (const petId of petIds) {
     const todayCheckIn = todayCheckInsByPetId[petId];
     const yesterdayCheckIn = yesterdayCheckInsByPetId[petId];
     for (const code of codes) {
       const typeId = catalog[code]?.type.id;
-      const todayObs = typeId ? (observationsByCheckIn[todayCheckIn?.id] || []).find((o) => o.observation_type_id === typeId) : null;
-      const yesterdayObs = typeId ? (observationsByCheckIn[yesterdayCheckIn?.id] || []).find((o) => o.observation_type_id === typeId) : null;
-      const todayOption = todayObs?.value != null ? catalog[code]?.optionsByValue[todayObs.value] : null;
-      const yesterdayOption = yesterdayObs?.value != null ? catalog[code]?.optionsByValue[yesterdayObs.value] : null;
+      const todayCount = typeId && todayCheckIn ? (countsByCheckInType[`${todayCheckIn.id}:${typeId}`] || 0) : 0;
+      const yesterdayCount = typeId && yesterdayCheckIn ? (countsByCheckInType[`${yesterdayCheckIn.id}:${typeId}`] || 0) : 0;
 
-      const todayState = resolveDailyAttributeState({ status: todayCheckIn?.status, observation: todayOption });
-      const yesterdayState = resolveDailyAttributeState({ status: yesterdayCheckIn?.status, observation: yesterdayOption });
+      const todayState = resolveDailyAttributeCount({ status: todayCheckIn?.status, count: todayCount });
+      const yesterdayState = resolveDailyAttributeCount({ status: yesterdayCheckIn?.status, count: yesterdayCount });
       result[petId][code] = computeAttributeDirection(todayState, yesterdayState);
     }
   }
@@ -324,12 +340,46 @@ async function upsertWellnessScore(petId, date, dailyCheckInId, score, reasonSum
   }, 'pet_id,check_in_date');
 }
 
-// "Today was normal" — no observations, baseline assumed unchanged.
+// "Today was normal" — every multi-select attribute gets an explicit
+// confirmed-normal (baseline) row, not just an absent one, so direction
+// comparisons never have to infer "no row = normal" (spec decision: every
+// attribute gets a real record, every day). Deletes any prior observations
+// for this check-in first, same as saveChangedCheckIn — otherwise editing a
+// previously-'changed' day back to 'normal' would leave stale symptom rows
+// behind for direction/score reads to pick up.
 export async function markNormal(petId, date = todayStr(), source = 'app') {
+  const catalog = await loadObservationCatalog();
   const checkIn = await entities.DailyCheckIn.upsert(
     { pet_id: petId, check_in_date: date, status: 'normal', completed_at: new Date().toISOString(), source },
     'pet_id,check_in_date',
   );
+
+  const { error: deleteError } = await supabase
+    .from('observations')
+    .delete()
+    .eq('daily_check_in_id', checkIn.id);
+  if (deleteError) throw deleteError;
+
+  // Single bulk insert rather than N individual creates — one round trip
+  // instead of up to 9, and one atomic SQL statement instead of N
+  // independently-failable network calls.
+  const baselineRows = MULTI_SELECT_CODES.map((code) => {
+    const entry = catalog[code];
+    if (!entry) return null;
+    return {
+      pet_id: petId,
+      daily_check_in_id: checkIn.id,
+      observation_type_id: entry.type.id,
+      value: baselineValueFor(getCategory(code)),
+      numeric_value: null,
+      severity_score: 0,
+      notes: null,
+      photo_url: null,
+      observed_at: new Date().toISOString(),
+    };
+  }).filter(Boolean);
+  if (baselineRows.length > 0) await entities.Observation.bulkCreate(baselineRows);
+
   const healthScoreResult = { score: 10, totalDeduction: 0, deductionsByAttribute: {}, reasonSummary: null };
   await upsertWellnessScore(petId, date, checkIn.id, 100, null, healthScoreResult);
   return { checkIn, healthScoreResult };
@@ -360,8 +410,14 @@ export async function markSkipped(petId, date = todayStr(), source = 'app') {
   );
 }
 
-// "Something changed" — selections: [{ code, value, numericValue, notes, photoUrl }]
-// Only categories the owner actually answered should be passed in.
+// "Something changed" — selections:
+//   multi-select categories (5 Health + 4 Wellbeing): { code, values: [...], notes, photoUrl }
+//   single-select categories (behavior, medication_exception) and
+//     number/text categories (weight, other): { code, value|numericValue, notes, photoUrl }
+// Only categories the owner actually answered need to be passed in for
+// single-select/number/text categories; multi-select categories are always
+// resolved for all 9 below (an omitted or empty one just means "no symptoms
+// today" — a real, explicit baseline row, not an absence).
 //
 // Every call is a full re-save of the day's *complete* current selection
 // set (see DailyCheckInSheet.jsx), so any observation from a previous save
@@ -369,12 +425,11 @@ export async function markSkipped(petId, date = todayStr(), source = 'app') {
 // removed first — otherwise a stale row lingers in `observations` for that
 // daily_check_in_id/observation_type_id, and every reader that resolves
 // "today's value for this attribute" (getHealthAttributeDirectionsForPets,
-// getWellbeingDirections, getObservationValuesForCheckIns) would have two
-// candidate rows to choose between with no defined order, i.e. a
-// non-deterministic read. Deleting existing observations for this check-in
-// up front makes every subsequent insert the single source of truth again,
-// satisfying spec §11.7 ("ensure removed observations no longer affect the
-// score" — and, by extension, no longer affect direction either).
+// getWellbeingDirections, getObservationValuesForCheckIns) would have extra
+// stale rows mixed into the count. Deleting existing observations for this
+// check-in up front makes every subsequent insert the single source of
+// truth again, satisfying "ensure removed observations no longer affect the
+// score" — and, by extension, no longer affect direction either.
 export async function saveChangedCheckIn(petId, date, selections, source = 'app') {
   const catalog = await loadObservationCatalog();
   const checkIn = await entities.DailyCheckIn.upsert(
@@ -388,46 +443,84 @@ export async function saveChangedCheckIn(petId, date, selections, source = 'app'
     .eq('daily_check_in_id', checkIn.id);
   if (deleteError) throw deleteError;
 
-  const contributingObservations = []; // legacy 0-100 deductions (severity_score < 0)
-  const healthScoreObservations = []; // V2 deductions (health_score_deduction), Health Attributes only
-  await Promise.all(selections.map(async (sel) => {
-    const entry = catalog[sel.code];
-    if (!entry) return;
-    const option = sel.value != null ? entry.optionsByValue[sel.value] : null;
-    const severityScore = option?.severity_score ?? 0;
-    const healthScoreDeduction = option?.health_score_deduction ?? 0;
+  const selectionsByCode = Object.fromEntries(selections.map((sel) => [sel.code, sel]));
+  const rows = []; // { code, value, numericValue, notes, photoUrl }
 
-    await entities.Observation.create({
+  for (const code of MULTI_SELECT_CODES) {
+    if (!catalog[code]) continue;
+    const category = getCategory(code);
+    const sel = selectionsByCode[code];
+    const chosenValues = (sel?.values || []).filter((v) => v && !BASELINE_VALUES.has(v));
+
+    if (chosenValues.length === 0) {
+      rows.push({ code, value: baselineValueFor(category), notes: sel?.notes || null, photoUrl: sel?.photoUrl || null });
+    } else {
+      chosenValues.forEach((value, i) => {
+        // Note/photo describe the category as a whole, not one specific
+        // symptom — attached only to the first row so they aren't
+        // duplicated (or silently dropped) across multiple symptom rows.
+        rows.push({
+          code, value,
+          notes: i === 0 ? (sel?.notes || null) : null,
+          photoUrl: i === 0 ? (sel?.photoUrl || null) : null,
+        });
+      });
+    }
+  }
+
+  for (const sel of selections) {
+    if (MULTI_SELECT_CODES.includes(sel.code)) continue;
+    if (sel.value == null && sel.numericValue == null && !sel.notes) continue;
+    rows.push({ code: sel.code, value: sel.value ?? null, numericValue: sel.numericValue ?? null, notes: sel.notes || null, photoUrl: sel.photoUrl || null });
+  }
+
+  const contributingObservations = []; // legacy 0-100 deductions (severity_score < 0)
+  const symptomCounts = {}; // V2: code -> count of non-baseline symptoms today (Health Attributes only matter to the score, but Wellbeing counts are harmless to include)
+
+  // Single bulk insert rather than N individual creates — one round trip
+  // instead of up to 9+, and one atomic SQL statement instead of N
+  // independently-failable network calls. The bookkeeping below only reads
+  // from `row`/`entry`/`option`, never from the create response, so it's
+  // safe to compute entirely before the network call.
+  const dbRows = [];
+  for (const row of rows) {
+    const entry = catalog[row.code];
+    if (!entry) continue;
+    const option = row.value != null ? entry.optionsByValue[row.value] : null;
+    const severityScore = option?.severity_score ?? 0;
+
+    dbRows.push({
       pet_id: petId,
       daily_check_in_id: checkIn.id,
       observation_type_id: entry.type.id,
-      value: sel.value ?? null,
-      numeric_value: sel.numericValue ?? null,
+      value: row.value ?? null,
+      numeric_value: row.numericValue ?? null,
       severity_score: severityScore,
-      notes: sel.notes || null,
-      photo_url: sel.photoUrl || null,
+      notes: row.notes || null,
+      photo_url: row.photoUrl || null,
       observed_at: new Date().toISOString(),
     });
 
     if (severityScore < 0) {
-      const categoryLabel = CATEGORIES.find((c) => c.code === sel.code)?.label;
+      const categoryLabel = CATEGORIES.find((c) => c.code === row.code)?.label;
       contributingObservations.push({ severity_score: severityScore, categoryLabel });
     }
-    if (healthScoreDeduction > 0) {
-      healthScoreObservations.push({ code: sel.code, health_score_deduction: healthScoreDeduction });
+    if (MULTI_SELECT_CODES.includes(row.code) && row.value != null && !BASELINE_VALUES.has(row.value)) {
+      symptomCounts[row.code] = (symptomCounts[row.code] || 0) + 1;
     }
-  }));
+  }
+  if (dbRows.length > 0) await entities.Observation.bulkCreate(dbRows);
 
-  // saveChangedCheckIn only ever receives selections for attributes the
-  // owner actually answered — every editing call re-saves the *complete*
-  // set of currently-selected categories (see DailyCheckInSheet.jsx), so
-  // recomputing both scores here from `selections` alone is always a full
-  // recalculation of the day, never an incremental patch (spec §11.7).
+  // saveChangedCheckIn resolves every multi-select category for the full
+  // day (see the MULTI_SELECT_CODES loop above) and single-select/number/
+  // text categories from the complete current `selections` set, so
+  // recomputing both scores here is always a full recalculation of the
+  // day, never an incremental patch.
   const score = computeDayScore(contributingObservations);
   const reasonSummary = contributingObservations.length > 0
     ? contributingObservations.map((o) => o.categoryLabel).join(', ')
     : null;
-  const healthScoreResult = computeHealthScore(healthScoreObservations);
+  const healthScoreResult = computeHealthScore(symptomCounts);
   await upsertWellnessScore(petId, date, checkIn.id, score, reasonSummary, healthScoreResult);
 
   return { checkIn, healthScoreResult };

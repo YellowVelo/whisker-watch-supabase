@@ -8,11 +8,23 @@ import ObservationCard from '../components/trends/ObservationCard';
 import WeightCard from '../components/trends/WeightCard';
 import InsightSummaryCard from '../components/trends/InsightSummaryCard';
 import { RANGE_OPTIONS } from '@/lib/checkin/trendsClient';
+import { getCategory, HEALTH_SCORE_ATTRIBUTES, WELLBEING_ATTRIBUTES } from '@/lib/checkin/config';
 import { getPetLabel } from '@/lib/speciesConfig';
 import { track } from '@/lib/analytics';
 import { PALETTE } from '@/lib/toneColors';
 import { useAuth } from '@/lib/AuthContext';
 import { detectTimezone } from '@/lib/timezone';
+
+// Trends sub-tab: every Health/Wellbeing attribute gets its own chart here
+// (unlike Overview, which only covers Health Score/Appetite/Water/Energy/
+// Weight/Insight Summary) — entry point picks which group loads first
+// (Home's Health Attribute chips -> 'health', Pets'/Pet Profile's
+// Wellbeing chips -> 'wellness'), and the in-page toggle lets the owner
+// switch to the other group afterward so every attribute stays reachable.
+const GROUPS = {
+  health: { label: 'Health', codes: HEALTH_SCORE_ATTRIBUTES, includesWeight: true },
+  wellness: { label: 'Wellness', codes: WELLBEING_ATTRIBUTES, includesWeight: false },
+};
 
 // "Trends" used to be a legacy sub-tab charting symptom_logs directly
 // (previously PetProfileTabs' own "Trends" tab). That table stopped
@@ -36,6 +48,10 @@ export default function PetTrends() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const activeSection = searchParams.get('section') || 'overview';
+  const activeGroup = GROUPS[searchParams.get('group')] ? searchParams.get('group') : 'health';
+  const metric = searchParams.get('metric');
+  const cardRefs = useRef({});
+  const [highlightedMetric, setHighlightedMetric] = useState(null);
   const { user } = useAuth();
   // Health Score Revision V2 — "today"/cutoff dates for every card on this
   // screen must agree with Home's, which uses the user's stored timezone
@@ -80,9 +96,33 @@ export default function PetTrends() {
     setSearchParams((prev) => {
       const next = new URLSearchParams(prev);
       next.set('section', key);
+      next.delete('metric');
       return next;
     }, { replace: true });
   };
+
+  const setGroup = (key) => {
+    track('trends_group_changed', { pet_id: petId, group: key });
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set('group', key);
+      next.delete('metric');
+      return next;
+    }, { replace: true });
+  };
+
+  // Deep-linked from Home/Pets chips via ?section=trends&group=...&metric=
+  // — scroll to and briefly highlight the specific card the owner tapped
+  // in from, same pattern as Pets.jsx's newly-added-pet highlight.
+  useEffect(() => {
+    if (activeSection !== 'trends' || !metric) return;
+    const node = cardRefs.current[metric];
+    if (!node) return;
+    requestAnimationFrame(() => node.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+    setHighlightedMetric(metric);
+    const t = setTimeout(() => setHighlightedMetric((m) => (m === metric ? null : m)), 2500);
+    return () => clearTimeout(t);
+  }, [activeSection, activeGroup, metric]);
 
   // Tracked off the debounced value (not on every tap) so rapid range
   // switching doesn't write a burst of analytics_events rows — the same
@@ -179,14 +219,54 @@ export default function PetTrends() {
                 ))}
               </div>
 
-              <div className="space-y-3">
-                <WellnessScoreCard petId={petId} range={debouncedRange} isMemorial={pet.is_memorial} timezone={timezone} />
-                <ObservationCard petId={petId} range={debouncedRange} code="appetite" label="Appetite" icon={UtensilsCrossed} timezone={timezone} />
-                <ObservationCard petId={petId} range={debouncedRange} code="water_intake" label="Water Intake" icon={Droplets} timezone={timezone} />
-                <ObservationCard petId={petId} range={debouncedRange} code="energy" label="Energy" icon={Zap} timezone={timezone} />
-                <WeightCard petId={petId} range={debouncedRange} timezone={timezone} />
-                <InsightSummaryCard petId={petId} petName={pet.name} range={debouncedRange} timezone={timezone} />
-              </div>
+              {activeSection === 'trends' ? (
+                <>
+                  {/* ── HEALTH / WELLNESS GROUP TOGGLE ── */}
+                  <div role="group" aria-label="Attribute group" className="flex rounded-full p-1 mb-4" style={{ background: 'rgba(255,255,255,0.05)' }}>
+                    {Object.entries(GROUPS).map(([key, g]) => (
+                      <button
+                        key={key}
+                        aria-pressed={activeGroup === key}
+                        onClick={() => setGroup(key)}
+                        className="flex-1 py-1.5 rounded-full text-[13px] font-semibold transition-colors"
+                        style={activeGroup === key ? { background: PALETTE.sky, color: 'hsl(var(--background))' } : { color: 'rgba(255,255,255,0.5)' }}
+                      >
+                        {g.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="space-y-3">
+                    {GROUPS[activeGroup].codes.map((code) => {
+                      const category = getCategory(code);
+                      return (
+                        <div
+                          key={code}
+                          ref={(el) => { cardRefs.current[code] = el; }}
+                          className="rounded-2xl transition-shadow"
+                          style={highlightedMetric === code ? { boxShadow: `0 0 0 2px ${PALETTE.sky}` } : undefined}
+                        >
+                          <ObservationCard petId={petId} range={debouncedRange} code={code} label={category?.label || code} icon={category?.icon} timezone={timezone} />
+                        </div>
+                      );
+                    })}
+                    {GROUPS[activeGroup].includesWeight && (
+                      <div ref={(el) => { cardRefs.current.weight = el; }} className="rounded-2xl transition-shadow" style={highlightedMetric === 'weight' ? { boxShadow: `0 0 0 2px ${PALETTE.sky}` } : undefined}>
+                        <WeightCard petId={petId} range={debouncedRange} timezone={timezone} />
+                      </div>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <div className="space-y-3">
+                  <WellnessScoreCard petId={petId} range={debouncedRange} isMemorial={pet.is_memorial} timezone={timezone} />
+                  <ObservationCard petId={petId} range={debouncedRange} code="appetite" label="Appetite" icon={UtensilsCrossed} timezone={timezone} />
+                  <ObservationCard petId={petId} range={debouncedRange} code="water_intake" label="Water Intake" icon={Droplets} timezone={timezone} />
+                  <ObservationCard petId={petId} range={debouncedRange} code="energy" label="Energy" icon={Zap} timezone={timezone} />
+                  <WeightCard petId={petId} range={debouncedRange} timezone={timezone} />
+                  <InsightSummaryCard petId={petId} petName={pet.name} range={debouncedRange} timezone={timezone} />
+                </div>
+              )}
             </>
           )}
         </main>

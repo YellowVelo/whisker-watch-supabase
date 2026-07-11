@@ -10,8 +10,7 @@ import { supabase } from '@/api/supabaseClient';
 import { entities } from '@/api/entities';
 import { invokeAI } from '@/api/aiClient';
 import { computeTrend, computeHealthScoreDirection } from './scoring';
-import { loadObservationCatalog } from './checkinClient';
-import { getCategory } from './config';
+import { loadObservationCatalog, BASELINE_VALUES } from './checkinClient';
 import { PALETTE } from '@/lib/toneColors';
 import { dateStrInTimezone } from '@/lib/timezone';
 
@@ -30,21 +29,13 @@ function cutoffDateStr(days, timezone) {
   return dateStrInTimezone(timezone, -days);
 }
 
-// Behavioral scale shared by every ObservationCard (Appetite/Water
-// Intake/Energy), per the spec's 5-point legend (Much More/More/Normal/
-// Less/Much Less) and semantic colors (green=above baseline, gray=
-// baseline, amber=below, red=significantly below). Derived from each
-// option's *value* rather than its severity_score, since severity_score
-// only encodes deductions (negative changes) — an "ate more"/"higher than
-// usual" option carries no deduction but is still a real deviation the
-// legend needs to show as green, not gray.
-export const OBSERVATION_LEVELS = {
-  appetite: { normal: 0, ate_little_less: -1, ate_much_less: -2, did_not_eat: -2, ate_more: 1 },
-  water_intake: { normal: 0, less_than_usual: -1, more_than_usual: 1, much_more_than_usual: 2 },
-  energy: { normal: 0, slightly_lower: -1, much_lower: -2, higher_than_usual: 1 },
-};
-export const LEVEL_LABEL = { '-2': 'Much Less', '-1': 'Less', 0: 'Normal', 1: 'More', 2: 'Much More' };
-export const LEVEL_COLOR = { '-2': PALETTE.red, '-1': PALETTE.amber, 0: PALETTE.gray, 1: PALETTE.teal, 2: PALETTE.teal };
+// Shared by every ObservationCard, across all 9 multi-select categories
+// (5 Health + 4 Wellbeing) — per-day chart color/label is a count of
+// distinct non-baseline symptoms logged that day, not a graded direction.
+// Matches the equal-weight, multi-select Health Score model: a category
+// no longer has one "how bad" value per day, it has a symptom count.
+export const SYMPTOM_COUNT_LABEL = { 0: 'Normal', 1: '1 Symptom', 2: '2+ Symptoms' };
+export const SYMPTOM_COUNT_COLOR = { 0: PALETTE.gray, 1: PALETTE.amber, 2: PALETTE.red };
 
 // Health Score V2 card + chart (spec §22). `series` is oldest-first for
 // charting and only ever includes V2-scored rows (health_score_version ===
@@ -109,18 +100,17 @@ export async function getWellnessScoreTrend(petId, range, timezone) {
   };
 }
 
-// Behavioral observation trend (Appetite / Water Intake / Energy), shared
-// by every ObservationCard instance — one generic function, not one per
-// metric (Product Principle 19/20).
+// Behavioral observation trend, shared by every ObservationCard instance —
+// one generic function for all 9 multi-select categories (5 Health + 4
+// Wellbeing), not one per metric (Product Principle 19/20).
 //
 // Per-day state, per Product Principle 6 ("Missing Data Is Meaningful"):
 //   - no daily_check_ins row for that date -> "missing" (gap)
 //   - status === 'skipped' -> "skipped" (visually distinct from missing)
-//   - a scorable check-in with no observation for this code -> "normal"/baseline
-//   - a scorable check-in with an observation for this code -> that option's bucket
+//   - a scorable check-in with zero non-baseline symptoms -> "normal"/baseline
+//   - a scorable check-in with 1+ non-baseline symptoms -> a symptom count
 export async function getObservationTrend(petId, code, range, timezone) {
   const days = RANGE_DAYS[range] ?? RANGE_DAYS['24H'];
-  const category = getCategory(code);
   const cutoff = cutoffDateStr(days, timezone);
 
   const [catalog, checkIns] = await Promise.all([
@@ -137,24 +127,26 @@ export async function getObservationTrend(petId, code, range, timezone) {
   }
 
   const scorableIds = inRange.filter((c) => c.status !== 'skipped').map((c) => c.id);
-  let observationsByCheckIn = {};
+  const countsByCheckIn = {};
+  const symptomLabelsByCheckIn = {};
   if (scorableIds.length > 0) {
     const { data, error } = await supabase
       .from('observations')
-      .select('daily_check_in_id, value, severity_score')
+      .select('daily_check_in_id, value')
       .in('daily_check_in_id', scorableIds)
       .eq('observation_type_id', entry.type.id);
     if (error) throw error;
-    for (const obs of data) observationsByCheckIn[obs.daily_check_in_id] = obs;
+    for (const obs of data) {
+      if (obs.value == null || BASELINE_VALUES.has(obs.value)) continue;
+      countsByCheckIn[obs.daily_check_in_id] = (countsByCheckIn[obs.daily_check_in_id] || 0) + 1;
+      (symptomLabelsByCheckIn[obs.daily_check_in_id] ||= []).push(entry.optionsByValue[obs.value]?.label || obs.value);
+    }
   }
 
-  const levels = OBSERVATION_LEVELS[code] || {};
   const series = inRange.map((c) => {
-    if (c.status === 'skipped') return { date: c.check_in_date, state: 'skipped', value: null, level: null };
-    const obs = observationsByCheckIn[c.id];
-    if (!obs || obs.value == null) return { date: c.check_in_date, state: 'normal', value: 'normal', level: 0 };
-    const level = levels[obs.value] ?? 0;
-    return { date: c.check_in_date, state: 'observed', value: obs.value, level };
+    if (c.status === 'skipped') return { date: c.check_in_date, state: 'skipped', count: null };
+    const count = countsByCheckIn[c.id] || 0;
+    return { date: c.check_in_date, state: count > 0 ? 'observed' : 'normal', count };
   });
 
   // Same "must actually be today" rule as getWellnessScoreTrend — a stale
@@ -162,20 +154,17 @@ export async function getObservationTrend(petId, code, range, timezone) {
   const latest = series[series.length - 1];
   const isLatestToday = latest?.date === todayStr(timezone);
   const { currentLabel, currentSubtitle } = isLatestToday
-    ? describeCurrentState(category, entry, latest)
+    ? describeCurrentState(latest, symptomLabelsByCheckIn[inRange[inRange.length - 1]?.id])
     : { currentLabel: null, currentSubtitle: null };
 
   return { hasAnyData, series, currentLabel, currentSubtitle };
 }
 
-function describeCurrentState(category, catalogEntry, latestPoint) {
+function describeCurrentState(latestPoint, symptomLabels) {
   if (!latestPoint || latestPoint.state === 'skipped') return { currentLabel: null, currentSubtitle: null };
-  if (latestPoint.state === 'normal') return { currentLabel: 'Normal', currentSubtitle: 'No change from usual' };
-
-  const option = catalogEntry.optionsByValue?.[latestPoint.value];
-  const optionLabel = option?.label || category?.options?.find((o) => o.value === latestPoint.value)?.label || 'No Data';
-  const currentLabel = LEVEL_LABEL[latestPoint.level] || 'Normal';
-  return { currentLabel, currentSubtitle: optionLabel };
+  if (latestPoint.count === 0) return { currentLabel: 'Normal', currentSubtitle: 'No change from usual' };
+  const currentLabel = SYMPTOM_COUNT_LABEL[Math.min(2, latestPoint.count)];
+  return { currentLabel, currentSubtitle: (symptomLabels || []).join(', ') || null };
 }
 
 // Weight card + chart, from symptom_logs.weight_grams — the only place

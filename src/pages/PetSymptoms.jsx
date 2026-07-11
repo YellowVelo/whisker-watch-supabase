@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { entities } from '@/api/entities';
 import { ArrowLeft, Plus, X, UtensilsCrossed, Zap, Heart, Activity, Droplets, Droplet, Scale, AlertTriangle, Pill, AlertCircle, ClipboardList } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
@@ -21,6 +21,7 @@ function Chip({ icon: Icon, label, danger }) {
 
 export default function PetSymptoms() {
   const { petId } = useParams();
+  const navigate = useNavigate();
   const [pet, setPet] = useState(null);
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -54,9 +55,9 @@ export default function PetSymptoms() {
           className="sticky z-20 bg-background/80 backdrop-blur-xl border-b border-white/8 px-4 py-3 flex items-center justify-between"
           style={{ top: 'var(--account-banner-height, 0px)', paddingTop: 'calc(env(safe-area-inset-top) + 12px)' }}
         >
-          <Link to={`/pet/${petId}`} className="w-9 h-9 rounded-full flex items-center justify-center bg-white/8">
+          <button onClick={() => navigate(-1)} aria-label="Back" className="w-9 h-9 rounded-full flex items-center justify-center bg-white/8">
             <ArrowLeft className="h-5 w-5 text-white" />
-          </Link>
+          </button>
           <h1 className="text-[28px] font-semibold text-white">Symptom Timeline</h1>
           <button
             onClick={() => setLogOpen(true)}

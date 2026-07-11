@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Cat, Dog, Heart, Pill, CalendarDays, ChevronRight, Rainbow } from 'lucide-react';
 import AttributeTrendChip, { DirectionIcon, DIRECTION_CONFIG } from '@/components/AttributeTrendChip';
 import { getPetLabel } from '@/lib/speciesConfig';
@@ -56,6 +56,15 @@ export default function PetSummaryCard({
   pet, medicationCount = 0, checkIn, healthScore, attributeDirections, attributesUnavailable = false,
   weight, chipsLoading = false, highlighted = false, cardRef,
 }) {
+  const navigate = useNavigate();
+
+  // Chips sit inside the card's own <Link to=".../trends"> — AttributeTrendChip
+  // itself stops that outer navigation when interactive, so this only needs
+  // to supply where the tap should actually go.
+  const goToMetric = (metric) => () => {
+    navigate(`/pet/${pet.id}/trends?section=trends&group=health&metric=${metric}`);
+  };
+
   const identity = (
     <>
       <p className="text-[28px] font-bold text-white leading-tight truncate">{pet.name}</p>
@@ -185,6 +194,8 @@ export default function PetSummaryCard({
               label={label}
               direction={attributeDirections?.[code]}
               state={chipsLoading ? 'loading' : attributesUnavailable ? 'unavailable' : !hasCheckedInToday ? 'no-checkin' : 'ready'}
+              interactive
+              onClick={goToMetric(code)}
             />
           ))}
           <AttributeTrendChip
@@ -192,6 +203,8 @@ export default function PetSummaryCard({
             direction={weight?.direction}
             comparisonLabel={weight?.comparisonLabel || 'Not enough data'}
             state={chipsLoading ? 'loading' : weight?.unavailable ? 'unavailable' : 'ready'}
+            interactive
+            onClick={goToMetric('weight')}
           />
         </div>
       </div>

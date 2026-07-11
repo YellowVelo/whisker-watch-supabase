@@ -92,62 +92,49 @@ const HEALTH_SCORE_MAX_PER_ATTRIBUTE = 2;
 // place that defines "which attributes are Health Attributes".
 const HEALTH_SCORE_ATTRIBUTE_SET = new Set(HEALTH_SCORE_ATTRIBUTES);
 
-// `observations` — plain objects with at least { code, health_score_deduction }.
-// Callers (checkinClient.js) attach `health_score_deduction` from each
-// observation's catalog option before calling this; this module never
-// reaches into a catalog itself, per "never talks to Supabase" above.
-export function computeHealthScore(observations = []) {
+// `symptomCounts` — { [code]: count } — count is the number of distinct
+// non-baseline symptoms selected for that Health Attribute today (multi-
+// select: an attribute can have 0, 1, or more symptoms logged the same
+// day). Every symptom carries equal weight (product decision — these are
+// owner-observed, not clinically graded); each attribute's own deduction
+// is capped at HEALTH_SCORE_MAX_PER_ATTRIBUTE regardless of how many
+// symptoms were logged for it.
+export function computeHealthScore(symptomCounts = {}) {
   const deductionsByAttribute = {};
 
-  for (const obs of observations) {
-    const deduction = obs?.health_score_deduction;
-    if (!deduction) continue; // 0/null/undefined never contributes
-
-    if (!HEALTH_SCORE_ATTRIBUTE_SET.has(obs.code)) {
-      // A Wellbeing/Weight/Other/unknown observation carrying a non-zero
-      // deduction is a data/config bug (spec §6.3: "Log a structured
-      // warning when an unknown or excluded attribute contains a Health
-      // Score deduction") — never let it silently affect the score.
-      console.warn('[computeHealthScore] ignoring deduction on non-Health attribute', { code: obs.code, deduction });
-      continue;
-    }
-
-    const capped = Math.min(HEALTH_SCORE_MAX_PER_ATTRIBUTE, (deductionsByAttribute[obs.code] || 0) + deduction);
-    deductionsByAttribute[obs.code] = Math.min(HEALTH_SCORE_MAX_PER_ATTRIBUTE, capped);
+  for (const code of HEALTH_SCORE_ATTRIBUTE_SET) {
+    const count = symptomCounts[code] || 0;
+    if (count <= 0) continue;
+    deductionsByAttribute[code] = Math.min(HEALTH_SCORE_MAX_PER_ATTRIBUTE, count);
   }
 
   const totalDeduction = Object.values(deductionsByAttribute).reduce((sum, d) => sum + d, 0);
   const score = Math.max(0, Math.min(HEALTH_SCORE_STARTING_SCORE, HEALTH_SCORE_STARTING_SCORE - totalDeduction));
 
   const reasonSummary = Object.keys(deductionsByAttribute)
-    .filter((code) => deductionsByAttribute[code] > 0)
     .map((code) => getCategory(code)?.label || code)
     .join(', ') || null;
 
   return { score, totalDeduction, deductionsByAttribute, reasonSummary };
 }
 
-// Resolves what a single attribute's state was on a given day, per spec
-// §13.2. `status` is the daily_check_ins.status for that date ('normal' |
-// 'changed' | 'skipped' | undefined/null for no row at all). `observation`
-// is that day's observation row for this attribute (or null/undefined if
-// the owner didn't log a change for it). `baselineOrdinal` defaults to 0
-// (the configured neutral/baseline ordinal) — only used when the day
-// itself establishes "normal" (a completed, non-skipped check-in).
-export function resolveDailyAttributeState({ status, observation, baselineOrdinal = 0 }) {
-  if (!status || status === 'skipped') return { ordinal: null, known: false };
-  if (observation && observation.direction_ordinal != null) {
-    return { ordinal: observation.direction_ordinal, known: true };
-  }
-  return { ordinal: baselineOrdinal, known: true };
+// Resolves what a single attribute's state was on a given day. `status` is
+// the daily_check_ins.status for that date ('normal' | 'changed' |
+// 'skipped' | undefined/null for no row at all). `count` is the number of
+// distinct non-baseline symptoms logged for this attribute that day (0 for
+// a confirmed-normal day/attribute).
+export function resolveDailyAttributeCount({ status, count = 0 }) {
+  if (!status || status === 'skipped') return { count: null, known: false };
+  return { count, known: true };
 }
 
-// Direction describes movement only — never medical interpretation
-// (spec §8.3). Unknown whenever either day isn't actually known.
+// Direction describes movement only — never medical interpretation.
+// Fewer symptoms today than yesterday = up (better); more = down (worse);
+// same count = equal. Unknown whenever either day isn't actually known.
 export function computeAttributeDirection(todayState, yesterdayState) {
   if (!todayState?.known || !yesterdayState?.known) return 'unknown';
-  if (todayState.ordinal > yesterdayState.ordinal) return 'up';
-  if (todayState.ordinal < yesterdayState.ordinal) return 'down';
+  if (todayState.count < yesterdayState.count) return 'up';
+  if (todayState.count > yesterdayState.count) return 'down';
   return 'equal';
 }
 

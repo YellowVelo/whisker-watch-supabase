@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { entities } from '@/api/entities';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, Printer, Menu } from 'lucide-react';
@@ -13,6 +13,7 @@ const qualityColor = { Normal: '#16a34a', Soft: '#ca8a04', Loose: '#ea580c', Wat
 
 export default function VetExport() {
   const { petId } = useParams();
+  const navigate = useNavigate();
   const [careOpen, setCareOpen] = useState(false);
   const [pet, setPet] = useState(null);
   const [logs, setLogs] = useState([]);
@@ -61,9 +62,9 @@ export default function VetExport() {
     <div className="min-h-screen bg-background">
       {/* Print toolbar - hidden when printing */}
       <div className="no-print border-b border-border bg-card/50 px-4 py-3 flex items-center justify-between sticky z-10" style={{ top: 'var(--account-banner-height, 0px)' }}>
-        <Link to={`/pet/${petId}`} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
+        <button onClick={() => navigate(-1)} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
           <ArrowLeft className="h-4 w-4" /> Back
-        </Link>
+        </button>
         <div className="flex items-center gap-2">
           <Button size="sm" onClick={() => window.print()}>
             <Printer className="h-4 w-4 mr-1.5" /> Print / Save PDF

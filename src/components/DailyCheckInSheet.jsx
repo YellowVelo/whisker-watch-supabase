@@ -37,10 +37,13 @@ export default function DailyCheckInSheet({ pet, date, onClose, onSaved, isCatch
   // are optional even once picked, per "Weight ... should not be
   // required daily". This prevents saving a category the owner tapped
   // in the picker but never actually answered as a bogus empty
-  // observation.
+  // observation. Multi-select categories are complete once `values` is an
+  // actual array (even empty — "Normal" is an explicit choice), not just
+  // present-but-undefined (untouched).
   const incompleteCodes = selectedCodes.filter((code) => {
     const cat = getCategory(code);
-    return cat.answerType === 'enum' && !answers[code]?.value;
+    if (cat.answerType !== 'enum') return false;
+    return cat.multiSelect ? answers[code]?.values === undefined : !answers[code]?.value;
   });
 
   const handleNormal = async () => {
@@ -93,14 +96,20 @@ export default function DailyCheckInSheet({ pet, date, onClose, onSaved, isCatch
       // Optional (number/text) categories only produce an observation if
       // the owner actually entered something — an untouched optional
       // category shouldn't leave a meaningless empty row behind.
+      // Multi-select categories always pass their `values` array (even
+      // empty, meaning "confirmed normal") — checkinClient.js resolves
+      // baseline rows for every multi-select category regardless, so this
+      // is just carrying forward what the owner actually saw/answered.
       const selections = selectedCodes
-        .map((code) => ({
-          code,
-          value: answers[code]?.value ?? null,
-          numericValue: answers[code]?.numericValue ?? null,
-          notes: answers[code]?.notes || null,
-        }))
-        .filter((sel) => sel.value != null || sel.numericValue != null || sel.notes);
+        .map((code) => {
+          const cat = getCategory(code);
+          const a = answers[code] || {};
+          if (cat.multiSelect) {
+            return { code, values: a.values || [], notes: a.notes || null, photoUrl: a.photoUrl || null };
+          }
+          return { code, value: a.value ?? null, numericValue: a.numericValue ?? null, notes: a.notes || null };
+        })
+        .filter((sel) => sel.values !== undefined || sel.value != null || sel.numericValue != null || sel.notes);
 
       const { healthScoreResult } = await saveChangedCheckIn(pet.id, date, selections);
       track('observation_saved', { pet_id: pet.id, check_in_date: date, categories: selectedCodes });
@@ -298,13 +307,37 @@ function CategoryQuestion({ category, species, petName, dayWord, answer, onChang
       {category.answerType === 'enum' && (
         <div className="flex flex-wrap gap-2">
           {getOptionsForSpecies(category, species).map((opt) => {
-            const active = answer.value === opt.value;
+            const isBaseline = opt.value === 'normal' || opt.value === 'none' || opt.value === 'no_change';
+            const selectedValues = category.multiSelect ? (answer.values || []) : [];
+            const active = category.multiSelect
+              ? (isBaseline ? (answer.values !== undefined && selectedValues.length === 0) : selectedValues.includes(opt.value))
+              : answer.value === opt.value;
+
+            const handleClick = () => {
+              if (!category.multiSelect) {
+                onChange({ value: opt.value });
+                return;
+              }
+              // "Normal" clears every other symptom for this category
+              // (mutually exclusive); picking a symptom toggles it in the
+              // set — multiple symptoms can be logged for one category the
+              // same day, each carrying equal weight.
+              if (isBaseline) {
+                onChange({ values: [] });
+                return;
+              }
+              const next = selectedValues.includes(opt.value)
+                ? selectedValues.filter((v) => v !== opt.value)
+                : [...selectedValues, opt.value];
+              onChange({ values: next });
+            };
+
             return (
               <button
                 key={opt.value}
                 type="button"
                 aria-pressed={active}
-                onClick={() => onChange({ value: opt.value })}
+                onClick={handleClick}
                 className={`text-sm px-3.5 py-2 rounded-full border transition-colors min-h-[40px] ${active ? '' : 'text-white/60 border-white/12'}`}
                 style={active ? { background: PALETTE.sky, color: 'hsl(var(--background))', borderColor: PALETTE.sky } : { background: 'rgba(255,255,255,0.05)' }}
               >

@@ -616,6 +616,8 @@ export default function PetProfileContent({ petId, onReload, expanded = true, on
                         label={WELLBEING_CHIP_LABELS[code]}
                         direction={wellbeingDirections?.[code]}
                         state={!wellbeingDirections ? 'loading' : !checkedInToday ? 'no-checkin' : 'ready'}
+                        interactive
+                        onClick={() => navigate(`/pet/${petId}/trends?section=trends&group=wellness&metric=${code}`)}
                       />
                     ))}
                   </div>
@@ -750,7 +752,7 @@ export default function PetProfileContent({ petId, onReload, expanded = true, on
                 icon={TrendingUp} iconBg="rgba(244,199,107,0.15)" iconColor={PALETTE.amber}
                 title="Observations" subtitle="Trends and recent observations"
                 value="Today" valueColor={PALETTE.amber}
-                to={`/pet/${petId}/symptoms`} error={errors.observations}
+                error={errors.observations}
               >
                 <div className="grid grid-cols-5 gap-1.5 mt-3">
                   {OBSERVATION_SLOTS.map(({ code, label, icon: Icon }) => {

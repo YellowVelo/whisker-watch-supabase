@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { LineChart, Line, BarChart, Bar, Cell, XAxis, YAxis, ResponsiveContainer, Tooltip } from 'recharts';
 import { format, parseISO } from 'date-fns';
-import { LEVEL_LABEL, LEVEL_COLOR } from '@/lib/checkin/trendsClient';
+import { SYMPTOM_COUNT_LABEL, SYMPTOM_COUNT_COLOR } from '@/lib/checkin/trendsClient';
 import { PALETTE } from '@/lib/toneColors';
 
 // One reusable chart, two variants (Trends Feature Spec: "Charts should
@@ -54,14 +54,15 @@ function LineVariant({ series, range, yDomain, color = PALETTE.sky, highlightExt
   );
 }
 
-// variant="observation" — Appetite / Water Intake / Energy. One bar per
-// day, height + color from the shared 5-point behavioral scale; skipped
-// days render as a flat, low-opacity marker distinct from a missing gap.
+// variant="observation" — all 9 multi-select categories. One bar per day,
+// height + color from that day's symptom count (0/1/2+, equal weight —
+// not a graded "how bad" direction); skipped days render as a flat,
+// low-opacity marker distinct from a missing gap.
 function ObservationVariant({ series, range }) {
   const data = series.map((p) => ({
     ...p,
     label: formatTick(p.date, range),
-    height: p.state === 'skipped' ? 0.5 : p.level == null ? 0 : Math.abs(p.level) + 1,
+    height: p.state === 'skipped' ? 0.5 : p.count == null ? 0 : Math.min(2, p.count) + 1,
   }));
 
   return (
@@ -72,11 +73,11 @@ function ObservationVariant({ series, range }) {
         <Tooltip
           contentStyle={{ background: '#1a1d21', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, fontSize: 12 }}
           labelStyle={{ color: 'rgba(255,255,255,0.6)' }}
-          formatter={(_, __, { payload }) => [payload.state === 'skipped' ? 'Skipped' : LEVEL_LABEL[payload.level] ?? 'No Data', '']}
+          formatter={(_, __, { payload }) => [payload.state === 'skipped' ? 'Skipped' : SYMPTOM_COUNT_LABEL[Math.min(2, payload.count ?? 0)] ?? 'No Data', '']}
         />
         <Bar dataKey="height" radius={[3, 3, 3, 3]} maxBarSize={14}>
           {data.map((d, i) => (
-            <Cell key={i} fill={d.state === 'skipped' ? 'rgba(255,255,255,0.15)' : LEVEL_COLOR[d.level] ?? PALETTE.gray} />
+            <Cell key={i} fill={d.state === 'skipped' ? 'rgba(255,255,255,0.15)' : SYMPTOM_COUNT_COLOR[Math.min(2, d.count ?? 0)] ?? PALETTE.gray} />
           ))}
         </Bar>
       </BarChart>
@@ -93,10 +94,10 @@ export default function TrendChart({ variant, series, range, yDomain = null, col
 export function ObservationLegend() {
   return (
     <div className="flex flex-col gap-1 text-[11px] text-white/40 flex-shrink-0 pl-2">
-      {[2, 1, 0, -1, -2].map((level) => (
-        <div key={level} className="flex items-center gap-1.5">
-          <span className="h-2 w-2 rounded-full flex-shrink-0" style={{ background: LEVEL_COLOR[level] }} />
-          <span>{LEVEL_LABEL[level]}</span>
+      {[2, 1, 0].map((count) => (
+        <div key={count} className="flex items-center gap-1.5">
+          <span className="h-2 w-2 rounded-full flex-shrink-0" style={{ background: SYMPTOM_COUNT_COLOR[count] }} />
+          <span>{SYMPTOM_COUNT_LABEL[count]}</span>
         </div>
       ))}
     </div>

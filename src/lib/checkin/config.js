@@ -18,6 +18,7 @@ export const CATEGORIES = [
     icon: UtensilsCrossed,
     question: (name, species, dayWord = 'today') => `How did ${name} eat ${dayWord}?`,
     answerType: 'enum',
+    multiSelect: true,
     hasNote: true,
     hasPhoto: true,
     options: [
@@ -34,6 +35,7 @@ export const CATEGORIES = [
     icon: Droplets,
     question: (name, species, dayWord = 'today') => `Did ${name} drink differently ${dayWord}?`,
     answerType: 'enum',
+    multiSelect: true,
     options: [
       { value: 'normal', label: 'Normal' },
       { value: 'less_than_usual', label: 'Less than usual' },
@@ -49,6 +51,7 @@ export const CATEGORIES = [
       ? `Was ${name}'s urination different ${dayWord}?`
       : `Was ${name}'s litter box use different ${dayWord}?`,
     answerType: 'enum',
+    multiSelect: true,
     options: [
       { value: 'normal', label: 'Normal' },
       { value: 'more_frequent', label: 'More frequent', species: 'cat' },
@@ -66,6 +69,7 @@ export const CATEGORIES = [
     icon: Waves,
     question: (name, species, dayWord = 'today') => `Was ${name}'s stool different ${dayWord}?`,
     answerType: 'enum',
+    multiSelect: true,
     options: [
       { value: 'normal', label: 'Normal' },
       { value: 'softer_than_usual', label: 'Softer than usual' },
@@ -80,6 +84,7 @@ export const CATEGORIES = [
     icon: VomitIcon,
     question: (name, species, dayWord = 'today') => `Did ${name} vomit ${dayWord}?`,
     answerType: 'enum',
+    multiSelect: true,
     hasPhoto: true,
     options: [
       { value: 'none', label: 'No' },
@@ -94,6 +99,7 @@ export const CATEGORIES = [
     icon: Zap,
     question: (name, species, dayWord = 'today') => `Was ${name}'s energy different ${dayWord}?`,
     answerType: 'enum',
+    multiSelect: true,
     options: [
       { value: 'normal', label: 'Normal' },
       { value: 'slightly_lower', label: 'Slightly lower' },
@@ -107,6 +113,7 @@ export const CATEGORIES = [
     icon: Footprints,
     question: (name, species, dayWord = 'today') => `Did ${name} move differently ${dayWord}?`,
     answerType: 'enum',
+    multiSelect: true,
     options: [
       { value: 'normal', label: 'Normal' },
       { value: 'hesitated_before_jumping', label: 'Hesitated before jumping', species: 'cat' },
@@ -128,6 +135,7 @@ export const CATEGORIES = [
     icon: Wind,
     question: (name, species, dayWord = 'today') => `Was ${name}'s breathing different ${dayWord}?`,
     answerType: 'enum',
+    multiSelect: true,
     options: [
       { value: 'normal', label: 'Normal' },
       { value: 'coughing', label: 'Coughing' },
@@ -142,6 +150,7 @@ export const CATEGORIES = [
     icon: Sparkles,
     question: (name, species, dayWord = 'today') => `Did ${name} scratch, lick, or chew more ${dayWord}?`,
     answerType: 'enum',
+    multiSelect: true,
     options: [
       { value: 'normal', label: 'Normal' },
       { value: 'scratching_more', label: 'Scratching more' },
