@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <rect width="1024" height="1024" fill="#0D0F12"/>
+  <!-- Paw print, centered within the maskable-icon safe zone (inner ~80% circle) -->
+  <g fill="#6FB7FF">
+    <!-- main pad -->
+    <ellipse cx="512" cy="620" rx="180" ry="150"/>
+    <!-- toes -->
+    <ellipse cx="340" cy="430" rx="85" ry="105" transform="rotate(-18 340 430)"/>
+    <ellipse cx="452" cy="330" rx="85" ry="110" transform="rotate(-6 452 330)"/>
+    <ellipse cx="580" cy="330" rx="85" ry="110" transform="rotate(6 580 330)"/>
+    <ellipse cx="692" cy="430" rx="85" ry="105" transform="rotate(18 692 430)"/>
+  </g>
+</svg>

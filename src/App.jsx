@@ -10,6 +10,8 @@ import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import BottomTabBar from './components/BottomTabBar';
 import AccountTypeBanner from './components/AccountTypeBanner';
+import OfflineBanner from './components/OfflineBanner';
+import IosInstallBanner from './components/IosInstallBanner';
 import Home from './pages/Home';
 import Notifications from './pages/Notifications';
 import Pets from './pages/Pets';
@@ -64,6 +66,8 @@ const AuthenticatedApp = () => {
   return (
     <>
       <AccountTypeBanner />
+      <OfflineBanner />
+      <IosInstallBanner />
       <AnimatePresence mode="wait">
         <Routes location={location} key={location.pathname}>
           <Route path="/login" element={<Login />} />
