@@ -36,3 +36,8 @@ dist-ssr
 !.dev.vars.example
 !.env.example
 !.env.test
+
+# supabase CLI local link state (points at whichever project you last
+# ran `supabase link` against — must never be a shared/tracked file
+# once dev/staging/prod are separate projects)
+supabase/.temp
