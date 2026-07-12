@@ -47,7 +47,8 @@ export default function IosInstallBanner() {
     >
       <Share className="h-5 w-5 shrink-0" style={{ color: '#6FB7FF' }} />
       <span className="flex-1">
-        Install Wysker Watch: tap <strong>Share</strong>, then <strong>Add to Home Screen</strong>.
+        Install Wysker Watch: tap <strong>•••</strong>, then <strong>Share</strong>, then{' '}
+        <strong>Add to Home Screen</strong>.
       </span>
       <button
         type="button"
