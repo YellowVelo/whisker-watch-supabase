@@ -23,6 +23,14 @@ export function isDemoAccount(user) {
   return user?.account_type === 'demo';
 }
 
+// A real personal-use account (not a synthetic test/demo one) that
+// should be excluded from real-user analytics but is never eligible
+// for reset-sandbox-account — that function's server-side guard only
+// allows 'test'/'demo', so this is safe by construction, not by convention.
+export function isOwnerAccount(user) {
+  return user?.account_type === 'owner';
+}
+
 export function isDemoAdmin(user) {
   return user?.role === 'admin';
 }

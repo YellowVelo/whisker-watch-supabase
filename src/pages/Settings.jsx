@@ -22,6 +22,7 @@ const ACCOUNT_TYPE_BADGES = {
   production: { label: 'Production', className: 'text-emerald-400 bg-emerald-400/10' },
   test: { label: 'Test', className: 'text-amber-400 bg-amber-400/10' },
   demo: { label: 'Demo', className: 'text-violet-400 bg-violet-400/10' },
+  owner: { label: 'Owner', className: 'text-sky-400 bg-sky-400/10' },
 };
 
 const MENU_ITEMS = [
