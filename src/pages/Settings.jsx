@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   User, Bell, ShieldCheck, Settings as SettingsIcon, HelpCircle,
-  LogOut, Trash2, Lock, ChevronRight, Sprout, RotateCcw, UsersRound, Sparkles, FileText,
+  LogOut, Trash2, Lock, ChevronRight, Sprout, RotateCcw, UsersRound, Sparkles, FileText, Download,
 } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -16,6 +16,7 @@ import { isDemoAccount, isInternalAccount } from '@/lib/accountType';
 import { getDisplayName } from '@/lib/profileName';
 import { SEED_SCENARIOS } from '@/lib/seedTestData';
 import { deleteAccount, resetSandboxAccount, signOutBestEffort } from '@/lib/accountClient';
+import { useInstallPrompt } from '@/lib/useInstallPrompt';
 
 const ACCOUNT_TYPE_BADGES = {
   production: { label: 'Production', className: 'text-emerald-400 bg-emerald-400/10' },
@@ -49,6 +50,7 @@ const DIALOG = {
 export default function Settings() {
   const { user, isLoadingAuth, logout, profileLoadError, checkUserAuth } = useAuth();
   const { toast } = useToast();
+  const { canInstall, promptInstall } = useInstallPrompt();
 
   const [activeDialog, setActiveDialog] = useState(DIALOG.NONE);
 
@@ -84,6 +86,12 @@ export default function Settings() {
     setDeleteError('');
     setDeleteConfirmText('');
     setActiveDialog(DIALOG.DELETE_WARNING);
+  };
+
+  const handleInstallApp = async () => {
+    track('install_app_selected', {});
+    const choice = await promptInstall();
+    if (choice) track('install_app_prompt_result', { outcome: choice.outcome });
   };
 
   const handleSignOutSelected = () => {
@@ -244,6 +252,19 @@ export default function Settings() {
             </div>
             <ChevronRight className="h-5 w-5 text-white/30 flex-shrink-0" aria-hidden="true" />
           </Link>
+
+          {canInstall && (
+            <div className="rounded-2xl overflow-hidden" style={{ background: 'rgba(111,183,255,0.08)', border: '1px solid rgba(111,183,255,0.25)' }}>
+              <MenuListRow
+                icon={Download}
+                iconClassName="text-primary"
+                iconBg="rgba(111,183,255,0.16)"
+                title="Install App"
+                subtitle="Add Wysker Watch to your device"
+                onClick={handleInstallApp}
+              />
+            </div>
+          )}
 
           {/* Primary menu */}
           <div className="rounded-2xl overflow-hidden divide-y" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderColor: 'rgba(255,255,255,0.08)' }}>
