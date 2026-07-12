@@ -42,6 +42,11 @@ export const AuthProvider = ({ children }) => {
   // event). Keyed by user id so concurrent calls for the same user
   // share one in-flight request instead of racing.
   const loadInFlightRef = useRef(new Map());
+  // Fires 'app_opened' once per page load, the first time we resolve an
+  // authenticated user — whether that's an existing session found on
+  // mount or a fresh sign-in. Guards against onAuthStateChange firing
+  // again later (token refresh, etc.) and inflating visit counts.
+  const appOpenedTrackedRef = useRef(false);
 
   useEffect(() => {
     checkUserAuth();
@@ -123,6 +128,10 @@ export const AuthProvider = ({ children }) => {
       ...profile,
     });
     setIsAuthenticated(true);
+    if (!appOpenedTrackedRef.current) {
+      appOpenedTrackedRef.current = true;
+      track('app_opened', {});
+    }
   };
 
   // Re-fetches the profiles row and merges it into `user`, without
