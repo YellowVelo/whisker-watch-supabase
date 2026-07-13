@@ -220,9 +220,11 @@ export default function Home() {
 
   const activePets = pets.filter((p) => !p.is_memorial);
 
-  // Only the single most recent missed day is surfaced on Home, for the
-  // first pet (in display order) that qualifies.
-  const catchUpPet = activePets.find((pet) => {
+  // Every active pet missing yesterday's check-in gets its own catch-up
+  // link on its own card — not just the first one found (a household with
+  // three pets that all missed yesterday should be able to catch up all
+  // three, not just one).
+  const catchUpPets = activePets.filter((pet) => {
     if (yesterdayCheckIns[pet.id]) return false;
     const petCreatedToday = pet.created_at && toDateStr(new Date(pet.created_at)) >= yesterdayStr();
     return !petCreatedToday;
@@ -337,8 +339,8 @@ export default function Home() {
                     {incompleteOnboardingIds.has(pet.id) && (
                       <CompleteProfileBanner petId={pet.id} petName={pet.name} />
                     )}
-                    {catchUpPet?.id === pet.id && (
-                      <CatchUpBanner petName={catchUpPet.name} onCatchUp={() => handleCatchUp(catchUpPet)} />
+                    {catchUpPets.some((p) => p.id === pet.id) && (
+                      <CatchUpBanner petName={pet.name} onCatchUp={() => handleCatchUp(pet)} />
                     )}
                   </div>
                 ))}
@@ -388,11 +390,11 @@ function CompleteProfileBanner({ petId, petName }) {
   );
 }
 
-// Only one Catch-Up reminder is ever shown on Home, for the most
-// recently missed pet (Home Feature Spec #5) — tapping opens the same
-// Daily Check-In flow, dated for yesterday, so the owner picks
-// normal/changed/skipped from the existing sheet rather than a
-// duplicate set of inline controls.
+// Rendered once per pet that missed yesterday's check-in (Home.jsx scopes
+// this inside that pet's own card) — tapping opens the same Daily
+// Check-In flow, dated for yesterday, so the owner picks Great/Off/Tough
+// Day from the existing sheet rather than a duplicate set of inline
+// controls.
 function CatchUpBanner({ petName, onCatchUp }) {
   return (
     <div className="text-center py-2">
