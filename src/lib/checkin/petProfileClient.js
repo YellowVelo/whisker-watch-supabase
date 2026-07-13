@@ -3,79 +3,15 @@
 // calls inside PetProfile.jsx (Technical Standards — never query Supabase
 // directly from UI components).
 //
-// Appetite/Energy/Symptoms/Weight "scores" shown on Pet Profile are NOT
-// persisted anywhere (Data Model §3.19: wellness_scores only stores one
-// total score per day). They're computed here at read time from the same
-// `observations` rows and the same computeDayScore/computeTrend helpers
-// Wellness Score uses, just narrowed to a category subset, per the
-// Feature Spec's "derive computed values ... rather than persisting
-// redundant values."
+// The retired Wellness/Appetite/Energy/Symptoms ring scores (computed
+// here at read time from computeDayScore/computeTrend) are gone along
+// with the 5-ring row itself. Only Weight-related reads remain here.
 
 import { supabase } from '@/api/supabaseClient';
 import { entities } from '@/api/entities';
-import { computeDayScore, computeTrend } from './scoring';
-import { loadObservationCatalog } from './checkinClient';
-import { dateStrInTimezone } from '@/lib/timezone';
-
-// "Symptoms" rolls up every Daily Check-In category except the ones with
-// their own ring (appetite/energy) or no ring (weight/other) — mirrors
-// the Pets screen's LOG_SLOTS grouping but combined into a single score.
-const SYMPTOM_CATEGORY_CODES = ['vomiting', 'bathroom', 'stool', 'breathing', 'itching', 'behavior', 'medication_exception'];
-const RING_GROUPS = { appetite: ['appetite'], energy: ['energy'], symptoms: SYMPTOM_CATEGORY_CODES };
-
-const TREND_STATUS_LABEL = { stable: 'Stable', improving: 'Improving', monitor: 'Monitor', declining: 'Lower', unknown: null };
-
-// `timezone` threaded through from the caller (PetProfileContent.jsx) so
-// "today" here agrees with Home's timezone-aware date (spec §24).
-const todayStr = (timezone) => dateStrInTimezone(timezone, 0);
-
-// Single fetch of the pet's recent daily_check_ins + observations, then
-// scored per ring group client-side — one round trip total instead of one
-// per ring (three separate DailyCheckIn + observations fetches, all
-// fetching the same underlying check-ins). Mirrors the Wellness ring's own
-// "only show a value if it's actually today's" rule (Data Model §3.19 has
-// no concept of a stale-but-still-shown score) — a ring whose most recent
-// scorable day isn't today reports no data rather than silently surfacing
-// a days-old number next to a Wellness ring that would show "No Data" for
-// the same gap.
-export async function getWellnessRingScores(petId, days = 14, timezone) {
-  const empty = { score: null, statusLabel: null };
-  const result = { appetite: empty, energy: empty, symptoms: empty };
-
-  const [catalog, checkIns] = await Promise.all([
-    loadObservationCatalog(),
-    entities.DailyCheckIn.filter({ pet_id: petId }, '-check_in_date', days),
-  ]);
-  const scorableCheckIns = checkIns.filter((c) => c.status !== 'skipped');
-  if (scorableCheckIns.length === 0) return result;
-
-  const allTypeIds = [...new Set(Object.values(RING_GROUPS).flat().map((code) => catalog[code]?.type.id).filter(Boolean))];
-  const checkInIds = scorableCheckIns.map((c) => c.id);
-  const { data, error } = await supabase
-    .from('observations')
-    .select('daily_check_in_id, observation_type_id, severity_score')
-    .in('daily_check_in_id', checkInIds)
-    .in('observation_type_id', allTypeIds);
-  if (error) throw error;
-
-  const byCheckIn = {};
-  for (const obs of data) (byCheckIn[obs.daily_check_in_id] ||= []).push(obs);
-
-  const isToday = scorableCheckIns[0].check_in_date === todayStr(timezone);
-
-  for (const [ring, codes] of Object.entries(RING_GROUPS)) {
-    const typeIds = new Set(codes.map((code) => catalog[code]?.type.id).filter(Boolean));
-    const series = scorableCheckIns.map((c) => ({
-      check_in_date: c.check_in_date,
-      score: computeDayScore((byCheckIn[c.id] || []).filter((o) => typeIds.has(o.observation_type_id))),
-    }));
-    if (!isToday) continue; // leave as `empty` — no scorable check-in today
-    const trend = computeTrend(series);
-    result[ring] = { score: series[0].score, statusLabel: TREND_STATUS_LABEL[trend] };
-  }
-
-  return result;
-}
+import { getObservationValuesForCheckIns } from './checkinClient';
+import { COUNTED_CATEGORIES, getCategory } from './config';
+import { getChipState } from './chipLabels';
 
 // Shared by getWeightSummary/getWeightSummariesForPets — turns a pet's
 // weight-bearing symptom_logs rows (already sorted oldest-first, already
@@ -201,6 +137,28 @@ export async function getTimelineEvents(petId, limit = 200) {
   ];
 
   return events.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+}
+
+// Per-day attribute chips for every Daily Check-In, most-recent first — the
+// granular detail the Timeline page shows for check-in days (vet visits
+// need the actual per-attribute answers, not just "Daily check-in — Off
+// Day"). Reuses getObservationValuesForCheckIns keyed by check-in id rather
+// than pet id, since that function only uses the key to shape its return
+// value.
+export async function getTimelineCheckIns(petId, limit = 200) {
+  const checkIns = await entities.DailyCheckIn.filter({ pet_id: petId }, '-check_in_date', limit);
+  const checkInsById = Object.fromEntries(checkIns.map((c) => [c.id, c]));
+  const valuesByCheckInId = await getObservationValuesForCheckIns(checkInsById);
+
+  return checkIns.map((c) => ({
+    id: c.id,
+    date: c.check_in_date,
+    status: c.status,
+    chips: COUNTED_CATEGORIES.map((code) => {
+      const { label, tone } = getChipState(code, c.status, valuesByCheckInId[c.id] || {});
+      return { code, categoryLabel: getCategory(code)?.label || code, label, tone };
+    }),
+  }));
 }
 
 // Health Records count. There is no document-storage table yet (Data
