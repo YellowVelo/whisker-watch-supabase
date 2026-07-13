@@ -4,8 +4,8 @@ import { entities } from '@/api/entities';
 import { supabase } from '@/api/supabaseClient';
 import {
   ChevronRight, ChevronDown, Share2, Pencil, Trash2, Rainbow,
-  Cat, Dog, Activity, UtensilsCrossed, Zap, Heart, Scale, HeartPulse, ClipboardList,
-  Pill, Utensils, ShieldCheck, TrendingUp, Calendar, Clock, FileText, FileDown, Droplets, Footprints, Loader2,
+  Cat, Dog, UtensilsCrossed, Zap, Scale, HeartPulse, ClipboardList,
+  Pill, Utensils, ShieldCheck, TrendingUp, Clock, FileText, FileDown, Droplets, Footprints, Loader2,
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
@@ -15,12 +15,12 @@ import MemorialDialog from './MemorialDialog';
 import DailyCheckInModal from './DailyCheckInModal';
 import { track } from '@/lib/analytics';
 import {
-  getLatestWellness, getObservationValuesForCheckIns, getCheckIn, getWellbeingDirections,
+  getObservationValuesForCheckIns, getCheckIn, getWellbeingDirections,
   yesterdayStr as yesterdayStrTz,
 } from '@/lib/checkin/checkinClient';
 import { getChipState } from '@/lib/checkin/chipLabels';
 import {
-  getWellnessRingScores, getWeightSummary, getVaccinationSummary, getTimelineEvents, getHealthRecordsCount,
+  getWeightSummary, getVaccinationSummary, getTimelineEvents, getHealthRecordsCount,
 } from '@/lib/checkin/petProfileClient';
 import { getPetLabel } from '@/lib/speciesConfig';
 import { computeDetailedAge } from '@/lib/lifeStage';
@@ -28,25 +28,25 @@ import { PALETTE, RING_COLOR } from '@/lib/toneColors';
 import { useAuth } from '@/lib/AuthContext';
 import { detectTimezone, dateStrInTimezone } from '@/lib/timezone';
 import AttributeTrendChip from '@/components/AttributeTrendChip';
+import VibeIcon, { vibeAccessibleLabel } from '@/components/VibeIcon';
 import { WELLBEING_ATTRIBUTES } from '@/lib/checkin/config';
 
-// Health Score Revision V2 (spec §10) — the Pets-tab card's Wellbeing
-// chips, always Energy/Mobility/Breathing/Itching in this order.
-const WELLBEING_CHIP_LABELS = { energy: 'Energy', mobility: 'Mobility', breathing: 'Breathing', itching: 'Skin / Itching' };
-
-const STATUS_TONE = { Stable: 'good', Improving: 'good', Lower: 'warn', Monitor: 'warn' };
+// Daily Check-In, Vibe & Trends (spec v5) — the Pets-tab card's Wellbeing
+// chips, always Energy/Mobility/Breathing/Skin-Itching/Behavior in this
+// order.
+const WELLBEING_CHIP_LABELS = { energy: 'Energy', mobility: 'Mobility', breathing: 'Breathing', itching: 'Skin / Itching', behavior: 'Behavior' };
 
 // `timezone` threaded through from the main component below (the signed-in
 // user's stored timezone, spec §24). WeightQuickLogSheet doesn't have
 // access to that context and keeps the UTC fallback — a late-night weight
 // log landing on the "wrong" UTC date is a pre-existing, lower-stakes gap
-// than the Wellness/Check-In "is this today" comparisons below, which this
-// feature's V2 chips on Home now get right.
+// than the Vibe/Check-In "is this today" comparisons below, which this
+// feature's chips on Home now get right.
 const todayStr = (timezone) => dateStrInTimezone(timezone, 0);
 
-// Fixed Observations chip slots (Feature Spec §9) — labels/state come from
-// the shared chipLabels module so this screen and the Pets screen's
-// PetCard never describe the same observation two different ways.
+// Fixed Observations chip slots — labels/state come from the shared
+// chipLabels module so this screen and the Pets screen's PetCard never
+// describe the same observation two different ways.
 const OBSERVATION_SLOTS = [
   { code: 'appetite', label: 'Appetite', icon: UtensilsCrossed },
   { code: 'water_intake', label: 'Water', icon: Droplets },
@@ -54,36 +54,6 @@ const OBSERVATION_SLOTS = [
   { code: 'stool', label: 'Stool', icon: HeartPulse },
   { code: 'mobility', label: 'Activity', icon: Footprints },
 ];
-
-// Oura-style circular indicator shared by all five Wellness Summary rings.
-// Rendered inside a <button> by the caller — every ring is tappable,
-// consistently (Wellness/Appetite/Energy/Symptoms open Daily Check-In,
-// Weight opens the weight quick-log sheet), so there's no dead-looking
-// ring next to a live one.
-function WellnessRing({ icon: Icon, score, maxScore, label, statusLabel }) {
-  const tone = statusLabel ? (STATUS_TONE[statusLabel] || 'unknown') : 'unknown';
-  const color = RING_COLOR[tone];
-  return (
-    <div className="flex flex-col items-center gap-1.5 flex-shrink-0" style={{ minWidth: 64 }}>
-      <div className="relative w-16 h-16 rounded-full flex items-center justify-center" style={{ background: 'rgba(255,255,255,0.06)' }}>
-        <svg className="absolute inset-0 w-full h-full -rotate-90" viewBox="0 0 64 64">
-          <circle cx="32" cy="32" r="28" fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth="4" />
-          {score != null && (
-            <circle cx="32" cy="32" r="28" fill="none" stroke={color} strokeWidth="4"
-              strokeDasharray={`${(Math.min(score, maxScore) / maxScore) * 175.9} 175.9`}
-              strokeLinecap="round" />
-          )}
-        </svg>
-        <Icon className="absolute h-4 w-4 text-white/25" style={{ top: 6 }} aria-hidden="true" />
-        <span className="text-[17px] font-bold text-white">{score != null ? score : '—'}</span>
-      </div>
-      <p className="text-[13px] font-medium text-white/50">{label}</p>
-      <p className="text-[13px] font-semibold" style={{ color: statusLabel ? color : 'rgba(255,255,255,0.35)' }}>
-        {statusLabel || 'No Data'}
-      </p>
-    </div>
-  );
-}
 
 // Summary card shared by Baseline/Conditions/Medications/Food/Vaccinations/
 // Weight/Observations/Timeline/Health Records — icon + title + subtitle +
@@ -243,9 +213,7 @@ export default function PetProfileContent({ petId, onReload, expanded = true, on
   const [headerLoading, setHeaderLoading] = useState(true);
   const [detailsLoading, setDetailsLoading] = useState(true);
 
-  const [wellness, setWellness] = useState(null);
-  const [ringScores, setRingScores] = useState({ appetite: {}, energy: {}, symptoms: {} });
-  // Health Score Revision V2 — only populated in context="pets" (spec §10).
+  // Only populated in context="pets" — the Pets-tab card's Wellbeing chips.
   const [wellbeingDirections, setWellbeingDirections] = useState(null);
   const [wellbeingUnavailable, setWellbeingUnavailable] = useState(false);
   const [weightSummary, setWeightSummary] = useState(null);
@@ -315,31 +283,18 @@ export default function PetProfileContent({ petId, onReload, expanded = true, on
       return;
     }
 
-    const [wellnessR, ringScoresR, weightR, checkInR] = await Promise.allSettled([
-      getLatestWellness(petId),
-      getWellnessRingScores(petId, 14, timezone),
+    const [weightR, checkInR] = await Promise.allSettled([
       getWeightSummary(petId),
       getCheckIn(petId, todayStr(timezone)),
     ]);
 
     const nextErrors = {};
 
-    setWellness(wellnessR.status === 'fulfilled' ? wellnessR.value : null);
-    if (wellnessR.status === 'rejected') { console.error(wellnessR.reason); nextErrors.wellness = true; }
-
-    if (ringScoresR.status === 'fulfilled') {
-      setRingScores(ringScoresR.value);
-    } else {
-      console.error(ringScoresR.reason);
-      setRingScores({ appetite: {}, energy: {}, symptoms: {} });
-      nextErrors.wellness = true;
-    }
-
     setWeightSummary(weightR.status === 'fulfilled' ? weightR.value : null);
     if (weightR.status === 'rejected') { console.error(weightR.reason); nextErrors.weight = true; }
 
-    // Wellbeing chips (Energy/Mobility/Breathing/Itching, spec §10.2) are
-    // only rendered in the Pets-tab collapsed card, so this extra fetch is
+    // Wellbeing chips (Energy/Mobility/Breathing/Itching/Behavior) are only
+    // rendered in the Pets-tab collapsed card, so this extra fetch is
     // skipped entirely for the standalone Pet Profile route.
     if (context === 'pets') {
       try {
@@ -516,16 +471,7 @@ export default function PetProfileContent({ petId, onReload, expanded = true, on
   const hasLinkedCoOwner = petCoOwners.some((c) => c.co_owner_user_id);
   const age = computeDetailedAge(pet);
   const checkedInToday = todayCheckIn?.check_in_date === todayStr(timezone);
-
-  const wellnessScore = wellness?.latest?.check_in_date === todayStr(timezone) ? wellness.latest.score : null;
-  const wellnessStatus = wellness?.latest?.check_in_date === todayStr(timezone)
-    ? { stable: 'Stable', improving: 'Improving', monitor: 'Monitor', declining: 'Lower', unknown: null }[wellness.trend]
-    : null;
-  const lastUpdated = wellness?.latest
-    ? (wellness.latest.check_in_date === todayStr(timezone)
-        ? `Today at ${format(parseISO(wellness.latest.created_at || new Date().toISOString()), 'h:mm a')}`
-        : format(parseISO(wellness.latest.check_in_date), 'MMM d'))
-    : pet.updated_at ? format(parseISO(pet.updated_at), 'MMM d') : null;
+  const vibeStatus = checkedInToday ? (todayCheckIn?.status ?? null) : null;
 
   const vaxSummary = getVaccinationSummary(vaccinations);
   const weightValLbs = weightSummary?.currentLbs != null ? weightSummary.currentLbs.toFixed(1) : null;
@@ -591,19 +537,19 @@ export default function PetProfileContent({ petId, onReload, expanded = true, on
           <PetProfileDetailsSkeleton />
         ) : (
           <>
-            {/* ── WELLNESS SUMMARY / WELLBEING CHIPS ── */}
+            {/* ── VIBE / WELLBEING CHIPS ── */}
             {/* Always visible — this and the identity block above are the
                 Pets-tab card's collapsed state (Nav + Daily Check-In UX
                 Refresh spec #6: "Collapse info after the top circles").
                 Everything below (actions + nav cards) only renders when
                 expanded.
-                Health Score Revision V2 (spec §10): the Pets-tab card
-                (context="pets") shows four Wellbeing directional chips
-                instead of the legacy 0-100 rings + Stable/Monitor wording
-                — no Health Score is ever shown here. The standalone Pet
-                Profile route (context="profile", the default) keeps the
-                original rings unchanged; that page is explicitly out of
-                scope for this feature. */}
+                Daily Check-In, Vibe & Trends (spec v5): the Pets-tab card
+                (context="pets") shows five Wellbeing directional chips —
+                no score of any kind is ever shown here. The standalone Pet
+                Profile route (context="profile", the default) shows a
+                single Vibe icon plus a separate Weight line, replacing the
+                retired 5-ring row (spec: "single Vibe icon, same icon and
+                color rules as Home"). */}
             {context === 'pets' ? (
               <div className="rounded-2xl px-4 py-4" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}>
                 {wellbeingUnavailable ? (
@@ -625,33 +571,22 @@ export default function PetProfileContent({ petId, onReload, expanded = true, on
               </div>
             ) : (
               <div className="rounded-2xl px-4 pt-5 pb-4" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}>
-                {errors.wellness ? (
+                {errors.weight ? (
                   <p className="text-base text-white/40 text-center py-4">Unable to load wellness summary.</p>
                 ) : (
-                  <div className="flex items-start justify-between gap-1">
-                    <button onClick={() => setCheckInOpen(true)} aria-label="Open Daily Check-In">
-                      <WellnessRing icon={Activity} score={wellnessScore} maxScore={100} label="Wellness" statusLabel={wellnessStatus} />
+                  <div className="flex items-center justify-between gap-3">
+                    <button onClick={() => setCheckInOpen(true)} aria-label={`Open Daily Check-In. Current Vibe: ${vibeAccessibleLabel(vibeStatus)}.`} className="flex flex-col items-center gap-1.5">
+                      <VibeIcon status={vibeStatus} size={40} />
+                      <p className="text-[13px] font-semibold" style={{ color: PALETTE.sky }}>
+                        {vibeStatus ? { great: 'Great Day', off: 'Off Day', tough: 'Tough Day', skipped: 'Skipped' }[vibeStatus] : 'Check in today'}
+                      </p>
                     </button>
-                    <button onClick={() => setCheckInOpen(true)} aria-label="Open Daily Check-In">
-                      <WellnessRing icon={UtensilsCrossed} score={ringScores.appetite.score} maxScore={100} label="Appetite" statusLabel={ringScores.appetite.statusLabel} />
-                    </button>
-                    <button onClick={() => setCheckInOpen(true)} aria-label="Open Daily Check-In">
-                      <WellnessRing icon={Zap} score={ringScores.energy.score} maxScore={100} label="Energy" statusLabel={ringScores.energy.statusLabel} />
-                    </button>
-                    <button onClick={() => setCheckInOpen(true)} aria-label="Open Daily Check-In">
-                      <WellnessRing icon={Heart} score={ringScores.symptoms.score} maxScore={100} label="Symptoms" statusLabel={ringScores.symptoms.statusLabel} />
-                    </button>
-                    <button onClick={() => setWeightLogOpen(true)} aria-label="Log weight">
-                      <WellnessRing icon={Scale} score={weightSummary?.score} maxScore={100} label="Weight" statusLabel={weightSummary?.statusLabel} />
+                    <button onClick={() => setWeightLogOpen(true)} aria-label="Log weight" className="flex flex-col items-center gap-1.5">
+                      <Scale className="h-6 w-6 text-white/40" aria-hidden="true" />
+                      <p className="text-[15px] font-semibold text-white">{weightValLbs ? `${weightValLbs} lbs` : 'No Data'}</p>
                     </button>
                   </div>
                 )}
-                <div className="flex items-center gap-1.5 mt-4 pt-3" style={{ borderTop: '1px solid rgba(255,255,255,0.07)' }}>
-                  <Calendar className="h-3.5 w-3.5 text-white/30" />
-                  <p className="text-[13px] text-white/35">
-                    {lastUpdated ? `Last updated ${lastUpdated}` : 'No wellness data yet'}
-                  </p>
-                </div>
               </div>
             )}
 

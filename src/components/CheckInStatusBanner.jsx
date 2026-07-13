@@ -1,16 +1,16 @@
 import { Link } from 'react-router-dom';
-import { Check, Minus, AlertTriangle, Clock } from 'lucide-react';
+import { Sun, Minus, CloudRainWind, CloudHail, Clock } from 'lucide-react';
 import { PALETTE } from '@/lib/toneColors';
 
 // One-line Daily Check-In status row nested directly under a pet's card on
-// Home (Nav + Daily Check-In UX Refresh spec #2/#4) — a single compact row
-// per pet rather than a separate "Today's Check-Ins" list. Covers every
-// state: not completed (tappable prompt), normal/changed/skipped completed
-// (links to Trends), and error — never collapses these into one generic
-// "done" state.
+// Home — a single compact row per pet rather than a separate "Today's
+// Check-Ins" list. Covers every state: not completed (tappable prompt),
+// Great/Off/Tough Day completed (links to Trends), and error — never
+// collapses these into one generic "done" state.
 const CONFIG = {
-  normal: { Icon: Check, color: PALETTE.teal, text: (name) => `${name} checked in today` },
-  changed: { Icon: AlertTriangle, color: PALETTE.amber, text: (name) => `${name}: something changed today` },
+  great: { Icon: Sun, color: PALETTE.teal, text: (name) => `${name} had a Great Day` },
+  off: { Icon: CloudRainWind, color: PALETTE.amber, text: (name) => `${name} had an Off Day` },
+  tough: { Icon: CloudHail, color: PALETTE.amber, text: (name) => `${name} had a Tough Day` },
   skipped: { Icon: Minus, color: 'rgba(255,255,255,0.4)', text: (name) => `${name} skipped today` },
 };
 
@@ -44,7 +44,7 @@ export default function CheckInStatusBanner({ pet, checkIn, onStartCheckIn, erro
     );
   }
 
-  const { Icon, color, text } = CONFIG[status];
+  const { Icon, color, text } = CONFIG[status] || CONFIG.skipped;
 
   return (
     <Link

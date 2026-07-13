@@ -12,6 +12,8 @@ export const CHIP_VALUE_LABELS = {
   water_intake: { normal: 'Normal', less_than_usual: 'Lower', more_than_usual: 'Higher', much_more_than_usual: 'Higher' },
   energy: { normal: 'Normal', slightly_lower: 'Lower', much_lower: 'Lower', higher_than_usual: 'Higher' },
   stool: { normal: 'Normal', softer_than_usual: 'Soft', diarrhea: 'Loose', constipated: 'Hard', blood_noticed: 'Blood' },
+  vomiting: { none: 'Normal', once: 'Once', more_than_once: '2+', hairball_only: 'Hairball', regurgitated: 'Regurgitated' },
+  nausea: { normal: 'Normal' },
   mobility: { normal: 'Normal' },
 };
 
@@ -30,6 +32,13 @@ export function getChipState(code, status, values, { unavailable = false } = {})
   }
 
   const observed = values?.[code];
+
+  // "Not Observed" (Water/Bathroom only) is a real, explicit answer,
+  // distinct from both Normal and Unknown — the owner didn't have the
+  // opportunity to observe, never counted as a symptom, never collapsed
+  // into either other state (spec Attribute Model).
+  if (observed?.notObserved) return { label: 'Not Observed', tone: 'unknown' };
+
   const symptomValues = observed?.values || [];
   if (symptomValues.length === 0) return { label: 'Normal', tone: 'good' };
   // Multi-select: a single symptom shows its specific word (e.g. "Loose");

@@ -1,34 +1,29 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { Cat, Dog, Heart, Pill, CalendarDays, ChevronRight, Rainbow } from 'lucide-react';
-import AttributeTrendChip, { DirectionIcon, DIRECTION_CONFIG } from '@/components/AttributeTrendChip';
+import AttributeTrendChip, { DIRECTION_CONFIG } from '@/components/AttributeTrendChip';
+import VibeIcon, { vibeAccessibleLabel } from '@/components/VibeIcon';
 import { getPetLabel } from '@/lib/speciesConfig';
 import { computeDetailedAge } from '@/lib/lifeStage';
+import { PALETTE } from '@/lib/toneColors';
 
-// Home's primary per-pet card (Health Score Revision V2, spec §9). One card
-// per pet — full identity + medication count, plus (for active pets)
-// today's 0-10 Health Score and exactly six directional chips (Appetite,
-// Water, Bathroom, Stool, Vomiting, Weight). Tapping the card opens that
-// pet's Trends. Memorial pets swap the score/chips for an "In Memory"
-// marker instead. No Stable/Improving/Monitor/Declining wording remains —
-// only up/equal/down/unknown direction (spec §8.3).
+// Home's primary per-pet card (Daily Check-In, Vibe & Trends spec v5). One
+// card per pet — full identity + medication count, plus (for active pets)
+// today's Vibe icon and six directional chips (Appetite, Water, Bathroom,
+// Stool, Vomiting, Nausea). Weight is its own line beneath the chip grid,
+// not a 7th chip. Tapping the card opens that pet's Trends. Memorial pets
+// swap the Vibe icon/chips for an "In Memory" marker instead. No score of
+// any kind is shown here — only the Vibe self-report and up/equal/down/
+// unknown symptom-count directions.
 
-// Copy for each reason the score comparison can't show a direction
-// (spec §9.2/§16).
-const DIRECTION_REASON_COPY = {
-  no_checkin_today: 'Check in today',
-  missing_yesterday: 'Not enough data',
-  skipped_yesterday: 'Not enough data',
-  first_day: 'First day logged',
-};
-
-// Home's six required chips (spec §9.3) — five Health Attributes plus
-// Weight. Order matches the approved Home screenshot.
+// Home's six Health Attribute chips (spec Attribute Model — now includes
+// Nausea). Order matches the approved Home screenshot.
 const HOME_CHIP_SLOTS = [
   { code: 'appetite', label: 'Appetite' },
   { code: 'water_intake', label: 'Water' },
   { code: 'bathroom', label: 'Bathroom' },
   { code: 'stool', label: 'Stool' },
   { code: 'vomiting', label: 'Vomiting' },
+  { code: 'nausea', label: 'Nausea' },
 ];
 
 function PetPhoto({ pet, size, memorial }) {
@@ -53,7 +48,7 @@ function PetPhoto({ pet, size, memorial }) {
 }
 
 export default function PetSummaryCard({
-  pet, medicationCount = 0, checkIn, healthScore, attributeDirections, attributesUnavailable = false,
+  pet, medicationCount = 0, checkIn, attributeDirections, attributesUnavailable = false,
   weight, chipsLoading = false, highlighted = false, cardRef,
 }) {
   const navigate = useNavigate();
@@ -109,13 +104,7 @@ export default function PetSummaryCard({
   const age = computeDetailedAge(pet);
   const conditions = pet.conditions?.length > 0 ? pet.conditions : null;
   const hasCheckedInToday = !!checkIn && checkIn.status !== 'skipped';
-  const score = hasCheckedInToday ? (healthScore?.score ?? null) : null;
-  const direction = hasCheckedInToday ? (healthScore?.direction ?? 'unknown') : 'unknown';
-  const comparisonText = !checkIn
-    ? 'Check in today'
-    : checkIn.status === 'skipped'
-      ? 'Not enough data'
-      : (DIRECTION_REASON_COPY[healthScore?.directionReason] || 'versus yesterday');
+  const vibeStatus = checkIn?.status ?? null;
 
   return (
     <Link
@@ -161,25 +150,10 @@ export default function PetSummaryCard({
         </div>
 
         <div className="flex items-center gap-2 flex-shrink-0">
-          <div className="flex flex-col items-center">
-            <div className="relative w-14 h-14 flex items-center justify-center">
-              <svg className="absolute inset-0 w-full h-full -rotate-90" viewBox="0 0 56 56">
-                <circle cx="28" cy="28" r="24" fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth="4" />
-                {score != null && (
-                  <circle
-                    cx="28" cy="28" r="24" fill="none"
-                    stroke={DIRECTION_CONFIG[direction]?.color || DIRECTION_CONFIG.unknown.color}
-                    strokeWidth="4"
-                    strokeDasharray={`${(score / 10) * 150.8} 150.8`}
-                    strokeLinecap="round"
-                  />
-                )}
-              </svg>
-              <span className="text-[15px] font-bold text-white">{score != null ? score : '—'}<span className="text-[11px] font-semibold text-white/40">/10</span></span>
-            </div>
-            <p className="text-[13px] font-semibold mt-1 whitespace-nowrap flex items-center gap-1" style={{ color: score != null ? DIRECTION_CONFIG[direction]?.color : 'rgba(255,255,255,0.4)' }}>
-              {score != null && <DirectionIcon direction={direction} className="h-3 w-3" />}
-              {comparisonText}
+          <div className="flex flex-col items-center" role="img" aria-label={vibeAccessibleLabel(vibeStatus)}>
+            <VibeIcon status={vibeStatus} size={32} />
+            <p className="text-[13px] font-semibold mt-1 whitespace-nowrap" style={{ color: PALETTE.sky }}>
+              {vibeStatus ? { great: 'Great Day', off: 'Off Day', tough: 'Tough Day', skipped: 'Skipped' }[vibeStatus] : 'Check in today'}
             </p>
           </div>
           <ChevronRight className="h-4 w-4 text-white/25" aria-hidden="true" />
@@ -198,6 +172,8 @@ export default function PetSummaryCard({
               onClick={goToMetric(code)}
             />
           ))}
+        </div>
+        <div className="mt-2">
           <AttributeTrendChip
             label="Weight"
             direction={weight?.direction}

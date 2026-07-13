@@ -1,5 +1,5 @@
 import { entities } from '@/api/entities';
-import { markNormal, markSkipped, saveChangedCheckIn } from '@/lib/checkin/checkinClient';
+import { markGreatDay, markSkipped, markOffTough } from '@/lib/checkin/checkinClient';
 
 // Test-account seed scenarios. Each function creates realistic sample
 // data via the normal entity API (so it goes through the same RLS
@@ -14,28 +14,30 @@ function daysAgo(n) {
   return d.toISOString().slice(0, 10);
 }
 
-// ── Daily Check-In history backfill (for testing Insights trend charts) ──
-// Reuses the same markNormal/markSkipped/saveChangedCheckIn functions the
-// real Daily Check-In UI calls, so seeded wellness_scores/trends are scored
+// ── Daily Check-In history backfill (for testing Trends charts) ──
+// Reuses the same markGreatDay/markSkipped/markOffTough functions the real
+// Daily Check-In UI calls, so seeded symptom counts are computed
 // identically to a real user's data — no separate scoring logic here.
+// Every non-normal/non-skip day is seeded as an "Off Day" — Vibe wording
+// isn't meaningful to these charts, only the symptom counts are.
 const HISTORY_DAYS = 30;
 
-// planFor(i, total) returns 'normal' | 'skip' | a selections array for
-// saveChangedCheckIn (see src/lib/checkin/checkinClient.js). i counts down
-// from `total - 1` (oldest day) to 0 (today).
+// planFor(i, total) returns 'normal' | 'skip' | a selections array
+// (`{ code, values: [...] }[]`) for markOffTough. i counts down from
+// `total - 1` (oldest day) to 0 (today).
 async function seedCheckInHistory(pet, days, planFor) {
-  // Oldest -> newest, one at a time: each day's wellness score/trend is
-  // computed from the history accumulated so far, same as it would be for
-  // a real user checking in day by day. Do not parallelize this loop.
+  // Oldest -> newest, one at a time: each day's symptom count is computed
+  // from the history accumulated so far, same as it would be for a real
+  // user checking in day by day. Do not parallelize this loop.
   for (let i = days - 1; i >= 0; i--) {
     const date = daysAgo(i);
     const plan = planFor(i, days);
     if (plan === 'skip') {
       await markSkipped(pet.id, date, 'app');
     } else if (plan === 'normal') {
-      await markNormal(pet.id, date, 'app');
+      await markGreatDay(pet.id, date, 'app');
     } else {
-      await saveChangedCheckIn(pet.id, date, plan, 'app');
+      await markOffTough(pet.id, date, 'off', plan, 'app');
     }
   }
 }
@@ -49,29 +51,27 @@ function isSkipDay(i) {
 // Mostly normal, with an occasional mild dip — trend should read "Stable".
 function stablePlan(i) {
   if (isSkipDay(i)) return 'skip';
-  if (i % 9 === 3) return [{ code: 'energy', value: 'slightly_lower' }];
+  if (i % 9 === 3) return [{ code: 'energy', values: ['slightly_lower'] }];
   return 'normal';
 }
 
-// Starts normal, worsens steadily toward today — trend should read
-// "Declining" by the end of the window.
+// Starts normal, symptom count climbs steadily toward today.
 function decliningPlan(i, total) {
   if (isSkipDay(i)) return 'skip';
   const daysFromStart = total - 1 - i; // 0 = oldest, increases toward today
   if (daysFromStart < 8) return 'normal';
-  if (daysFromStart < 16) return daysFromStart % 3 === 0 ? [{ code: 'appetite', value: 'ate_little_less' }] : 'normal';
-  if (daysFromStart < 23) return [{ code: 'appetite', value: 'ate_little_less' }, { code: 'energy', value: 'slightly_lower' }];
-  return [{ code: 'appetite', value: 'ate_much_less' }, { code: 'energy', value: 'much_lower' }, { code: 'vomiting', value: 'once' }];
+  if (daysFromStart < 16) return daysFromStart % 3 === 0 ? [{ code: 'appetite', values: ['ate_little_less'] }] : 'normal';
+  if (daysFromStart < 23) return [{ code: 'appetite', values: ['ate_little_less'] }, { code: 'energy', values: ['slightly_lower'] }];
+  return [{ code: 'appetite', values: ['ate_much_less'] }, { code: 'energy', values: ['much_lower'] }, { code: 'vomiting', values: ['once'] }];
 }
 
-// Starts rough, steadily improves toward today — trend should read
-// "Improving" by the end of the window.
+// Starts rough, symptom count falls steadily toward today.
 function improvingPlan(i, total) {
   if (isSkipDay(i)) return 'skip';
   const daysFromStart = total - 1 - i;
-  if (daysFromStart < 8) return [{ code: 'appetite', value: 'ate_much_less' }, { code: 'energy', value: 'much_lower' }];
-  if (daysFromStart < 16) return [{ code: 'appetite', value: 'ate_little_less' }, { code: 'energy', value: 'slightly_lower' }];
-  if (daysFromStart < 23) return daysFromStart % 3 === 0 ? [{ code: 'energy', value: 'slightly_lower' }] : 'normal';
+  if (daysFromStart < 8) return [{ code: 'appetite', values: ['ate_much_less'] }, { code: 'energy', values: ['much_lower'] }];
+  if (daysFromStart < 16) return [{ code: 'appetite', values: ['ate_little_less'] }, { code: 'energy', values: ['slightly_lower'] }];
+  if (daysFromStart < 23) return daysFromStart % 3 === 0 ? [{ code: 'energy', values: ['slightly_lower'] }] : 'normal';
   return 'normal';
 }
 

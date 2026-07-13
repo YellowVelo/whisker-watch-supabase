@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Lightbulb } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
-import { getInsightSummary, getWellnessScoreTrend, getObservationTrend, getWeightTrend } from '@/lib/checkin/trendsClient';
+import { getInsightSummary, getObservationTrend, getWeightTrend } from '@/lib/checkin/trendsClient';
 
 // Spec calls for distinct handling here vs. the other cards: on failure,
 // hide the summary and show "Insights unavailable." rather than the
@@ -19,14 +19,13 @@ export default function InsightSummaryCard({ petId, petName, range, timezone }) 
     let cancelled = false;
     setState({ loading: true, error: false, summary: null });
     (async () => {
-      const [wellness, appetite, waterIntake, energy, weight] = await Promise.all([
-        getWellnessScoreTrend(petId, range, timezone),
+      const [appetite, waterIntake, energy, weight] = await Promise.all([
         getObservationTrend(petId, 'appetite', range, timezone),
         getObservationTrend(petId, 'water_intake', range, timezone),
         getObservationTrend(petId, 'energy', range, timezone),
         getWeightTrend(petId, range, timezone),
       ]);
-      return getInsightSummary(petId, petName, { wellness, appetite, waterIntake, energy, weight });
+      return getInsightSummary(petId, petName, { appetite, waterIntake, energy, weight });
     })()
       .then((summary) => { if (!cancelled) setState({ loading: false, error: false, summary }); })
       .catch(() => { if (!cancelled) setState({ loading: false, error: true, summary: null }); });

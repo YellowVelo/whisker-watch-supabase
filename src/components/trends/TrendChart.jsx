@@ -54,40 +54,90 @@ function LineVariant({ series, range, yDomain, color = PALETTE.sky, highlightExt
   );
 }
 
-// variant="observation" — all 9 multi-select categories. One bar per day,
-// height + color from that day's symptom count (0/1/2+, equal weight —
-// not a graded "how bad" direction); skipped days render as a flat,
-// low-opacity marker distinct from a missing gap.
-function ObservationVariant({ series, range }) {
+const NOT_OBSERVED_COLOR = 'rgba(255,255,255,0.25)';
+const SKIPPED_COLOR = 'rgba(255,255,255,0.15)';
+
+function observationBarColor(d) {
+  if (d.state === 'skipped') return SKIPPED_COLOR;
+  if (d.state === 'not_observed') return NOT_OBSERVED_COLOR;
+  return SYMPTOM_COUNT_COLOR[Math.min(2, d.count ?? 0)] ?? PALETTE.gray;
+}
+
+function observationTooltipLabel(payload) {
+  if (payload.state === 'skipped') return 'Skipped';
+  if (payload.state === 'not_observed') return 'Not Observed';
+  return SYMPTOM_COUNT_LABEL[Math.min(2, payload.count ?? 0)] ?? 'No Data';
+}
+
+// variant="observation" — every counted category. One bar per day, height
+// + color from that day's symptom count (0/1/2+, equal weight — not a
+// graded "how bad" direction). Skipped days render as a flat, low-opacity
+// marker distinct from a missing gap; "Not Observed" (Water/Bathroom only)
+// renders as its own distinct flat marker, never collapsed into Normal or
+// Skipped (spec Attribute Model).
+function ObservationVariant({ series, range, height = 140 }) {
   const data = series.map((p) => ({
     ...p,
     label: formatTick(p.date, range),
-    height: p.state === 'skipped' ? 0.5 : p.count == null ? 0 : Math.min(2, p.count) + 1,
+    barHeight: p.state === 'skipped' || p.state === 'not_observed' ? 0.5 : p.count == null ? 0 : Math.min(2, p.count) + 1,
   }));
 
   return (
-    <ResponsiveContainer width="100%" height={90}>
+    <ResponsiveContainer width="100%" height={height}>
       <BarChart data={data} margin={{ top: 4, right: 4, left: 4, bottom: 0 }}>
         <XAxis dataKey="label" tick={{ fontSize: 10, fill: 'rgba(255,255,255,0.35)' }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
         <YAxis hide domain={[0, 3]} />
         <Tooltip
           contentStyle={{ background: '#1a1d21', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, fontSize: 12 }}
           labelStyle={{ color: 'rgba(255,255,255,0.6)' }}
-          formatter={(_, __, { payload }) => [payload.state === 'skipped' ? 'Skipped' : SYMPTOM_COUNT_LABEL[Math.min(2, payload.count ?? 0)] ?? 'No Data', '']}
+          formatter={(_, __, { payload }) => [observationTooltipLabel(payload), '']}
         />
-        <Bar dataKey="height" radius={[3, 3, 3, 3]} maxBarSize={14}>
-          {data.map((d, i) => (
-            <Cell key={i} fill={d.state === 'skipped' ? 'rgba(255,255,255,0.15)' : SYMPTOM_COUNT_COLOR[Math.min(2, d.count ?? 0)] ?? PALETTE.gray} />
-          ))}
+        <Bar dataKey="barHeight" radius={[3, 3, 3, 3]} maxBarSize={14}>
+          {data.map((d, i) => <Cell key={i} fill={observationBarColor(d)} />)}
         </Bar>
       </BarChart>
     </ResponsiveContainer>
   );
 }
 
-export default function TrendChart({ variant, series, range, yDomain = null, color = PALETTE.sky, highlightExtremes = false }) {
+// variant="vomitingNausea" — Health group's combined panel (spec: "Trends
+// should revert to previous versions"), two bars per day (Vomiting, then
+// Nausea), reusing the same per-day symptom-count color/state rules as the
+// single-attribute variant above.
+function VomitingNauseaVariant({ series, range }) {
+  const data = series.map((p) => ({
+    label: formatTick(p.date, range),
+    vomiting: p.vomiting,
+    nausea: p.nausea,
+    vomitingHeight: p.vomiting.state === 'skipped' || p.vomiting.state === 'not_observed' ? 0.5 : p.vomiting.count == null ? 0 : Math.min(2, p.vomiting.count) + 1,
+    nauseaHeight: p.nausea.state === 'skipped' || p.nausea.state === 'not_observed' ? 0.5 : p.nausea.count == null ? 0 : Math.min(2, p.nausea.count) + 1,
+  }));
+
+  return (
+    <ResponsiveContainer width="100%" height={140}>
+      <BarChart data={data} margin={{ top: 4, right: 4, left: 4, bottom: 0 }}>
+        <XAxis dataKey="label" tick={{ fontSize: 10, fill: 'rgba(255,255,255,0.35)' }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
+        <YAxis hide domain={[0, 3]} />
+        <Tooltip
+          contentStyle={{ background: '#1a1d21', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, fontSize: 12 }}
+          labelStyle={{ color: 'rgba(255,255,255,0.6)' }}
+          formatter={(value, name, { payload }) => [observationTooltipLabel(name === 'vomitingHeight' ? payload.vomiting : payload.nausea), name === 'vomitingHeight' ? 'Vomiting' : 'Nausea']}
+        />
+        <Bar dataKey="vomitingHeight" name="vomitingHeight" radius={[3, 3, 0, 0]} maxBarSize={10}>
+          {data.map((d, i) => <Cell key={i} fill={observationBarColor(d.vomiting)} />)}
+        </Bar>
+        <Bar dataKey="nauseaHeight" name="nauseaHeight" radius={[3, 3, 0, 0]} maxBarSize={10}>
+          {data.map((d, i) => <Cell key={i} fill={observationBarColor(d.nausea)} fillOpacity={0.6} />)}
+        </Bar>
+      </BarChart>
+    </ResponsiveContainer>
+  );
+}
+
+export default function TrendChart({ variant, series, range, yDomain = null, color = PALETTE.sky, highlightExtremes = false, height }) {
   if (!series || series.length === 0) return null;
-  if (variant === 'observation') return <ObservationVariant series={series} range={range} />;
+  if (variant === 'observation') return <ObservationVariant series={series} range={range} height={height} />;
+  if (variant === 'vomitingNausea') return <VomitingNauseaVariant series={series} range={range} />;
   return <LineVariant series={series} range={range} yDomain={yDomain} color={color} highlightExtremes={highlightExtremes} />;
 }
 

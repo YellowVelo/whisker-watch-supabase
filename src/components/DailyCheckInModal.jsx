@@ -2,11 +2,11 @@ import DailyCheckInSheet from './DailyCheckInSheet';
 import { todayStr } from '@/lib/checkin/checkinClient';
 
 // Public entry point for the Daily Check-In pop-up. All actual save/stage
-// logic lives in DailyCheckInSheet (markNormal/markSkipped/saveChangedCheckIn
-// against daily_check_ins/observations/wellness_scores) — this wrapper only
-// normalizes the prop contract (`pet`, `checkInDate`, `existingCheckIn`,
-// `onComplete`, `onClose`) so callers don't need to know the sheet's
-// catch-up-specific prop names.
+// logic lives in DailyCheckInSheet (markGreatDay/markSkipped/markOffTough
+// against daily_check_ins/observations) — this wrapper only normalizes the
+// prop contract (`pet`, `checkInDate`, `existingCheckIn`, `onComplete`,
+// `onClose`) so callers don't need to know the sheet's catch-up-specific
+// prop names.
 //
 // `isCatchUp` is accepted as an explicit override so callers that already
 // know which date they resolved `checkInDate` from (e.g. Home.jsx, which

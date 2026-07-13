@@ -3,12 +3,12 @@ import { useParams, useSearchParams, useNavigate, Link } from 'react-router-dom'
 import { ArrowLeft, UtensilsCrossed, Droplets, Zap, Rainbow } from 'lucide-react';
 import { entities } from '@/api/entities';
 import PageTransition from '../components/PageTransition';
-import WellnessScoreCard from '../components/trends/WellnessScoreCard';
 import ObservationCard from '../components/trends/ObservationCard';
+import VomitingNauseaCard from '../components/trends/VomitingNauseaCard';
 import WeightCard from '../components/trends/WeightCard';
 import InsightSummaryCard from '../components/trends/InsightSummaryCard';
 import { RANGE_OPTIONS } from '@/lib/checkin/trendsClient';
-import { getCategory, HEALTH_SCORE_ATTRIBUTES, WELLBEING_ATTRIBUTES } from '@/lib/checkin/config';
+import { getCategory, HEALTH_ATTRIBUTES, WELLBEING_ATTRIBUTES } from '@/lib/checkin/config';
 import { getPetLabel } from '@/lib/speciesConfig';
 import { track } from '@/lib/analytics';
 import { PALETTE } from '@/lib/toneColors';
@@ -16,14 +16,18 @@ import { useAuth } from '@/lib/AuthContext';
 import { detectTimezone } from '@/lib/timezone';
 
 // Trends sub-tab: every Health/Wellbeing attribute gets its own chart here
-// (unlike Overview, which only covers Health Score/Appetite/Water/Energy/
-// Weight/Insight Summary) — entry point picks which group loads first
-// (Home's Health Attribute chips -> 'health', Pets'/Pet Profile's
-// Wellbeing chips -> 'wellness'), and the in-page toggle lets the owner
-// switch to the other group afterward so every attribute stays reachable.
+// (unlike Overview, which only covers Appetite/Water/Energy/Weight/Insight
+// Summary) — entry point picks which group loads first (Home's Health
+// Attribute chips -> 'health', Pets'/Pet Profile's Wellbeing chips ->
+// 'wellness'), and the in-page toggle lets the owner switch to the other
+// group afterward so every attribute stays reachable. Vomiting and Nausea
+// (both Health) render as one combined panel — the grouped-chart style the
+// screen reverts to (spec: "Trends should revert to previous versions") —
+// so `codes` for the health group omits them; VomitingNauseaCard renders
+// separately alongside it.
 const GROUPS = {
-  health: { label: 'Health', codes: HEALTH_SCORE_ATTRIBUTES, includesWeight: true },
-  wellness: { label: 'Wellness', codes: WELLBEING_ATTRIBUTES, includesWeight: false },
+  health: { label: 'Health', codes: HEALTH_ATTRIBUTES.filter((c) => c !== 'vomiting' && c !== 'nausea'), includesVomitingNausea: true, includesWeight: true },
+  wellness: { label: 'Wellness', codes: WELLBEING_ATTRIBUTES, includesVomitingNausea: false, includesWeight: false },
 };
 
 // "Trends" used to be a legacy sub-tab charting symptom_logs directly
@@ -32,10 +36,10 @@ const GROUPS = {
 // became the primary logging flow (Data Model_V2.md §7 — symptom_logs is
 // now written to only for Weight), so that sub-tab was permanently stuck
 // on "Need at least 2 logs to show trends" for any pet tracked purely
-// through Daily Check-In, even when Overview (reading observations/
-// wellness_scores) had real trended data for the same pet. Fixed by
-// rendering the same real, observations-backed cards for both "Overview"
-// and "Trends" rather than maintaining a second, disconnected data path.
+// through Daily Check-In, even when Overview (reading observations) had
+// real trended data for the same pet. Fixed by rendering the same real,
+// observations-backed cards for both "Overview" and "Trends" rather than
+// maintaining a second, disconnected data path.
 const SECTIONS = [
   { key: 'overview', label: 'Overview' },
   { key: 'trends', label: 'Trends' },
@@ -250,6 +254,15 @@ export default function PetTrends() {
                         </div>
                       );
                     })}
+                    {GROUPS[activeGroup].includesVomitingNausea && (
+                      <div
+                        ref={(el) => { cardRefs.current.vomiting = el; cardRefs.current.nausea = el; }}
+                        className="rounded-2xl transition-shadow"
+                        style={(highlightedMetric === 'vomiting' || highlightedMetric === 'nausea') ? { boxShadow: `0 0 0 2px ${PALETTE.sky}` } : undefined}
+                      >
+                        <VomitingNauseaCard petId={petId} range={debouncedRange} timezone={timezone} />
+                      </div>
+                    )}
                     {GROUPS[activeGroup].includesWeight && (
                       <div ref={(el) => { cardRefs.current.weight = el; }} className="rounded-2xl transition-shadow" style={highlightedMetric === 'weight' ? { boxShadow: `0 0 0 2px ${PALETTE.sky}` } : undefined}>
                         <WeightCard petId={petId} range={debouncedRange} timezone={timezone} />
@@ -259,7 +272,6 @@ export default function PetTrends() {
                 </>
               ) : (
                 <div className="space-y-3">
-                  <WellnessScoreCard petId={petId} range={debouncedRange} isMemorial={pet.is_memorial} timezone={timezone} />
                   <ObservationCard petId={petId} range={debouncedRange} code="appetite" label="Appetite" icon={UtensilsCrossed} timezone={timezone} />
                   <ObservationCard petId={petId} range={debouncedRange} code="water_intake" label="Water Intake" icon={Droplets} timezone={timezone} />
                   <ObservationCard petId={petId} range={debouncedRange} code="energy" label="Energy" icon={Zap} timezone={timezone} />

@@ -6,7 +6,7 @@
 
 import {
   UtensilsCrossed, Droplets, Home as HomeIcon, Waves, Loader2 as VomitIcon,
-  Zap, Footprints, Wind, Sparkles, Heart, Pill, Scale, MoreHorizontal,
+  Zap, Footprints, Wind, Sparkles, Heart, Pill, Scale, MoreHorizontal, CloudDrizzle,
 } from 'lucide-react';
 
 // species: 'both' | 'cat' | 'dog' — options tagged with a species are only
@@ -41,6 +41,7 @@ export const CATEGORIES = [
       { value: 'less_than_usual', label: 'Less than usual' },
       { value: 'more_than_usual', label: 'More than usual' },
       { value: 'much_more_than_usual', label: 'Much more than usual' },
+      { value: 'not_observed', label: 'Not observed' },
     ],
   },
   {
@@ -61,6 +62,7 @@ export const CATEGORIES = [
       { value: 'straining', label: 'Straining' },
       { value: 'outside_litter_box', label: 'Outside the litter box', species: 'cat' },
       { value: 'blood_noticed', label: 'Blood noticed' },
+      { value: 'not_observed', label: 'Not observed' },
     ],
   },
   {
@@ -91,6 +93,23 @@ export const CATEGORIES = [
       { value: 'once', label: 'Once' },
       { value: 'more_than_once', label: 'More than once' },
       { value: 'hairball_only', label: 'Hairball only' },
+      { value: 'regurgitated', label: 'Regurgitated' },
+    ],
+  },
+  {
+    code: 'nausea',
+    label: 'Nausea',
+    icon: CloudDrizzle,
+    question: (name, species, dayWord = 'today') => `Did ${name} seem nauseated ${dayWord}?`,
+    answerType: 'enum',
+    multiSelect: true,
+    options: [
+      { value: 'normal', label: 'Normal' },
+      { value: 'lip_licking', label: 'Lip licking' },
+      { value: 'burping', label: 'Burping' },
+      { value: 'drooling', label: 'Drooling' },
+      { value: 'ate_non_food_items', label: 'Ate non-food items' },
+      { value: 'hunched_posture', label: 'Hunched posture' },
     ],
   },
   {
@@ -165,6 +184,7 @@ export const CATEGORIES = [
     icon: Heart,
     question: (name, species, dayWord = 'today') => `Was ${name}'s behavior different ${dayWord}?`,
     answerType: 'enum',
+    multiSelect: true,
     options: [
       { value: 'normal', label: 'Normal' },
       { value: 'hiding_more', label: 'Hiding more' },
@@ -207,18 +227,18 @@ export const CATEGORIES = [
   },
 ];
 
-// Health Score Revision V2 — the single source of truth for which
-// categories may affect the 0-10 Health Score, which are display-only
-// "Wellbeing" chips, and which are tracked separately (Weight). Anything
-// that groups categories for scoring/chip purposes must import these
-// rather than re-deriving its own list (spec §12.5: "Do not duplicate
-// these lists across pages or components").
-export const HEALTH_SCORE_ATTRIBUTES = [
+// Daily Check-In, Vibe & Trends (spec v5) — the single source of truth for
+// which categories are Health vs. Wellbeing, and which are tracked
+// separately (Weight) or deferred (Medication Exception)/unaffected
+// (Other). Anything that groups categories for check-in/chip/trend
+// purposes must import these rather than re-deriving its own list.
+export const HEALTH_ATTRIBUTES = [
   'appetite',
   'water_intake',
   'bathroom',
   'stool',
   'vomiting',
+  'nausea',
 ];
 
 export const WELLBEING_ATTRIBUTES = [
@@ -226,7 +246,13 @@ export const WELLBEING_ATTRIBUTES = [
   'mobility',
   'breathing',
   'itching',
+  'behavior',
 ];
+
+// The 11 categories that get an explicit row every completed day and feed
+// the daily symptom count — Medication Exception (deferred this round),
+// Weight, and Other are excluded (spec Core Model II / Attribute Model).
+export const COUNTED_CATEGORIES = [...HEALTH_ATTRIBUTES, ...WELLBEING_ATTRIBUTES];
 
 export const SEPARATE_TRACKED_ATTRIBUTES = [
   'weight',

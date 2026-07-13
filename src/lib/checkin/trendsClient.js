@@ -1,16 +1,20 @@
-// Trends screen data layer (Feature Spec: Trends). Same precedent as
-// petProfileClient.js/checkinClient.js — batched/derived reads live here,
-// never as direct Supabase calls inside components (Technical Standards).
+// Trends screen data layer (Daily Check-In, Vibe & Trends spec v5). Same
+// precedent as petProfileClient.js/checkinClient.js — batched/derived
+// reads live here, never as direct Supabase calls inside components
+// (Technical Standards).
 //
-// Range -> lookback-day mapping. wellness_scores/daily_check_ins are one
-// row per calendar day, so a literal "24 hours" has no meaning; 24H is
-// treated as a short trailing window for chart context, while the
-// headline number/annotation always compares today vs. yesterday.
+// No numeric point-value system exists anymore — this fully reverses the
+// prior Wellness Score V1 / Health Score V2 chart. Every chart here
+// represents raw, unweighted symptom counts per attribute per day.
+//
+// Range -> lookback-day mapping. daily_check_ins is one row per calendar
+// day, so a literal "24 hours" has no meaning; 24H is treated as a short
+// trailing window for chart context, while the headline number/annotation
+// always compares today vs. yesterday.
 import { supabase } from '@/api/supabaseClient';
 import { entities } from '@/api/entities';
 import { invokeAI } from '@/api/aiClient';
-import { computeTrend, computeHealthScoreDirection } from './scoring';
-import { loadObservationCatalog, BASELINE_VALUES } from './checkinClient';
+import { loadObservationCatalog, BASELINE_VALUES, NOT_OBSERVED_VALUES } from './checkinClient';
 import { PALETTE } from '@/lib/toneColors';
 import { dateStrInTimezone } from '@/lib/timezone';
 
@@ -20,107 +24,48 @@ export const RANGE_OPTIONS = ['24H', '7D', '30D', '90D', '1Y'];
 // `timezone` is threaded through from the caller (PetTrends.jsx, via the
 // signed-in user's stored timezone) so "today"/"yesterday" here agree with
 // Home's — a plain UTC comparison would disagree with a check-in saved
-// under the user's local date in the evening (spec §24: "Daily date
-// boundaries must use the user's stored timezone, not UTC midnight").
-// Falls back to UTC (dateStrInTimezone's own default) if omitted.
+// under the user's local date in the evening. Falls back to UTC
+// (dateStrInTimezone's own default) if omitted.
 const todayStr = (timezone) => dateStrInTimezone(timezone, 0);
 
 function cutoffDateStr(days, timezone) {
   return dateStrInTimezone(timezone, -days);
 }
 
-// Shared by every ObservationCard, across all 9 multi-select categories
-// (5 Health + 4 Wellbeing) — per-day chart color/label is a count of
-// distinct non-baseline symptoms logged that day, not a graded direction.
-// Matches the equal-weight, multi-select Health Score model: a category
-// no longer has one "how bad" value per day, it has a symptom count.
+// Shared by every ObservationCard, across all 11 counted categories (6
+// Health + 5 Wellbeing) — per-day chart color/label is a count of distinct
+// non-baseline, non-"Not Observed" symptoms logged that day, not a graded
+// direction (spec Attribute Model: "no score of any kind").
 export const SYMPTOM_COUNT_LABEL = { 0: 'Normal', 1: '1 Symptom', 2: '2+ Symptoms' };
 export const SYMPTOM_COUNT_COLOR = { 0: PALETTE.gray, 1: PALETTE.amber, 2: PALETTE.red };
 
-// Health Score V2 card + chart (spec §22). `series` is oldest-first for
-// charting and only ever includes V2-scored rows (health_score_version ===
-// 'health_score_v2') — legacy 0-100 rows are never mixed into this line,
-// even though they live in the same `wellness_scores` table (spec §12.4:
-// "Begin the V2 Health Score chart on the first V2 score date" / "Do not
-// mix legacy 0-100 and V2 0-10 values in one chart line").
-export async function getWellnessScoreTrend(petId, range, timezone) {
-  const days = RANGE_DAYS[range] ?? RANGE_DAYS['24H'];
-  const rows = await entities.WellnessScore.filter({ pet_id: petId }, '-check_in_date', Math.max(days, 14));
-  const v2Rows = rows.filter((r) => r.health_score_version === 'health_score_v2' && r.health_score != null);
-  const hasAnyData = v2Rows.length > 0;
+// Per-day states a chart must be able to render (spec Trends & Overview
+// Charts): normal (0 symptoms), 1 symptom, 2+ symptoms, not observed
+// (Water Intake/Bathroom only), skipped, no check-in (a date with no
+// daily_check_ins row at all — a real gap, distinct from skipped).
+async function fetchDailyCheckIns(petId, days, timezone) {
   const cutoff = cutoffDateStr(days, timezone);
-  const inRange = v2Rows.filter((r) => r.check_in_date >= cutoff).slice().reverse();
-
-  if (inRange.length === 0) {
-    return { hasAnyData, series: [], current: null, max: 10, direction: 'unknown', directionReason: hasAnyData ? null : 'no_checkin_today' };
-  }
-
-  // "Current"/"Today" values only surface when the most recent row is
-  // actually dated today — mirrors the existing, deliberate rule in
-  // getWellnessRingScores (petProfileClient.js): a stale score from a
-  // missed check-in must never be presented as today's, per Product
-  // Principle 10 ("Honest Uncertainty"). The chart's `series` still shows
-  // whatever history exists in range regardless — only the "current"
-  // headline is gated.
-  const latest = v2Rows[0];
-  const isLatestToday = latest.check_in_date === todayStr(timezone);
-  if (!isLatestToday) {
-    return { hasAnyData, series: inRange.map((r) => ({ date: r.check_in_date, value: r.health_score })), current: null, max: 10, direction: 'unknown', directionReason: 'no_checkin_today' };
-  }
-
-  const yesterdayCutoff = cutoffDateStr(1, timezone);
-  const yesterdayRow = v2Rows.find((r) => r.check_in_date === yesterdayCutoff);
-  const direction = computeHealthScoreDirection(latest.health_score, yesterdayRow?.health_score ?? null, 'normal', yesterdayRow ? 'normal' : null);
-  let directionReason = null;
-  if (direction === 'unknown') {
-    // `rows` is bounded to Math.max(days, 14) entries, so "no V2 row for
-    // yesterday in that window" doesn't by itself distinguish a genuinely
-    // first-ever scored day (spec: "First day logged") from a pet with
-    // real but sparse history further back (spec: "Not enough data") — a
-    // single targeted existence check resolves it rather than trusting
-    // the bounded window's row count.
-    const { data: earlierRows, error: earlierError } = await supabase
-      .from('wellness_scores')
-      .select('id')
-      .eq('pet_id', petId)
-      .eq('health_score_version', 'health_score_v2')
-      .lt('check_in_date', latest.check_in_date)
-      .limit(1);
-    if (earlierError) throw earlierError;
-    directionReason = earlierRows.length > 0 ? 'missing_yesterday' : 'first_day';
-  }
-
-  return {
-    hasAnyData,
-    series: inRange.map((r) => ({ date: r.check_in_date, value: r.health_score })),
-    current: latest.health_score,
-    max: 10,
-    direction,
-    directionReason,
-  };
+  const checkIns = await entities.DailyCheckIn.filter({ pet_id: petId }, '-check_in_date', Math.max(days, 14));
+  const hasAnyData = checkIns.length > 0;
+  const inRange = checkIns.filter((c) => c.check_in_date >= cutoff).slice().reverse();
+  return { hasAnyData, inRange };
 }
 
 // Behavioral observation trend, shared by every ObservationCard instance —
-// one generic function for all 9 multi-select categories (5 Health + 4
-// Wellbeing), not one per metric (Product Principle 19/20).
+// one generic function for all 11 counted categories, not one per metric.
 //
-// Per-day state, per Product Principle 6 ("Missing Data Is Meaningful"):
+// Per-day state:
 //   - no daily_check_ins row for that date -> "missing" (gap)
 //   - status === 'skipped' -> "skipped" (visually distinct from missing)
-//   - a scorable check-in with zero non-baseline symptoms -> "normal"/baseline
-//   - a scorable check-in with 1+ non-baseline symptoms -> a symptom count
+//   - Water Intake/Bathroom logged "Not observed" -> "not_observed"
+//     (distinct from both Normal and skipped/missing)
+//   - a completed check-in with zero countable symptoms -> "normal"
+//   - a completed check-in with 1+ countable symptoms -> a symptom count
 export async function getObservationTrend(petId, code, range, timezone) {
   const days = RANGE_DAYS[range] ?? RANGE_DAYS['24H'];
-  const cutoff = cutoffDateStr(days, timezone);
-
-  const [catalog, checkIns] = await Promise.all([
-    loadObservationCatalog(),
-    entities.DailyCheckIn.filter({ pet_id: petId }, '-check_in_date', Math.max(days, 14)),
-  ]);
-  const hasAnyData = checkIns.length > 0;
-
+  const { hasAnyData, inRange } = await fetchDailyCheckIns(petId, days, timezone);
+  const catalog = await loadObservationCatalog();
   const entry = catalog[code];
-  const inRange = checkIns.filter((c) => c.check_in_date >= cutoff).slice().reverse();
 
   if (inRange.length === 0 || !entry) {
     return { hasAnyData, series: [], currentLabel: null, currentSubtitle: null };
@@ -128,6 +73,7 @@ export async function getObservationTrend(petId, code, range, timezone) {
 
   const scorableIds = inRange.filter((c) => c.status !== 'skipped').map((c) => c.id);
   const countsByCheckIn = {};
+  const notObservedByCheckIn = {};
   const symptomLabelsByCheckIn = {};
   if (scorableIds.length > 0) {
     const { data, error } = await supabase
@@ -137,7 +83,9 @@ export async function getObservationTrend(petId, code, range, timezone) {
       .eq('observation_type_id', entry.type.id);
     if (error) throw error;
     for (const obs of data) {
-      if (obs.value == null || BASELINE_VALUES.has(obs.value)) continue;
+      if (obs.value == null) continue;
+      if (NOT_OBSERVED_VALUES.has(obs.value)) { notObservedByCheckIn[obs.daily_check_in_id] = true; continue; }
+      if (BASELINE_VALUES.has(obs.value)) continue;
       countsByCheckIn[obs.daily_check_in_id] = (countsByCheckIn[obs.daily_check_in_id] || 0) + 1;
       (symptomLabelsByCheckIn[obs.daily_check_in_id] ||= []).push(entry.optionsByValue[obs.value]?.label || obs.value);
     }
@@ -145,12 +93,13 @@ export async function getObservationTrend(petId, code, range, timezone) {
 
   const series = inRange.map((c) => {
     if (c.status === 'skipped') return { date: c.check_in_date, state: 'skipped', count: null };
+    if (notObservedByCheckIn[c.id]) return { date: c.check_in_date, state: 'not_observed', count: null };
     const count = countsByCheckIn[c.id] || 0;
     return { date: c.check_in_date, state: count > 0 ? 'observed' : 'normal', count };
   });
 
-  // Same "must actually be today" rule as getWellnessScoreTrend — a stale
-  // in-range point must never be presented as today's current state.
+  // A stale in-range point must never be presented as today's current
+  // state — same rule everywhere on this screen.
   const latest = series[series.length - 1];
   const isLatestToday = latest?.date === todayStr(timezone);
   const { currentLabel, currentSubtitle } = isLatestToday
@@ -162,9 +111,30 @@ export async function getObservationTrend(petId, code, range, timezone) {
 
 function describeCurrentState(latestPoint, symptomLabels) {
   if (!latestPoint || latestPoint.state === 'skipped') return { currentLabel: null, currentSubtitle: null };
+  if (latestPoint.state === 'not_observed') return { currentLabel: 'Not Observed', currentSubtitle: null };
   if (latestPoint.count === 0) return { currentLabel: 'Normal', currentSubtitle: 'No change from usual' };
   const currentLabel = SYMPTOM_COUNT_LABEL[Math.min(2, latestPoint.count)];
   return { currentLabel, currentSubtitle: (symptomLabels || []).join(', ') || null };
+}
+
+// Combined Vomiting + Nausea panel (Health group) — both categories'
+// per-day symptom counts, for the grouped chart style the Trends screen
+// reverts to (spec: "Trends should revert to previous versions"). Kept in
+// this data layer, not computed twice, by calling getObservationTrend once
+// per category and zipping the results by date.
+export async function getVomitingNauseaTrend(petId, range, timezone) {
+  const [vomiting, nausea] = await Promise.all([
+    getObservationTrend(petId, 'vomiting', range, timezone),
+    getObservationTrend(petId, 'nausea', range, timezone),
+  ]);
+  const hasAnyData = vomiting.hasAnyData || nausea.hasAnyData;
+  const nauseaByDate = Object.fromEntries(nausea.series.map((p) => [p.date, p]));
+  const series = vomiting.series.map((v) => ({
+    date: v.date,
+    vomiting: v,
+    nausea: nauseaByDate[v.date] || { state: 'missing', count: null },
+  }));
+  return { hasAnyData, series, vomiting, nausea };
 }
 
 // Weight card + chart, from symptom_logs.weight_grams — the only place
@@ -194,13 +164,13 @@ export async function getWeightTrend(petId, range, timezone) {
   return { hasAnyData, series, currentLbs, deltaLbs };
 }
 
-// One-paragraph Insight Summary, built from the already-fetched trend
-// data for the other four cards (no extra queries). Returns null when
-// there isn't enough underlying history to say anything meaningful, so
-// the card can show "Complete more check-ins to unlock AI insights."
-// instead of calling the AI. Throws on AI failure so the card can show
-// "Insights unavailable." while every other card keeps working.
-export async function getInsightSummary(petId, petName, { wellness, appetite, waterIntake, energy, weight }) {
+// One-paragraph Insight Summary, built from the already-fetched trend data
+// for the other cards (no extra queries). Returns null when there isn't
+// enough underlying history to say anything meaningful. Throws on AI
+// failure so the card can show "Insights unavailable." while every other
+// card keeps working. No score of any kind is passed to the model — only
+// the same symptom-count/Not-Observed/Weight descriptions the cards show.
+export async function getInsightSummary(petId, petName, { appetite, waterIntake, energy, weight }) {
   // Require at least 2 *scorable* check-ins (not skipped) — two skipped
   // days shouldn't be enough to justify a live LLM call with nothing but
   // "No Data" for every field.
@@ -211,7 +181,6 @@ export async function getInsightSummary(petId, petName, { wellness, appetite, wa
   const describe = (label, obs) => `${label}: ${obs?.currentLabel || 'No Data'}${obs?.currentSubtitle ? ` (${obs.currentSubtitle})` : ''}`;
   const context = [
     `Pet: ${petName}`,
-    `Health Score: ${wellness?.current ?? 'No Data'} / 10`,
     describe('Appetite', appetite),
     describe('Water Intake', waterIntake),
     describe('Energy', energy),

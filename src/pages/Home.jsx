@@ -11,7 +11,7 @@ import usePullToRefresh from '../hooks/usePullToRefresh';
 import PullToRefreshIndicator from '../components/PullToRefreshIndicator';
 import { useToast } from '@/components/ui/use-toast';
 import {
-  getCheckInsForPets, getRecentWellnessForPets, getCheckIn,
+  getCheckInsForPets, getCheckIn,
   getHealthAttributeDirectionsForPets,
   todayStr as todayStrTz, yesterdayStr as yesterdayStrTz,
 } from '@/lib/checkin/checkinClient';
@@ -56,9 +56,8 @@ export default function Home() {
   const yesterdayStr = () => yesterdayStrTz(timezone);
 
   const [pets, setPets] = useState([]);
-  const [checkIns, setCheckIns] = useState({}); // pet_id -> today's daily_check_in row
+  const [checkIns, setCheckIns] = useState({}); // pet_id -> today's daily_check_in row (carries .status Vibe + .symptom_count)
   const [yesterdayCheckIns, setYesterdayCheckIns] = useState({}); // pet_id -> yesterday's row
-  const [wellness, setWellness] = useState({}); // pet_id -> { latest, trend } (V2 health_score lives on the same row)
   const [attributeDirections, setAttributeDirections] = useState({}); // pet_id -> { [code]: direction }
   const [attributesUnavailable, setAttributesUnavailable] = useState(false);
   const [weightStates, setWeightStates] = useState({}); // pet_id -> { direction, comparisonLabel, unavailable }
@@ -99,10 +98,9 @@ export default function Home() {
       const petIds = activePets.map((p) => p.id);
 
       if (petIds.length) {
-        const [todayRowsR, yesterdayRowsR, wellnessByPetR, unreadR, medCountsR] = await Promise.allSettled([
+        const [todayRowsR, yesterdayRowsR, unreadR, medCountsR] = await Promise.allSettled([
           getCheckInsForPets(petIds, todayStr()),
           getCheckInsForPets(petIds, yesterdayStr()),
-          getRecentWellnessForPets(petIds, 14, todayStr()),
           getUnreadCount(),
           getActiveMedicationCountsForPets(petIds),
         ]);
@@ -121,9 +119,6 @@ export default function Home() {
         const yesterdayRows = yesterdayRowsR.status === 'fulfilled' ? yesterdayRowsR.value : {};
         setYesterdayCheckIns(yesterdayRows);
         if (yesterdayRowsR.status === 'rejected') console.error(yesterdayRowsR.reason);
-
-        setWellness(wellnessByPetR.status === 'fulfilled' ? wellnessByPetR.value : {});
-        if (wellnessByPetR.status === 'rejected') console.error(wellnessByPetR.reason);
 
         if (unreadR.status === 'fulfilled') setUnreadCount(unreadR.value);
         else console.error(unreadR.reason);
@@ -156,7 +151,6 @@ export default function Home() {
       } else {
         setCheckIns({});
         setYesterdayCheckIns({});
-        setWellness({});
         setAttributeDirections({});
         setAttributesUnavailable(false);
         setWeightStates({});
@@ -191,21 +185,18 @@ export default function Home() {
   // merges it into state, rather than re-running loadData() for every
   // pet on the screen.
   const refreshPetCard = useCallback(async (pet) => {
-    const [todayRow, yesterdayRow, wellnessByPet, onboardingRows, medCounts, weightSummaries] = await Promise.all([
+    const [todayRow, yesterdayRow, onboardingRows, medCounts, weightSummaries] = await Promise.all([
       getCheckIn(pet.id, todayStr()),
       getCheckIn(pet.id, yesterdayStr()),
-      getRecentWellnessForPets([pet.id], 14, todayStr()),
       entities.PetOnboarding.filter({ pet_id: pet.id }),
       getActiveMedicationCountsForPets([pet.id]),
       getWeightSummariesForPets([pet.id]),
     ]);
-    const wellnessResult = wellnessByPet[pet.id];
     const weightSummary = weightSummaries[pet.id];
     const directions = await getHealthAttributeDirectionsForPets([pet.id], { [pet.id]: todayRow }, { [pet.id]: yesterdayRow });
 
     setCheckIns((prev) => ({ ...prev, [pet.id]: todayRow }));
     setYesterdayCheckIns((prev) => ({ ...prev, [pet.id]: yesterdayRow }));
-    setWellness((prev) => ({ ...prev, [pet.id]: wellnessResult }));
     setAttributeDirections((prev) => ({ ...prev, [pet.id]: directions[pet.id] }));
     setWeightStates((prev) => ({ ...prev, [pet.id]: buildWeightState(weightSummary) }));
     setMedicationCounts((prev) => ({ ...prev, [pet.id]: medCounts[pet.id] || 0 }));
@@ -330,7 +321,6 @@ export default function Home() {
                   <div key={pet.id} className="space-y-2">
                     <PetSummaryCard
                       pet={pet}
-                      healthScore={wellness[pet.id]?.healthScore}
                       checkIn={checkIns[pet.id]}
                       attributeDirections={attributeDirections[pet.id]}
                       attributesUnavailable={attributesUnavailable}
