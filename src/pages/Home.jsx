@@ -337,13 +337,12 @@ export default function Home() {
                     {incompleteOnboardingIds.has(pet.id) && (
                       <CompleteProfileBanner petId={pet.id} petName={pet.name} />
                     )}
+                    {catchUpPet?.id === pet.id && (
+                      <CatchUpBanner petName={catchUpPet.name} onCatchUp={() => handleCatchUp(catchUpPet)} />
+                    )}
                   </div>
                 ))}
               </div>
-            )}
-
-            {catchUpPet && (
-              <CatchUpBanner petName={catchUpPet.name} onCatchUp={() => handleCatchUp(catchUpPet)} />
             )}
           </div>
         )}
