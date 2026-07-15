@@ -1,0 +1,115 @@
+This is exactly the direction I would take for Wysker Watch.
+
+One of the principles we've talked about is that **owners don't diagnose diseases—they observe behavior.** The app should never ask, "Is your dog dehydrated?" It should ask, "Did your dog drink more water today than usual?"
+
+Here's how I'd translate the common canine conditions into **observable behaviors** and the recommended logging frequency.
+
+| Observable Behavior                      | Why It Matters                                               | Log Interval               |
+| ---------------------------------------- | ------------------------------------------------------------ | -------------------------- |
+| Appetite (ate all, some, none)           | GI disease, kidney disease, diabetes, cancer, dental disease | **Daily**                  |
+| Water intake (less, normal, more)        | Kidney disease, diabetes, Cushing's, fever                   | **Daily**                  |
+| Urination frequency                      | UTI, diabetes, kidney disease                                | **Daily**                  |
+| Urination accidents indoors              | UTI, cognitive decline, diabetes                             | **Daily**                  |
+| Stool consistency                        | GI disease, parasites, food intolerance                      | **Daily**                  |
+| Vomiting                                 | GI disease, pancreatitis, toxins                             | **As Occurs**              |
+| Regurgitation                            | Esophageal disease                                           | **As Occurs**              |
+| Weight                                   | Obesity, cancer, kidney disease, diabetes                    | **Weekly**                 |
+| Activity level                           | Arthritis, illness, heart disease                            | **Daily**                  |
+| Energy level                             | Infection, hypothyroidism, anemia                            | **Daily**                  |
+| Willingness to walk/play                 | Arthritis, pain, illness                                     | **Daily**                  |
+| Limping                                  | Orthopedic injury, arthritis                                 | **As Occurs**              |
+| Difficulty standing                      | Arthritis, neurologic disease                                | **Daily**                  |
+| Difficulty climbing stairs               | Arthritis, IVDD                                              | **Daily**                  |
+| Difficulty jumping into car/on furniture | Arthritis, IVDD                                              | **Daily**                  |
+| Stiffness after resting                  | Arthritis                                                    | **Daily**                  |
+| Panting at rest                          | Pain, heart disease, anxiety                                 | **Daily**                  |
+| Coughing                                 | Heart disease, respiratory disease                           | **As Occurs**              |
+| Breathing harder than normal             | Heart/lung disease                                           | **Daily**                  |
+| Sneezing                                 | Respiratory disease                                          | **As Occurs**              |
+| Nasal discharge                          | Respiratory disease                                          | **Daily while present**    |
+| Eye discharge                            | Allergies, infection                                         | **Daily while present**    |
+| Squinting                                | Eye pain, glaucoma                                           | **As Occurs**              |
+| Cloudy eye                               | Eye disease                                                  | **As Occurs**              |
+| Ear scratching                           | Allergies, ear infection                                     | **Daily**                  |
+| Head shaking                             | Ear infection                                                | **Daily**                  |
+| Ear odor                                 | Ear infection                                                | **Weekly**                 |
+| Skin scratching                          | Allergies, parasites                                         | **Daily**                  |
+| Licking paws                             | Allergies, pain                                              | **Daily**                  |
+| Chewing skin                             | Allergies                                                    | **Daily**                  |
+| Hair loss                                | Allergies, endocrine disease                                 | **Weekly**                 |
+| New lumps or bumps                       | Cancer, cysts                                                | **Monthly**                |
+| Lump changed in size                     | Cancer                                                       | **Weekly**                 |
+| Bad breath                               | Dental disease, kidney disease                               | **Weekly**                 |
+| Dropping food while eating               | Dental disease                                               | **Daily**                  |
+| Difficulty chewing                       | Dental disease                                               | **Daily**                  |
+| Excessive drooling                       | Dental disease, nausea                                       | **Daily**                  |
+| Bad odor from mouth                      | Dental disease                                               | **Weekly**                 |
+| Drinking from unusual places             | Increased thirst                                             | **Daily**                  |
+| Asking to go outside more                | Urinary disease, diabetes                                    | **Daily**                  |
+| Straining to urinate                     | UTI, urinary obstruction                                     | **As Occurs**              |
+| Blood in urine                           | UTI, bladder disease                                         | **As Occurs (Urgent)**     |
+| Blood in stool                           | GI disease                                                   | **As Occurs**              |
+| Scooting                                 | Anal gland disease, parasites                                | **As Occurs**              |
+| Dragging rear end                        | Anal glands                                                  | **As Occurs**              |
+| Scooting frequency                       | Chronic anal gland issues                                    | **Weekly**                 |
+| Seizure                                  | Epilepsy                                                     | **Every Episode**          |
+| Collapse/fainting                        | Cardiac disease                                              | **Every Episode**          |
+| Trembling/shaking                        | Pain, anxiety                                                | **As Occurs**              |
+| Restlessness                             | Pain, GI disease, anxiety                                    | **Daily**                  |
+| Hiding                                   | Pain, illness                                                | **Daily**                  |
+| Increased clinginess                     | Pain, anxiety                                                | **Daily**                  |
+| Confusion                                | Cognitive dysfunction                                        | **Daily**                  |
+| Wandering aimlessly                      | Cognitive dysfunction                                        | **Daily**                  |
+| Night pacing                             | Cognitive dysfunction                                        | **Daily**                  |
+| Barking at night                         | Cognitive dysfunction                                        | **Daily**                  |
+| House-soiling                            | Cognitive dysfunction, urinary disease                       | **Daily**                  |
+| Anxiety episodes                         | Behavioral disease                                           | **As Occurs**              |
+| Aggression                               | Pain, neurologic disease                                     | **As Occurs**              |
+| New fears                                | Anxiety, cognitive decline                                   | **Weekly**                 |
+| Exercise intolerance                     | Heart disease                                                | **Daily**                  |
+| Tires more quickly than usual            | Heart disease, anemia                                        | **Daily**                  |
+| Heat intolerance                         | Cushing's, obesity                                           | **Daily (when exercised)** |
+| Cold intolerance                         | Hypothyroidism                                               | **Weekly**                 |
+| Medication given                         | Treatment compliance                                         | **Every Dose**             |
+| Appetite after medication                | Side effects                                                 | **Daily**                  |
+| Missed medication                        | Compliance                                                   | **Every Occurrence**       |
+
+## My recommendation for V1
+
+Rather than presenting owners with 60+ individual questions every day, I'd organize them into **daily check-ins** that take less than a minute:
+
+### 🟢 Daily (30–45 seconds)
+
+* Appetite
+* Water intake
+* Urination
+* Stool
+* Vomiting
+* Energy
+* Activity
+* Pain/mobility
+* Scratching/itching
+* Coughing/breathing
+* Mood/behavior
+* Medications
+
+### 🟡 Weekly (2–3 minutes)
+
+* Weight
+* Body condition
+* Lumps/bumps
+* Bad breath
+* Hair coat
+* Nail condition
+* Ear odor
+* Overall quality of life
+
+### 🔵 Monthly
+
+* Photos (body, teeth, skin, known lumps)
+* Mobility assessment
+* Dental assessment
+* Comprehensive skin check
+* Senior wellness questionnaire (for older dogs)
+
+This approach aligns with your vision of making tracking "impossibly easy." Owners answer a handful of behavior-based questions on a regular schedule, and Wysker Watch can detect meaningful patterns across days, weeks, and months instead of overwhelming them with disease-specific forms.

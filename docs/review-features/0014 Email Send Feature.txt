@@ -1,0 +1,464 @@
+
+
+You are a senior engineer implementing the Wysker Watch Email feature.
+
+Read the Foundation documents first: (found here: C:\Users\lynnm\OneDrive\Documents\WyskerWatchFiles\Files\00 Foundation)
+
+Product Context
+Design System
+Technical Standards
+Data Model
+Navigation & Information Architecture
+Terminology
+
+Build only the Email feature described in this specification.
+
+Implement:
+
+Resend integration through Supabase Edge Functions.
+Shared server-side sendEmail service.
+Shared email template renderer.
+Shared branded HTML email layout.
+Plain text fallback for every email.
+Initial templates:
+co-owner-invitation
+welcome
+verify-email
+password-reset
+email_logs table migration.
+Structured error handling.
+Logging for successful and failed sends.
+Manual QA steps for local and production testing.
+
+Do not create a user-facing Email screen.
+Do not redesign existing app UI.
+Do not call Resend from frontend code.
+Do not expose API keys or provider errors.
+Do not implement the full co-owner invitation flow in this feature.
+Only create the reusable Email system and initial templates.
+
+When complete, return:
+
+Changed files
+Migration name
+Edge Function/shared module names
+Required environment variables/secrets
+Manual QA steps
+
+
+
+
+
+# Feature Specification: Email
+
+## Purpose
+
+Enable Wysker Watch to send branded transactional emails from server-side code.
+
+This feature creates the shared email system used by current and future product workflows, including co-owner invitations.
+
+## Functional Requirements
+
+### 1. Email Provider
+
+Use Resend as the transactional email provider.
+
+All email sending must happen server-side through Supabase Edge Functions.
+
+The frontend must never call Resend directly.
+
+Required secret:
+- `RESEND_API_KEY`
+
+Required sender:
+- `Wysker Watch <no-reply@wyskerwatch.com>`
+
+### 2. Shared Email Service
+
+Create a reusable server-side email service.
+
+The service must support:
+
+- Template-based email sending
+- HTML email body
+- Plain text fallback
+- Dynamic variable replacement
+- Subject variable replacement
+- Preview text
+- Error handling
+- Structured logging
+- Provider response capture
+
+Standard interface:
+
+```typescript
+sendEmail({
+  to: string,
+  template: string,
+  variables: Record<string, string>,
+  replyTo?: string
+})
+3. Email Templates
+
+Create a shared template system.
+
+Each template must include:
+
+Template name
+Subject
+Preview text
+HTML body
+Plain text body
+Required variables
+
+Templates must live in a shared server-side location, not inside UI components.
+
+Recommended structure:
+
+supabase/
+  functions/
+    _shared/
+      email/
+        sendEmail.ts
+        renderTemplate.ts
+        templates/
+          co-owner-invitation.ts
+          welcome.ts
+          password-reset.ts
+          verify-email.ts
+4. Template Rendering
+
+Template rendering must:
+
+Replace all required variables
+Fail safely if required variables are missing
+Escape user-provided values where appropriate
+Produce both HTML and plain text output
+Return structured errors
+5. Shared Branding
+
+All HTML emails must use a shared layout.
+
+Shared layout must include:
+
+Wysker Watch name/logo text
+Dark background
+High-contrast body text
+Clear primary CTA button
+Plain-language footer
+Mobile-responsive layout
+
+Do not create a separate visual style per email.
+
+6. Initial Templates
+
+Implement these templates in V1:
+
+co-owner-invitation
+welcome
+verify-email
+password-reset
+Template: Co-owner Invitation
+
+Template name:
+
+co-owner-invitation
+
+Subject:
+
+{{owner_name}} invited you to help care for {{pet_name}} in Wysker Watch
+
+Preview text:
+
+Accept your invitation to help care for {{pet_name}}.
+
+Required variables:
+
+owner_name
+pet_name
+accept_url
+expiration_date
+
+HTML body content:
+
+Hi,
+
+{{owner_name}} invited you to become a co-owner for {{pet_name}} in Wysker Watch.
+
+As a co-owner, you will be able to help track daily check-ins, view trends, manage care information, and support {{pet_name}}’s health story.
+
+Accept invitation:
+{{accept_url}}
+
+This invitation expires on {{expiration_date}}.
+
+If you were not expecting this invitation, you can safely ignore this email.
+
+The Wysker Watch Team
+
+Plain text body:
+
+{{owner_name}} invited you to become a co-owner for {{pet_name}} in Wysker Watch.
+
+Accept your invitation:
+{{accept_url}}
+
+This invitation expires on {{expiration_date}}.
+
+If you were not expecting this invitation, you can safely ignore this email.
+
+The Wysker Watch Team
+Template: Welcome
+
+Template name:
+
+welcome
+
+Subject:
+
+Welcome to Wysker Watch
+
+Preview text:
+
+Start building your pet’s health story.
+
+Required variables:
+
+first_name
+app_url
+
+Body:
+
+Hi {{first_name}},
+
+Welcome to Wysker Watch.
+
+You can now add your pets, complete their profiles, and begin tracking daily changes.
+
+Open Wysker Watch:
+{{app_url}}
+
+The Wysker Watch Team
+Template: Verify Email
+
+Template name:
+
+verify-email
+
+Subject:
+
+Verify your Wysker Watch email
+
+Preview text:
+
+Confirm your email address to finish setting up your account.
+
+Required variables:
+
+verify_url
+
+Body:
+
+Please verify your email address to finish setting up your Wysker Watch account.
+
+Verify email:
+{{verify_url}}
+
+If you did not create this account, you can ignore this email.
+
+The Wysker Watch Team
+Template: Password Reset
+
+Template name:
+
+password-reset
+
+Subject:
+
+Reset your Wysker Watch password
+
+Preview text:
+
+Use this secure link to reset your password.
+
+Required variables:
+
+reset_url
+
+Body:
+
+We received a request to reset your Wysker Watch password.
+
+Reset password:
+{{reset_url}}
+
+If you did not request this, you can ignore this email.
+
+The Wysker Watch Team
+UI Components
+
+No primary user-facing screen is required for this feature.
+
+This is a platform feature used by other workflows.
+
+Developer-visible components only:
+
+Shared email service
+Template files
+Template renderer
+Email provider client
+Email log handling
+User Interactions
+
+No direct user interaction is required in this feature.
+
+Users receive emails triggered by product workflows.
+
+Initial supported triggers:
+
+Co-owner invitation
+Account welcome
+Email verification
+Password reset
+Navigation
+
+No new app navigation is required.
+
+Email CTA links may route users to:
+
+App home
+Email verification route
+Password reset route
+Accept invite route
+Empty States
+
+Not applicable.
+
+Loading States
+
+Not applicable.
+
+Feature workflows that call the email service must handle their own loading states.
+
+Error States
+
+The email service must return structured errors.
+
+Required error types:
+
+missing_template
+missing_variable
+provider_error
+invalid_recipient
+unauthorized
+unknown_error
+
+Errors returned to the frontend must be user-safe.
+
+Do not expose:
+
+Resend API response details
+Stack traces
+Secret values
+Raw provider errors
+Business Rules
+Emails must only be sent from authenticated server-side workflows unless explicitly required for auth flows.
+Email provider secrets must never be exposed to the frontend.
+All transactional emails must have both HTML and plain text versions.
+All templates must use the shared layout.
+Each email must have a clear purpose.
+Product workflows must call the shared email service instead of implementing custom email logic.
+Email sending failure must not silently fail.
+Email sending must be logged.
+Do not send marketing emails through this feature.
+Validation Rules
+
+Recipient email:
+
+Required
+Must be valid email format
+Normalize to lowercase before sending where appropriate
+
+Template:
+
+Required
+Must match a known template
+
+Variables:
+
+All required variables for the selected template must be present
+Empty required variables should fail validation
+URLs must be valid URLs
+Data Requirements
+
+Create an email_logs table.
+
+Fields:
+
+id
+recipient_email
+template_name
+status
+provider_message_id
+error_code
+error_message
+related_entity_type
+related_entity_id
+sent_at
+created_at
+
+Statuses:
+
+sent
+failed
+
+RLS:
+
+No client-side insert access.
+Inserts must happen from Edge Functions using service role.
+Admin/service-role only for reads unless a future UI requires owner-visible email history.
+
+Do not store full email HTML bodies in the database.
+
+Acceptance Criteria
+Resend API key is stored as a Supabase secret.
+Shared email service exists.
+Template renderer exists.
+Templates support subject, preview text, HTML, and plain text.
+Missing template returns structured error.
+Missing required variable returns structured error.
+Email sends successfully through Resend.
+Email failures are logged.
+Successful sends are logged.
+Co-owner invitation template exists.
+Welcome template exists.
+Verify email template exists.
+Password reset template exists.
+No frontend component calls Resend directly.
+No email provider secret appears in frontend code.
+HTML emails use shared branding.
+Plain text fallback is included for every template.
+Edge Cases
+Resend API unavailable
+Invalid recipient email
+Missing template
+Missing variable
+Expired CTA link generated by calling workflow
+Duplicate send request
+Provider accepts email but delivery later fails
+User signs up with uppercase email
+Email sent successfully but log insert fails
+Log insert succeeds but provider send fails
+Local development without Resend secret configured
+Implementation Notes for Claude Code
+Preserve Wysker Watch’s existing architecture.
+Implement this as shared backend infrastructure, not as UI-specific logic.
+Use Supabase Edge Function shared modules where possible.
+Store secrets only in Supabase secrets.
+Do not call Resend from frontend code.
+Do not duplicate email rendering logic across functions.
+Keep templates simple and maintainable.
+Use the Design System colors and typography direction for HTML email styling.
+Keep email language calm, clear, and non-clinical.
+Do not include medical advice in transactional emails.
+Add manual QA notes for testing email sends in development and production.

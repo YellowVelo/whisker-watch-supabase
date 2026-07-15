@@ -1,0 +1,15 @@
+costs
+
+ChatGPT
+Claude Pro
+Cloudflare (website)
+
+
+Supabase - Free
+Git - Free
+CodeRabbit - 7 day trial (cancelled)
+
+Upcoming:
+Apple Developer's License
+Andriod store
+

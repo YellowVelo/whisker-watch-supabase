@@ -1,0 +1,24 @@
+Every Normal, completed, non-skipped daily check-in gets a 10–10 Health Score
+
+Starting at 10 and losing points only for five specific attributes:
+
+Appetite, Water, Bathroom, Stool, Vomiting
+
+each capped at −2. 
+
+Each observed symptom deduction has equal weight:
+First Observed symptom is -1
+Second observed symptom is -1 (total deductions -2)
+There is no deduction for each additional observed symptom. However, they are logged for the up/down/equal arrow calculation from day to day
+
+
+Everything else (Energy, Mobility, Breathing, Itching, Weight) never touches the score; instead they show as simple up/equal/down/unknown directional chips comparing to the previous day (or previous entry, for Weight). 
+
+Arrow ordinals:
+Tally Each observed symptom each day
+Compare the number from the prior day
+Display the arrow corresponding to the calculation
+Positive change = Up
+Negative change = down
+No change = equal
+

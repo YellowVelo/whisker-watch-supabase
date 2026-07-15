@@ -1,0 +1,491 @@
+Feature Specification
+Trends
+
+Document
+
+01 Features/Trends/Trends.md
+
+Status
+
+Ready for Implementation
+
+Owner
+
+Product
+
+Audience
+
+Claude Code
+
+Purpose
+
+Provide a dedicated screen for visualizing changes in a pet's health over time.
+
+The Trends screen presents historical health metrics using charts, summaries, and AI-generated insights.
+
+This screen is read-only.
+
+No health data is entered from this screen.
+
+Functional Requirements
+1. Entry
+
+Users access Trends by:
+
+Pet Profile
+Selecting the Trends tab
+
+Navigation state must preserve the selected pet.
+
+2. Header
+
+Display:
+
+Back button
+Pet photo
+Pet name
+Breed
+Sex
+Calendar button
+Overflow menu
+
+The overflow menu reuses the existing application menu component.
+
+3. Top Navigation Tabs
+
+Display:
+
+Overview
+Trends
+Patterns
+Compare
+
+The selected tab is highlighted.
+
+Only Overview is implemented in Version 1.
+
+Patterns and Compare display placeholder screens until implemented.
+
+4. Time Range Selector
+
+Display segmented control.
+
+Options:
+
+24H
+7D
+30D
+90D
+1Y
+
+Default
+
+24H
+
+Changing the selected range refreshes every chart on the screen.
+
+Selections persist while viewing the pet.
+
+5. Metric Cards
+
+Display cards in this order:
+
+Wellness Score
+Appetite
+Water Intake
+Energy
+Weight
+Insight Summary
+
+Each card is independent.
+
+Cards refresh independently.
+
+Wellness Score Card
+
+Display:
+
+Current score
+Maximum score
+Current status label
+Trend chart
+Date labels
+Trend annotation
+Current period
+
+Example:
+
+74 /100
+
+Monitor
+
+Down 7 points from yesterday
+
+Chart
+
+Display line chart.
+
+X-axis
+
+Time
+
+Y-axis
+
+0–100
+
+Highlight:
+
+Current value
+
+Lowest value
+
+Highest value
+
+Selecting the card opens the detailed Wellness Score history screen (future).
+
+Appetite Card
+
+Display
+
+Current state
+
+Example
+
+Lower
+
+Subtitle
+
+Ate less
+
+Chart
+
+Historical observations
+
+Legend
+
+Much More
+More
+Normal
+Less
+Much Less
+
+Data points use semantic colors.
+
+Green
+
+Above baseline
+
+Gray
+
+Baseline
+
+Amber
+
+Below baseline
+
+Red
+
+Significantly below baseline
+
+Selecting the card opens Appetite history.
+
+Water Intake Card
+
+Display
+
+Current status
+
+Historical chart
+
+Legend
+
+Much More
+More
+Normal
+Less
+Much Less
+
+Selecting opens Water Intake history.
+
+Energy Card
+
+Display
+
+Current status
+
+Historical chart
+
+Legend
+
+Same behavioral scale.
+
+Selecting opens Energy history.
+
+Weight Card
+
+Display
+
+Current weight
+
+Trend
+
+Historical graph
+
+Weight change summary.
+
+Example
+
+9.8 lbs
+
+Down 0.2 lbs
+
+Weight chart uses line graph.
+
+Date labels adjust based upon selected time period.
+
+Selecting opens Weight history.
+
+Insight Summary Card
+
+Display one summarized paragraph.
+
+Example
+
+Tribble's appetite, energy and wellness score are lower today while water intake has increased.
+
+The summary is generated from stored observations.
+
+It is not editable.
+
+Selecting opens the full AI Insight screen (future).
+
+UI Components
+
+Uses existing application components.
+
+Page header
+Segmented controls
+Card component
+Line chart
+Bar chart
+Metric labels
+Trend annotations
+Bottom navigation
+
+Charts should share one reusable chart component.
+
+Only data configuration changes.
+
+User Interactions
+
+Users may:
+
+Change date range
+Scroll vertically
+Open detailed metric history
+Navigate back
+Switch tabs
+
+No editing occurs.
+
+Navigation
+Home
+
+↓
+
+Pets
+
+↓
+
+Pet Profile
+
+↓
+
+Trends
+
+Back returns to Pet Profile.
+
+Selected pet remains unchanged.
+
+Empty States
+No Wellness Data
+
+Display
+
+"No health trends available yet."
+
+Primary action
+
+Complete today's Daily Check-In
+
+No Weight
+
+Display
+
+"No weight history available."
+
+No Insight
+
+Display
+
+"Complete more check-ins to unlock AI insights."
+
+Loading States
+
+While loading:
+
+Display skeleton cards.
+
+Charts display placeholders.
+
+Cards load independently.
+
+Changing date range displays loading only within chart content.
+
+The screen itself should not reload.
+
+Error States
+
+If metric retrieval fails:
+
+Display inline message.
+
+"Unable to load trend."
+
+Retry automatically when user changes the date range.
+
+If AI summary fails:
+
+Hide summary.
+
+Display
+
+"Insights unavailable."
+
+Other cards continue functioning.
+
+Business Rules
+
+Trend calculations always compare against the pet's baseline where available.
+
+Historical data is never modified.
+
+Unknown days remain gaps.
+
+Skipped days are visually distinguishable from missing data.
+
+Trend summaries never diagnose.
+
+Charts display only owner-accessible data.
+
+Future dates are never shown.
+
+Weight changes use recorded measurements only.
+
+AI summaries describe observations.
+
+They never recommend diagnosis or treatment.
+
+Validation Rules
+
+Time range must be one of:
+
+24H
+7D
+30D
+90D
+1Y
+
+Metric values must remain within valid ranges.
+
+Wellness Score
+
+0–100
+
+Weight
+
+Positive decimal
+
+Behavioral observations must map to supported observation values.
+
+Unknown values render as "No Data."
+
+Data Requirements
+
+Retrieve:
+
+Pet
+
+Wellness Scores
+
+Daily Check-Ins
+
+Observations
+
+Weight history
+
+Computed trends
+
+AI summary
+
+Use the existing entity layer.
+
+Never query Supabase directly from UI components.
+
+Support owner-scoped RLS.
+
+Charts must respect the currently selected time window.
+
+Acceptance Criteria
+
+Users can:
+
+✓ Open Trends from Pet Profile.
+
+✓ Switch between all supported time ranges.
+
+✓ View historical Wellness Score.
+
+✓ View Appetite history.
+
+✓ View Water Intake history.
+
+✓ View Energy history.
+
+✓ View Weight history.
+
+✓ Read Insight Summary.
+
+✓ Navigate back without losing context.
+
+✓ View charts that update without reloading the page.
+
+✓ See appropriate empty states.
+
+✓ Continue using the screen if one metric fails to load.
+
+✓ View only data belonging to pets they are authorized to access.
+
+Edge Cases
+First Daily Check-In completed today.
+Only one historical data point exists.
+All historical values are identical.
+Missing days within the selected range.
+Skipped check-ins within the selected range.
+Pet has no weight history.
+Pet has no observations.
+AI summary unavailable.
+Date range returns no records.
+Rapid switching between date ranges.
+Extremely long histories (>1 year).
+Memorial pets remain viewable in read-only mode.
+Implementation Notes for Claude Code
+Preserve the existing visual style, spacing, typography, and card patterns defined in the Design System.
+Implement the page using reusable chart components. The Wellness Score, Weight, and observation charts should share a common chart infrastructure with configuration determining chart type and formatting.
+Route all data access through the existing entity layer and data services. Do not access Supabase directly from UI components.
+Build each metric card as an independently loading component so failures in one section do not block rendering of the rest of the page.
+Use the existing Daily Check-In, Observation, Wellness Score, and Symptom Log data models as they currently exist. Where the current application maintains separate historical sources (for example, Wellness Scores versus legacy symptom history), read from the existing source of truth for each metric rather than attempting to reconcile the models as part of this feature.
+Treat the Trends page as a read-only visualization layer. No editing, logging, or baseline management should occur from this screen.
+Keep the Overview, Patterns, and Compare tab architecture reusable so future implementations can be added without restructuring the page.
+Ensure charts correctly distinguish between normal observations, skipped days, and missing data in accordance with the Product Principles and current data model.
+Maintain smooth chart updates when switching time ranges without reloading the entire page.
