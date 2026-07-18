@@ -9,10 +9,10 @@ were changed.
 
 **Context:** `docs/features/` is meant to hold specs "confirmed current
 against the codebase" (per `CLAUDE.md`). All 14 files here were touched in a
-reorg commit on 2026-07-18 that acted on an earlier triage
-(`docs/feature-triage-2026-07-14.md`) of `docs/review-features/`. This pass
-re-verifies that the reorg's "confirmed current" claim actually holds for
-each file, now that they live in `docs/features/`.
+2026-07-18 reorg that acted on an earlier triage of a since-removed
+review-drafts folder. This pass re-verifies that the reorg's "confirmed
+current" claim actually holds for each file, now that they live in
+`docs/features/`.
 
 **Key finding that drives most classifications below:** the app retired
 three prior scoring systems — a 0–100 "Wellness Score V1," a 0–10 "Health

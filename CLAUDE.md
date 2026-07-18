@@ -21,7 +21,7 @@ Current model in one line: `daily_check_ins.status` is `great` / `off` / `tough`
 - `src/api/aiClient.js` + `supabase/functions/ask-vet-assistant` — AI features via Anthropic API through a Supabase Edge Function
 - `src/lib/checkin/{scoring,config,chipLabels,checkinClient}.js` — current Vibe/symptom-count logic
 - Deployed on Cloudflare Workers (`wrangler.jsonc`). A manual-deploy gate exists in the Cloudflare dashboard — not represented in-repo config.
-- Local dev and production currently share the same Supabase project (known issue, tracked in `docs/launch-punch-list.md` P0 — do not assume separate environments).
+- Local dev and production currently share the same Supabase project — a known, unresolved risk (local testing writes real rows to live data). Do not assume separate environments.
 
 ## Working conventions
 - This is a READ-ONLY exploration by default. Do not edit, create, or delete files unless the task explicitly asks for changes, or Plan Mode has been used and the plan approved first.

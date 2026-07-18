@@ -104,7 +104,7 @@ Displayed only when the signed-in user has active **sitter** access (`PetSitterA
 
 Header: **SHARED WITH ME**
 
-Rows use a separate, deliberately lighter `SharedPetRow` component — a bare identity link (photo/species icon, name) with **no chip UI of any kind**: no condition chips, no Wellbeing chips, no medication count. This is a known, tracked gap (`docs/launch-punch-list.md`), not a design decision documented anywhere as intentional. Tapping a row **does** navigate — to that pet's Trends screen (`/pet/:petId/trends`), not Pet Profile, and not an inline expansion like Active Pets get.
+Rows use a separate, deliberately lighter `SharedPetRow` component — a bare identity link (photo/species icon, name) with **no chip UI of any kind**: no condition chips, no Wellbeing chips, no medication count. This is a known, undecided gap, not a design decision documented anywhere as intentional. Tapping a row **does** navigate — to that pet's Trends screen (`/pet/:petId/trends`), not Pet Profile, and not an inline expansion like Active Pets get.
 
 ---
 

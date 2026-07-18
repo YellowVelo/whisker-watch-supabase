@@ -4,8 +4,7 @@
 
 **Status:** New as-built documentation, written 2026-07-18. This is not a
 correction of a prior draft — the PWA install/offline behavior has never
-been documented anywhere before (previously only mentioned in passing in
-`docs/audit-2026-07-14.md` and `docs/launch-punch-list.md`). Everything
+been documented as its own feature before. Everything
 below was verified directly against `vite.config.js`, `index.html`,
 `src/lib/useInstallPrompt.js`, `src/components/OfflineBanner.jsx`,
 `src/components/IosInstallBanner.jsx`, `src/App.jsx`, and
@@ -18,9 +17,9 @@ below was verified directly against `vite.config.js`, `index.html`,
 **Purpose:**
 
 Wysker Watch is not yet wrapped as a native app — per
-`docs/foundation/0006 Technical Standards.md` and `docs/launch-punch-list.md`
-P1, Capacitor wrapping for iOS/Android is unstarted (no `ios`/`android`
-folders, no `capacitor.config`). Until that ships, the Progressive Web App
+`docs/foundation/0006 Technical Standards.md`, Capacitor wrapping for
+iOS/Android is unstarted (no `ios`/`android` folders, no
+`capacitor.config`). Until that ships, the Progressive Web App
 (PWA) layer is the **only** installable-app path available to users: a web
 app manifest plus a service worker let the site be added to a phone's home
 screen and opens as a standalone app (no browser chrome), with the static
@@ -47,7 +46,7 @@ not committed to the repo as a static file:
 - `display`: `standalone`
 - `start_url`: `/`
 - Icons: 64×64, 192×192, 512×512, plus a 512×512 `maskable` variant — all sourced from `public/pwa-*.png` and `public/maskable-icon-512x512.png`
-- `manifestFilename`: `manifest.json` — generated and injected at build time; **`index.html`'s source has no `<link rel="manifest">` tag**, because the plugin injects it automatically into the built output. This resolves a stale line in `docs/launch-punch-list.md` (P1: "`manifest.json` is missing... currently 404s") — that was true before `vite-plugin-pwa` was added; it is not true of the current build.
+- `manifestFilename`: `manifest.json` — generated and injected at build time; **`index.html`'s source has no `<link rel="manifest">` tag**, because the plugin injects it automatically into the built output. (A manifest 404 was a real, since-resolved problem before `vite-plugin-pwa` was added — not true of the current build.)
 - `public/` also holds `favicon.ico`, `icon-source.svg`, and `apple-touch-icon-180x180.png`, referenced directly from `index.html`'s `<head>` (not part of the generated manifest).
 
 `index.html` additionally sets `apple-mobile-web-app-capable`,
@@ -195,7 +194,7 @@ A user can:
 - All `beforeinstallprompt` handling lives in `useInstallPrompt.js` — don't add a second listener elsewhere; consume the existing hook.
 - Manifest and service-worker registration are generated at build time by `vite-plugin-pwa`; nothing in `public/` or `index.html` needs to be hand-maintained for a manifest change — edit the `VitePWA({...})` config in `vite.config.js` instead.
 - To test install/offline behavior, use `vite build && vite preview` (or an actual Cloudflare Workers deploy), not `vite dev`.
-- If Capacitor wrapping (`docs/launch-punch-list.md` P1) ships later, revisit whether the PWA install banners should be suppressed inside the native wrapper's webview to avoid a confusing "install the app" prompt shown to a user who's already in the installed native app.
+- If Capacitor wrapping ships later, revisit whether the PWA install banners should be suppressed inside the native wrapper's webview to avoid a confusing "install the app" prompt shown to a user who's already in the installed native app.
 
 ---
 

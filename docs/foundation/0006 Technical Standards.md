@@ -18,7 +18,7 @@ AI: Claude via Supabase Edge Functions
 
 Deployment: Cloudflare Workers (`wrangler.jsonc`), with a manual-deploy gate in the Cloudflare dashboard not represented in-repo config — **not** Netlify/Vercel (§11 previously said otherwise)
 
-Mobile: **not yet built.** A Capacitor wrapper for iOS/Android is planned (see §7) but per `docs/launch-punch-list.md` P1, this is the #1 App Store blocker — there are no `ios`/`android` folders and no `capacitor.config` anywhere in the repo. Treat every claim in this document about Capacitor/native behavior as target architecture, not current state.
+Mobile: **not yet built.** A Capacitor wrapper for iOS/Android is planned (see §7) but entirely unstarted, and it's the single largest blocker standing between this app and either app store — there are no `ios`/`android` folders and no `capacitor.config` anywhere in the repo. Treat every claim in this document about Capacitor/native behavior as target architecture, not current state.
 
 Version Control: GitHub
 
@@ -226,7 +226,7 @@ Deploy migrations via CLI
 
 Deploy Edge Functions via CLI
 
-Local dev and production currently point at the **same** Supabase project (no separate environments) — a known P0 issue tracked in `docs/launch-punch-list.md`, not a documentation gap in itself, but worth knowing before assuming "deploy" means "deploy somewhere isolated."
+Local dev and production currently point at the **same** Supabase project (no separate environments) — a known, unresolved risk (local testing writes real rows to live data), not a documentation gap in itself, but worth knowing before assuming "deploy" means "deploy somewhere isolated."
 
 Frontend
 

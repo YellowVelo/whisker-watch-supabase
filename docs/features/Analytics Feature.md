@@ -27,7 +27,7 @@ pipeline, not a database backup.** It exists to answer product questions
 completed") — it does not protect or duplicate any of the app's real data
 (pets, check-ins, medications, etc.). The project currently has **no
 database backup or point-in-time recovery configured at all**
-(`docs/launch-punch-list.md` P0: `pitr_enabled: false`, `backups: []`,
+(`pitr_enabled: false`, `backups: []` on the live Supabase project —
 already the cause of one real data-loss incident). If the goal is actual
 data protection, that's a separate, still-open gap — this feature doesn't
 touch it. See "Relationship to Backups" below.
@@ -156,10 +156,9 @@ snapshot any other table, and it isn't retained as point-in-time history
 of anything beyond the 6 numeric columns in `analytics_daily_summary`.
 
 The project's actual database backup posture is a separate, still-open
-item: `docs/launch-punch-list.md` P0 confirms `pitr_enabled: false` and
-`backups: []` on the live Supabase project — no backups exist for pets,
-check-ins, medications, accounts, or any other real data, and this
-feature does nothing to change that.
+item: `pitr_enabled: false` and `backups: []` on the live Supabase
+project — no backups exist for pets, check-ins, medications, accounts,
+or any other real data, and this feature does nothing to change that.
 
 ---
 
@@ -231,4 +230,4 @@ Current, as-built behavior:
 
 - Should the rollup filter out `test`/`demo`/`owner` account types by default, given every metric currently blends them with real production usage?
 - Is an in-app or otherwise more accessible analytics view wanted, or is SQL-Editor-only access sufficient for now?
-- Separately from this feature: is the lack of any database backup/PITR (`docs/launch-punch-list.md` P0) being prioritized? This document doesn't change that gap, only clarifies that the analytics rollup was never meant to fill it.
+- Separately from this feature: is the lack of any database backup/PITR being prioritized? This document doesn't change that gap, only clarifies that the analytics rollup was never meant to fill it.
