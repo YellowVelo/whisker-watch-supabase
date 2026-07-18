@@ -6,7 +6,7 @@ This file is read automatically at the start of every Claude Code session in thi
 Read `/docs/foundation/Product Context.md` first, every session, before doing anything else.
 
 ## Current data model — read before touching scoring/check-in logic
-`/docs/features/0012_DailyCheckIn_Vibe_Trends_Specification_v5.txt` is the canonical source for all Vibe/scoring/check-in logic. The app has retired three prior scoring systems (Wellness Score V1, Health Score V2, and an equal-weight multi-select version) — if any other file, doc, or piece of code appears to reference a 0–100 score, a 0–10 Health Score, or Stable/Declining/Monitor labels, treat it as outdated and check this spec first.
+`/docs/features/0012_DailyCheckIn_Vibe_Trends_Specification_v5.md` is the canonical source for all Vibe/scoring/check-in logic. (A byte-identical `.txt` copy also exists under `/docs/Archive/` — that copy is a leftover duplicate, not a separate source; always use the `.md` one in `/docs/features/`.) The app has retired three prior scoring systems (Wellness Score V1, Health Score V2, and an equal-weight multi-select version) — if any other file, doc, or piece of code appears to reference a 0–100 score, a 0–10 Health Score, or Stable/Declining/Monitor labels, treat it as outdated and check this spec first.
 
 Current model in one line: `daily_check_ins.status` is `great` / `off` / `tough` / `skipped` (Vibe, subjective, owner-reported) plus an unweighted symptom count (objective, direction-only). The two signals never inform each other.
 
