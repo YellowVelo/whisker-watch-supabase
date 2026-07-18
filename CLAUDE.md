@@ -13,8 +13,7 @@ Current model in one line: `daily_check_ins.status` is `great` / `off` / `tough`
 ## Doc folder structure
 - `/docs/foundation/` — Product Context, Vision, Principles, UX Principles, Design System, Technical Standards, Data Model, Navigation & IA, Terminology. Cross-cutting, locked. Safe to treat as ground truth.
 - `/docs/features/` — feature-specific specs confirmed current against the codebase. Safe to build against.
-- `/docs/review-features/` — feature docs not yet verified against current code. **Do not treat as accurate without cross-checking against `src/` first.** Some may describe deprecated features.
-- `/docs/archive/` — deprecated/retired specs, kept for history only. Never build against these.
+- `/docs/review-features/` and `/docs/archive/` — both folders have been removed from the repo to avoid confusion. You will no longer find them in /docs. This is intentional.
 
 ## Key architecture
 - `src/api/entities.js` — entity CRUD
