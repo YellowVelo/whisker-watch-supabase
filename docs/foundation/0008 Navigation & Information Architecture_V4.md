@@ -164,9 +164,11 @@ Preferences, Support (still placeholders)
 
 `src/pages/Preferences.jsx` (`/preferences`) and `src/pages/Support.jsx` (`/support`) remain explicit stubs — each renders a static "coming soon" screen with a back button, so Menu's row list doesn't dead-end (the same precedent Timeline used before it became real).
 
-CareMenu (in-context quick nav)
+CareMenu (in-context quick nav) — **intended to be deprecated, still live in code**
 
-`src/components/CareMenu.jsx` — slide-out panel from Pet Profile and PetProfileTabs. Its "Trends" item points to `/pet/:petId/trends` (defaulting to the Overview sub-tab). Still includes History/Meds/Baseline/Food/Labs/Vaccines/Sitter/AI (`PetProfileTabs` tabs) plus a global Menu/About link. `PetProfileTabs`' own former "Trends" tab now redirects to the Trends screen's "Trends" sub-tab rather than rendering its own copy (see the Trends section above).
+**Product direction (2026-07-18): CareMenu — the hamburger-menu icon on `PetProfileTabs.jsx`, `Documents.jsx`, and `Insurance.jsx` — should not be used. All navigation is meant to go through the bottom nav (Home/Pets/Menu) and back, not a per-page hamburger menu.** This has not yet been implemented in code — `src/components/CareMenu.jsx` is still actively rendered and functional in all three of those pages as of this revision. Removing it as-is would orphan three destinations that currently have no other entry point anywhere in the app: **History** (`LogHistory.jsx`, via `PetProfileTabs.jsx?tab=history`), **Documents** (`src/pages/Documents.jsx`), and **Insurance** (`src/pages/Insurance.jsx`). Everything else CareMenu links to already has an independent path: Vet Report/Baseline/Medications/Food/Vaccinations/Health Records via the current Pet Profile's nav cards (see above), and AI/Pet Sitter via `Menu → AI` / `Menu → Pet Sitter` pet-picker directories (`AIMenu.jsx`/`PetSitterMenu.jsx`) that don't touch CareMenu at all. See `docs/launch-punch-list.md` P4 for the tracked decision on the three orphaned destinations.
+
+Until that decision lands, here's what CareMenu currently does: `src/components/CareMenu.jsx` — slide-out panel from Pet Profile and PetProfileTabs. Its "Trends" item points to `/pet/:petId/trends` (defaulting to the Overview sub-tab). Still includes History/Meds/Baseline/Food/Labs/Vaccines/Sitter/AI (`PetProfileTabs` tabs) plus a global Menu/About link. `PetProfileTabs`' own former "Trends" tab now redirects to the Trends screen's "Trends" sub-tab rather than rendering its own copy (see the Trends section above).
 
 Routing (as implemented in `src/App.jsx`)
 
