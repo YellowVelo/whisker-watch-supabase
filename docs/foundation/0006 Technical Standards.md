@@ -2,13 +2,13 @@ Technical Standards
 
 Purpose
 
-These standards define how Whisker Watch is engineered. They ensure reliability, maintainability, security, and consistency across the entire system—from frontend to backend to AI integrations.
+These standards define how Wysker Watch is engineered. They ensure reliability, maintainability, security, and consistency across the entire system—from frontend to backend to AI integrations.
 
-Whisker Watch is built for long-term stability and rapid iteration. These standards serve as the foundation for every engineer and AI agent contributing to the codebase.
+Wysker Watch is built for long-term stability and rapid iteration. These standards serve as the foundation for every engineer and AI agent contributing to the codebase.
 
 1. Architecture Overview
 
-Whisker Watch uses a modern, modular architecture:
+Wysker Watch uses a modern, modular architecture:
 
 Frontend: React + Vite
 
@@ -16,7 +16,9 @@ Backend: Supabase (Postgres, Auth, Storage, Edge Functions)
 
 AI: Claude via Supabase Edge Functions
 
-Mobile: Capacitor wrapper for iOS/Android
+Deployment: Cloudflare Workers (`wrangler.jsonc`), with a manual-deploy gate in the Cloudflare dashboard not represented in-repo config — **not** Netlify/Vercel (§11 previously said otherwise)
+
+Mobile: **not yet built.** A Capacitor wrapper for iOS/Android is planned (see §7) but per `docs/launch-punch-list.md` P1, this is the #1 App Store blocker — there are no `ios`/`android` folders and no `capacitor.config` anywhere in the repo. Treat every claim in this document about Capacitor/native behavior as target architecture, not current state.
 
 Version Control: GitHub
 
@@ -32,7 +34,7 @@ Keep database schema clean, relational, and RLS‑secured
 
 Languages & Frameworks
 
-TypeScript for all frontend and backend code
+TypeScript for all backend code (Supabase Edge Functions — this is consistently followed). **The frontend does not follow this standard**: there is no `tsconfig.json`, and `src/` is almost entirely `.js`/`.jsx` (one stray `.ts` utility file exists, `src/utils/index.ts`). Confirmed 2026-07-18 — if frontend TypeScript adoption is still a real goal, it hasn't started; if it's been deliberately dropped, this standard should say so instead of asserting a rule the whole frontend violates.
 
 React with functional components and hooks
 
@@ -140,7 +142,9 @@ Never store passwords client‑side
 
 Use context provider (AuthContext.jsx) for session state
 
-7. Mobile Standards (Capacitor)
+7. Mobile Standards (Capacitor) — target architecture, not yet built (see §1)
+
+The app currently ships as an installable PWA (`vite-plugin-pwa`, iOS/Chromium install banners) — a real, shipped alternative to native wrapping, not documented elsewhere in this file. Everything below this line is planned, not current.
 
 Native Plugins
 
@@ -222,18 +226,18 @@ Deploy migrations via CLI
 
 Deploy Edge Functions via CLI
 
+Local dev and production currently point at the **same** Supabase project (no separate environments) — a known P0 issue tracked in `docs/launch-punch-list.md`, not a documentation gap in itself, but worth knowing before assuming "deploy" means "deploy somewhere isolated."
+
 Frontend
 
 Use Vite build
 
-Deploy to modern hosting (Netlify/Vercel)
+Deploy to **Cloudflare Workers** (`wrangler.jsonc`) — not Netlify/Vercel, which this document previously said. A manual-deploy gate exists in the Cloudflare dashboard, not represented in-repo config.
 
 Mobile
 
-Build via Capacitor
-
-Submit through App Store / Play Store pipelines
+Not yet built — see §1 and §7. Nothing to deploy through App Store / Play Store pipelines until Capacitor wrapping exists.
 
 Summary
 
-These technical standards ensure Whisker Watch is stable, secure, maintainable, and ready to scale. They provide a shared foundation for all engineering work and guarantee that every feature aligns with the product’s long‑term vision.
+These technical standards ensure Wysker Watch is stable, secure, maintainable, and ready to scale. They provide a shared foundation for all engineering work and guarantee that every feature aligns with the product’s long‑term vision.

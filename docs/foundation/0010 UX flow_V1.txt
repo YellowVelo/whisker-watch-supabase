@@ -2,11 +2,25 @@ Home
 
 ↓
 
-Tap Harper
+Tap Harper's card
 
 ↓
 
-Pet Profile
+Trends (not Pet Profile — corrected 2026-07-18; tapping a pet card on Home or Pets links to Trends, never the flat Pet Profile)
+
+---
+
+To reach Pet Profile instead:
+
+Pets tab
+
+↓
+
+Tap "Show More" on Harper's card
+
+↓
+
+Pet Profile content expands inline (no navigation — same screen)
 
 ↓
 
@@ -26,8 +40,4 @@ Save
 
 ↓
 
-Return to Profile
-
-↓
-
-Updated summary
+Card stays expanded, showing updated summary

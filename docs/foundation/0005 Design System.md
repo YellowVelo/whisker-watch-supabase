@@ -2,13 +2,13 @@ Design System
 
 Purpose
 
-The Whisker Watch Design System defines the visual language, interaction patterns, and component standards that create a calm, premium, and emotionally supportive experience. It ensures consistency across all screens, features, and future expansions.
+The Wysker Watch Design System defines the visual language, interaction patterns, and component standards that create a calm, premium, and emotionally supportive experience. It ensures consistency across all screens, features, and future expansions.
 
-Whisker Watch’s design identity is inspired by Oura: clean, modern, and focused on clarity.
+Wysker Watch’s design identity is inspired by Oura: clean, modern, and focused on clarity.
 
 1. Color System
 
-Whisker Watch uses a restrained, wellness‑oriented palette designed to feel calm, trustworthy, and non‑clinical.
+Wysker Watch uses a restrained, wellness‑oriented palette designed to feel calm, trustworthy, and non‑clinical.
 
 Core Colors
 
@@ -40,7 +40,7 @@ Maintain high contrast for accessibility.
 
 2. Typography
 
-Whisker Watch uses a clean, modern type system optimized for readability and emotional calm.
+Wysker Watch uses a clean, modern type system optimized for readability and emotional calm.
 
 Primary Font
 
@@ -84,7 +84,7 @@ Keep stroke width consistent.
 
 4. Components
 
-Whisker Watch components follow a calm, minimal, wellness‑inspired aesthetic.
+Wysker Watch components follow a calm, minimal, wellness‑inspired aesthetic.
 
 Cards
 
@@ -112,6 +112,8 @@ Label beneath
 
 Consistent spacing
 
+(Note, 2026-07-18: no current screen uses a numeric score badge — the Wellness/Health Score circular displays this pattern originally described were retired in favor of Vibe icons and direction chips, which show state/trend without a number. Keep this pattern documented for any future numeric metric, but don't assume it's currently in use anywhere.)
+
 Chips
 
 Soft background
@@ -122,7 +124,7 @@ Used for diagnoses or tags
 
 5. Layout & Spacing
 
-Whisker Watch uses a breathable, modern layout.
+Wysker Watch uses a breathable, modern layout.
 
 Spacing Scale
 
@@ -154,7 +156,7 @@ Keep interactions predictable
 
 7. Tone & Personality
 
-Whisker Watch’s design tone is:
+Wysker Watch’s design tone is:
 
 Calm
 
@@ -188,7 +190,7 @@ Avoid color‑only indicators
 
 9. Platform Considerations
 
-Whisker Watch is mobile‑first.
+Wysker Watch is mobile‑first.
 
 iOS / Android (Capacitor)
 
@@ -206,6 +208,6 @@ Consistent component behavior
 
 Summary
 
-The Whisker Watch Design System creates a calm, premium, emotionally supportive experience. It ensures consistency across the product and provides a foundation for future features, native apps, and AI‑powered insights.
+The Wysker Watch Design System creates a calm, premium, emotionally supportive experience. It ensures consistency across the product and provides a foundation for future features, native apps, and AI‑powered insights.
 
-This system is the visual backbone of Whisker Watch—clean, modern, and designed to help owners feel confident and reassured every time they open the app.
+This system is the visual backbone of Wysker Watch—clean, modern, and designed to help owners feel confident and reassured every time they open the app.
