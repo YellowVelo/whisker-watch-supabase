@@ -64,15 +64,6 @@ psql "$RESTORE_TEST_DB_URL" -v ON_ERROR_STOP=1 -q -c "
 # run's backup. auth's own FK cascades clear identities/sessions/etc.
 psql "$RESTORE_TEST_DB_URL" -v ON_ERROR_STOP=1 -q -c "DELETE FROM auth.users;"
 
-# observation_types/observation_options seeded by migrations 0014/0026 use
-# gen_random_uuid() with no fixed IDs - clear those so the backup's rows
-# (with the real, stable production IDs that observations rows reference)
-# are what actually gets restored.
-psql "$RESTORE_TEST_DB_URL" -v ON_ERROR_STOP=1 -q -c "
-  DELETE FROM public.observation_options;
-  DELETE FROM public.observation_types;
-"
-
 echo "== Rebuilding schema from migrations =="
 # A real disaster recovery starts from an empty Supabase project: the
 # schema comes from replaying supabase/migrations/, not from the backup.
@@ -90,6 +81,15 @@ for MIGRATION in supabase/migrations/*.sql; do
   echo "Applying $MIGRATION"
   psql "$RESTORE_TEST_DB_URL" -v ON_ERROR_STOP=1 -q -f "$MIGRATION"
 done
+
+# observation_types/observation_options seeded by migrations 0014/0026
+# (just applied, above) use gen_random_uuid() with no fixed IDs - clear
+# those so the backup's rows (with the real, stable production IDs that
+# observations rows reference) are what actually gets restored.
+psql "$RESTORE_TEST_DB_URL" -v ON_ERROR_STOP=1 -q -c "
+  DELETE FROM public.observation_options;
+  DELETE FROM public.observation_types;
+"
 
 # Restoring auth.users data fires the on_auth_user_created trigger (just
 # created by migration 0001, above), which would insert a stub
