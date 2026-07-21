@@ -49,6 +49,17 @@ psql "$RESTORE_TEST_DB_URL" -v ON_ERROR_STOP=1 -q -c "
   GRANT USAGE ON SCHEMA public TO postgres, anon, authenticated, service_role;
 "
 
+# storage.objects isn't ours to drop/recreate, but the policies migration
+# 0002 creates on it are ours (owned by postgres) and CREATE POLICY has no
+# IF NOT EXISTS, so clear any leftovers from a prior drill run.
+psql "$RESTORE_TEST_DB_URL" -v ON_ERROR_STOP=1 -q -c "
+  DROP POLICY IF EXISTS uploads_public_read ON storage.objects;
+  DROP POLICY IF EXISTS uploads_insert_own_folder ON storage.objects;
+  DROP POLICY IF EXISTS uploads_update_own_folder ON storage.objects;
+  DROP POLICY IF EXISTS uploads_delete_own_folder ON storage.objects;
+  DELETE FROM storage.buckets WHERE id = 'uploads';
+"
+
 echo "== Rebuilding schema from migrations =="
 # A real disaster recovery starts from an empty Supabase project: the
 # schema comes from replaying supabase/migrations/, not from the backup.
