@@ -57,7 +57,6 @@ psql "$RESTORE_TEST_DB_URL" -v ON_ERROR_STOP=1 -q -c "
   DROP POLICY IF EXISTS uploads_insert_own_folder ON storage.objects;
   DROP POLICY IF EXISTS uploads_update_own_folder ON storage.objects;
   DROP POLICY IF EXISTS uploads_delete_own_folder ON storage.objects;
-  DELETE FROM storage.buckets WHERE id = 'uploads';
 "
 
 echo "== Rebuilding schema from migrations =="
