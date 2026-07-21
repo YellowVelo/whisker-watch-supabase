@@ -17,8 +17,13 @@ cleanup() {
 }
 trap cleanup EXIT
 
-echo "== Dumping database =="
-pg_dump "$SUPABASE_DB_URL" -Fc -f "$DUMP_FILE"
+echo "== Dumping database (data only: public + auth) =="
+# Schema/DDL is versioned in supabase/migrations/ and pre-provisioned on
+# every Supabase project, so only data needs to travel in the backup.
+# Dumping full schema (including auth/storage/realtime internals) fails
+# on restore: those schemas are owned by Supabase-managed roles the
+# connecting "postgres" role doesn't have DROP/CREATE rights over.
+pg_dump "$SUPABASE_DB_URL" -Fc --data-only --schema=public --schema=auth -f "$DUMP_FILE"
 
 echo "== Encrypting dump =="
 gpg --batch --yes --passphrase "$BACKUP_ENCRYPTION_PASSPHRASE" \

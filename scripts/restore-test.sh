@@ -39,12 +39,27 @@ echo "== Decrypting =="
 gpg --batch --yes --passphrase "$BACKUP_ENCRYPTION_PASSPHRASE" \
   --decrypt --output "$DUMP_FILE" "$ENCRYPTED_FILE"
 
-echo "== Restoring into scratch project =="
+echo "== Rebuilding schema from migrations =="
+# A real disaster recovery starts from an empty Supabase project: the
+# schema comes from replaying supabase/migrations/, not from the backup.
+# Two migrations (0003, 0007) are one-off historical data-recovery INSERTs,
+# not schema — replaying them would conflict with the real backup data
+# restored afterward, so they're skipped here.
+for MIGRATION in supabase/migrations/*.sql; do
+  case "$(basename "$MIGRATION")" in
+    0003_real_data_import.sql|0007_restore_real_data_new_account.sql)
+      echo "Skipping $MIGRATION (historical data recovery, not schema)"
+      continue
+      ;;
+  esac
+  echo "Applying $MIGRATION"
+  psql "$RESTORE_TEST_DB_URL" -v ON_ERROR_STOP=1 -q -f "$MIGRATION"
+done
+
+echo "== Restoring data into scratch project =="
+# --data-only: only public/auth data, matching how backup-db.sh dumps it.
 # --no-owner/--no-acl: source roles don't exist in the scratch project.
-# --clean --if-exists: safe to rerun against the same scratch project repeatedly.
-# Extension-related "already exists" warnings on a fresh project are expected
-# and non-fatal (Supabase pre-installs several extensions).
-pg_restore --no-owner --no-acl --clean --if-exists \
+pg_restore --data-only --no-owner --no-acl \
   -d "$RESTORE_TEST_DB_URL" "$DUMP_FILE"
 
 echo "== Restore test complete =="
