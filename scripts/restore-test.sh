@@ -64,6 +64,15 @@ psql "$RESTORE_TEST_DB_URL" -v ON_ERROR_STOP=1 -q -c "
 # run's backup. auth's own FK cascades clear identities/sessions/etc.
 psql "$RESTORE_TEST_DB_URL" -v ON_ERROR_STOP=1 -q -c "DELETE FROM auth.users;"
 
+# observation_types/observation_options seeded by migrations 0014/0026 use
+# gen_random_uuid() with no fixed IDs - clear those so the backup's rows
+# (with the real, stable production IDs that observations rows reference)
+# are what actually gets restored.
+psql "$RESTORE_TEST_DB_URL" -v ON_ERROR_STOP=1 -q -c "
+  DELETE FROM public.observation_options;
+  DELETE FROM public.observation_types;
+"
+
 echo "== Rebuilding schema from migrations =="
 # A real disaster recovery starts from an empty Supabase project: the
 # schema comes from replaying supabase/migrations/, not from the backup.
@@ -82,10 +91,36 @@ for MIGRATION in supabase/migrations/*.sql; do
   psql "$RESTORE_TEST_DB_URL" -v ON_ERROR_STOP=1 -q -f "$MIGRATION"
 done
 
+# Restoring auth.users data fires the on_auth_user_created trigger (just
+# created by migration 0001, above), which would insert a stub
+# public.profiles row and collide with the real profiles row in the same
+# backup. Temporarily no-op the function around the restore (postgres
+# owns it, unlike auth.users itself), then restore its real behavior after.
+psql "$RESTORE_TEST_DB_URL" -v ON_ERROR_STOP=1 -q -c "
+  CREATE OR REPLACE FUNCTION public.handle_new_user()
+  RETURNS trigger AS \$\$
+  BEGIN
+    RETURN NEW;
+  END;
+  \$\$ LANGUAGE plpgsql SECURITY DEFINER;
+"
+
 echo "== Restoring data into scratch project =="
 # --data-only: only public/auth data, matching how backup-db.sh dumps it.
 # --no-owner/--no-acl: source roles don't exist in the scratch project.
 pg_restore --data-only --no-owner --no-acl \
   -d "$RESTORE_TEST_DB_URL" "$DUMP_FILE"
+
+echo "== Reinstating handle_new_user =="
+psql "$RESTORE_TEST_DB_URL" -v ON_ERROR_STOP=1 -q -c "
+  CREATE OR REPLACE FUNCTION public.handle_new_user()
+  RETURNS trigger AS \$\$
+  BEGIN
+    INSERT INTO public.profiles (id, email)
+    VALUES (NEW.id, NEW.email);
+    RETURN NEW;
+  END;
+  \$\$ LANGUAGE plpgsql SECURITY DEFINER;
+"
 
 echo "== Restore test complete =="

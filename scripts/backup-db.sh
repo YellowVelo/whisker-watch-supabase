@@ -23,14 +23,15 @@ echo "== Dumping database (data only: public + auth) =="
 # Dumping full schema (including auth/storage/realtime internals) fails
 # on restore: those schemas are owned by Supabase-managed roles the
 # connecting "postgres" role doesn't have DROP/CREATE rights over.
-# observation_types/observation_options are fixed reference data owned by
-# migrations 0014/0026, not user data - excluding avoids duplicate-key
-# conflicts on restore when migrations reseed them. auth.schema_migrations
-# is Supabase Auth's internal migration tracker, not app data, and isn't
-# writable by the postgres role anyway.
+# observation_types/observation_options ARE included even though
+# migrations 0014/0026 also seed them: those seeds use gen_random_uuid()
+# with no fixed IDs, so a schema rebuild generates different IDs every
+# time. Real observations rows reference the original production IDs, so
+# the backup's copy of these tables (with stable IDs) must be what wins -
+# restore-test.sh clears the migrations' seed rows before restoring.
+# auth.schema_migrations is Supabase Auth's internal migration tracker,
+# not app data, and isn't writable by the postgres role anyway.
 pg_dump "$SUPABASE_DB_URL" -Fc --data-only --schema=public --schema=auth \
-  --exclude-table-data=public.observation_types \
-  --exclude-table-data=public.observation_options \
   --exclude-table-data=auth.schema_migrations \
   -f "$DUMP_FILE"
 
