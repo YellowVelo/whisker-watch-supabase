@@ -52,12 +52,13 @@ psql "$RESTORE_TEST_DB_URL" -v ON_ERROR_STOP=1 -q -c "
 echo "== Rebuilding schema from migrations =="
 # A real disaster recovery starts from an empty Supabase project: the
 # schema comes from replaying supabase/migrations/, not from the backup.
-# Two migrations (0003, 0007) are one-off historical data-recovery INSERTs,
-# not schema — replaying them would conflict with the real backup data
-# restored afterward, so they're skipped here.
+# Three migrations (0003, 0007, 0027) are one-off historical data
+# INSERTs hardcoded to specific real pet/user rows, not schema — they
+# either conflict with or depend on data that only exists in
+# production, so they're skipped here.
 for MIGRATION in supabase/migrations/*.sql; do
   case "$(basename "$MIGRATION")" in
-    0003_real_data_import.sql|0007_restore_real_data_new_account.sql)
+    0003_real_data_import.sql|0007_restore_real_data_new_account.sql|0027_migrate_symptom_logs_to_checkins.sql)
       echo "Skipping $MIGRATION (historical data recovery, not schema)"
       continue
       ;;
