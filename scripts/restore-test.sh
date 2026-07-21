@@ -59,6 +59,11 @@ psql "$RESTORE_TEST_DB_URL" -v ON_ERROR_STOP=1 -q -c "
   DROP POLICY IF EXISTS uploads_delete_own_folder ON storage.objects;
 "
 
+# auth data persists across drill runs (public reset doesn't touch it),
+# so previously-restored users would collide with the same rows in this
+# run's backup. auth's own FK cascades clear identities/sessions/etc.
+psql "$RESTORE_TEST_DB_URL" -v ON_ERROR_STOP=1 -q -c "DELETE FROM auth.users;"
+
 echo "== Rebuilding schema from migrations =="
 # A real disaster recovery starts from an empty Supabase project: the
 # schema comes from replaying supabase/migrations/, not from the backup.

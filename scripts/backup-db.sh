@@ -23,7 +23,16 @@ echo "== Dumping database (data only: public + auth) =="
 # Dumping full schema (including auth/storage/realtime internals) fails
 # on restore: those schemas are owned by Supabase-managed roles the
 # connecting "postgres" role doesn't have DROP/CREATE rights over.
-pg_dump "$SUPABASE_DB_URL" -Fc --data-only --schema=public --schema=auth -f "$DUMP_FILE"
+# observation_types/observation_options are fixed reference data owned by
+# migrations 0014/0026, not user data - excluding avoids duplicate-key
+# conflicts on restore when migrations reseed them. auth.schema_migrations
+# is Supabase Auth's internal migration tracker, not app data, and isn't
+# writable by the postgres role anyway.
+pg_dump "$SUPABASE_DB_URL" -Fc --data-only --schema=public --schema=auth \
+  --exclude-table-data=public.observation_types \
+  --exclude-table-data=public.observation_options \
+  --exclude-table-data=auth.schema_migrations \
+  -f "$DUMP_FILE"
 
 echo "== Encrypting dump =="
 gpg --batch --yes --passphrase "$BACKUP_ENCRYPTION_PASSPHRASE" \
