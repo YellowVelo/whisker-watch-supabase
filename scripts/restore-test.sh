@@ -39,6 +39,16 @@ echo "== Decrypting =="
 gpg --batch --yes --passphrase "$BACKUP_ENCRYPTION_PASSPHRASE" \
   --decrypt --output "$DUMP_FILE" "$ENCRYPTED_FILE"
 
+echo "== Resetting public schema =="
+# Makes this drill safely rerunnable against the same scratch project:
+# "postgres" owns public (unlike auth/storage/realtime), so this is a
+# clean drop/recreate with no ownership errors.
+psql "$RESTORE_TEST_DB_URL" -v ON_ERROR_STOP=1 -q -c "
+  DROP SCHEMA public CASCADE;
+  CREATE SCHEMA public;
+  GRANT USAGE ON SCHEMA public TO postgres, anon, authenticated, service_role;
+"
+
 echo "== Rebuilding schema from migrations =="
 # A real disaster recovery starts from an empty Supabase project: the
 # schema comes from replaying supabase/migrations/, not from the backup.
