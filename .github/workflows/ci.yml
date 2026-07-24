@@ -49,8 +49,12 @@ jobs:
       - name: Run delete-pet / delete-account integration tests
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_DEV_URL }}
-          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_DEV_ANON_KEY }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_DEV_SERVICE_ROLE_KEY }}
+          # sb_publishable / sb_secret: repo secret names as actually
+          # created (Supabase's newer publishable/secret key format, not
+          # the legacy anon/service_role JWTs — see testHelpers.ts, both
+          # work with supabase-js's createClient() regardless of format).
+          SUPABASE_ANON_KEY: ${{ secrets.sb_publishable }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.sb_secret }}
           TEST2_EMAIL: ${{ secrets.SUPABASE_DEV_TEST2_EMAIL }}
           TEST2_PASSWORD: ${{ secrets.SUPABASE_DEV_TEST2_PASSWORD }}
         run: |
