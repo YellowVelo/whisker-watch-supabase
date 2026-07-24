@@ -16,7 +16,10 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          # 22, not 20: @supabase/supabase-js's realtime client needs
+          # native WebSocket support, stable in Node 22+ (Node 20 throws
+          # at client-construction time without a polyfill).
+          node-version: 22
           cache: npm
 
       - run: npm ci
