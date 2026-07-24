@@ -55,12 +55,12 @@ Purpose: "Tell me everything about my pets" — browsing and long-term managemen
 Implemented in `src/pages/Pets.jsx`. Shows, in order:
 
 1. Active pets
-2. Shared with Me (pets the signed-in user has sitter access to, via `getSharedPetsForUser()` in `src/lib/petsClient.js`)
+2. Pets I Sit (pets the signed-in user has sitter-only access to, via `getSitterOnlyPetIds()` in `src/lib/petsClient.js`)
 3. Rainbow Bridge (memorial pets)
 
 Active and Rainbow Bridge pet rows render `ExpandablePetProfileCard`, which embeds the shared `PetProfileContent` component (`context="pets"`) — the same component the standalone Pet Profile page uses. Collapsed, each row shows photo/species icon, name, species, breed, sex, computed age, and condition chips — **no Wellness Score or trend of any kind**; instead, five Wellbeing direction chips (Energy, Mobility, Breathing, Skin/Itching, Behavior) compare today's state to yesterday's. Tapping "Show More" expands the row **in place** to reveal the pet's full profile (action pills + all summary cards) — this is the primary, day-to-day way most owners reach Pet Profile content; see the Pet Profile section below.
 
-"Shared with Me" rows use a separate, deliberately lighter `SharedPetRow` component — a bare identity link with no chip UI at all — and link to `/pet/:petId/trends`, not Pet Profile. (A known, open inconsistency — sitter-shared pets show no Wellbeing information at all, unlike owned/co-owned pets.)
+"Pets I Sit" rows use a separate, deliberately lighter `SitterPetRow` component — a bare identity link with no chip UI at all — and link to `/pet/:petId/trends`, not Pet Profile. (A known, open inconsistency — sitter-shared pets show no Wellbeing information at all, unlike owned/co-owned pets.)
 
 Per-source error handling: pets list, shared-pets, wellness scores, check-ins, and medication counts are fetched independently (the latter three via `Promise.allSettled`), so a failure in one (e.g. wellness scores) degrades gracefully (score shows as "—") without hiding the pet list or any other section. A hard failure in the core pets-list fetch is the only one that blocks the page.
 

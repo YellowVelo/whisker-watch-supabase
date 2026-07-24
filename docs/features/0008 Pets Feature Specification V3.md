@@ -98,13 +98,13 @@ There is **no chevron and no full-card tap target that navigates to Pet Profile.
 
 ---
 
-## **4. Shared with Me Section — not previously documented**
+## **4. Pets I Sit Section — not previously documented**
 
-Displayed only when the signed-in user has active **sitter** access (`PetSitterAccess`/`PetSit`, via `getSharedPetsForUser()`) to at least one pet they don't own — **not** co-owned pets, which appear in Active Pets like any owned pet.
+Displayed only when the signed-in user has active **sitter-only** access (`PetSitterAccess`/`PetSit`, via `getSitterOnlyPetIds()`) to at least one pet — specifically excluding any pet they also own or co-own, which appears in Active Pets instead (a pet's row in `Pet.list()` is now visible to both an owner and a sitter thanks to RLS granting sitter read access, so the split has to be made explicitly client-side rather than assumed from "this pet showed up in my list").
 
-Header: **SHARED WITH ME**
+Header: **PETS I SIT**
 
-Rows use a separate, deliberately lighter `SharedPetRow` component — a bare identity link (photo/species icon, name) with **no chip UI of any kind**: no condition chips, no Wellbeing chips, no medication count. This is a known, undecided gap, not a design decision documented anywhere as intentional. Tapping a row **does** navigate — to that pet's Trends screen (`/pet/:petId/trends`), not Pet Profile, and not an inline expansion like Active Pets get.
+Rows use a separate, deliberately lighter `SitterPetRow` component — a bare identity link (photo/species icon, name) with **no chip UI of any kind**: no condition chips, no Wellbeing chips, no medication count. This is a known, undecided gap, not a design decision documented anywhere as intentional. Tapping a row **does** navigate — to that pet's Trends screen (`/pet/:petId/trends`), not Pet Profile, and not an inline expansion like Active Pets get.
 
 ---
 
@@ -165,7 +165,7 @@ See `docs/features/0009 Pet Profile Feature V4.md` for the full spec of this sha
 - Status Chips
 - Today's Log Chips (Wellbeing only)
 - Show More / Show Less toggle — **not** a Chevron; there is no separate chevron affordance
-- `SharedPetRow` (bare identity link, Shared with Me section only)
+- `SitterPetRow` (bare identity link, Pets I Sit section only)
 - Rainbow Bridge Card
 - Empty State
 - Loading Skeleton
@@ -178,7 +178,7 @@ See `docs/features/0009 Pet Profile Feature V4.md` for the full spec of this sha
 ### **Tap "Show More" on an Active or Rainbow Bridge Card**
 Expands the card in place. No navigation occurs.
 
-### **Tap a Shared with Me Row**
+### **Tap a Pets I Sit Row**
 Navigate: **Pets → Trends** (not Pet Profile).
 
 ### **Tap Add Pet**
@@ -191,7 +191,7 @@ Highlight newly added pet.
 ### **Pull to Refresh**
 Refresh:
 - Pets list
-- Shared-with-me list
+- Pets-I-sit list
 - Today's Wellbeing logs (each fetched independently — a failure in one doesn't block the others)
 
 ---
@@ -206,7 +206,7 @@ Bottom Navigation:
 Navigation Flow — corrected:
 - Home pet-card tap → **Trends** (not Pet Profile)
 - Pets Active/Rainbow Bridge card → **inline expansion, no navigation** (not "Pets → Pet Profile")
-- Pets Shared-with-Me row → **Trends** (not Pet Profile)
+- Pets I Sit row → **Trends** (not Pet Profile)
 - Pets → Add Pet → Pet Onboarding → Pets
 
 The standalone `/pet/:petId` Pet Profile page (as opposed to the inline-expanded content on this screen) is reached only via two flows unrelated to this screen: completing Pet Onboarding's "start check-in" link, and accepting a co-owner invite. Neither Home nor Pets links to it directly.
@@ -224,10 +224,10 @@ Display:
 
 Hide:
 - Active Pets section
-- Shared with Me section
+- Pets I Sit section
 - Rainbow Bridge section
 
-### **No Shared with Me Pets**
+### **No Pets I Sit Pets**
 Hide section entirely (not previously documented, but matches the same "hide if empty" pattern as Rainbow Bridge).
 
 ### **No Rainbow Bridge Pets**
@@ -271,7 +271,7 @@ Pet remains selectable/expandable.
 # **Business Rules**
 
 - Only active pets appear in Active Pets.
-- Only pets with sitter access (not co-ownership) appear in Shared with Me.
+- Only pets with sitter access (not co-ownership) appear in Pets I Sit.
 - Only memorial pets appear in Rainbow Bridge.
 - Age is calculated dynamically.
 - Life stage is **not** displayed anywhere on this screen — confirmed not present in `PetProfileContent.jsx`'s collapsed or expanded views, despite being listed as a "Computed" data requirement in the prior draft.
@@ -280,7 +280,7 @@ Pet remains selectable/expandable.
 - PETS does **not** display Vibe.
 - PETS does **not** display Health attributes or Weight (on the collapsed card — Weight does appear inside the expanded Weight nav card).
 - Active/Rainbow Bridge cards expand in place via "Show More" — they are **not** tappable as a single navigation target, and there is no chevron.
-- Shared with Me rows **are** a single navigation target (to Trends), with no chip UI and no expansion.
+- Pets I Sit rows **are** a single navigation target (to Trends), with no chip UI and no expansion.
 - Pet Profile (in the sense of the full detail view) is reached through the expanded card on this screen, not a separate destination navigated to from a tap.
 - No editing occurs from the collapsed card view; editing happens inside the expanded card via the action pills and nav cards.
 - Delete Pet is available from the expanded card's action-pill row, not a separate menu — and is a two-step, co-owner-aware confirmation flow, not a single-step action.
@@ -318,7 +318,7 @@ Today's Logs:
 - conditions
 - is_memorial
 
-### **Shared with Me**
+### **Pets I Sit**
 - Sitter access records (`PetSitterAccess`/`PetSit`) resolving to which pets the signed-in user can view but doesn't own
 
 ### **Today's Wellbeing Summary**
@@ -361,7 +361,7 @@ A user can:
 - Pet without today's check‑in
 - Pet without today's Wellbeing logs
 - Large number of pets
-- Only Shared with Me pets, no owned pets
+- Only Pets I Sit pets, no owned pets
 - Only Rainbow Bridge pets
 - Only one pet
 - No pets
@@ -382,7 +382,7 @@ A user can:
 - There is no medication chip or "Healthy" fallback chip on this screen — don't add one without a spec update; those belong to Home's `PetSummaryCard` only.
 - The collapsed/expanded card behavior is shared with the standalone Pet Profile page via `PetProfileContent.jsx` — changes to one affect the other. Don't fork this component to make Pets-specific tweaks; extend the shared component with a `context` branch instead, matching the existing `context="pets"`/`context="profile"` pattern.
 - Refresh list automatically when returning from Add Pet.
-- Keep Rainbow Bridge and Shared with Me sections read‑only from this screen's own controls (editing happens via the expanded card's action pills, for Active/Rainbow Bridge pets only — Shared with Me pets offer no editing surface here at all).
+- Keep Rainbow Bridge and Pets I Sit sections read‑only from this screen's own controls (editing happens via the expanded card's action pills, for Active/Rainbow Bridge pets only — Pets I Sit pets offer no editing surface here at all).
 - Ensure loading, error, and empty states preserve layout.
 
 ---
@@ -400,9 +400,13 @@ written:
 
 1. **Corrected card-tap navigation — the most significant fix.** V2 said the entire card is tappable and navigates to Pet Profile, with a chevron affordance. Neither exists: Active/Rainbow Bridge cards expand **in place** via "Show More," with no navigation and no chevron at all.
 2. **Corrected the Navigation Flow section** to match: "Home → Pet Profile" and "Pets → Pet Profile" are both wrong. Home goes to Trends; Pets expands inline.
-3. **Added the missing Shared with Me section entirely** — V2 only described Active Pets and Rainbow Bridge, omitting a real, existing third section (sitter-shared pets, bare identity link, no chips, links to Trends).
+3. **Added the missing Pets I Sit section entirely** — V2 only described Active Pets and Rainbow Bridge, omitting a real, existing third section (sitter-shared pets, bare identity link, no chips, links to Trends).
 4. **Corrected Status Chips.** V2 implied a semi-fixed example set including "Healthy" as a fallback value. There's no fallback chip on this screen at all — if a pet has no conditions, nothing renders. ("Healthy" is a real fallback, but only on Home's unrelated `PetSummaryCard`.)
 5. **Corrected the Medication Chip claim.** V2 said every card shows a medication count chip. The collapsed Pets-tab card never shows one — that only exists inside the expanded Medications nav card.
 6. **Corrected the Error State copy** ("Unavailable" → "Unable to load," confirmed against `AttributeTrendChip.jsx`).
 7. **Removed "Life Stage" from Data Requirements/Business Rules** — not displayed anywhere on this screen, despite being listed as a computed field.
 8. **Added §7 (Expanded Card Contents)**, since "Show More" surfaces real, substantial screen content (the full Pet Profile card set) that V2 didn't acknowledge existed at all, having assumed a separate navigation target instead.
+
+## **Revision Notes (2026-07-24 — sitter-invite-email fix)**
+
+The "Shared with Me" section was renamed **"Pets I Sit"** throughout this doc, and its underlying component/function names updated (`SharedPetRow` → `SitterPetRow`, `getSharedPetsForUser()` → `getSitterOnlyPetIds()`). This was a side effect of fixing the sitter-invite-email feature (see `docs/features/requirements-sitter-invite-email.md`): new RLS grants meant a sitter's pet now shows up in the same `Pet.list()` call an owner's pets do, so the client had to start explicitly checking *why* a pet is visible instead of assuming visibility meant ownership. The section's actual behavior (bare identity link, no chips, links to Trends, hidden when empty) is unchanged — only the names.

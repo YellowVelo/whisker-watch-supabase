@@ -1,6 +1,6 @@
 # Requirements: Sitter Invite Email + Access Linking
 
-**Status:** Draft — open questions resolved 2026-07-24, ready for implementation
+**Status:** Implemented (2026-07-24). Live on dev, staging, and prod.
 **Date:** 2026-07-24
 **Related files:**
 [src/components/InviteSitterDialog.jsx](../../src/components/InviteSitterDialog.jsx),
@@ -12,6 +12,10 @@
 [supabase/functions/_shared/email/templates/index.ts](../../supabase/functions/_shared/email/templates/index.ts),
 [supabase/migrations/0001_init_schema.sql](../../supabase/migrations/0001_init_schema.sql) (`pet_sitter_access`, `pet_sit_logs`),
 [supabase/migrations/0016_link_pending_co_owner_invites.sql](../../supabase/migrations/0016_link_pending_co_owner_invites.sql) (the linking bug this same pattern already caused once, for co-owners).
+
+## Post-Implementation Note (added after shipping)
+
+Manually testing this end to end (against `wysker-watch-dev`) surfaced two more pre-existing bugs beyond the two already called out below — `pet_sitter_access` was missing a `created_by` column every insert needs (migration `0029`), and the database had no rule letting a sitter read the `pet_sits`/`pets` rows for what they're sitting for at all (migrations `0030`, `0031`). Fixing that last one exposed a side effect in `Pets.jsx`: it had assumed anything visible to a user was something they owned, so a sitter would've shown up with a full owner-management card instead of a limited view. Fixed by having `Pets.jsx`/`petsClient.js` explicitly check *why* a pet is visible, and renaming the "Shared with Me" section to **"Pets I Sit"** (owners see no change). None of this is reflected in the Technical Spec section below, which describes the plan as originally approved — this note exists so a reader isn't confused why the shipped code has more moving parts than the spec.
 
 ## Before You Approve This
 

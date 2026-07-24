@@ -1,6 +1,6 @@
 Data Model (V2 — as-built)
 
-Revision note: originally written against migrations 0001–0014. Updated in place (not re-versioned) to add migrations 0015–0017 (profile first/last name, timezone settings, the co-owner-invite-linking fix) and the pre-existing `notifications` table (migration 0005), which was missed in the original pass. Updated in place again (2026-07-18) to reflect migrations 0018–0027, most significantly the retirement of the wellness-score model in favor of Vibe + Symptom Count (migrations 0026/0027) — the previous revision described `daily_check_ins.status` and `wellness_scores` as they existed before that change; both were wrong by the time this correction was made, since `docs/foundation/` is treated as ground truth and nothing prompts a re-check of it. Everything below reflects migrations 0001–0027.
+Revision note: originally written against migrations 0001–0014. Updated in place (not re-versioned) to add migrations 0015–0017 (profile first/last name, timezone settings, the co-owner-invite-linking fix) and the pre-existing `notifications` table (migration 0005), which was missed in the original pass. Updated in place again (2026-07-18) to reflect migrations 0018–0027, most significantly the retirement of the wellness-score model in favor of Vibe + Symptom Count (migrations 0026/0027) — the previous revision described `daily_check_ins.status` and `wellness_scores` as they existed before that change; both were wrong by the time this correction was made, since `docs/foundation/` is treated as ground truth and nothing prompts a re-check of it. Updated in place again (2026-07-24) to reflect migrations 0028–0031, which fixed the sitter-access model: `pet_sitter_access.sitter_user_id` now actually gets linked on login (it never did before), a missing `created_by` column was added to `pet_sitter_access`, and sitters gained read access to `pet_sits`/`pets` for what they're assigned to. Everything below reflects migrations 0001–0031.
 
 Purpose
 
@@ -25,16 +25,16 @@ Wysker Watch uses a relational, owner-scoped schema built on Supabase/Postgres w
 |---|---|---|
 | profiles | 0001 (+0010, 0011, 0015, 0017) | `id = auth.uid()` |
 | notifications | 0005 | `user_id = auth.uid()` |
-| pets | 0001 (+0008) | `is_pet_owner()` |
+| pets | 0001 (+0008, +0031 sitter read) | `is_pet_owner()`, or an assigned sitter via `is_pet_sitter()` |
 | pet_foods | 0001 | `is_pet_owner()` |
 | food_logs | 0001 | `is_pet_owner()` |
 | medications | 0001 (+0012 reminder_enabled) | `is_pet_owner()` |
 | vaccinations | 0001 | `is_pet_owner()` |
 | bloodwork | 0001 | `is_pet_owner()` |
 | symptom_logs | 0001 | `is_pet_owner()` |
-| pet_sits | 0001 | `is_pet_owner()` on any pet in `pet_ids`, or `created_by` |
+| pet_sits | 0001 (+0030 sitter read) | `is_pet_owner()` on any pet in `pet_ids`, or `created_by`, or an assigned sitter via `is_pet_sit_sitter()` |
 | pet_sit_logs | 0001 | `is_pet_owner()` or matching sitter access |
-| pet_sitter_access | 0001 | owner via related `pet_sits`, or the sitter themself |
+| pet_sitter_access | 0001 (+0029 `created_by`) | owner via related `pet_sits`, or the sitter themself |
 | pet_co_owners | 0004 | `owner_id` (list/manage) or `co_owner_user_id` (self) |
 | pet_onboarding | 0012 (+0013 skipped_at) | `is_pet_owner()` |
 | daily_check_ins | 0014 | `is_pet_owner()` |
@@ -103,7 +103,7 @@ Legacy per-meal feeding log. `id`, `created_by`, `pet_id`, `date`, `food_name`, 
 Legacy, still-live per-pet-profile daily log (predates Daily Check-In). `id`, `created_by`, `pet_id`, `date`, `appetite` (enum), `vomiting` int, `stool_quality` (enum), `energy_level` (enum), `water_intake` (enum), `weight_grams` numeric, `urination` (enum), `nausea_symptoms` text[], `pain_signs` bool, `medication_given` bool, `notes`, `created_at`. This is currently the only place `weight_grams` is written from the UI (Pet Profile's Weight quick-log bubble and the full Symptom Log form) — the newer `observations` table also has a `weight` observation type, but the two are not yet reconciled into one source of truth. See section 7.
 
 3.9 pet_sits / 3.10 pet_sit_logs / 3.11 pet_sitter_access
-Sitter session model. `pet_sits` covers multiple pets via a `pet_ids uuid[]` array (not a single FK) plus dates/instructions/contacts. `pet_sit_logs` are entries a sitter makes during a session. `pet_sitter_access` grants a sitter (by email, later linked to `sitter_user_id` once they sign up) read/log access scoped to one `pet_sit`.
+Sitter session model. `pet_sits` covers multiple pets via a `pet_ids uuid[]` array (not a single FK) plus dates/instructions/contacts. `pet_sit_logs` are entries a sitter makes during a session. `pet_sitter_access` grants a sitter (by email, linked to `sitter_user_id` on login) read/log access scoped to one `pet_sit`. That linking step (`claim_pending_sitter_invites()`, migration 0028, called from `AuthContext.jsx` the same way `claim_pending_co_owner_invites()` already was) actually runs now — until 2026-07-24 it was documented intent that nothing in the code ever implemented, the same failure mode `pet_co_owners.co_owner_user_id` had before migration 0016 fixed it. `pet_sitter_access` also picked up a `created_by` column in migration 0029 (every other table's generic insert path requires one; this table was missing it since 0001, which silently broke every insert until fixed).
 
 3.12 pet_co_owners
 Full-parity co-ownership (migration 0004) — distinct from sitter access. `id`, `pet_id`, `owner_id` (the primary owner who invited), `created_by`, `co_owner_email`, `co_owner_user_id` (filled once accepted), `created_at`. Once linked, a co-owner has identical rights to the primary owner on every pet-scoped table (edit, log, delete) via `is_pet_owner()`. Only the primary owner can invite/remove co-owners.
