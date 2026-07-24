@@ -2,14 +2,16 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ArrowLeft, ChevronRight, Cat, Dog } from 'lucide-react';
 import { entities } from '@/api/entities';
-import { getSharedPetsForUser } from '@/lib/petsClient';
+import { getSitterOnlyPetIds } from '@/lib/petsClient';
 import PageTransition from '../components/PageTransition';
 
 // Directory of the user's pets, linking to each pet's AI tab
 // (`/pet/:petId/profile?tab=ai`) so AI insights/chat are reachable from
 // the main Menu without first opening a specific pet. Includes
 // sitter-shared pets so a sitter can also ask AI questions about a pet
-// they're watching.
+// they're watching. Pet.list() already returns sitter-only pets too (see
+// migration 0031_pets_select_sitter.sql) — getSitterOnlyPetIds() is only
+// needed here to tag which ones to label "Shared with you".
 export default function AIMenu() {
   const navigate = useNavigate();
   const [pets, setPets] = useState([]);
@@ -18,9 +20,9 @@ export default function AIMenu() {
 
   useEffect(() => {
     (async () => {
-      const owned = await entities.Pet.list('-created_date');
-      const shared = await getSharedPetsForUser(owned).catch(() => []);
-      setPets([...owned, ...shared.map((p) => ({ ...p, _shared: true }))]);
+      const petList = await entities.Pet.list('-created_date');
+      const sitterOnlyIds = await getSitterOnlyPetIds().catch(() => new Set());
+      setPets(petList.map((p) => (sitterOnlyIds.has(p.id) ? { ...p, _shared: true } : p)));
     })()
       .catch(() => setError(true))
       .finally(() => setLoading(false));

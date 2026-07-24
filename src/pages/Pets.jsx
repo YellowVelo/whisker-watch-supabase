@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { PawPrint, Plus, Activity, Rainbow, Home as HomeIcon, Cat, Dog } from 'lucide-react';
 import { entities } from '@/api/entities';
-import { getSharedPetsForUser } from '@/lib/petsClient';
+import { getSitterOnlyPetIds } from '@/lib/petsClient';
 import ExpandablePetProfileCard from '../components/ExpandablePetProfileCard';
 import AddPetDialog from '../components/AddPetDialog';
 import PageTransition from '../components/PageTransition';
@@ -36,7 +36,6 @@ export default function Pets() {
     let petList;
     try {
       petList = await entities.Pet.list('-created_date');
-      setPets(petList);
       setLoadError(false);
     } catch (err) {
       console.error(err);
@@ -45,14 +44,21 @@ export default function Pets() {
       return;
     }
 
-    // Non-critical: pet-sitting access. A failure here shouldn't hide the
-    // owner's own pets, so it's isolated from the pets-list try/catch above.
+    // Pet.list() returns every pet RLS lets this user see, which now
+    // includes pets they only have sitter access to (not just pets they
+    // own/co-own) — see migration 0031_pets_select_sitter.sql. Split
+    // those out so a sitter-only pet lands in "Pets I Sit" rather than
+    // being shown as if fully owned. Non-critical: a failure here
+    // shouldn't hide the owner's own pets, so it's isolated from the
+    // pets-list try/catch above.
+    let sitterOnlyIds = new Set();
     try {
-      setSharedPets(await getSharedPetsForUser(petList));
+      sitterOnlyIds = await getSitterOnlyPetIds();
     } catch (err) {
       console.error(err);
-      setSharedPets([]);
     }
+    setPets(petList.filter((p) => !sitterOnlyIds.has(p.id)));
+    setSharedPets(petList.filter((p) => sitterOnlyIds.has(p.id)));
 
     setLoading(false);
   }, []);
@@ -151,11 +157,11 @@ export default function Pets() {
                 <section>
                   <div className="flex items-center gap-2 mb-3">
                     <HomeIcon className="h-4 w-4 text-muted-foreground flex-shrink-0" aria-hidden="true" />
-                    <h2 className="text-[13px] font-bold tracking-widest uppercase text-muted-foreground">Shared with Me</h2>
+                    <h2 className="text-[13px] font-bold tracking-widest uppercase text-muted-foreground">Pets I Sit</h2>
                   </div>
                   <div className="space-y-3">
                     {sharedPets.map((pet) => (
-                      <SharedPetRow key={pet.id} pet={pet} />
+                      <SitterPetRow key={pet.id} pet={pet} />
                     ))}
                   </div>
                 </section>
@@ -191,9 +197,10 @@ export default function Pets() {
 }
 
 // Pets the signed-in user has sitter access to (via PetSit/PetSitterAccess)
-// but does not own — not part of the Pets Feature Spec mockup, kept as a
-// lightweight row so existing pet-sitting access isn't lost from the screen.
-function SharedPetRow({ pet }) {
+// but does not own — deliberately a lightweight row, not the full
+// ExpandablePetProfileCard used for owned/co-owned pets, since a sitter
+// doesn't have owner-level management rights over these pets.
+function SitterPetRow({ pet }) {
   return (
     <Link
       to={`/pet/${pet.id}/trends`}

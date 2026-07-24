@@ -5,13 +5,20 @@ import SetPasswordForm from '@/components/SetPasswordForm';
 import { Loader2 } from 'lucide-react';
 
 // Landing page for the co-owner invite email (sent via the send-email
-// Edge Function — see supabase/functions/invite-co-owner/index.ts). That
-// email's CTA links here (our own domain, required by the email system's
-// CTA allowlist) carrying a raw token_hash rather than Supabase's own
-// ready-made action_link, so — unlike ResetPassword.jsx, where Supabase
-// establishes the session automatically before the page even mounts —
-// we have to redeem it ourselves via verifyOtp() before anything else
-// can happen.
+// Edge Function — see supabase/functions/invite-co-owner/index.ts) and,
+// as of the sitter-invite fix, the sitter invite email as well (see
+// supabase/functions/invite-sitter/index.ts). Both emails' CTAs link here
+// (our own domain, required by the email system's CTA allowlist) carrying
+// a raw token_hash rather than Supabase's own ready-made action_link, so
+// — unlike ResetPassword.jsx, where Supabase establishes the session
+// automatically before the page even mounts — we have to redeem it
+// ourselves via verifyOtp() before anything else can happen.
+//
+// `role=sitter` (present only on sitter invite links) distinguishes the
+// two: a co-owner invite carries `petId` and redirects to that pet's
+// profile afterward, while a sitter invite carries `petSitId` instead and
+// redirects to the Pets screen, since a pet-sit can cover multiple pets
+// with no single profile to land on.
 //
 // Once redeemed, the invited co-owner is asked to set a password (via
 // the shared SetPasswordForm, also used by ResetPassword.jsx) rather
@@ -30,6 +37,7 @@ const ALLOWED_TYPES = ['invite', 'recovery'];
 export default function AcceptInvite() {
   const [searchParams] = useSearchParams();
   const petId = searchParams.get('petId');
+  const isSitterInvite = searchParams.get('role') === 'sitter';
 
   const [status, setStatus] = useState('verifying'); // verifying | ready | invalid
 
@@ -58,6 +66,15 @@ export default function AcceptInvite() {
   }, [searchParams]);
 
   const handleSuccess = () => {
+    if (isSitterInvite) {
+      // Not /pets: that screen's own "My Pets" list only distinguishes
+      // owned/co-owned pets from sitter-only ones for the bottom-nav case
+      // (see src/lib/petsClient.js's getSitterOnlyPetIds and Pets.jsx) —
+      // landing here first goes straight to the dedicated Pet Sitter
+      // directory instead.
+      window.location.href = '/settings/pet-sitter';
+      return;
+    }
     window.location.href = petId ? `/pet/${petId}` : '/';
   };
 

@@ -90,6 +90,14 @@ export const AuthProvider = ({ children }) => {
       console.error('Failed to link pending co-owner invites:', claimError);
     }
 
+    // Same linking step for sitter invites — links pet_sitter_access.
+    // sitter_user_id so an invited sitter can actually log entries for
+    // the pet-sit, not just see that they've been granted access.
+    const { error: sitterClaimError } = await supabase.rpc('claim_pending_sitter_invites');
+    if (sitterClaimError) {
+      console.error('Failed to link pending sitter invites:', sitterClaimError);
+    }
+
     let { data: profile, error } = await supabase
       .from('profiles')
       .select('*')
