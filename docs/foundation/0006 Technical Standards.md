@@ -226,7 +226,7 @@ Deploy migrations via CLI
 
 Deploy Edge Functions via CLI
 
-Local dev and production currently point at the **same** Supabase project (no separate environments) — a known, unresolved risk (local testing writes real rows to live data), not a documentation gap in itself, but worth knowing before assuming "deploy" means "deploy somewhere isolated."
+**Corrected 2026-07-21** — this section previously said local dev and production shared one Supabase project. That was already false: three separate projects exist (`Whisker-Watch` prod, `wysker-watch-dev`, `wysker-watch-staging`), and local `.env` points at `wysker-watch-dev` (confirmed via `supabase projects list`/`api-keys` and `.env.example`, which documents which project each deploy target should use). No deploy pipeline currently wires `wysker-watch-staging` to a branch/environment automatically — that project exists but isn't yet integrated into the build process.
 
 Frontend
 
