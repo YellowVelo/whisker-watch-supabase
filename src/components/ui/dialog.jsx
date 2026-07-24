@@ -46,40 +46,44 @@ const DialogContent = React.forwardRef(({ className, children, ...props }, ref) 
 ))
 DialogContent.displayName = DialogPrimitive.Content.displayName
 
-const DialogHeader = ({
+// Cast to `any` on these four: thin passthrough wrappers (plain <div>s,
+// or Radix primitives that also accept `asChild`) — TypeScript's checkJs
+// inference from the bare destructured signature is too narrow for the
+// range of real call sites across the app, same reasoning as Button/Input.
+const DialogHeader = /** @type {any} */ (({
   className,
   ...props
 }) => (
   <div
     className={cn("flex flex-col space-y-1.5 text-center sm:text-left", className)}
     {...props} />
-)
+))
 DialogHeader.displayName = "DialogHeader"
 
-const DialogFooter = ({
+const DialogFooter = /** @type {any} */ (({
   className,
   ...props
 }) => (
   <div
     className={cn("flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2", className)}
     {...props} />
-)
+))
 DialogFooter.displayName = "DialogFooter"
 
-const DialogTitle = React.forwardRef(({ className, ...props }, ref) => (
+const DialogTitle = /** @type {any} */ (React.forwardRef(({ className, ...props }, ref) => (
   <DialogPrimitive.Title
     ref={ref}
     className={cn("text-lg font-semibold leading-none tracking-tight", className)}
     {...props} />
-))
+)))
 DialogTitle.displayName = DialogPrimitive.Title.displayName
 
-const DialogDescription = React.forwardRef(({ className, ...props }, ref) => (
+const DialogDescription = /** @type {any} */ (React.forwardRef(({ className, ...props }, ref) => (
   <DialogPrimitive.Description
     ref={ref}
     className={cn("text-sm text-muted-foreground", className)}
     {...props} />
-))
+)))
 DialogDescription.displayName = DialogPrimitive.Description.displayName
 
 export {

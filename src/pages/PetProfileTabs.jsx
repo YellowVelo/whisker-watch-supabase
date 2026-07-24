@@ -1,9 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, Link, Navigate, useSearchParams, useNavigate } from 'react-router-dom';
 import { entities } from '@/api/entities';
-import { Button } from '@/components/ui/button';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ArrowLeft, Plus, FileText, X, Rainbow, Calendar, Cat, Dog, Sparkles, MessageCircle, Menu } from 'lucide-react';
+import { Tabs, TabsContent } from '@/components/ui/tabs';
+import { ArrowLeft, Plus, X, Rainbow, Cat, Dog, Sparkles, MessageCircle, Menu } from 'lucide-react';
 import SymptomLogForm from '../components/SymptomLogForm';
 import MemorialDialog from '../components/MemorialDialog';
 import CareMenu from '../components/CareMenu';

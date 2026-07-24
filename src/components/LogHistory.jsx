@@ -1,6 +1,5 @@
 import { format, parseISO } from 'date-fns';
-import { Badge } from '@/components/ui/badge';
-import { AlertTriangle, Pill, Droplets } from 'lucide-react';
+import { AlertTriangle, Pill } from 'lucide-react';
 
 const qualityColor = {
   Normal: 'text-green-600', Soft: 'text-yellow-600', Loose: 'text-orange-600',

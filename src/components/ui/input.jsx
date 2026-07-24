@@ -2,7 +2,11 @@ import * as React from "react"
 
 import { cn } from "@/lib/utils"
 
-const Input = React.forwardRef(({ className, type, ...props }, ref) => {
+// Cast to `any`: this is a thin passthrough wrapper around <input> that
+// forwards arbitrary props, so TypeScript's inference (via checkJs) from
+// the destructured signature alone is too narrow for real call sites
+// across the app — same reasoning as Button/Dialog below.
+const Input = /** @type {any} */ (React.forwardRef(({ className, type, ...props }, ref) => {
   return (
     (<input
       type={type}
@@ -13,7 +17,7 @@ const Input = React.forwardRef(({ className, type, ...props }, ref) => {
       ref={ref}
       {...props} />)
   );
-})
+}))
 Input.displayName = "Input"
 
 export { Input }

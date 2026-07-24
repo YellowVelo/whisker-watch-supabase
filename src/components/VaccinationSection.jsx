@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Plus, Syringe, Pencil, Trash2, Bell, Upload, Loader2 } from 'lucide-react';
-import { format, parseISO, differenceInDays, isPast } from 'date-fns';
+import { format, parseISO, differenceInDays } from 'date-fns';
 import { getVaccines } from '@/lib/speciesConfig';
 
 const EMPTY_FORM = { vaccine_name: '', date_given: '', next_due_date: '', administered_by: '', lot_number: '', notes: '' };

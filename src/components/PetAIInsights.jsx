@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { invokeAI } from '@/api/aiClient';
 import { Sparkles, RefreshCw, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';

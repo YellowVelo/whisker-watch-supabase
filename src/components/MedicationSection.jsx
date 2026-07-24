@@ -6,8 +6,8 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Plus, Pencil, X, ShieldCheck, CheckCircle2, Bug, Heart } from 'lucide-react';
-import { format, parseISO, addMonths, addWeeks } from 'date-fns';
+import { Plus, Pencil, X, ShieldCheck, CheckCircle2 } from 'lucide-react';
+import { format, parseISO, addMonths } from 'date-fns';
 import SmartSelect from './SmartSelect';
 
 const today = () => new Date().toISOString().split('T')[0];
