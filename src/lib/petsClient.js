@@ -23,28 +23,26 @@ export async function getActiveMedicationCountsForPets(petIds) {
   return counts;
 }
 
-// Pets the signed-in user has sitter access to (via PetSit/PetSitterAccess)
-// but doesn't own. Not part of the Pets Feature Spec mockup — kept so
-// existing pet-sitting access isn't lost from the screen (see Pets.jsx's
-// "Shared with Me" section).
-export async function getSharedPetsForUser(ownedPets) {
+// Ids of pets the signed-in user has sitter access to (via PetSit/
+// PetSitterAccess), regardless of whether they also own or co-own any of
+// them. Pet.list() already returns full rows for these pets (RLS grants
+// sitters read access — see migration 0031_pets_select_sitter.sql), so
+// this is purely about telling apart *why* a pet showed up in that list:
+// owner/co-owner (full access, belongs in "My Pets") vs. sitter-only
+// (belongs in "Pets I Sit" instead). Without this check, Pets.jsx would
+// have no way to distinguish the two and would show a sitter the full
+// owner-level management card, which they don't actually have rights to.
+export async function getSitterOnlyPetIds() {
   const { data: userData } = await supabase.auth.getUser();
   const me = userData?.user;
-  if (!me?.email) return [];
+  if (!me?.email) return new Set();
 
   const accesses = await entities.PetSitterAccess.filter({ sitter_email: me.email });
-  if (accesses.length === 0) return [];
+  if (accesses.length === 0) return new Set();
 
   const sitIds = [...new Set(accesses.map((a) => a.pet_sit_id).filter(Boolean))];
   const sits = sitIds.length
     ? await Promise.all(sitIds.map((id) => entities.PetSit.get(id).catch(() => null)))
     : [];
-  const sharedPetIds = [...new Set(sits.filter(Boolean).flatMap((s) => s.pet_ids || []))];
-
-  const ownIds = new Set(ownedPets.map((p) => p.id));
-  const toFetch = sharedPetIds.filter((id) => !ownIds.has(id));
-  if (toFetch.length === 0) return [];
-
-  const shared = await Promise.all(toFetch.map((id) => entities.Pet.get(id).catch(() => null)));
-  return shared.filter(Boolean);
+  return new Set(sits.filter(Boolean).flatMap((s) => s.pet_ids || []));
 }

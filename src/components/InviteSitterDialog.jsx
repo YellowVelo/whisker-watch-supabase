@@ -5,13 +5,14 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { UserPlus, Trash2, Mail } from 'lucide-react';
+import { UserPlus, Trash2, Mail, CheckCircle2 } from 'lucide-react';
 
 export default function InviteSitterDialog({ petSitId, open, onOpenChange }) {
   const [email, setEmail] = useState('');
   const [saving, setSaving] = useState(false);
   const [accesses, setAccesses] = useState([]);
   const [loaded, setLoaded] = useState(false);
+  const [successMsg, setSuccessMsg] = useState('');
 
   const load = async () => {
     if (!petSitId) return;
@@ -22,7 +23,7 @@ export default function InviteSitterDialog({ petSitId, open, onOpenChange }) {
 
   const handleOpenChange = (val) => {
     if (val && !loaded) load();
-    if (!val) { setEmail(''); setLoaded(false); setAccesses([]); }
+    if (!val) { setEmail(''); setSuccessMsg(''); setLoaded(false); setAccesses([]); }
     onOpenChange(val);
   };
 
@@ -30,24 +31,38 @@ export default function InviteSitterDialog({ petSitId, open, onOpenChange }) {
     e.preventDefault();
     if (!email.trim() || !petSitId) return;
     setSaving(true);
+    setSuccessMsg('');
     const { data: userData } = await supabase.auth.getUser();
     const me = userData?.user;
+    const cleanEmail = email.trim().toLowerCase();
     // Check if already invited
-    const existing = accesses.find(a => a.sitter_email === email.trim().toLowerCase());
+    const existing = accesses.find(a => a.sitter_email === cleanEmail);
     if (!existing) {
       await entities.PetSitterAccess.create({
         pet_sit_id: petSitId,
         owner_id: me.id,
-        sitter_email: email.trim().toLowerCase(),
+        sitter_email: cleanEmail,
       });
-      // NOTE (Phase D — not yet built): Base44's `users.inviteUser()` sent
-      // an actual invite email and registered the sitter as a user of
-      // this app. Supabase has no direct equivalent. The access record
-      // above is created so the sitter WILL see shared pets once they
-      // sign up/log in with this email (see Home.jsx's sitter-access
-      // lookup), but right now nobody is notified automatically. A
-      // Supabase Edge Function (or simple transactional email call)
-      // is needed here to actually email the sitter an invite link.
+
+      // Send the invite email via the Edge Function.
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData?.session?.access_token;
+      const fnResp = await supabase.functions.invoke('invite-sitter', {
+        body: { sitterEmail: cleanEmail, petSitId },
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+
+      if (fnResp.error) {
+        // Access record is already saved; just warn rather than block.
+        console.error('invite-sitter function error:', fnResp.error);
+        setSuccessMsg(`${cleanEmail} added as a sitter, but the invite email could not be sent. Try inviting them again — if it keeps failing, they can also use "Forgot password" on the login screen with this email.`);
+      } else if (fnResp.data?.reason === 'test_or_demo_account') {
+        setSuccessMsg(`${cleanEmail} added as a sitter. No real email was sent (test/demo accounts don't send production email) — they'll see this pet sit on their next login.`);
+      } else if (fnResp.data?.sent === false) {
+        setSuccessMsg(`${cleanEmail} already has a Whisker Watch account and can now see this pet sit.`);
+      } else {
+        setSuccessMsg(`Invite sent to ${cleanEmail}!`);
+      }
     }
     setEmail('');
     setSaving(false);
@@ -82,6 +97,13 @@ export default function InviteSitterDialog({ petSitId, open, onOpenChange }) {
             <UserPlus className="h-4 w-4 mr-1" /> Invite
           </Button>
         </form>
+
+        {successMsg && (
+          <div className="flex items-start gap-2 text-sm text-emerald-500">
+            <CheckCircle2 className="h-4 w-4 mt-0.5 shrink-0" />
+            <span>{successMsg}</span>
+          </div>
+        )}
 
         {loaded && accesses.length > 0 && (
           <div className="mt-2 space-y-2">
