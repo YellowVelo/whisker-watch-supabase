@@ -12,5 +12,9 @@ export default defineConfig({
   },
   test: {
     environment: 'node',
+    // supabase/functions/**/*.test.ts are Deno integration tests (Deno.test,
+    // jsr: imports) run separately via `deno test` — vitest's default glob
+    // would otherwise pick them up and fail trying to run them under Node.
+    exclude: ['**/node_modules/**', 'supabase/functions/**'],
   },
 });

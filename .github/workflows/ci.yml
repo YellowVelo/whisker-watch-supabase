@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+      - run: npm run lint
+      # typecheck is intentionally not run here yet — as of 2026-07-21 it
+      # has 274 pre-existing errors across 51 files, unrelated to this
+      # workflow. Re-add once that's cleaned up as its own tracked effort;
+      # see docs/launch-punch-list.md.
+      - run: npm run test
+      - run: npm run build
+
+  edge-functions:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # These tests call the already-deployed Edge Functions on
+    # wysker-watch-dev over HTTP (see supabase/functions/_shared/testHelpers.ts)
+    # — they are never run against production. Deploy the target function
+    # to wysker-watch-dev before merging a change to it, same as any other
+    # manual deploy step today.
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Run delete-pet / delete-account integration tests
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_DEV_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_DEV_ANON_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_DEV_SERVICE_ROLE_KEY }}
+          TEST2_EMAIL: ${{ secrets.SUPABASE_DEV_TEST2_EMAIL }}
+          TEST2_PASSWORD: ${{ secrets.SUPABASE_DEV_TEST2_PASSWORD }}
+        run: |
+          deno test --allow-net --allow-env --node-modules-dir=none \
+            supabase/functions/delete-pet/index.test.ts \
+            supabase/functions/delete-account/index.test.ts

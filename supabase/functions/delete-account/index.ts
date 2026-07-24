@@ -12,21 +12,31 @@
 //
 // What happens, in order:
 //   1. Auth check — reject any request without a valid session.
-//   2. Find pets where this user is the primary owner (created_by).
+//   2. Guard: refuse for account_type 'test'/'demo' (see below).
+//   3. Find pets where this user is the primary owner (created_by).
 //      - If co-owners exist: reassign created_by to the oldest co-owner,
 //        delete the departing user's pet_co_owners rows, write an
 //        in-app notification to the new primary owner.
 //      - If sole-owned: leave as-is; the pet cascades when auth row goes.
-//   3. Find pets where this user is a co-owner (not created_by).
+//   4. Find pets where this user is a co-owner (not created_by).
 //      Write an in-app notification to the primary owner, then the
 //      pet_co_owners row cascades automatically in step 6.
-//   4. Delete all Storage objects under uploads/{userId}/.
-//   5. Delete the auth.users row (service-role). This is the last step —
+//   5. Delete all Storage objects under uploads/{userId}/.
+//   6. Delete the auth.users row (service-role). This is the last step —
 //      it cascades: profiles, sole-owned pets and all their children,
 //      remaining pet_co_owners rows, sitter access records.
 //
-// On any failure before step 5 the function returns an error without
+// On any failure before step 6 the function returns an error without
 // touching the auth row, so the account is never left half-deleted.
+//
+// The guard in step 2 exists because this function has no other
+// protection against deleting the shared internal test1@/test2@/demo1@
+// identities (unlike reset-sandbox-account, which exists specifically to
+// wipe test/demo *data* without ever touching the login row). Losing one
+// of those accounts to a misdirected call — a bad CI run, a manual test
+// against the wrong project — would mean recreating it by hand in
+// Supabase Auth and re-running the account_type allowlist migration.
+// Production and owner accounts are unaffected by this guard.
 
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 
@@ -67,6 +77,23 @@ Deno.serve(async (req) => {
     // bypass RLS and act on rows across multiple users.
     const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
+    // ── 2. Guard: refuse for account_type 'test'/'demo' ───────────────────
+    const { data: callerAccount, error: accountError } = await admin
+      .from('profiles')
+      .select('account_type')
+      .eq('id', userId)
+      .single();
+
+    if (accountError || !callerAccount) {
+      return json({ error: 'Failed to look up account' }, 500);
+    }
+    if (callerAccount.account_type === 'test' || callerAccount.account_type === 'demo') {
+      return json(
+        { error: 'This account cannot be deleted this way. Use Reset Test/Demo Account in Menu instead.' },
+        403,
+      );
+    }
+
     // Prefer the caller's first name in notifications shown to the
     // other party — falling back to email only if they never set one
     // (there's no full profile/settings UI yet for editing this).
@@ -77,7 +104,7 @@ Deno.serve(async (req) => {
       .maybeSingle();
     const actorName = callerProfile?.first_name || user.email || 'A former co-owner';
 
-    // ── 2. Handle pets where this user is the primary owner ──────────────
+    // ── 3. Handle pets where this user is the primary owner ──────────────
     const { data: ownedPets, error: petsError } = await admin
       .from('pets')
       .select('id, name')
@@ -147,7 +174,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    // ── 3. Handle pets where this user is a co-owner (not created_by) ───
+    // ── 4. Handle pets where this user is a co-owner (not created_by) ───
     const { data: coOwnedRows, error: coOwnedError } = await admin
       .from('pet_co_owners')
       .select('pet_id, owner_id, pets(name)')
@@ -169,7 +196,7 @@ Deno.serve(async (req) => {
       // The pet_co_owners row itself cascades when the auth row is deleted (step 5).
     }
 
-    // ── 4. Clean up Storage ──────────────────────────────────────────────
+    // ── 5. Clean up Storage ──────────────────────────────────────────────
     // Delete all objects under uploads/{userId}/ in the uploads bucket.
     const { data: storageList, error: listError } = await admin.storage
       .from('uploads')
@@ -189,7 +216,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    // ── 5. Delete the auth.users row (must be last) ──────────────────────
+    // ── 6. Delete the auth.users row (must be last) ──────────────────────
     // This cascades: profiles, sole-owned pets (and all their child rows),
     // remaining pet_co_owners rows, pet_sitter_access rows.
     const { error: deleteError } = await admin.auth.admin.deleteUser(userId);
