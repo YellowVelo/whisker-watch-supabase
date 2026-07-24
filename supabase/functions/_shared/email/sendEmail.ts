@@ -31,6 +31,11 @@ import { isValidEmail, normalizeEmail } from './utils.ts';
 
 const RESEND_API_URL = 'https://api.resend.com/emails';
 const FROM_ADDRESS = 'Wysker Watch <no-reply@wyskerwatch.com>';
+// no-reply@ isn't a monitored inbox, so without this, replies to any
+// transactional email bounce. support@wyskerwatch.com is a real,
+// monitored mailbox as of 2026-07 — this is the default for every send;
+// an individual caller can still override via SendEmailParams.replyTo.
+const DEFAULT_REPLY_TO = 'support@wyskerwatch.com';
 
 function getAdminClient(): SupabaseClient {
   const url = Deno.env.get('SUPABASE_URL')!;
@@ -218,7 +223,7 @@ export async function sendEmail(params: SendEmailParams): Promise<SendEmailResul
         subject: rendered.subject,
         html: rendered.html,
         text: rendered.text,
-        ...(replyTo ? { reply_to: replyTo } : {}),
+        reply_to: replyTo || DEFAULT_REPLY_TO,
       }),
     });
 

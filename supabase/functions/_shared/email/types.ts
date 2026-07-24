@@ -51,6 +51,8 @@ export interface SendEmailParams {
   to: string;
   template: string;
   variables: Record<string, string>;
+  // Defaults to support@wyskerwatch.com if omitted (see sendEmail.ts's
+  // DEFAULT_REPLY_TO) — only pass this to override that default.
   replyTo?: string;
   // Optional linkage for email_logs (e.g. 'pet_co_owners' / invite id).
   relatedEntityType?: string;
