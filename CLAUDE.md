@@ -22,8 +22,10 @@ Current model in one line: `daily_check_ins.status` is `great` / `off` / `tough`
 - `src/lib/checkin/{scoring,config,chipLabels,checkinClient}.js` — current Vibe/symptom-count logic
 - Deployed on Cloudflare Workers (`wrangler.jsonc`). A manual-deploy gate exists in the Cloudflare dashboard — not represented in-repo config.
 - Three separate Supabase projects exist: `Whisker-Watch` (prod), `wysker-watch-dev` (local dev), `wysker-watch-staging`. Local `.env` points at `wysker-watch-dev` — confirmed 2026-07-21, see `.env.example`. This corrects an earlier, stale version of this file that claimed local dev and prod shared one project.
+- CI (`.github/workflows/ci.yml`) runs lint/vitest/build + Edge Function integration tests, required on `main` via branch protection as of 2026-07-24.
 
 ## Working conventions
 - This is a READ-ONLY exploration by default. Do not edit, create, or delete files unless the task explicitly asks for changes, or Plan Mode has been used and the plan approved first.
 - When asked to review or audit, always compare docs against actual code/git history — do not rely on doc content alone, since docs have historically lagged fast-moving code changes here (4 scoring-model iterations shipped in 8 days).
 - Foundation and confirmed-current feature docs are trustworthy. Everything in `/review-features` is not, until checked.
+- Use the `spec-writer` skill for new features/changes/fixes before implementing; use `doc-updater` after a change lands to keep docs in sync. Both are project skills under `.claude/skills/`.

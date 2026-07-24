@@ -17,6 +17,7 @@ Every outbound transactional email (co-owner invitations + reminders, welcome, v
 - **Idempotency:** an optional `idempotencyKey` lets a retried request (client timeout, at-least-once job delivery, a double-tapped button) replay the original result instead of sending a duplicate email. Implemented via `claim_email_idempotency_key`, a single atomic `INSERT ... ON CONFLICT ... DO UPDATE ... WHERE` so concurrent callers can't both win a claim on the same key.
 - **CTA/URL variables** (`accept_url`, `verify_url`, `reset_url`, `app_url`) are validated by `isSafeEmailUrl` before being placed in an `href`: must be `https:` (or `http(s)://localhost` / `127.0.0.1` for local dev), and the host must be in an allowlist (default: `www.wyskerwatch.com` only; overridable via the `EMAIL_LINK_ALLOWED_HOSTS` secret, comma-separated).
 - **`send-email` auth:** requires a Supabase `service_role` JWT specifically — checked by decoding the (already gateway-verified) JWT's `role` claim, not by string-comparing against a stored service-role key value. A regular user session must never be able to call this endpoint.
+- **Reply-to** defaults to `support@wyskerwatch.com` for every send unless a caller passes its own `replyTo` — added 2026-07-24 once that became a real, monitored mailbox (previously all mail sent from `no-reply@wyskerwatch.com`, so replies bounced). See [requirements-email-reply-to.md](requirements-email-reply-to.md) for the full rationale.
 
 ## Empty States / Load Errors
 

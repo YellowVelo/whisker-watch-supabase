@@ -208,6 +208,8 @@ Integration Tests
 
 Test Edge Functions
 
+As of 2026-07-24, this is real for `delete-pet`/`delete-account` specifically — 8 Deno integration tests (`supabase/functions/{delete-pet,delete-account}/index.test.ts`) run against real `wysker-watch-dev` data via `.github/workflows/ci.yml`, required on `main`. Not yet extended to other Edge Functions.
+
 Test database migrations
 
 Manual QA
