@@ -274,15 +274,32 @@ export default function Home() {
 
   const greeting = buildGreeting(user?.first_name);
 
-  // Launch the Daily Check-In pop-up automatically the moment Home first
-  // loads with an incomplete check-in for the day (Nav + Daily Check-In UX
-  // Refresh spec: "launched when a user logs in when they have NOT
-  // completed it for the day"). Only the oldest such pet is auto-opened,
-  // and only once per session — subsequent pets still get their one-line
-  // prompt nested under their card for the owner to tap manually.
+  // Launch a pop-up automatically the moment Home first loads with
+  // something incomplete for the day (Nav + Daily Check-In UX Refresh
+  // spec: "launched when a user logs in when they have NOT completed it
+  // for the day"). Only one pet is auto-opened, and only once per session
+  // — everyone else still gets their one-line prompt nested under their
+  // card for the owner to tap manually.
+  //
+  // Multi-day Catch Up takes priority over today's plain check-in. Before
+  // this, a pet with e.g. a 45-day gap would still auto-launch the plain
+  // "How was so-and-so's day today?" sheet (since that only ever checked
+  // "is today done"), burying the actual Catch Up entry screen the owner
+  // needed — confirmed live in production 2026-07-25. A 2+ day gap now
+  // wins the auto-launch slot; completing it naturally leads back into
+  // today anyway, so nothing about the plain flow is lost, just reordered.
   useEffect(() => {
-    if (loading || hasAutoLaunchedRef.current || checkInSheet || checkInsUnavailable) return;
+    if (loading || hasAutoLaunchedRef.current || checkInSheet || catchUpFlowOpen || checkInsUnavailable) return;
     hasAutoLaunchedRef.current = true;
+
+    if (multiDayCatchUpPets.length > 0) {
+      const pet = multiDayCatchUpPets[0];
+      track('multi_day_catch_up_started', { pet_id: pet.id, missed_day_count: missedDaysByPet[pet.id]?.count || 0, source: 'auto_launch' });
+      setCatchUpPet(pet);
+      setCatchUpFlowOpen(true);
+      return;
+    }
+
     const pending = activePets.find((pet) => !checkIns[pet.id]);
     if (pending) {
       track('daily_check_in_started', { pet_id: pending.id, check_in_date: todayStr(), source: 'auto_launch' });
