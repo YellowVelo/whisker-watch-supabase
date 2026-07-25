@@ -103,11 +103,13 @@ Functional Requirements — Home (PetSummaryCard)
 Replace the current −/10 circle with a single Vibe icon:
 
 Great Day → Sun
-Off Day → CloudRainWind
-Tough Day → CloudHail
+Off Day → Cloud
+Tough Day → CloudLightning
 Skipped / no check-in yet today → BadgeHelp
 
 (BadgeHelp — a badge shape containing a question mark — is the closest existing icon to "badge-question-mark," which does not exist in the pinned lucide-react version. Confirmed both BadgeHelp and the three Vibe icons above exist in the exact version pinned in package.json.)
+
+(Corrected 2026-07-25, during the Catch-Up Check-In build: the originally-shipped Off/Tough icons were CloudRainWind/CloudHail — product feedback was that they didn't read as visually distinct enough at a glance, especially side-by-side on Catch-Up's calendar. Cloud/CloudLightning replace them everywhere VibeIcon renders — Home and Pet Profile, not just Catch-Up.)
 
 Icon color: flat sky blue for every state, using the existing PALETTE.sky / --accent-sky token. No tone-based (good/warn/bad) color mapping — this replaces, and simplifies away, today's STATUS_TONE logic for this element.
 
@@ -197,7 +199,7 @@ A non-zero symptom count must have at least one corresponding observation record
 
 UI Components
 
-Vibe icon component (Sun / CloudRainWind / CloudHail / BadgeHelp), flat sky-blue color, shared by Home and Pet Profile.
+Vibe icon component (Sun / Cloud / CloudLightning / BadgeHelp — corrected 2026-07-25, was CloudRainWind/CloudHail), flat sky-blue color, shared by Home and Pet Profile.
 
 Existing AttributeTrendChip, NavCard, and chart components are reused as-is structurally; only the attribute lists feeding them change. No new visual language is introduced beyond the Vibe icon itself.
 

@@ -207,9 +207,12 @@ Return to Home on completion.
 Refresh card immediately.
 
 5. Catch-Up Reminder
+Updated 2026-07-25 — see 0015_MultiDay_CatchUp_CheckIn_Specification_v1.md for the full spec this section now summarizes. Two distinct paths, based on how many days are missing:
+
+5a. Exactly one missed day, and it's yesterday
 Display only when:
 
-Yesterday has no Daily Check-In
+Yesterday has no Daily Check-In, and no earlier day is also missing
 
 Message:
 
@@ -219,9 +222,26 @@ Action:
 
 Catch up yesterday
 
-Selecting launches Catch-Up Check-In.
+Selecting launches the existing single-day Catch-Up Check-In (unchanged from this doc's original version).
 
-Only the most recent missed day is surfaced on Home.
+5b. Two or more missed days (or a single missed day that isn't yesterday)
+Display only when:
+
+2+ days have no Daily Check-In, since the pet's own creation date or up to 6 months back, whichever is more recent
+
+Message:
+
+“{N} days weren’t logged for {Pet Name}.”
+
+Action:
+
+Catch up now
+
+Selecting launches the full-screen multi-day Catch-Up flow (calendar + exceptions list, not the single-day sheet).
+
+A pet is only ever in one of these two states, never both — only the most recent missed day is surfaced on Home for case 5a; case 5b surfaces every missed day at once inside its own screen, not on Home directly.
+
+Auto-launch priority: if a pet has a 2+ day gap (case 5b) at the moment Home loads, the multi-day Catch-Up flow auto-launches automatically, taking priority over today's plain Daily Check-In pop-up (see "Incomplete Check-In," above, and the Daily Check-In auto-launch rule this doc doesn't otherwise describe). Completing Catch-Up naturally leads back into today's check-in afterward, so nothing is skipped, just reordered — confirmed necessary after production smoke testing showed the plain today-only pop-up was burying the more urgent multi-day reminder.
 
 UI Components
 Greeting
@@ -238,7 +258,7 @@ Primary button
 
 Chevron
 
-Catch-Up banner
+Catch-Up banner (single-day) / multi-day Catch-Up banner — two distinct banners, see section 5 above
 
 Bottom navigation
 
@@ -269,9 +289,16 @@ Return to Home on completion.
 Refresh card immediately.
 
 Tap Catch Up Yesterday
-Launch Catch-Up Check-In.
+Launch the single-day Catch-Up Check-In (case 5a only).
 
 Return Home.
+
+Refresh card.
+
+Tap Catch Up Now
+Launch the full-screen multi-day Catch-Up flow (case 5b only).
+
+Return Home on close/finish.
 
 Refresh card.
 
@@ -308,9 +335,13 @@ Incomplete Check-In
 ↓
 Daily Check-In
 
-Catch-Up
+Catch-Up (single-day)
 ↓
 Catch-Up Check-In
+
+Catch-Up (multi-day)
+↓
+Multi-Day Catch-Up flow (calendar + exceptions)
 
 Bottom Navigation:
 
@@ -481,9 +512,11 @@ Raw symptom counts
 Attribute directions
 
 Catch-Up
-Determine if:
+Determine which of the two states (section 5) applies:
 
-Yesterday has no Daily Check-In
+Yesterday has no Daily Check-In and no earlier day is missing (single-day), or
+
+2+ days have no Daily Check-In within the pet's eligible window — its own creation date or 6 months back, whichever is more recent (multi-day)
 
 Notifications
 Unread count
