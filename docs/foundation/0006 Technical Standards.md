@@ -66,6 +66,8 @@ Supabase Client Usage
 
 All data access goes through entityClient.js and entities.js
 
+Exception: `src/lib/checkin/checkinClient.js` calls `supabase.rpc(...)` directly (e.g. `save_daily_check_ins`, migration `0034`, spec `0016`, 2026-07-25) for atomic multi-statement writes that `entityClient.js`'s generic per-table CRUD wrapper can't express — a stored Postgres function, not a table, so there's no per-table wrapper to route it through. Same data-access-layer rationale as this file's existing direct read calls: `checkinClient.js` is itself a data-access layer, not a UI component, so this doesn't violate "never call Supabase directly inside UI components" below.
+
 Never call Supabase directly inside UI components
 
 Always handle errors explicitly

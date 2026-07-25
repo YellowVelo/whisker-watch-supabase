@@ -1,6 +1,6 @@
 # 0017_CatchUp_Exceptions_Navigation_Fix_Specification_v1
 
-**Status:** Draft
+**Status:** Shipped (2026-07-25)
 **Date:** 2026-07-25
 **Related files:** `src/components/catchup/CatchUpFlow.jsx`, `src/components/catchup/BulkApplySheet.jsx` (unaffected, referenced only), `docs/features/0015_MultiDay_CatchUp_CheckIn_Specification_v1.md`, `docs/features/0016_Atomic_CheckIn_Writes_Specification_v1.md`
 
