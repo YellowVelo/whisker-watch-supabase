@@ -1,4 +1,4 @@
-import { Sun, CloudRainWind, CloudHail, BadgeHelp } from 'lucide-react';
+import { Sun, Cloud, CloudLightning, BadgeHelp } from 'lucide-react';
 import { PALETTE } from '@/lib/toneColors';
 
 // Daily Check-In, Vibe & Trends (spec v5) — replaces the retired 0-100
@@ -7,7 +7,13 @@ import { PALETTE } from '@/lib/toneColors';
 // single icon in one flat color (PALETTE.sky) for every state — no tone-
 // based (good/warn/bad) color mapping, deliberately simplifying away the
 // old STATUS_TONE logic for this element.
-const VIBE_ICON = { great: Sun, off: CloudRainWind, tough: CloudHail };
+//
+// Off/Tough icons corrected per 0015 Catch-Up spec: the original
+// CloudRainWind/CloudHail pair didn't read as clearly distinct at a
+// glance. Cloud (Off) vs CloudLightning (Tough) gives more visual
+// separation between the two, including on the Catch-Up calendar where
+// several days render side by side.
+const VIBE_ICON = { great: Sun, off: Cloud, tough: CloudLightning };
 
 // `status`: 'great' | 'off' | 'tough' | 'skipped' | null (no check-in yet
 // today, or a legacy migrated day with no Vibe recorded — both render the

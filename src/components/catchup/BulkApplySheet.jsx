@@ -1,125 +1,58 @@
 import { useState, useEffect, useRef } from 'react';
 import { X, Loader2 } from 'lucide-react';
 import { CATEGORIES, getOptionsForSpecies, getCategory } from '@/lib/checkin/config';
-import { markGreatDay, markSkipped, markOffTough } from '@/lib/checkin/checkinClient';
+import { markOffTough } from '@/lib/checkin/checkinClient';
 import { track } from '@/lib/analytics';
 import { Textarea } from '@/components/ui/textarea';
 import { PALETTE } from '@/lib/toneColors';
 
 const FOCUSABLE = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
-
-// Medication Exception is deferred out of this round's picker (spec:
-// "not shown in this round's check-in flow ... category is not removed
-// from the data model — only from this round's UI"). Weight and Other are
-// untouched — they were never counted categories and stay exactly where
-// they were.
 const PICKER_CATEGORIES = CATEGORIES.filter((c) => c.code !== 'medication_exception');
 
-// Bottom-sheet Daily Check-In flow: "How are things today?" -> (Off Day /
-// Tough Day) category picker -> only the relevant follow-up questions ->
-// save. Deliberately not a multi-page wizard — everything after category
-// selection lives in one scrollable sheet so an Off/Tough Day check-in
-// stays fast, per "Minimize typing" / "one interaction over many".
-//
-// Great Day, Off Day, and Tough Day (spec v5 Core Model I) replace the
-// prior Normal/Changed binary. Great Day saves immediately, identical to
-// the old "normal" path. Off Day and Tough Day both open the same
-// category picker and follow-up flow — nothing about save behavior
-// distinguishes them beyond which label gets stored (spec: "Both are
-// equally real, equally complete data points").
-//
-// `isCatchUp` distinguishes a catch-up-for-a-past-date save from a normal
-// today save purely for analytics attribution (catch_up_completed vs the
-// regular events) — it doesn't change any persistence behavior.
-export default function DailyCheckInSheet({ pet, date, onClose, onSaved, isCatchUp = false, existingCheckIn = null, dayLabel = null }) {
+// Catch Up's (spec 0015) bulk-apply — "if several consecutive days all had
+// the same issue, apply one set of answers to all of them at once instead
+// of repeating yourself". Deliberately a separate, trimmed component
+// rather than a DailyCheckInSheet prop variant: DailyCheckInSheet's save
+// path is tied to a single date end-to-end (state, analytics, the
+// isCatchUp/dayLabel wording), and threading "N dates instead of 1"
+// through all of that would risk the single-day path more than it's worth
+// for what's structurally a different flow — this only ever writes Off/
+// Tough Day details (a bulk-flagged day is never "Great" by definition,
+// so that choice and Skip are both out of scope here), applying the exact
+// same selections to each date via markOffTough, one call per date so
+// every day still gets its own independent, correct row (spec: "each of
+// those days gets its own independent, correct record — not one shared
+// row").
+export default function BulkApplySheet({ pet, dates, onClose, onSaved }) {
   const dialogRef = useRef(null);
-  // isCatchUp doesn't just change analytics attribution — it drives the
-  // "today" vs "yesterday" wording throughout this sheet, since a
-  // catch-up save is for a past date and showing "today" language would
-  // mislead the owner about which day they're logging (UX Principle:
-  // "owners should always understand ... what information was used").
-  // `dayLabel` overrides that default for multi-day Catch Up (spec 0015),
-  // where the date being detailed usually isn't yesterday at all — a
-  // hardcoded "yesterday" would actively mislead the owner about which of
-  // several missed days they're looking at, so the caller supplies the
-  // actual formatted date (e.g. "Jul 14") instead.
-  const dayWord = dayLabel || (isCatchUp ? 'yesterday' : 'today');
-  const [stage, setStage] = useState('initial'); // initial | categories | details | saving
-  const [selectedCodes, setSelectedCodes] = useState([]);
-  const [answers, setAnswers] = useState({}); // code -> { value, numericValue, notes }
-  const [error, setError] = useState(null);
-
-  // 'off' | 'tough' while the picker/details flow is in progress, so the
-  // eventual save knows which Vibe to store.
+  const [stage, setStage] = useState('vibe'); // vibe | categories | details | saving
   const [vibeStatus, setVibeStatus] = useState(null);
+  const [selectedCodes, setSelectedCodes] = useState([]);
+  const [answers, setAnswers] = useState({});
+  const [error, setError] = useState(null);
 
   const setAnswer = (code, patch) => setAnswers((a) => ({ ...a, [code]: { ...a[code], ...patch } }));
 
-  // Only enum-answer categories require a selected option before the
-  // check-in can be saved — Weight (number) and Other (text) are optional
-  // even once picked. Multi-select (every counted category) is complete
-  // once `values` is an actual array (even empty — "Normal" is an
-  // explicit choice), not just present-but-undefined (untouched).
   const incompleteCodes = selectedCodes.filter((code) => {
     const cat = getCategory(code);
     if (cat.answerType !== 'enum') return false;
     return cat.multiSelect ? answers[code]?.values === undefined : !answers[code]?.value;
   });
 
-  const handleGreatDay = async () => {
-    setStage('saving');
-    setError(null);
-    try {
-      track('daily_check_in_vibe_selected', { pet_id: pet.id, check_in_date: date, vibe: 'great' });
-      await markGreatDay(pet.id, date, isCatchUp ? 'catch_up' : 'app');
-      track('vibe_recorded', { pet_id: pet.id, check_in_date: date, status: 'great', symptom_count: 0 });
-      onSaved?.();
-    } catch (err) {
-      console.error(err);
-      setError('Unable to save check-in. Please try again.');
-      setStage('initial');
-    }
-  };
-
-  const startOffTough = (status) => {
+  const chooseVibe = (status) => {
     setVibeStatus(status);
-    track('daily_check_in_vibe_selected', { pet_id: pet.id, check_in_date: date, vibe: status });
     setStage('categories');
   };
 
-  const handleSkip = async () => {
-    setStage('saving');
-    setError(null);
-    try {
-      track('daily_check_in_skipped', { pet_id: pet.id, check_in_date: date });
-      await markSkipped(pet.id, date, isCatchUp ? 'catch_up' : 'app');
-      onSaved?.();
-    } catch (err) {
-      console.error(err);
-      setError('Unable to save check-in. Please try again.');
-      setStage('initial');
-    }
-  };
-
   const toggleCategory = (code) => {
-    setSelectedCodes((codes) => {
-      const next = codes.includes(code) ? codes.filter((c) => c !== code) : [...codes, code];
-      if (!codes.includes(code)) track('observation_category_selected', { pet_id: pet.id, category: code });
-      return next;
-    });
+    setSelectedCodes((codes) => (codes.includes(code) ? codes.filter((c) => c !== code) : [...codes, code]));
   };
 
-  const handleSaveOffTough = async () => {
+  const handleSave = async () => {
     if (incompleteCodes.length > 0) return;
     setStage('saving');
     setError(null);
     try {
-      // Counted categories are multi-select — `values` is always passed
-      // (even empty, meaning "confirmed normal"); checkinClient.js
-      // resolves baseline rows for every counted category regardless, so
-      // this is just carrying forward what the owner actually saw/
-      // answered. Weight/Other only produce a selection if the owner
-      // actually entered something.
       const selections = selectedCodes
         .map((code) => {
           const cat = getCategory(code);
@@ -131,26 +64,29 @@ export default function DailyCheckInSheet({ pet, date, onClose, onSaved, isCatch
         })
         .filter((sel) => sel.values !== undefined || sel.value != null || sel.numericValue != null || sel.notes);
 
-      const { symptomCount } = await markOffTough(pet.id, date, vibeStatus, selections, isCatchUp ? 'catch_up' : 'app');
-      track('observation_saved', { pet_id: pet.id, check_in_date: date, categories: selectedCodes });
-      track('vibe_recorded', { pet_id: pet.id, check_in_date: date, status: vibeStatus, symptom_count: symptomCount });
-      if (isCatchUp) track('catch_up_completed', { pet_id: pet.id, check_in_date: date, status: vibeStatus });
-      onSaved?.();
+      // Sequential, not parallel — each call deletes-then-inserts that
+      // day's observations (see markOffTough), so overlapping calls for
+      // different dates are safe either way, but sequential keeps this
+      // consistent with how every other multi-write path in this app
+      // behaves and makes a partial failure easy to reason about (dates
+      // before the failure are saved for real, dates after are not).
+      for (const date of dates) {
+        await markOffTough(pet.id, date, vibeStatus, selections, 'catch_up');
+      }
+      track('multi_day_catch_up_bulk_applied', { pet_id: pet.id, status: vibeStatus, dates_count: dates.length, categories: selectedCodes });
+      onSaved?.(dates);
     } catch (err) {
       console.error(err);
-      setError('Unable to save check-in. Please try again.');
+      setError('Unable to save some of these days. Please try again.');
       setStage('details');
     }
   };
 
   const handleClose = () => {
-    if (stage !== 'saving') track('check_in_abandoned', { pet_id: pet.id, check_in_date: date, stage });
+    if (stage !== 'saving') track('multi_day_catch_up_bulk_apply_abandoned', { pet_id: pet.id, dates_count: dates.length, stage });
     onClose();
   };
 
-  // Accessibility: modal traps focus and is dismissible via Escape (Nav +
-  // Daily Check-In UX Refresh spec — "Modal must trap focus" / "Modal must
-  // be dismissible using expected keyboard behavior").
   useEffect(() => {
     const node = dialogRef.current;
     const focusables = () => Array.from(node?.querySelectorAll(FOCUSABLE) || []).filter((el) => !el.disabled);
@@ -178,7 +114,6 @@ export default function DailyCheckInSheet({ pet, date, onClose, onSaved, isCatch
 
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stage]);
 
   return (
@@ -188,7 +123,7 @@ export default function DailyCheckInSheet({ pet, date, onClose, onSaved, isCatch
         ref={dialogRef}
         role="dialog"
         aria-modal="true"
-        aria-labelledby="daily-check-in-title"
+        aria-labelledby="bulk-apply-title"
         className="relative rounded-t-3xl shadow-2xl max-h-[85vh] flex flex-col"
         style={{ background: 'rgba(18,20,32,0.98)', border: '1px solid rgba(255,255,255,0.08)' }}
         onClick={(e) => e.stopPropagation()}
@@ -196,9 +131,9 @@ export default function DailyCheckInSheet({ pet, date, onClose, onSaved, isCatch
         <div className="px-5 pt-5 pb-3 flex-shrink-0">
           <div className="w-10 h-1 bg-white/20 rounded-full mx-auto mb-4" />
           <div className="flex items-center justify-between">
-            <h3 id="daily-check-in-title" className="text-xl font-bold text-white">
-              {stage === 'initial' && `How was ${pet.name}'s day ${dayWord}?`}
-              {stage === 'categories' && 'What happened?'}
+            <h3 id="bulk-apply-title" className="text-xl font-bold text-white">
+              {stage === 'vibe' && `Apply to ${dates.length} days`}
+              {stage === 'categories' && 'What changed?'}
               {(stage === 'details' || stage === 'saving') && 'A few details'}
             </h3>
             <button onClick={handleClose} aria-label="Close" className="h-9 w-9 rounded-full bg-white/8 flex items-center justify-center flex-shrink-0">
@@ -206,20 +141,30 @@ export default function DailyCheckInSheet({ pet, date, onClose, onSaved, isCatch
             </button>
           </div>
           {error && <p className="text-sm text-red-400 mt-2">{error}</p>}
-          {!error && stage === 'initial' && existingCheckIn?.status && (
-            <p className="text-xs text-white/40 mt-2">
-              Already logged as {{ great: 'Great Day', off: 'Off Day', tough: 'Tough Day', skipped: 'Skipped' }[existingCheckIn.status] || existingCheckIn.status} for {dayWord} — saving again will update it.
-            </p>
+          {!error && stage === 'vibe' && (
+            <p className="text-xs text-white/40 mt-2">Pick what these {dates.length} days had in common — each day still gets saved on its own.</p>
           )}
         </div>
 
         <div className="px-5 overflow-y-auto flex-1 pb-2">
-          {stage === 'initial' && (
+          {stage === 'vibe' && (
             <div className="space-y-3 pb-2">
-              <BigChoiceButton label="Great Day" onClick={handleGreatDay} />
-              <BigChoiceButton label="Off Day" onClick={() => startOffTough('off')} />
-              <BigChoiceButton label="Tough Day" onClick={() => startOffTough('tough')} />
-              <BigChoiceButton label={`Skip ${dayWord}`} subtle onClick={handleSkip} />
+              <button
+                type="button"
+                onClick={() => chooseVibe('off')}
+                className="w-full text-left rounded-2xl px-5 py-4 text-base font-semibold min-h-[56px]"
+                style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', color: '#fff' }}
+              >
+                Off Day
+              </button>
+              <button
+                type="button"
+                onClick={() => chooseVibe('tough')}
+                className="w-full text-left rounded-2xl px-5 py-4 text-base font-semibold min-h-[56px]"
+                style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', color: '#fff' }}
+              >
+                Tough Day
+              </button>
             </div>
           )}
 
@@ -248,12 +193,10 @@ export default function DailyCheckInSheet({ pet, date, onClose, onSaved, isCatch
           {(stage === 'details' || stage === 'saving') && (
             <div className="space-y-6 pb-2">
               {selectedCodes.map((code) => (
-                <CategoryQuestion
+                <BulkCategoryQuestion
                   key={code}
                   category={CATEGORIES.find((c) => c.code === code)}
                   species={pet.species}
-                  petName={pet.name}
-                  dayWord={dayWord}
                   answer={answers[code] || {}}
                   onChange={(patch) => setAnswer(code, patch)}
                 />
@@ -266,7 +209,8 @@ export default function DailyCheckInSheet({ pet, date, onClose, onSaved, isCatch
           {stage === 'categories' && (
             <button
               onClick={() => setStage('details')}
-              className="w-full text-base font-bold rounded-2xl h-14 transition-opacity"
+              disabled={selectedCodes.length === 0}
+              className="w-full text-base font-bold rounded-2xl h-14 disabled:opacity-40 transition-opacity"
               style={{ background: PALETTE.sky, color: 'hsl(var(--background))' }}
             >
               Continue
@@ -278,12 +222,12 @@ export default function DailyCheckInSheet({ pet, date, onClose, onSaved, isCatch
                 <p className="text-xs text-white/40 mb-2 text-center">Answer each selected category to save</p>
               )}
               <button
-                onClick={handleSaveOffTough}
+                onClick={handleSave}
                 disabled={stage === 'saving' || incompleteCodes.length > 0}
                 className="w-full flex items-center justify-center text-base font-bold rounded-2xl h-14 disabled:opacity-40 transition-opacity"
                 style={{ background: PALETTE.sky, color: 'hsl(var(--background))' }}
               >
-                {stage === 'saving' ? <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Saving…</> : 'Save check-in'}
+                {stage === 'saving' ? <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Saving {dates.length} days…</> : `Save to ${dates.length} days`}
               </button>
             </>
           )}
@@ -293,29 +237,19 @@ export default function DailyCheckInSheet({ pet, date, onClose, onSaved, isCatch
   );
 }
 
-function BigChoiceButton({ label, onClick, subtle }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="w-full text-left rounded-2xl px-5 py-4 text-base font-semibold transition-all active:opacity-70 min-h-[56px]"
-      style={subtle
-        ? { background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.6)' }
-        : { background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', color: '#fff' }}
-    >
-      {label}
-    </button>
-  );
-}
-
-function CategoryQuestion({ category, species, petName, dayWord, answer, onChange }) {
+// Trimmed copy of DailyCheckInSheet's CategoryQuestion — no dayWord/
+// petName-dependent question copy (a bulk apply spans multiple dates, so
+// "today"/"yesterday"/a specific date wording doesn't apply to any single
+// one of them); everything else (options, multi-select toggle behavior,
+// notes) matches exactly so the two flows feel identical to the owner.
+function BulkCategoryQuestion({ category, species, answer, onChange }) {
   const Icon = category.icon;
 
   return (
     <div>
       <div className="flex items-center gap-2 mb-2.5">
         <Icon className="h-4 w-4 text-white/50 flex-shrink-0" />
-        <p className="text-sm font-semibold text-white">{category.question(petName, species, dayWord)}</p>
+        <p className="text-sm font-semibold text-white">{category.label}</p>
       </div>
 
       {category.answerType === 'enum' && (
@@ -332,10 +266,6 @@ function CategoryQuestion({ category, species, petName, dayWord, answer, onChang
                 onChange({ value: opt.value });
                 return;
               }
-              // "Normal" clears every other symptom for this category
-              // (mutually exclusive); picking a symptom toggles it in the
-              // set — multiple symptoms can be logged for one category the
-              // same day, each carrying equal weight.
               if (isBaseline) {
                 onChange({ values: [] });
                 return;
@@ -395,7 +325,6 @@ function CategoryQuestion({ category, species, petName, dayWord, answer, onChang
           className="w-full mt-2 rounded-xl px-3.5 py-2 text-sm text-white bg-white/5 border border-white/10 focus:outline-none focus:ring-1 focus:ring-primary placeholder:text-white/30"
         />
       )}
-
     </div>
   );
 }

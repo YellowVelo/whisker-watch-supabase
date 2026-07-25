@@ -82,10 +82,17 @@ const SAFE_TIMEZONE = 'UTC';
 
 // en-CA locale formats as YYYY-MM-DD directly, avoiding a manual
 // day/month/year re-assembly from Intl.DateTimeFormat's part list.
-export function dateStrInTimezone(timezone, offsetDays = 0) {
+// Exported (rather than kept module-private) so callers that need the
+// calendar date of an arbitrary instant (e.g. Catch Up's "when was this
+// pet/account created" lookback floor) share this same timezone-aware
+// formatting instead of re-implementing it.
+export function dateStrForInstant(instant, timezone) {
   const tz = isValidIanaTimezone(timezone) ? timezone : SAFE_TIMEZONE;
-  const instant = new Date(Date.now() + offsetDays * 86400000);
   return new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).format(instant);
+}
+
+export function dateStrInTimezone(timezone, offsetDays = 0) {
+  return dateStrForInstant(new Date(Date.now() + offsetDays * 86400000), timezone);
 }
 
 export function todayInTimezone(timezone) {

@@ -23,7 +23,7 @@ import { entities } from '@/api/entities';
 import { supabase } from '@/api/supabaseClient';
 import { resolveDailyAttributeCount, computeAttributeDirection, computeSymptomCount } from './scoring';
 import { CATEGORIES, getCategory, HEALTH_ATTRIBUTES, WELLBEING_ATTRIBUTES, COUNTED_CATEGORIES } from './config';
-import { todayInTimezone, yesterdayInTimezone } from '@/lib/timezone';
+import { todayInTimezone, yesterdayInTimezone, dateStrInTimezone, dateStrForInstant } from '@/lib/timezone';
 
 // Answer values that represent "no change from normal" across every
 // enum category — these are never worth surfacing as an observation
@@ -56,6 +56,57 @@ function baselineValueFor(category) {
 // behavior via timezone.js's own UTC fallback.
 export const todayStr = (timezone) => todayInTimezone(timezone);
 export const yesterdayStr = (timezone) => yesterdayInTimezone(timezone);
+
+// Catch Up (spec 0015) never looks back further than this, regardless of
+// how old the pet or account is — an owner who's never checked in should
+// never be handed a multi-month backlog. Exported so the UI (the "How has
+// {pet} been?" long-gap copy, etc.) can reference the same constant rather
+// than hardcoding 180 elsewhere.
+export const CATCH_UP_MAX_LOOKBACK_DAYS = 180;
+
+// Plain calendar-date-string arithmetic (YYYY-MM-DD), independent of any
+// timezone — once a day string has been resolved via dateStr*(timezone,
+// ...), it's just a calendar date, not an instant, so this parses/adds/
+// re-formats in UTC purely to walk the calendar, never to resolve "now".
+function addDaysToDateStr(dateStr, days) {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const date = new Date(Date.UTC(y, m - 1, d));
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().split('T')[0];
+}
+
+// Catch Up's gap detection (spec 0015). Finds every calendar day between a
+// floor date and yesterday that has no daily_check_ins row for this pet.
+// The floor is the latest (most restrictive) of: 6 months ago, the
+// account's created_at, and the pet's created_at — so a brand-new pet or
+// account never surfaces a backlog (floor lands on/after today, before
+// yesterday, so the loop below never runs), and an old pet that's simply
+// never been checked in only ever gets asked about the last 6 months, not
+// its entire history (spec: "never looks back further than 6 months").
+export async function getMissedDaysForPet(petId, { timezone, userCreatedAt, petCreatedAt } = {}) {
+  const yesterday = yesterdayStr(timezone);
+  const floors = [dateStrInTimezone(timezone, -CATCH_UP_MAX_LOOKBACK_DAYS)];
+  if (userCreatedAt) floors.push(dateStrForInstant(new Date(userCreatedAt), timezone));
+  if (petCreatedAt) floors.push(dateStrForInstant(new Date(petCreatedAt), timezone));
+  const startDate = floors.reduce((max, d) => (d > max ? d : max));
+
+  if (startDate > yesterday) return { missedDates: [], count: 0 };
+
+  const { data, error } = await supabase
+    .from('daily_check_ins')
+    .select('check_in_date')
+    .eq('pet_id', petId)
+    .gte('check_in_date', startDate)
+    .lte('check_in_date', yesterday);
+  if (error) throw error;
+  const existingDates = new Set(data.map((row) => row.check_in_date));
+
+  const missedDates = [];
+  for (let cursor = startDate; cursor <= yesterday; cursor = addDaysToDateStr(cursor, 1)) {
+    if (!existingDates.has(cursor)) missedDates.push(cursor);
+  }
+  return { missedDates, count: missedDates.length };
+}
 
 // observation_types + observation_options rarely change — cache for the
 // lifetime of the tab instead of refetching on every check-in.
@@ -100,6 +151,23 @@ export async function getCheckInsForPets(petIds, date) {
     .eq('check_in_date', date);
   if (error) throw error;
   return Object.fromEntries(data.map((row) => [row.pet_id, row]));
+}
+
+// One pet, many dates — the counterpart to getCheckInsForPets' "many pets,
+// one date". Used by the Catch Up calendar (spec 0015) to tell which of a
+// pet's missed days already have a real, saved row (from a previous
+// partial Catch Up session) versus which are still just the "assumed
+// Great Day" default. Keyed by check_in_date so the calendar can look a
+// given day up directly.
+export async function getCheckInsForDateRange(petId, dates) {
+  if (dates.length === 0) return {};
+  const { data, error } = await supabase
+    .from('daily_check_ins')
+    .select('*')
+    .eq('pet_id', petId)
+    .in('check_in_date', dates);
+  if (error) throw error;
+  return Object.fromEntries(data.map((row) => [row.check_in_date, row]));
 }
 
 // Exported (rather than kept module-private) so it can be unit tested
@@ -280,6 +348,67 @@ export async function markGreatDay(petId, date = todayStr(), source = 'app') {
   if (baselineRows.length > 0) await entities.Observation.bulkCreate(baselineRows);
 
   return { checkIn };
+}
+
+// Catch Up's (spec 0015) "finish" action — the bulk write for every missed
+// day the owner never flagged, i.e. the ones still just "assumed Great
+// Day". Same rule as markGreatDay (explicit baseline row per counted
+// category, prior observations cleared first) but batched across
+// potentially dozens of days in two round trips total instead of N —
+// N individual markGreatDay calls would mean up to N upserts + N deletes +
+// N inserts for a 6-month gap, which doesn't scale. Uses entityClient's
+// user/created_by resolution manually (bulk upsert isn't something
+// entityClient.upsert supports — it wraps a single-row .single() call)
+// rather than looping, following the same "one bulk insert, not N" pattern
+// markGreatDay/markOffTough already use for observations.
+export async function markGreatDaysBulk(petId, dates, source = 'catch_up') {
+  if (dates.length === 0) return { checkIns: [] };
+  const catalog = await loadObservationCatalog();
+  const { data: userData } = await supabase.auth.getUser();
+  const createdBy = userData?.user?.id;
+
+  const checkInRows = dates.map((date) => ({
+    pet_id: petId,
+    check_in_date: date,
+    status: 'great',
+    symptom_count: 0,
+    completed_at: new Date().toISOString(),
+    source,
+    created_by: createdBy,
+  }));
+  const { data: checkIns, error: upsertError } = await supabase
+    .from('daily_check_ins')
+    .upsert(checkInRows, { onConflict: 'pet_id,check_in_date' })
+    .select();
+  if (upsertError) throw upsertError;
+
+  const checkInIds = checkIns.map((c) => c.id);
+  const { error: deleteError } = await supabase
+    .from('observations')
+    .delete()
+    .in('daily_check_in_id', checkInIds);
+  if (deleteError) throw deleteError;
+
+  const baselineRows = [];
+  for (const checkIn of checkIns) {
+    for (const code of MULTI_SELECT_CODES) {
+      const entry = catalog[code];
+      if (!entry) continue;
+      baselineRows.push({
+        pet_id: petId,
+        daily_check_in_id: checkIn.id,
+        observation_type_id: entry.type.id,
+        value: baselineValueFor(getCategory(code)),
+        numeric_value: null,
+        notes: null,
+        photo_url: null,
+        observed_at: new Date().toISOString(),
+      });
+    }
+  }
+  if (baselineRows.length > 0) await entities.Observation.bulkCreate(baselineRows);
+
+  return { checkIns };
 }
 
 // "Skip today" — status 'skipped', symptom_count null. If an earlier

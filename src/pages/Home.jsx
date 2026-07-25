@@ -6,13 +6,14 @@ import PetSummaryCard from '../components/PetSummaryCard';
 import CheckInStatusBanner from '../components/CheckInStatusBanner';
 import NotificationBell from '../components/NotificationBell';
 import DailyCheckInModal from '../components/DailyCheckInModal';
+import CatchUpFlow from '../components/catchup/CatchUpFlow';
 import PageTransition from '../components/PageTransition';
 import usePullToRefresh from '../hooks/usePullToRefresh';
 import PullToRefreshIndicator from '../components/PullToRefreshIndicator';
 import { useToast } from '@/components/ui/use-toast';
 import {
   getCheckInsForPets, getCheckIn,
-  getHealthAttributeDirectionsForPets,
+  getHealthAttributeDirectionsForPets, getMissedDaysForPet,
   todayStr as todayStrTz, yesterdayStr as yesterdayStrTz,
 } from '@/lib/checkin/checkinClient';
 import { getWeightSummariesForPets } from '@/lib/checkin/petProfileClient';
@@ -22,12 +23,6 @@ import { buildGreeting } from '@/lib/greeting';
 import { useAuth } from '@/lib/AuthContext';
 import { detectTimezone } from '@/lib/timezone';
 import { track } from '@/lib/analytics';
-
-// Health Score Revision V2 — day boundaries must use the signed-in user's
-// stored timezone, not UTC midnight (spec: "Use the user's stored timezone
-// when resolving today and yesterday"). Falls back to the device timezone,
-// then UTC, if the profile hasn't captured one yet.
-const toDateStr = (d) => d.toISOString().split('T')[0];
 
 // Builds Home's Weight chip state from petProfileClient's
 // getWeightSummariesForPets (batched — Weight stays on symptom_logs per
@@ -58,6 +53,7 @@ export default function Home() {
   const [pets, setPets] = useState([]);
   const [checkIns, setCheckIns] = useState({}); // pet_id -> today's daily_check_in row (carries .status Vibe + .symptom_count)
   const [yesterdayCheckIns, setYesterdayCheckIns] = useState({}); // pet_id -> yesterday's row
+  const [missedDaysByPet, setMissedDaysByPet] = useState({}); // pet_id -> { missedDates, count } (Catch Up, spec 0015)
   const [attributeDirections, setAttributeDirections] = useState({}); // pet_id -> { [code]: direction }
   const [attributesUnavailable, setAttributesUnavailable] = useState(false);
   const [weightStates, setWeightStates] = useState({}); // pet_id -> { direction, comparisonLabel, unavailable }
@@ -72,6 +68,8 @@ export default function Home() {
   const [loadError, setLoadError] = useState(false);
   const [stale, setStale] = useState(false);
   const [checkInSheet, setCheckInSheet] = useState(null); // { pet, date, isCatchUp? } | null
+  const [catchUpFlowOpen, setCatchUpFlowOpen] = useState(false); // spec 0015 multi-day Catch Up
+  const [catchUpPet, setCatchUpPet] = useState(null); // which pet the open Catch Up flow is scoped to
   const hasLoadedOnceRef = useRef(false);
   const hasAutoLaunchedRef = useRef(false);
   const location = useLocation();
@@ -143,6 +141,30 @@ export default function Home() {
           setWeightStates(Object.fromEntries(activePets.map((p) => [p.id, { direction: null, comparisonLabel: 'Not enough data', unavailable: true }])));
         }
 
+        // Catch Up (spec 0015) gap detection, one query per pet — batching
+        // across pets isn't worth the added complexity yet at typical
+        // household sizes (1-3 pets). A failure here degrades to "no
+        // Catch Up prompt for that pet" rather than breaking the page.
+        try {
+          const missedResults = await Promise.allSettled(
+            activePets.map((pet) => getMissedDaysForPet(pet.id, { timezone, userCreatedAt: user?.created_at, petCreatedAt: pet.created_at })),
+          );
+          const missedByPet = {};
+          activePets.forEach((pet, i) => {
+            const result = missedResults[i];
+            if (result.status === 'fulfilled') {
+              missedByPet[pet.id] = result.value;
+            } else {
+              console.error(result.reason);
+              missedByPet[pet.id] = { missedDates: [], count: 0 };
+            }
+          });
+          setMissedDaysByPet(missedByPet);
+        } catch (err) {
+          console.error(err);
+          setMissedDaysByPet({});
+        }
+
         // A pet with no onboarding row, or a row that isn't completed yet,
         // still needs "Complete {PetName}'s Profile" surfaced.
         const onboardingRows = await entities.PetOnboarding.list();
@@ -151,6 +173,7 @@ export default function Home() {
       } else {
         setCheckIns({});
         setYesterdayCheckIns({});
+        setMissedDaysByPet({});
         setAttributeDirections({});
         setAttributesUnavailable(false);
         setWeightStates({});
@@ -172,7 +195,7 @@ export default function Home() {
       hasLoadedOnceRef.current = true;
       setLoading(false);
     }
-  }, [timezone]);
+  }, [timezone, user?.created_at]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
@@ -185,18 +208,20 @@ export default function Home() {
   // merges it into state, rather than re-running loadData() for every
   // pet on the screen.
   const refreshPetCard = useCallback(async (pet) => {
-    const [todayRow, yesterdayRow, onboardingRows, medCounts, weightSummaries] = await Promise.all([
+    const [todayRow, yesterdayRow, onboardingRows, medCounts, weightSummaries, missed] = await Promise.all([
       getCheckIn(pet.id, todayStr()),
       getCheckIn(pet.id, yesterdayStr()),
       entities.PetOnboarding.filter({ pet_id: pet.id }),
       getActiveMedicationCountsForPets([pet.id]),
       getWeightSummariesForPets([pet.id]),
+      getMissedDaysForPet(pet.id, { timezone, userCreatedAt: user?.created_at, petCreatedAt: pet.created_at }),
     ]);
     const weightSummary = weightSummaries[pet.id];
     const directions = await getHealthAttributeDirectionsForPets([pet.id], { [pet.id]: todayRow }, { [pet.id]: yesterdayRow });
 
     setCheckIns((prev) => ({ ...prev, [pet.id]: todayRow }));
     setYesterdayCheckIns((prev) => ({ ...prev, [pet.id]: yesterdayRow }));
+    setMissedDaysByPet((prev) => ({ ...prev, [pet.id]: missed }));
     setAttributeDirections((prev) => ({ ...prev, [pet.id]: directions[pet.id] }));
     setWeightStates((prev) => ({ ...prev, [pet.id]: buildWeightState(weightSummary) }));
     setMedicationCounts((prev) => ({ ...prev, [pet.id]: medCounts[pet.id] || 0 }));
@@ -206,7 +231,7 @@ export default function Home() {
       if (completed) next.delete(pet.id); else next.add(pet.id);
       return next;
     });
-  }, [timezone]);
+  }, [timezone, user?.created_at]);
 
   const handleStartCheckIn = (pet) => {
     track('daily_check_in_started', { pet_id: pet.id, check_in_date: todayStr() });
@@ -218,16 +243,33 @@ export default function Home() {
     setCheckInSheet({ pet, date: yesterdayStr(), isCatchUp: true });
   };
 
+  // Opens the full-screen Catch Up calendar for the specific pet whose
+  // banner was tapped. Scoped to just that one pet — the tap itself is
+  // already "picking which pet" (Requirement 9); CatchUpFlow's own
+  // multi-pet selector is for a future entry point that isn't per-pet
+  // (e.g. a single combined "Catch Up" entry), not this one.
+  const handleMultiDayCatchUp = (pet) => {
+    track('multi_day_catch_up_started', { pet_id: pet.id, missed_day_count: missedDaysByPet[pet.id]?.count || 0 });
+    setCatchUpPet(pet);
+    setCatchUpFlowOpen(true);
+  };
+
   const activePets = pets.filter((p) => !p.is_memorial);
 
-  // Every active pet missing yesterday's check-in gets its own catch-up
-  // link on its own card — not just the first one found (a household with
-  // three pets that all missed yesterday should be able to catch up all
-  // three, not just one).
-  const catchUpPets = activePets.filter((pet) => {
-    if (yesterdayCheckIns[pet.id]) return false;
-    const petCreatedToday = pet.created_at && toDateStr(new Date(pet.created_at)) >= yesterdayStr();
-    return !petCreatedToday;
+  // Catch Up (spec 0015) routing: exactly one missed day, and it's
+  // yesterday, keeps using today's simple "Catch up yesterday" banner/flow
+  // unchanged. Two or more missed days — or a single missed day that isn't
+  // yesterday, which the simple flow has no way to address since it's
+  // hardcoded to "yesterday" — routes to the new multi-day entry point
+  // instead. A pet can only ever be in one of these two buckets.
+  const singleDayCatchUpPets = activePets.filter((pet) => {
+    const missed = missedDaysByPet[pet.id];
+    return !!missed && missed.count === 1 && missed.missedDates[0] === yesterdayStr();
+  });
+  const multiDayCatchUpPets = activePets.filter((pet) => {
+    const missed = missedDaysByPet[pet.id];
+    if (!missed || missed.count === 0) return false;
+    return !(missed.count === 1 && missed.missedDates[0] === yesterdayStr());
   });
 
   const greeting = buildGreeting(user?.first_name);
@@ -339,8 +381,15 @@ export default function Home() {
                     {incompleteOnboardingIds.has(pet.id) && (
                       <CompleteProfileBanner petId={pet.id} petName={pet.name} />
                     )}
-                    {catchUpPets.some((p) => p.id === pet.id) && (
+                    {singleDayCatchUpPets.some((p) => p.id === pet.id) && (
                       <CatchUpBanner petName={pet.name} onCatchUp={() => handleCatchUp(pet)} />
+                    )}
+                    {multiDayCatchUpPets.some((p) => p.id === pet.id) && (
+                      <MultiDayCatchUpBanner
+                        petName={pet.name}
+                        missedCount={missedDaysByPet[pet.id]?.count || 0}
+                        onCatchUp={() => handleMultiDayCatchUp(pet)}
+                      />
                     )}
                   </div>
                 ))}
@@ -361,6 +410,20 @@ export default function Home() {
             const savedPet = checkInSheet.pet;
             setCheckInSheet(null);
             refreshPetCard(savedPet).catch((err) => {
+              console.error(err);
+              toast({ description: 'Saved, but unable to refresh this card. Pull down to refresh.' });
+            });
+          }}
+        />
+      )}
+
+      {catchUpFlowOpen && catchUpPet && (
+        <CatchUpFlow
+          pets={[catchUpPet]}
+          missedDaysByPet={missedDaysByPet}
+          onClose={() => { setCatchUpFlowOpen(false); setCatchUpPet(null); }}
+          onPetProgress={(pet) => {
+            refreshPetCard(pet).catch((err) => {
               console.error(err);
               toast({ description: 'Saved, but unable to refresh this card. Pull down to refresh.' });
             });
@@ -404,6 +467,24 @@ function CatchUpBanner({ petName, onCatchUp }) {
       </p>
       <button onClick={onCatchUp} className="text-[13px] font-semibold text-primary mt-1">
         Catch up yesterday
+      </button>
+    </div>
+  );
+}
+
+// Rendered once per pet with a 2+ day gap (or a single missed day that
+// isn't yesterday) — spec 0015's multi-day Catch Up. The full calendar/
+// exceptions flow this launches ships in a later PR; for now this proves
+// gap detection surfaces the right pet with the right count.
+function MultiDayCatchUpBanner({ petName, missedCount, onCatchUp }) {
+  return (
+    <div className="text-center py-2">
+      <p className="text-[13px] text-white/40 flex items-center justify-center gap-1.5">
+        <CalendarClock className="h-3.5 w-3.5" aria-hidden="true" />
+        {missedCount} days weren't logged for {petName}.
+      </p>
+      <button onClick={onCatchUp} className="text-[13px] font-semibold text-primary mt-1">
+        Catch up now
       </button>
     </div>
   );
