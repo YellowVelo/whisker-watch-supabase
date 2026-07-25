@@ -120,7 +120,16 @@ export default function CatchUpFlow({ pets, missedDaysByPet, onClose, onPetProgr
     const savedDate = detailDate;
     setDetailDate(null);
     getCheckInsForDateRange(selectedPet.id, [savedDate])
-      .then((rows) => setCheckInsByDate((prev) => ({ ...prev, ...rows })))
+      .then((rows) => {
+        const nextCheckInsByDate = { ...checkInsByDate, ...rows };
+        setCheckInsByDate(nextCheckInsByDate);
+        // Spec 0017: once the day just saved was the last one still
+        // flagged as needing details, return to Calendar automatically
+        // instead of leaving the owner on an empty "No days need details
+        // right now" screen with no obvious next step.
+        const stillNeedsDetails = missedDates.some((d) => exceptionDates.has(d) && !nextCheckInsByDate[d]);
+        if (!stillNeedsDetails) setStep('calendar');
+      })
       .catch((err) => console.error(err));
     track('multi_day_catch_up_day_saved', { pet_id: selectedPet.id, check_in_date: savedDate });
     onPetProgress?.(selectedPet);
@@ -144,7 +153,15 @@ export default function CatchUpFlow({ pets, missedDaysByPet, onClose, onPetProgr
     setBulkApplyDates(null);
     setBulkSelectedDates(new Set());
     getCheckInsForDateRange(selectedPet.id, savedDates)
-      .then((rows) => setCheckInsByDate((prev) => ({ ...prev, ...rows })))
+      .then((rows) => {
+        const nextCheckInsByDate = { ...checkInsByDate, ...rows };
+        setCheckInsByDate(nextCheckInsByDate);
+        // Spec 0017: same auto-return rule as handleDetailSaved — bulk
+        // resolving the last flagged days should also return to Calendar,
+        // not leave the owner on the dead-looking empty exceptions list.
+        const stillNeedsDetails = missedDates.some((d) => exceptionDates.has(d) && !nextCheckInsByDate[d]);
+        if (!stillNeedsDetails) setStep('calendar');
+      })
       .catch((err) => console.error(err));
     onPetProgress?.(selectedPet);
   };
@@ -488,12 +505,16 @@ function CalendarStep({ grid, missedDates, checkInsByDate, exceptionDates, onTog
   );
 }
 
-// Multi-select here is deliberately lightweight — no separate "select
-// mode" toggle. The checkbox is always available; tapping the row body
-// (not the checkbox) still opens that single day's details directly, the
-// common case. Bulk apply (spec: "if several consecutive days all had the
-// same issue, apply the same details to all selected days") only needs 2+
-// checked to make sense, so the action bar stays hidden below that.
+// Spec 0017: tapping a day's row is the default, single action — select it
+// for bulk-apply (the common case: several days shared the same issue). A
+// separate, small icon-only button opens that one day's full details
+// instead, for the less common case of reviewing/answering a day on its
+// own. This flips the previous design (checkbox to select, row-body tap to
+// open details), which read as two competing, easy-to-mix-up tap targets
+// on the same row. Bulk apply (spec 0015: "if several consecutive days all
+// had the same issue, apply the same details to all selected days") only
+// needs 2+ selected to make sense, so the action bar stays hidden below
+// that, same as before.
 function ExceptionsStep({ dates, selectedDates, onToggleSelect, onOpenDetails, onBulkApply }) {
   if (dates.length === 0) {
     return <p className="text-sm text-white/50 text-center py-8">No days need details right now.</p>;
@@ -501,7 +522,7 @@ function ExceptionsStep({ dates, selectedDates, onToggleSelect, onOpenDetails, o
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between mb-2">
-        <p className="text-sm text-white/50">Tap a day to add details.</p>
+        <p className="text-sm text-white/50">Tap a day to select it, or open it to answer alone.</p>
         {selectedDates.size >= 2 && (
           <button onClick={onBulkApply} className="text-sm font-semibold" style={{ color: PALETTE.sky }}>
             Apply to {selectedDates.size} days
@@ -514,26 +535,32 @@ function ExceptionsStep({ dates, selectedDates, onToggleSelect, onOpenDetails, o
           <div
             key={dateStr}
             className="w-full flex items-center gap-3 rounded-2xl px-4 py-3.5"
-            style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}
+            style={checked
+              ? { background: 'rgba(255,255,255,0.05)', border: `2px solid ${PALETTE.sky}` }
+              : { background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}
           >
             <button
               onClick={() => onToggleSelect(dateStr)}
               aria-pressed={checked}
               aria-label={checked ? `Deselect ${formatDayLabel(dateStr)}` : `Select ${formatDayLabel(dateStr)}`}
-              className="h-6 w-6 rounded-md flex items-center justify-center flex-shrink-0"
-              style={checked ? { background: PALETTE.sky } : { border: '1px solid rgba(255,255,255,0.25)' }}
+              className="flex-1 flex items-center justify-between text-left"
             >
-              {checked && <Check className="h-4 w-4" style={{ color: 'hsl(var(--background))' }} />}
-            </button>
-            <button onClick={() => onOpenDetails(dateStr)} className="flex-1 flex items-center justify-between text-left">
               <div className="flex items-center gap-3">
-                <CircleDashed className="h-4 w-4" style={{ color: PALETTE.amber }} aria-hidden="true" />
+                <CircleDashed className="h-4 w-4" style={{ color: checked ? PALETTE.sky : PALETTE.amber }} aria-hidden="true" />
                 <div>
                   <p className="text-base font-semibold text-white">{formatDayLabel(dateStr)}</p>
-                  <p className="text-sm text-white/50">Needs details</p>
+                  <p className="text-sm text-white/50">{checked ? 'Selected' : 'Needs details'}</p>
                 </div>
               </div>
-              <ChevronRight className="h-4 w-4 text-white/40" />
+              {checked && <Check className="h-4 w-4 flex-shrink-0" style={{ color: PALETTE.sky }} aria-hidden="true" />}
+            </button>
+            <button
+              onClick={() => onOpenDetails(dateStr)}
+              aria-label={`Open details for ${formatDayLabel(dateStr)}`}
+              className="h-9 w-9 rounded-full flex items-center justify-center flex-shrink-0"
+              style={{ background: 'rgba(255,255,255,0.08)' }}
+            >
+              <ChevronRight className="h-4 w-4 text-white/60" aria-hidden="true" />
             </button>
           </div>
         );
