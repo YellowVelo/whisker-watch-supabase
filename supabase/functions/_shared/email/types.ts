@@ -63,9 +63,18 @@ export interface SendEmailParams {
   // sendEmail.ts's claimIdempotencyKey for the concurrency-safe
   // reservation this relies on.
   idempotencyKey?: string;
+  // Optional id of the profiles row responsible for triggering this
+  // send. When present, sendEmail() checks that account's account_type
+  // and silently suppresses (never calls Resend) for 'test'/'demo'
+  // accounts — see sendEmail.ts. Omit when there's no single acting
+  // user (e.g. an ops/scheduled call through the send-email endpoint).
+  sentByUserId?: string;
 }
 
 export interface SendEmailResult {
   success: true;
   messageId: string | null;
+  // True only when this send was skipped because sentByUserId resolved
+  // to a test/demo account — no Resend call was made.
+  suppressed?: boolean;
 }

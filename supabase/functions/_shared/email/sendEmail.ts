@@ -13,12 +13,6 @@
 // callers only ever see one of the EmailErrorCode values.
 //
 // Known, deliberately deferred gaps (not implemented here):
-//   - Suppressing sends for test/demo accounts. sendEmail only knows
-//     about a recipient address, not which internal account triggered
-//     the send, so this stays a caller responsibility for now — see
-//     invite-co-owner/index.ts's account_type check for the existing
-//     pattern. If a second workflow needs the same guard, that's the
-//     signal to thread a `sentByUserId` through here and centralize it.
 //   - Updating email_logs after Resend accepts a message but delivery
 //     later bounces/fails (would require a Resend webhook receiver).
 //     A row's `status: 'sent'` therefore means "accepted by the
@@ -46,7 +40,7 @@ function getAdminClient(): SupabaseClient {
 interface LogFields {
   recipientEmail: string;
   templateName: string;
-  status: 'sent' | 'failed';
+  status: 'sent' | 'suppressed' | 'failed';
   providerMessageId?: string | null;
   errorCode?: string | null;
   errorMessage?: string | null;
@@ -149,7 +143,16 @@ async function claimIdempotencyKey(
 }
 
 export async function sendEmail(params: SendEmailParams): Promise<SendEmailResult> {
-  const { to, template: templateName, variables, replyTo, relatedEntityType, relatedEntityId, idempotencyKey } = params;
+  const {
+    to,
+    template: templateName,
+    variables,
+    replyTo,
+    relatedEntityType,
+    relatedEntityId,
+    idempotencyKey,
+    sentByUserId,
+  } = params;
 
   if (!to || !isValidEmail(to)) {
     throw new EmailServiceError('invalid_recipient', 'Recipient email is missing or not a valid email address');
@@ -157,6 +160,30 @@ export async function sendEmail(params: SendEmailParams): Promise<SendEmailResul
   const recipientEmail = normalizeEmail(to);
 
   const admin = getAdminClient();
+
+  // Test/demo accounts must never trigger a real outbound email. This
+  // is checked (and logged) before the idempotency claim, template
+  // render, or anything Resend-related — a suppressed send never gets
+  // that far. sentByUserId is optional: a caller with no single acting
+  // user (e.g. an ops/scheduled call through the send-email endpoint)
+  // just gets no suppression check, same as before this existed.
+  if (sentByUserId) {
+    const { data: senderProfile } = await admin
+      .from('profiles')
+      .select('account_type')
+      .eq('id', sentByUserId)
+      .single();
+    if (senderProfile?.account_type === 'test' || senderProfile?.account_type === 'demo') {
+      await insertLog(admin, {
+        recipientEmail,
+        templateName,
+        status: 'suppressed',
+        relatedEntityType,
+        relatedEntityId,
+      });
+      return { success: true, messageId: null, suppressed: true };
+    }
+  }
 
   let claimedLogId: string | null = null;
   if (idempotencyKey) {

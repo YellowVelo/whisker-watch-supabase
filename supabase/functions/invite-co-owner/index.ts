@@ -100,20 +100,14 @@ Deno.serve(async (req) => {
     // Use the service-role client for admin operations (inviting users).
     const adminClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-    // Test/demo accounts must never send real production email. The
-    // pet_co_owners record already exists by the time this function
-    // runs, so the sharing flow still works end-to-end for testing —
-    // we just skip the actual outbound email.
+    // Only needed here for the email body's owner_name — the
+    // test/demo suppression check itself now lives in sendEmail()
+    // (passed sentByUserId below), not here.
     const { data: inviterProfile } = await adminClient
       .from('profiles')
-      .select('account_type, first_name')
+      .select('first_name')
       .eq('id', userData.user.id)
       .single();
-    if (inviterProfile?.account_type === 'test' || inviterProfile?.account_type === 'demo') {
-      return new Response(JSON.stringify({ sent: false, reason: 'test_or_demo_account' }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
 
     // Use the app's own (owned) domain — required by the email system's
     // CTA allowlist (isSafeEmailUrl only permits www.wyskerwatch.com and
@@ -275,7 +269,17 @@ Deno.serve(async (req) => {
         // when no idempotency key is provided (sendEmail.ts only logs a
         // pre-send failure via the idempotency-claim row).
         idempotencyKey: crypto.randomUUID(),
+        // Lets sendEmail() itself decide whether this is a test/demo
+        // account and suppress the real send — see
+        // requirements-centralized-email-suppression.md.
+        sentByUserId: userData.user.id,
       });
+
+      if (emailResult.suppressed) {
+        return new Response(JSON.stringify({ sent: false, reason: 'test_or_demo_account' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
 
       return new Response(JSON.stringify({ sent: true, messageId: emailResult.messageId }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },

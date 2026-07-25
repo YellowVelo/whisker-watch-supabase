@@ -48,6 +48,7 @@
 //     relatedEntityType?: string,
 //     relatedEntityId?: string,
 //     idempotencyKey?: string,   // pass the same key on retry to avoid a duplicate send
+//     sentByUserId?: string,     // if known, lets sendEmail() suppress the send for test/demo accounts
 //   }
 //
 // Response:
@@ -122,15 +123,17 @@ Deno.serve(async (req) => {
       return json({ error: { code: 'unknown_error', message: 'Request body must be valid JSON' } }, 400);
     }
 
-    const { to, template, variables, replyTo, relatedEntityType, relatedEntityId, idempotencyKey } = body as {
-      to?: string;
-      template?: string;
-      variables?: Record<string, string>;
-      replyTo?: string;
-      relatedEntityType?: string;
-      relatedEntityId?: string;
-      idempotencyKey?: string;
-    };
+    const { to, template, variables, replyTo, relatedEntityType, relatedEntityId, idempotencyKey, sentByUserId } =
+      body as {
+        to?: string;
+        template?: string;
+        variables?: Record<string, string>;
+        replyTo?: string;
+        relatedEntityType?: string;
+        relatedEntityId?: string;
+        idempotencyKey?: string;
+        sentByUserId?: string;
+      };
 
     if (!to || typeof to !== 'string') {
       return json({ error: { code: 'invalid_recipient', message: '"to" is required' } }, 400);
@@ -147,6 +150,7 @@ Deno.serve(async (req) => {
       relatedEntityType,
       relatedEntityId,
       idempotencyKey,
+      sentByUserId,
     });
 
     return json(result);
