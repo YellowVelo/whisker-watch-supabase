@@ -7,6 +7,12 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 // vi.resetModules() + dynamic import (the module caches
 // loadObservationCatalog() at module scope, so a fresh module instance is
 // needed per test to control the mocked catalog).
+//
+// markGreatDay/markOffTough/markGreatDaysBulk/markOffToughBulk all write
+// through the save_daily_check_ins RPC (migration 0034, spec 0016) instead
+// of separate upsert/delete/bulkCreate calls, so these tests mock
+// supabase.rpc and assert against the payload sent to it, rather than the
+// old separate-call sequence.
 describe('checkinClient persistence (Vibe & Symptom Count)', () => {
   beforeEach(() => {
     vi.resetModules();
@@ -30,57 +36,55 @@ describe('checkinClient persistence (Vibe & Symptom Count)', () => {
 
   it('markGreatDay writes status=great, symptom_count=0, and explicit baseline rows for every counted category', async () => {
     const appetiteTypeId = 'type-appetite';
-    const checkInUpsertMock = vi.fn().mockResolvedValue({ id: 'ci-1', pet_id: 'pet-1', check_in_date: '2026-01-01', status: 'great' });
-    const observationBulkCreateMock = vi.fn().mockResolvedValue([]);
+    const rpcMock = vi.fn().mockResolvedValue({
+      data: [{ id: 'ci-1', pet_id: 'pet-1', check_in_date: '2026-01-01', status: 'great', symptom_count: 0 }],
+      error: null,
+    });
 
     vi.doMock('@/api/entities', () => ({
       entities: {
-        DailyCheckIn: { upsert: checkInUpsertMock },
-        Observation: { bulkCreate: observationBulkCreateMock },
         ObservationType: { list: vi.fn().mockResolvedValue([{ id: appetiteTypeId, code: 'appetite' }]) },
         ObservationOption: { list: vi.fn().mockResolvedValue([]) },
       },
     }));
-    const deleteEqMock = vi.fn().mockResolvedValue({ error: null });
-    vi.doMock('@/api/supabaseClient', () => ({
-      supabase: { from: vi.fn(() => ({ delete: vi.fn(() => ({ eq: deleteEqMock })) })) },
-    }));
+    vi.doMock('@/api/supabaseClient', () => ({ supabase: { rpc: rpcMock } }));
 
     const { markGreatDay } = await import('./checkinClient');
-    await markGreatDay('pet-1', '2026-01-01', 'app');
+    const { checkIn } = await markGreatDay('pet-1', '2026-01-01', 'app');
 
-    expect(checkInUpsertMock).toHaveBeenCalledWith(
-      expect.objectContaining({ pet_id: 'pet-1', check_in_date: '2026-01-01', status: 'great', symptom_count: 0 }),
-      'pet_id,check_in_date',
-    );
-    // Deletes any prior observations first (editing a previously off/tough
-    // day back to Great Day must not leave stale symptom rows behind), then
-    // writes an explicit confirmed-normal row per multi-select category
-    // present in the catalog, as a single bulk insert.
-    expect(deleteEqMock).toHaveBeenCalledWith('daily_check_in_id', 'ci-1');
-    expect(observationBulkCreateMock).toHaveBeenCalledWith([
-      expect.objectContaining({ observation_type_id: appetiteTypeId, value: 'normal' }),
-    ]);
+    expect(checkIn).toEqual(expect.objectContaining({ id: 'ci-1', status: 'great' }));
+    expect(rpcMock).toHaveBeenCalledTimes(1);
+    // One atomic call carrying both the check-in row and its observations
+    // together — the RPC (not this JS code) is responsible for clearing any
+    // prior observations before inserting the new baseline row, so there's
+    // no separate delete-call assertion here anymore; the payload shape is
+    // the only thing this test level can observe.
+    expect(rpcMock).toHaveBeenCalledWith('save_daily_check_ins', {
+      payloads: [
+        expect.objectContaining({
+          pet_id: 'pet-1',
+          check_in_date: '2026-01-01',
+          status: 'great',
+          symptom_count: 0,
+          observations: [expect.objectContaining({ observation_type_id: appetiteTypeId, value: 'normal' })],
+        }),
+      ],
+    });
   });
 
   it('markOffTough recalculates the complete day from the current selections, not an incremental patch', async () => {
     const appetiteTypeId = 'type-appetite';
-    const checkInUpsertMock = vi.fn().mockResolvedValue({ id: 'ci-1', pet_id: 'pet-1', check_in_date: '2026-01-01', status: 'off' });
-    const checkInUpdateMock = vi.fn().mockResolvedValue({});
-    const observationBulkCreateMock = vi.fn().mockResolvedValue([]);
+    const rpcMock = vi.fn()
+      .mockResolvedValueOnce({ data: [{ id: 'ci-1', pet_id: 'pet-1', check_in_date: '2026-01-01', status: 'off', symptom_count: 2 }], error: null })
+      .mockResolvedValueOnce({ data: [{ id: 'ci-1', pet_id: 'pet-1', check_in_date: '2026-01-01', status: 'off', symptom_count: 0 }], error: null });
 
     vi.doMock('@/api/entities', () => ({
       entities: {
-        DailyCheckIn: { upsert: checkInUpsertMock, update: checkInUpdateMock },
-        Observation: { bulkCreate: observationBulkCreateMock },
         ObservationType: { list: vi.fn().mockResolvedValue([{ id: appetiteTypeId, code: 'appetite' }]) },
         ObservationOption: { list: vi.fn().mockResolvedValue([]) },
       },
     }));
-    const deleteEqMock = vi.fn().mockResolvedValue({ error: null });
-    vi.doMock('@/api/supabaseClient', () => ({
-      supabase: { from: vi.fn(() => ({ delete: vi.fn(() => ({ eq: deleteEqMock })) })) },
-    }));
+    vi.doMock('@/api/supabaseClient', () => ({ supabase: { rpc: rpcMock } }));
 
     const { markOffTough } = await import('./checkinClient');
 
@@ -88,43 +92,61 @@ describe('checkinClient persistence (Vibe & Symptom Count)', () => {
     // equal weight, both count, uncapped.
     const first = await markOffTough('pet-1', '2026-01-01', 'off', [{ code: 'appetite', values: ['ate_much_less', 'did_not_eat'] }]);
     expect(first.symptomCount).toBe(2);
-    expect(checkInUpdateMock).toHaveBeenLastCalledWith('ci-1', { symptom_count: 2 });
+    expect(rpcMock).toHaveBeenNthCalledWith(1, 'save_daily_check_ins', {
+      payloads: [expect.objectContaining({ symptom_count: 2, observations: expect.arrayContaining([
+        expect.objectContaining({ observation_type_id: appetiteTypeId, value: 'ate_much_less' }),
+        expect.objectContaining({ observation_type_id: appetiteTypeId, value: 'did_not_eat' }),
+      ]) })],
+    });
 
     // Edit: re-saving with the full current selection set back to no
     // symptoms (confirmed normal) must recompute from scratch (0), not
-    // subtract/add deltas.
+    // subtract/add deltas — reflected here as a second, independent RPC
+    // call whose payload has no leftover symptom rows from the first save.
     const second = await markOffTough('pet-1', '2026-01-01', 'off', [{ code: 'appetite', values: [] }]);
     expect(second.symptomCount).toBe(0);
-    expect(checkInUpdateMock).toHaveBeenLastCalledWith('ci-1', { symptom_count: 0 });
-
-    // Both saves must have cleared the check-in's prior observations first
-    // — otherwise the stale symptom rows from the first save would still
-    // exist for direction/observation reads to pick up.
-    expect(deleteEqMock).toHaveBeenCalledTimes(2);
-    expect(deleteEqMock).toHaveBeenCalledWith('daily_check_in_id', 'ci-1');
+    expect(rpcMock).toHaveBeenNthCalledWith(2, 'save_daily_check_ins', {
+      payloads: [expect.objectContaining({
+        symptom_count: 0,
+        observations: [expect.objectContaining({ observation_type_id: appetiteTypeId, value: 'normal' })],
+      })],
+    });
+    expect(rpcMock).toHaveBeenCalledTimes(2);
   });
 
   it('markOffTough never counts a "Not Observed" answer as a symptom', async () => {
     const waterTypeId = 'type-water';
-    const checkInUpsertMock = vi.fn().mockResolvedValue({ id: 'ci-1', pet_id: 'pet-1', check_in_date: '2026-01-01', status: 'tough' });
-    const checkInUpdateMock = vi.fn().mockResolvedValue({});
+    const rpcMock = vi.fn().mockResolvedValue({
+      data: [{ id: 'ci-1', pet_id: 'pet-1', check_in_date: '2026-01-01', status: 'tough', symptom_count: 0 }],
+      error: null,
+    });
 
     vi.doMock('@/api/entities', () => ({
       entities: {
-        DailyCheckIn: { upsert: checkInUpsertMock, update: checkInUpdateMock },
-        Observation: { bulkCreate: vi.fn().mockResolvedValue([]) },
         ObservationType: { list: vi.fn().mockResolvedValue([{ id: waterTypeId, code: 'water_intake' }]) },
         ObservationOption: { list: vi.fn().mockResolvedValue([]) },
       },
     }));
-    vi.doMock('@/api/supabaseClient', () => ({
-      supabase: { from: vi.fn(() => ({ delete: vi.fn(() => ({ eq: vi.fn().mockResolvedValue({ error: null }) })) })) },
-    }));
+    vi.doMock('@/api/supabaseClient', () => ({ supabase: { rpc: rpcMock } }));
 
     const { markOffTough } = await import('./checkinClient');
     const result = await markOffTough('pet-1', '2026-01-01', 'tough', [{ code: 'water_intake', values: ['not_observed'] }]);
 
     expect(result.symptomCount).toBe(0);
+  });
+
+  it('markOffTough throws and propagates the error when the RPC call fails, without swallowing it', async () => {
+    const rpcMock = vi.fn().mockResolvedValue({ data: null, error: new Error('boom') });
+    vi.doMock('@/api/entities', () => ({
+      entities: {
+        ObservationType: { list: vi.fn().mockResolvedValue([]) },
+        ObservationOption: { list: vi.fn().mockResolvedValue([]) },
+      },
+    }));
+    vi.doMock('@/api/supabaseClient', () => ({ supabase: { rpc: rpcMock } }));
+
+    const { markOffTough } = await import('./checkinClient');
+    await expect(markOffTough('pet-1', '2026-01-01', 'off', [])).rejects.toThrow('boom');
   });
 });
 
@@ -224,32 +246,23 @@ describe('getMissedDaysForPet', () => {
   });
 });
 
-// Catch Up (spec 0015), PR 3 — the bulk "finish" write.
+// Catch Up (spec 0015), PR 3 — the bulk "finish" write. Chunked atomic RPC
+// calls (spec 0016) replace the old single bulk-upsert/bulk-delete/
+// bulk-insert sequence.
 describe('markGreatDaysBulk', () => {
   beforeEach(() => {
     vi.resetModules();
   });
 
-  it('writes one great-day row per date plus baseline observations for every counted category, in batched calls', async () => {
+  it('writes one great-day row per date plus baseline observations for every counted category, in one RPC call', async () => {
     const appetiteTypeId = 'type-appetite';
     const dates = ['2026-07-01', '2026-07-02', '2026-07-03'];
-    const upsertedCheckIns = dates.map((d, i) => ({ id: `ci-${i}`, pet_id: 'pet-1', check_in_date: d, status: 'great' }));
+    const upsertedCheckIns = dates.map((d, i) => ({ id: `ci-${i}`, pet_id: 'pet-1', check_in_date: d, status: 'great', symptom_count: 0 }));
 
-    const upsertMock = vi.fn(() => ({ select: vi.fn().mockResolvedValue({ data: upsertedCheckIns, error: null }) }));
-    const deleteInMock = vi.fn().mockResolvedValue({ error: null });
-    const fromMock = vi.fn((table) => {
-      if (table === 'daily_check_ins') return { upsert: upsertMock };
-      if (table === 'observations') return { delete: vi.fn(() => ({ in: deleteInMock })) };
-      throw new Error(`unexpected table ${table}`);
-    });
-    const observationBulkCreateMock = vi.fn().mockResolvedValue([]);
-
-    vi.doMock('@/api/supabaseClient', () => ({
-      supabase: { from: fromMock, auth: { getUser: vi.fn().mockResolvedValue({ data: { user: { id: 'user-1' } } }) } },
-    }));
+    const rpcMock = vi.fn().mockResolvedValue({ data: upsertedCheckIns, error: null });
+    vi.doMock('@/api/supabaseClient', () => ({ supabase: { rpc: rpcMock } }));
     vi.doMock('@/api/entities', () => ({
       entities: {
-        Observation: { bulkCreate: observationBulkCreateMock },
         ObservationType: { list: vi.fn().mockResolvedValue([{ id: appetiteTypeId, code: 'appetite' }]) },
         ObservationOption: { list: vi.fn().mockResolvedValue([]) },
       },
@@ -259,31 +272,143 @@ describe('markGreatDaysBulk', () => {
     const { checkIns } = await markGreatDaysBulk('pet-1', dates, 'catch_up');
 
     expect(checkIns).toHaveLength(3);
-    // One upsert call for all 3 dates (not 3 separate calls) — the whole
-    // point of the bulk path over N markGreatDay calls.
-    expect(upsertMock).toHaveBeenCalledTimes(1);
-    expect(upsertMock).toHaveBeenCalledWith(
-      dates.map((d) => expect.objectContaining({ check_in_date: d, status: 'great', symptom_count: 0, source: 'catch_up', created_by: 'user-1' })),
-      { onConflict: 'pet_id,check_in_date' },
-    );
-    // Stale observations cleared for every check-in in one call.
-    expect(deleteInMock).toHaveBeenCalledWith('daily_check_in_id', ['ci-0', 'ci-1', 'ci-2']);
-    // One baseline row per date for the single catalog category present.
-    expect(observationBulkCreateMock).toHaveBeenCalledTimes(1);
-    expect(observationBulkCreateMock.mock.calls[0][0]).toHaveLength(3);
-    expect(observationBulkCreateMock.mock.calls[0][0][0]).toEqual(
-      expect.objectContaining({ observation_type_id: appetiteTypeId, value: 'normal' }),
-    );
+    // Well under the 20-day chunk size, so this is one atomic call for all
+    // 3 dates — not 3 separate calls, and not yet split into chunks.
+    expect(rpcMock).toHaveBeenCalledTimes(1);
+    expect(rpcMock).toHaveBeenCalledWith('save_daily_check_ins', {
+      payloads: dates.map((d) => expect.objectContaining({
+        check_in_date: d, status: 'great', symptom_count: 0, source: 'catch_up',
+        observations: [expect.objectContaining({ observation_type_id: appetiteTypeId, value: 'normal' })],
+      })),
+    });
+  });
+
+  it('splits a gap larger than the chunk size into multiple sequential RPC calls', async () => {
+    const dates = Array.from({ length: 45 }, (_, i) => `2026-01-${String(i + 1).padStart(2, '0')}`);
+    const rpcMock = vi.fn().mockImplementation((_fn, { payloads }) => Promise.resolve({
+      data: payloads.map((p, i) => ({ id: `ci-${i}`, ...p })),
+      error: null,
+    }));
+    vi.doMock('@/api/supabaseClient', () => ({ supabase: { rpc: rpcMock } }));
+    vi.doMock('@/api/entities', () => ({
+      entities: {
+        ObservationType: { list: vi.fn().mockResolvedValue([]) },
+        ObservationOption: { list: vi.fn().mockResolvedValue([]) },
+      },
+    }));
+
+    const { markGreatDaysBulk } = await import('./checkinClient');
+    const { checkIns } = await markGreatDaysBulk('pet-1', dates, 'catch_up');
+
+    // 45 dates / chunk size 20 = 3 calls (20 + 20 + 5), sequential, not
+    // parallel — so a failure's exact position is always known.
+    expect(rpcMock).toHaveBeenCalledTimes(3);
+    expect(rpcMock.mock.calls[0][1].payloads).toHaveLength(20);
+    expect(rpcMock.mock.calls[1][1].payloads).toHaveLength(20);
+    expect(rpcMock.mock.calls[2][1].payloads).toHaveLength(5);
+    expect(checkIns).toHaveLength(45);
   });
 
   it('is a no-op for an empty date list — no network calls at all', async () => {
-    const fromMock = vi.fn();
-    vi.doMock('@/api/supabaseClient', () => ({ supabase: { from: fromMock } }));
+    const rpcMock = vi.fn();
+    vi.doMock('@/api/supabaseClient', () => ({ supabase: { rpc: rpcMock } }));
 
     const { markGreatDaysBulk } = await import('./checkinClient');
     const result = await markGreatDaysBulk('pet-1', [], 'catch_up');
 
     expect(result).toEqual({ checkIns: [] });
-    expect(fromMock).not.toHaveBeenCalled();
+    expect(rpcMock).not.toHaveBeenCalled();
+  });
+
+  it('stops at the failed chunk — a later chunk never runs once an earlier one errors', async () => {
+    const dates = Array.from({ length: 25 }, (_, i) => `2026-02-${String(i + 1).padStart(2, '0')}`);
+    const rpcMock = vi.fn()
+      .mockResolvedValueOnce({ data: null, error: new Error('boom') });
+    vi.doMock('@/api/supabaseClient', () => ({ supabase: { rpc: rpcMock } }));
+    vi.doMock('@/api/entities', () => ({
+      entities: {
+        ObservationType: { list: vi.fn().mockResolvedValue([]) },
+        ObservationOption: { list: vi.fn().mockResolvedValue([]) },
+      },
+    }));
+
+    const { markGreatDaysBulk } = await import('./checkinClient');
+    await expect(markGreatDaysBulk('pet-1', dates, 'catch_up')).rejects.toThrow('boom');
+    // 25 dates = 2 chunks (20 + 5); only the first chunk's call should have
+    // happened before the function threw.
+    expect(rpcMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+// BulkApplySheet.jsx's multi-day apply (spec 0016) — shares one status and
+// one set of selections across every date in the bulk-apply session.
+describe('markOffToughBulk', () => {
+  beforeEach(() => {
+    vi.resetModules();
+  });
+
+  it('resolves selections once and applies the same observations/symptom_count to every date, chunked', async () => {
+    const appetiteTypeId = 'type-appetite';
+    const dates = ['2026-07-01', '2026-07-02'];
+    const rpcMock = vi.fn().mockResolvedValue({
+      data: dates.map((d, i) => ({ id: `ci-${i}`, pet_id: 'pet-1', check_in_date: d, status: 'off', symptom_count: 1 })),
+      error: null,
+    });
+    vi.doMock('@/api/supabaseClient', () => ({ supabase: { rpc: rpcMock } }));
+    vi.doMock('@/api/entities', () => ({
+      entities: {
+        ObservationType: { list: vi.fn().mockResolvedValue([{ id: appetiteTypeId, code: 'appetite' }]) },
+        ObservationOption: { list: vi.fn().mockResolvedValue([]) },
+      },
+    }));
+
+    const { markOffToughBulk } = await import('./checkinClient');
+    const { checkIns, symptomCount } = await markOffToughBulk(
+      'pet-1', dates, 'off', [{ code: 'appetite', values: ['ate_much_less'] }], 'catch_up',
+    );
+
+    expect(symptomCount).toBe(1);
+    expect(checkIns).toHaveLength(2);
+    expect(rpcMock).toHaveBeenCalledTimes(1);
+    expect(rpcMock).toHaveBeenCalledWith('save_daily_check_ins', {
+      payloads: dates.map((d) => expect.objectContaining({
+        check_in_date: d, status: 'off', symptom_count: 1, source: 'catch_up',
+        observations: [expect.objectContaining({ observation_type_id: appetiteTypeId, value: 'ate_much_less' })],
+      })),
+    });
+  });
+
+  it('is a no-op for an empty date list — no network calls at all', async () => {
+    const rpcMock = vi.fn();
+    vi.doMock('@/api/supabaseClient', () => ({ supabase: { rpc: rpcMock } }));
+
+    const { markOffToughBulk } = await import('./checkinClient');
+    const result = await markOffToughBulk('pet-1', [], 'off', []);
+
+    expect(result).toEqual({ checkIns: [] });
+    expect(rpcMock).not.toHaveBeenCalled();
+  });
+
+  it('splits more than 20 dates into multiple sequential chunked RPC calls', async () => {
+    const dates = Array.from({ length: 22 }, (_, i) => `2026-03-${String(i + 1).padStart(2, '0')}`);
+    const rpcMock = vi.fn().mockImplementation((_fn, { payloads }) => Promise.resolve({
+      data: payloads.map((p, i) => ({ id: `ci-${i}`, ...p })),
+      error: null,
+    }));
+    vi.doMock('@/api/supabaseClient', () => ({ supabase: { rpc: rpcMock } }));
+    vi.doMock('@/api/entities', () => ({
+      entities: {
+        ObservationType: { list: vi.fn().mockResolvedValue([]) },
+        ObservationOption: { list: vi.fn().mockResolvedValue([]) },
+      },
+    }));
+
+    const { markOffToughBulk } = await import('./checkinClient');
+    const { checkIns } = await markOffToughBulk('pet-1', dates, 'tough', []);
+
+    expect(rpcMock).toHaveBeenCalledTimes(2);
+    expect(rpcMock.mock.calls[0][1].payloads).toHaveLength(20);
+    expect(rpcMock.mock.calls[1][1].payloads).toHaveLength(2);
+    expect(checkIns).toHaveLength(22);
   });
 });

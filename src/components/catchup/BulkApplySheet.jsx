@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { X, Loader2 } from 'lucide-react';
 import { CATEGORIES, getOptionsForSpecies, getCategory } from '@/lib/checkin/config';
-import { markOffTough } from '@/lib/checkin/checkinClient';
+import { markOffToughBulk } from '@/lib/checkin/checkinClient';
 import { track } from '@/lib/analytics';
 import { Textarea } from '@/components/ui/textarea';
 import { PALETTE } from '@/lib/toneColors';
@@ -19,10 +19,10 @@ const PICKER_CATEGORIES = CATEGORIES.filter((c) => c.code !== 'medication_except
 // for what's structurally a different flow — this only ever writes Off/
 // Tough Day details (a bulk-flagged day is never "Great" by definition,
 // so that choice and Skip are both out of scope here), applying the exact
-// same selections to each date via markOffTough, one call per date so
-// every day still gets its own independent, correct row (spec: "each of
-// those days gets its own independent, correct record — not one shared
-// row").
+// same selections to every date via markOffToughBulk (spec 0016), which
+// writes each date's row atomically in chunks of 20 so every day still
+// gets its own independent, correct row (spec: "each of those days gets
+// its own independent, correct record — not one shared row").
 export default function BulkApplySheet({ pet, dates, onClose, onSaved }) {
   const dialogRef = useRef(null);
   const [stage, setStage] = useState('vibe'); // vibe | categories | details | saving
@@ -64,15 +64,11 @@ export default function BulkApplySheet({ pet, dates, onClose, onSaved }) {
         })
         .filter((sel) => sel.values !== undefined || sel.value != null || sel.numericValue != null || sel.notes);
 
-      // Sequential, not parallel — each call deletes-then-inserts that
-      // day's observations (see markOffTough), so overlapping calls for
-      // different dates are safe either way, but sequential keeps this
-      // consistent with how every other multi-write path in this app
-      // behaves and makes a partial failure easy to reason about (dates
-      // before the failure are saved for real, dates after are not).
-      for (const date of dates) {
-        await markOffTough(pet.id, date, vibeStatus, selections, 'catch_up');
-      }
+      // One atomic call per chunk of 20 dates (spec 0016), sequential, not
+      // parallel, so a partial failure is easy to reason about: dates in
+      // chunks before the failure are saved for real, the failed chunk (and
+      // anything after) is not.
+      await markOffToughBulk(pet.id, dates, vibeStatus, selections, 'catch_up');
       track('multi_day_catch_up_bulk_applied', { pet_id: pet.id, status: vibeStatus, dates_count: dates.length, categories: selectedCodes });
       onSaved?.(dates);
     } catch (err) {

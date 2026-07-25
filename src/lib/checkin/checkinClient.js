@@ -308,105 +308,99 @@ export async function getWellbeingDirections(petId, todayCheckIn, yesterdayCheck
   return byPet[petId];
 }
 
-// "Great Day" — every counted category gets an explicit confirmed-normal
-// (baseline) row, not just an absent one, so direction comparisons never
-// have to infer "no row = normal" (spec: "explicit baseline row is still
-// written for every counted category"). Deletes any prior observations
-// for this check-in first, same as markOffTough — otherwise editing a
-// previously off/tough day back to Great Day would leave stale symptom
-// rows behind for direction reads to pick up.
-export async function markGreatDay(petId, date = todayStr(), source = 'app') {
-  const catalog = await loadObservationCatalog();
-  const checkIn = await entities.DailyCheckIn.upsert(
-    { pet_id: petId, check_in_date: date, status: 'great', symptom_count: 0, completed_at: new Date().toISOString(), source },
-    'pet_id,check_in_date',
-  );
-
-  const { error: deleteError } = await supabase
-    .from('observations')
-    .delete()
-    .eq('daily_check_in_id', checkIn.id);
-  if (deleteError) throw deleteError;
-
-  // Single bulk insert rather than N individual creates — one round trip
-  // instead of up to 11, and one atomic SQL statement instead of N
-  // independently-failable network calls.
-  const baselineRows = MULTI_SELECT_CODES.map((code) => {
+// Baseline (confirmed-normal) observation payload for every counted
+// category — used by both markGreatDay and markGreatDaysBulk so a Great
+// Day always gets an explicit row per category, not just an absent one
+// (spec: "explicit baseline row is still written for every counted
+// category"), matching the shape save_daily_check_ins (migration 0034)
+// expects nested under each day's `observations` key.
+function buildBaselineObservations(catalog) {
+  return MULTI_SELECT_CODES.map((code) => {
     const entry = catalog[code];
     if (!entry) return null;
     return {
-      pet_id: petId,
-      daily_check_in_id: checkIn.id,
       observation_type_id: entry.type.id,
       value: baselineValueFor(getCategory(code)),
       numeric_value: null,
       notes: null,
       photo_url: null,
-      observed_at: new Date().toISOString(),
     };
   }).filter(Boolean);
-  if (baselineRows.length > 0) await entities.Observation.bulkCreate(baselineRows);
-
-  return { checkIn };
 }
 
-// Catch Up's (spec 0015) "finish" action — the bulk write for every missed
-// day the owner never flagged, i.e. the ones still just "assumed Great
-// Day". Same rule as markGreatDay (explicit baseline row per counted
-// category, prior observations cleared first) but batched across
-// potentially dozens of days in two round trips total instead of N —
-// N individual markGreatDay calls would mean up to N upserts + N deletes +
-// N inserts for a 6-month gap, which doesn't scale. Uses entityClient's
-// user/created_by resolution manually (bulk upsert isn't something
-// entityClient.upsert supports — it wraps a single-row .single() call)
-// rather than looping, following the same "one bulk insert, not N" pattern
-// markGreatDay/markOffTough already use for observations.
-export async function markGreatDaysBulk(petId, dates, source = 'catch_up') {
-  if (dates.length === 0) return { checkIns: [] };
+// "Great Day" — every counted category gets an explicit confirmed-normal
+// (baseline) row, not just an absent one, so direction comparisons never
+// have to infer "no row = normal" (spec: "explicit baseline row is still
+// written for every counted category"). The RPC (migration 0034,
+// save_daily_check_ins) clears any prior observations for this check-in
+// first, same as markOffTough — otherwise editing a previously off/tough
+// day back to Great Day would leave stale symptom rows behind for
+// direction reads to pick up — and does the upsert/delete/insert in one
+// atomic call (spec 0016), so a failure partway through can no longer
+// leave the check-in row saved without its observations.
+export async function markGreatDay(petId, date = todayStr(), source = 'app') {
   const catalog = await loadObservationCatalog();
-  const { data: userData } = await supabase.auth.getUser();
-  const createdBy = userData?.user?.id;
-
-  const checkInRows = dates.map((date) => ({
+  const payload = {
     pet_id: petId,
     check_in_date: date,
     status: 'great',
     symptom_count: 0,
     completed_at: new Date().toISOString(),
     source,
-    created_by: createdBy,
-  }));
-  const { data: checkIns, error: upsertError } = await supabase
-    .from('daily_check_ins')
-    .upsert(checkInRows, { onConflict: 'pet_id,check_in_date' })
-    .select();
-  if (upsertError) throw upsertError;
+    observations: buildBaselineObservations(catalog),
+  };
 
-  const checkInIds = checkIns.map((c) => c.id);
-  const { error: deleteError } = await supabase
-    .from('observations')
-    .delete()
-    .in('daily_check_in_id', checkInIds);
-  if (deleteError) throw deleteError;
+  const { data, error } = await supabase.rpc('save_daily_check_ins', { payloads: [payload] });
+  if (error) throw error;
 
-  const baselineRows = [];
-  for (const checkIn of checkIns) {
-    for (const code of MULTI_SELECT_CODES) {
-      const entry = catalog[code];
-      if (!entry) continue;
-      baselineRows.push({
-        pet_id: petId,
-        daily_check_in_id: checkIn.id,
-        observation_type_id: entry.type.id,
-        value: baselineValueFor(getCategory(code)),
-        numeric_value: null,
-        notes: null,
-        photo_url: null,
-        observed_at: new Date().toISOString(),
-      });
-    }
+  return { checkIn: data[0] };
+}
+
+// Chunk size for save_daily_check_ins RPC calls (spec 0016) — a deliberate
+// speed/redo tradeoff: grouping days into one atomic call cuts round trips
+// for a 6-month gap from ~180 to ~9, at the cost of redoing a whole chunk
+// (not just one day) if that chunk's call is interrupted. A starting
+// default, not tuned against real usage yet.
+const CHECK_IN_CHUNK_SIZE = 20;
+
+function chunkArray(array, size) {
+  const chunks = [];
+  for (let i = 0; i < array.length; i += size) chunks.push(array.slice(i, i + size));
+  return chunks;
+}
+
+// Catch Up's (spec 0015) "finish" action — the bulk write for every missed
+// day the owner never flagged, i.e. the ones still just "assumed Great
+// Day". Same rule as markGreatDay (explicit baseline row per counted
+// category, prior observations cleared first) but batched across
+// potentially dozens of days. Split into chunks of CHECK_IN_CHUNK_SIZE days
+// per save_daily_check_ins call (spec 0016) — each chunk is atomic (all its
+// days save together or none do), and chunks run sequentially (not
+// parallel) so a failure's exact position is always known: every chunk
+// before it is saved for real, and the failed chunk (and anything after)
+// is not, leaving Catch Up's resume-from-any-point design to handle the
+// rest normally.
+export async function markGreatDaysBulk(petId, dates, source = 'catch_up') {
+  if (dates.length === 0) return { checkIns: [] };
+  const catalog = await loadObservationCatalog();
+  const observations = buildBaselineObservations(catalog);
+  const completedAt = new Date().toISOString();
+
+  const checkIns = [];
+  for (const dateChunk of chunkArray(dates, CHECK_IN_CHUNK_SIZE)) {
+    const payloads = dateChunk.map((date) => ({
+      pet_id: petId,
+      check_in_date: date,
+      status: 'great',
+      symptom_count: 0,
+      completed_at: completedAt,
+      source,
+      observations,
+    }));
+    const { data, error } = await supabase.rpc('save_daily_check_ins', { payloads });
+    if (error) throw error;
+    checkIns.push(...data);
   }
-  if (baselineRows.length > 0) await entities.Observation.bulkCreate(baselineRows);
 
   return { checkIns };
 }
@@ -442,19 +436,15 @@ export async function markSkipped(petId, date = todayStr(), source = 'app') {
 // or downstream processing distinguishes them (spec Core Model I): the
 // only difference is which label gets stored and, by extension, symptom
 // count math is identical for both.
-export async function markOffTough(petId, date, status, selections, source = 'app') {
-  const catalog = await loadObservationCatalog();
-  const checkIn = await entities.DailyCheckIn.upsert(
-    { pet_id: petId, check_in_date: date, status, completed_at: new Date().toISOString(), source },
-    'pet_id,check_in_date',
-  );
-
-  const { error: deleteError } = await supabase
-    .from('observations')
-    .delete()
-    .eq('daily_check_in_id', checkIn.id);
-  if (deleteError) throw deleteError;
-
+//
+// Shared by markOffTough and markOffToughBulk (spec 0016 — BulkApplySheet's
+// multi-day apply shares one set of selections across every date, so this
+// only needs to run once per save rather than once per date). Resolves
+// every counted category against `selections` (an omitted or empty one
+// just means "no symptoms today" — a real, explicit baseline row, not an
+// absence) plus the optional Weight/Other pass-through, and tallies
+// symptomCounts per category as it goes.
+function buildObservationRows(catalog, selections) {
   const selectionsByCode = Object.fromEntries(selections.map((sel) => [sel.code, sel]));
   const rows = []; // { code, value, notes, photoUrl }
   const symptomCounts = {}; // code -> count of non-baseline, non-"Not Observed" symptoms today
@@ -491,29 +481,78 @@ export async function markOffTough(petId, date, status, selections, source = 'ap
     rows.push({ code: sel.code, value: sel.value ?? null, numericValue: sel.numericValue ?? null, notes: sel.notes || null, photoUrl: sel.photoUrl || null });
   }
 
-  // Single bulk insert rather than N individual creates — one round trip
-  // instead of up to 13, and one atomic SQL statement instead of N
-  // independently-failable network calls.
-  const dbRows = rows.map((row) => {
+  return { rows, symptomCounts };
+}
+
+// Turns buildObservationRows' intermediate { code, value, ... } rows into
+// the flat shape save_daily_check_ins (migration 0034) expects nested under
+// a day's `observations` key.
+function rowsToObservationPayload(catalog, rows) {
+  return rows.map((row) => {
     const entry = catalog[row.code];
     return entry && {
-      pet_id: petId,
-      daily_check_in_id: checkIn.id,
       observation_type_id: entry.type.id,
       value: row.value ?? null,
       numeric_value: row.numericValue ?? null,
       notes: row.notes || null,
       photo_url: row.photoUrl || null,
-      observed_at: new Date().toISOString(),
     };
   }).filter(Boolean);
-  if (dbRows.length > 0) await entities.Observation.bulkCreate(dbRows);
+}
 
-  // markOffTough resolves every counted category for the full day (see the
-  // MULTI_SELECT_CODES loop above), so this is always a full recalculation
-  // of the day's symptom count, never an incremental patch.
+export async function markOffTough(petId, date, status, selections, source = 'app') {
+  const catalog = await loadObservationCatalog();
+  const { rows, symptomCounts } = buildObservationRows(catalog, selections);
+  // markOffTough resolves every counted category for the full day (see
+  // buildObservationRows), so this is always a full recalculation of the
+  // day's symptom count, never an incremental patch.
   const symptomCount = computeSymptomCount(symptomCounts);
-  await entities.DailyCheckIn.update(checkIn.id, { symptom_count: symptomCount });
 
-  return { checkIn: { ...checkIn, symptom_count: symptomCount }, symptomCount };
+  const payload = {
+    pet_id: petId,
+    check_in_date: date,
+    status,
+    symptom_count: symptomCount,
+    completed_at: new Date().toISOString(),
+    source,
+    observations: rowsToObservationPayload(catalog, rows),
+  };
+
+  const { data, error } = await supabase.rpc('save_daily_check_ins', { payloads: [payload] });
+  if (error) throw error;
+
+  return { checkIn: data[0], symptomCount };
+}
+
+// BulkApplySheet.jsx's multi-day apply (spec 0016) — every date in one
+// bulk-apply session shares the same status and selections (a bulk-flagged
+// day is never "Great" by definition), so buildObservationRows only needs
+// to run once, not once per date. Chunked the same way as markGreatDaysBulk
+// (CHECK_IN_CHUNK_SIZE per call, sequential, not parallel) so a failure's
+// exact position is always known and each chunk's write is atomic.
+export async function markOffToughBulk(petId, dates, status, selections, source = 'catch_up') {
+  if (dates.length === 0) return { checkIns: [] };
+  const catalog = await loadObservationCatalog();
+  const { rows, symptomCounts } = buildObservationRows(catalog, selections);
+  const symptomCount = computeSymptomCount(symptomCounts);
+  const observations = rowsToObservationPayload(catalog, rows);
+  const completedAt = new Date().toISOString();
+
+  const checkIns = [];
+  for (const dateChunk of chunkArray(dates, CHECK_IN_CHUNK_SIZE)) {
+    const payloads = dateChunk.map((date) => ({
+      pet_id: petId,
+      check_in_date: date,
+      status,
+      symptom_count: symptomCount,
+      completed_at: completedAt,
+      source,
+      observations,
+    }));
+    const { data, error } = await supabase.rpc('save_daily_check_ins', { payloads });
+    if (error) throw error;
+    checkIns.push(...data);
+  }
+
+  return { checkIns, symptomCount };
 }
