@@ -230,6 +230,8 @@ Deploy Edge Functions via CLI
 
 **Corrected 2026-07-21** — this section previously said local dev and production shared one Supabase project. That was already false: three separate projects exist (`Whisker-Watch` prod, `wysker-watch-dev`, `wysker-watch-staging`), and local `.env` points at `wysker-watch-dev` (confirmed via `supabase projects list`/`api-keys` and `.env.example`, which documents which project each deploy target should use). No deploy pipeline currently wires `wysker-watch-staging` to a branch/environment automatically — that project exists but isn't yet integrated into the build process.
 
+**Migration history intentionally diverges between projects.** `0003`, `0007`, and `0027` contain one-time inserts of real personal pet data tied to specific production `user_id`s — they were deliberately never run on `wysker-watch-dev`/`wysker-watch-staging` and are reconciled there via `supabase migration repair --status applied` (marks them resolved without executing their SQL) rather than run. If `supabase db push` on dev/staging ever refuses with "Found local migration files to be inserted before the last migration," check whether the blocking file is one of these three (or a similar prod-only data migration) before reaching for `--include-all` — that flag would actually try to run them.
+
 Frontend
 
 Use Vite build
