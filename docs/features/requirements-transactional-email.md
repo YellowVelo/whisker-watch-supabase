@@ -1,7 +1,7 @@
 # Requirements: Transactional Email System
 
 **Status:** Implemented (07-07/07-08), undocumented. This doc describes the system as built, including two security fixes already applied.
-**Source files:** [supabase/functions/send-email/index.ts](../../supabase/functions/send-email/index.ts), [supabase/functions/_shared/email/](../../supabase/functions/_shared/email/), migrations `0018`–`0020`.
+**Source files:** [supabase/functions/send-email/index.ts](../../supabase/functions/send-email/index.ts), [supabase/functions/_shared/email/](../../supabase/functions/_shared/email/), migrations `0018`–`0020`. Delivery/bounce/complaint tracking (Business Rule 4 below) was added later — see [0020_Resend_Bounce_Delivery_Webhook_Specification_v1.md](0020_Resend_Bounce_Delivery_Webhook_Specification_v1.md), migration `0038`.
 
 ## Purpose
 
@@ -35,7 +35,7 @@ Every outbound transactional email (co-owner invitations + reminders, welcome, v
 1. **`send-email` (the HTTP endpoint) is service-role-only, full stop.** Templates accept an arbitrary `to` and CTA URL; allowing a regular user session to call this would let any account send Wysker-Watch-branded phishing email to any third party. This is the subject of security fix #1 (JWT role-claim check replacing key comparison — see below).
 2. **CTA URLs must resolve through the shared allowlist check, never be inserted raw.** This is the subject of security fix #2: an earlier version of the allowlist included `wyskerwatch.app`, a domain the project doesn't actually own, caught via a broken link in a test welcome email. The allowlist now only contains domains actually owned (`www.wyskerwatch.com`).
 3. **`email_logs` stores metadata only, never rendered HTML/text body.** The template name + variables used to generate an email already live with the workflow that triggered it (e.g. the `pet_co_owners` invite row), so this table doesn't become a second place PII-bearing email content has to be protected.
-4. **A row's `status: 'sent'` means "accepted by Resend," not "confirmed delivered."** There's no Resend webhook receiver updating rows after acceptance — a known, deliberate gap, not an oversight.
+4. **A row's `status: 'sent'` still means "accepted by Resend" at send time** — but `delivered_at`/`bounced_at`/`complained_at` (added migration `0038`) are filled in later, asynchronously, by the `resend-webhook` Edge Function once Resend reports what actually happened. A hard bounce or spam complaint also adds the recipient address to `email_suppressions`, which `sendEmail()` checks before every future send. See [0020_Resend_Bounce_Delivery_Webhook_Specification_v1.md](0020_Resend_Bounce_Delivery_Webhook_Specification_v1.md).
 5. **Test/demo send-suppression lives inside `sendEmail()` itself** (centralized 2026-07-24 — see [requirements-centralized-email-suppression.md](requirements-centralized-email-suppression.md)). A caller passes `sentByUserId` (the id of the `profiles` row responsible for triggering the send); if that account's `account_type` is `test`/`demo`, `sendEmail()` skips Resend entirely and logs the attempt with `status: 'suppressed'` instead of `'sent'`. Callers with no single acting user (e.g. an ops call through `send-email` with no `sentByUserId`) simply get no suppression check, same as before this existed. `invite-co-owner`/`invite-sitter` no longer do this check themselves — they pass `sentByUserId` and read `result.suppressed` back.
 6. **`{{key}}` tokens for unknown variables are left as literal text, not silently dropped** — a typo'd variable name should be visibly wrong in a preview/QA send, not vanish.
 
@@ -57,7 +57,7 @@ Every outbound transactional email (co-owner invitations + reminders, welcome, v
 - Two overlapping requests with the same `idempotencyKey`: one claims the row (`pending`), the other sees `in_progress` and returns without sending — never a double send, but also never a fabricated `messageId` for the losing request.
 - A retried request after a prior *failure* for the same key is allowed to re-claim (`failed` → `pending`), unlike a prior *success*, which always replays without resending.
 - A CTA variable pointing at `http://` (not `https://`) for a non-localhost host is rejected outright, even if the host itself is allowlisted.
-- Resend accepts the send but the message later bounces or is marked spam — `email_logs` has no way to reflect this today (no webhook receiver); don't assume `status = 'sent'` means the user actually received it.
+- Resend accepts the send but the message later bounces or is marked spam — this is now tracked: `resend-webhook` updates `email_logs`'s `bounced_at`/`complained_at` and adds the address to `email_suppressions` (migration `0038`). Still don't assume `status = 'sent'` alone means the user received it — check the delivery-lifecycle columns.
 
 ## Implementation Notes for Claude Code
 

@@ -97,7 +97,7 @@ No mockups or screenshots apply — this is backend delivery-logic plumbing with
 
 ## Non-Goals
 
-- **Not building the Resend bounce/delivery webhook.** Separate P2 item, separate spec.
+- **Not building the Resend bounce/delivery webhook.** Separate P2 item, separate spec. (This was built later — see [0020_Resend_Bounce_Delivery_Webhook_Specification_v1.md](0020_Resend_Bounce_Delivery_Webhook_Specification_v1.md), migration `0038`.)
 - **Not fixing the P5 lowercase-string-literal vs. shared-constants inconsistency.** The literal comparison moves to one place; it isn't replaced with the frontend's shared helper (which Edge Functions structurally can't import).
 - **Not changing `delete-account/index.ts`'s account_type check.** Confirmed out of scope — different purpose (blocking a destructive action, not suppressing an email), left as-is.
 - **Not adding suppression to the `send-email` HTTP endpoint's real behavior** beyond optionally accepting the new parameter — no current caller of that endpoint has an acting user to pass.
