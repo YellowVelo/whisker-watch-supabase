@@ -259,19 +259,26 @@ Deno.serve(async (req) => {
     let sentByUserId: string | undefined;
 
     if (action === 'signup') {
-      const { data: linkData, error: linkError } = await adminClient.auth.admin.generateLink({
-        type: 'signup',
+      // Deliberately NOT generateLink({type:'signup'}) — despite mirroring
+      // invite-co-owner's admin-API pattern, that call turned out (verified
+      // in production 2026-07-26, not just documented behavior) to still
+      // trigger Supabase's own built-in confirmation email, unlike
+      // 'invite'/'recovery' types. That defeated the entire point of this
+      // spec: the user got BOTH Supabase's generic default email AND our
+      // branded one for the same signup. createUser() is a pure admin
+      // operation with no email side effect, and the 'recovery'-type
+      // generateLink call below is the same mechanism the 'resend' path
+      // already uses safely — see resolveConfirmationResend().
+      const { data: createData, error: createError } = await adminClient.auth.admin.createUser({
         email: cleanEmail,
         password: password as string,
-        options: {
-          redirectTo: verifyPageUrl,
-          data: firstName ? { first_name: firstName } : undefined,
-        },
+        email_confirm: false,
+        user_metadata: firstName ? { first_name: firstName } : undefined,
       });
 
-      if (linkError) {
-        if (!isAlreadyRegisteredError(linkError)) {
-          console.error('generateLink (signup) error:', linkError);
+      if (createError) {
+        if (!isAlreadyRegisteredError(createError)) {
+          console.error('createUser (signup) error:', createError);
           return jsonResponse({ error: 'Unable to process this request right now' }, 500, cors);
         }
 
@@ -283,9 +290,18 @@ Deno.serve(async (req) => {
         }
         ({ tokenHash, tokenType, sentByUserId } = resend);
       } else {
-        sentByUserId = linkData?.user?.id;
-        tokenHash = linkData?.properties?.hashed_token;
-        tokenType = 'signup';
+        sentByUserId = createData?.user?.id;
+        const { data: linkData, error: linkError } = await adminClient.auth.admin.generateLink({
+          type: 'recovery',
+          email: cleanEmail,
+          options: { redirectTo: verifyPageUrl },
+        });
+        if (linkError || !linkData?.properties?.hashed_token) {
+          console.error('generateLink (recovery, post-createUser) error:', linkError);
+          return jsonResponse({ error: 'Unable to process this request right now' }, 500, cors);
+        }
+        tokenHash = linkData.properties.hashed_token;
+        tokenType = 'recovery';
       }
     } else {
       // action === 'resend'

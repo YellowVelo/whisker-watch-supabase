@@ -15,13 +15,13 @@ export function normalizeEmail(email: string): string {
 
 // Wysker Watch's own domain — CTA links in transactional email must
 // only ever point back into the product, never to an arbitrary
-// caller-supplied host. www.wyskerwatch.com is the only domain
-// currently owned/hosting the app (confirmed 2026-07-08 — an earlier
-// version of this list also allowed wyskerwatch.app, which is not
-// actually owned and was caught via a bad CTA link in a test email).
-// Override/extend via the EMAIL_LINK_ALLOWED_HOSTS secret
+// caller-supplied host. wyskerwatch.com (bare, not www.) is the real
+// production domain — www. redirects to it (confirmed 2026-07-26; an
+// earlier version of this list also allowed wyskerwatch.app, which is
+// not actually owned and was caught via a bad CTA link in a test
+// email). Override/extend via the EMAIL_LINK_ALLOWED_HOSTS secret
 // (comma-separated) if another first-party host is added later.
-const DEFAULT_ALLOWED_URL_HOSTS = ['www.wyskerwatch.com'];
+const DEFAULT_ALLOWED_URL_HOSTS = ['wyskerwatch.com'];
 
 // Validates a URL variable (accept_url, verify_url, reset_url, app_url)
 // before it's inserted into an href. Rejects non-http(s) schemes
