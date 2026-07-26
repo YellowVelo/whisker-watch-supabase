@@ -6,6 +6,7 @@ import VibeIcon from '@/components/VibeIcon';
 import DailyCheckInSheet from '@/components/DailyCheckInSheet';
 import BulkApplySheet from './BulkApplySheet';
 import { getCheckInsForDateRange, markGreatDaysBulk } from '@/lib/checkin/checkinClient';
+import { friendlyErrorMessage } from '@/lib/demoWriteGuard';
 import { track } from '@/lib/analytics';
 
 // Spec 0015 (Multi-Day Catch-Up Check-In). Calendar/exceptions UI (PR 2)
@@ -193,7 +194,7 @@ export default function CatchUpFlow({ pets, missedDaysByPet, onClose, onPetProgr
       setStep('complete');
     } catch (err) {
       console.error(err);
-      setFinishError("Couldn't finish catch up — check your connection and try again.");
+      setFinishError(friendlyErrorMessage(err, "Couldn't finish catch up — check your connection and try again."));
     } finally {
       setFinishing(false);
     }

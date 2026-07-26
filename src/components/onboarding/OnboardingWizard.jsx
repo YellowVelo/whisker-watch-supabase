@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 import { entities } from '@/api/entities';
+import { friendlyErrorMessage } from '@/lib/demoWriteGuard';
 import { track } from '@/lib/analytics';
 import ChoiceCard from './ChoiceCard';
 import ConditionsCard from './ConditionsCard';
@@ -60,7 +61,7 @@ export default function OnboardingWizard({ pet, row, onRowChange, onComplete }) 
       await fn();
     } catch (err) {
       console.error('Failed to save onboarding step:', err);
-      setSaveError("Couldn't save that — check your connection and try again.");
+      setSaveError(friendlyErrorMessage(err, "Couldn't save that — check your connection and try again."));
     } finally {
       savingRef.current = false;
       setSaving(false);

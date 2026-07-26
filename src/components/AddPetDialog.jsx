@@ -8,6 +8,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { uploadFile } from '@/api/storageClient';
 import { entities } from '@/api/entities';
+import { friendlyErrorMessage } from '@/lib/demoWriteGuard';
 import { track } from '@/lib/analytics';
 import { computeLifeStage } from '@/lib/lifeStage';
 import { getOrCreatePetOnboarding } from '@/lib/onboardingClient';
@@ -206,7 +207,7 @@ export default function AddPetDialog({ open, onOpenChange, onSuccess, returnTo =
     } catch (err) {
       console.error('Failed to save pet:', err);
       setSaving(false);
-      setError('Unable to create pet. Please try again.');
+      setError(friendlyErrorMessage(err, 'Unable to create pet. Please try again.'));
       return;
     }
 

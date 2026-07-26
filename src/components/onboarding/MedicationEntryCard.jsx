@@ -6,6 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import SmartSelect from '@/components/SmartSelect';
 import { entities } from '@/api/entities';
+import { friendlyErrorMessage } from '@/lib/demoWriteGuard';
 import { FREQUENCY_OPTIONS } from '@/lib/onboardingConfig';
 
 const emptyEntry = (petId) => ({ pet_id: petId, name: '', dosage: '', frequency: '', reminder_enabled: false });
@@ -37,7 +38,7 @@ export default function MedicationEntryCard({ petId, petName, onContinue, onSkip
       return created;
     } catch (err) {
       console.error('Failed to save medication:', err);
-      setError("Couldn't save that medication — check your connection and try again.");
+      setError(friendlyErrorMessage(err, "Couldn't save that medication — check your connection and try again."));
       return null;
     } finally {
       setSaving(false);

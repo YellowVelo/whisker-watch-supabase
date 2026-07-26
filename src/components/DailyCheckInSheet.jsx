@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { X, Loader2 } from 'lucide-react';
 import { CATEGORIES, getOptionsForSpecies, getCategory } from '@/lib/checkin/config';
 import { markGreatDay, markSkipped, markOffTough } from '@/lib/checkin/checkinClient';
+import { friendlyErrorMessage } from '@/lib/demoWriteGuard';
 import { track } from '@/lib/analytics';
 import { Textarea } from '@/components/ui/textarea';
 import { PALETTE } from '@/lib/toneColors';
@@ -76,7 +77,7 @@ export default function DailyCheckInSheet({ pet, date, onClose, onSaved, isCatch
       onSaved?.();
     } catch (err) {
       console.error(err);
-      setError('Unable to save check-in. Please try again.');
+      setError(friendlyErrorMessage(err, 'Unable to save check-in. Please try again.'));
       setStage('initial');
     }
   };
@@ -96,7 +97,7 @@ export default function DailyCheckInSheet({ pet, date, onClose, onSaved, isCatch
       onSaved?.();
     } catch (err) {
       console.error(err);
-      setError('Unable to save check-in. Please try again.');
+      setError(friendlyErrorMessage(err, 'Unable to save check-in. Please try again.'));
       setStage('initial');
     }
   };
@@ -138,7 +139,7 @@ export default function DailyCheckInSheet({ pet, date, onClose, onSaved, isCatch
       onSaved?.();
     } catch (err) {
       console.error(err);
-      setError('Unable to save check-in. Please try again.');
+      setError(friendlyErrorMessage(err, 'Unable to save check-in. Please try again.'));
       setStage('details');
     }
   };
