@@ -83,6 +83,30 @@ Deno.serve(async (req) => {
     // sitter) owns.
     const adminClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
+    // ── Guard: demo accounts cannot invite a sitter ──────────────────────
+    // This runs under the service-role client, which bypasses RLS (and the
+    // prevent_demo_account_writes trigger, which only sees writes made
+    // under the caller's own session) — so this check is the only thing
+    // stopping a demo account here if this endpoint is called directly.
+    const { data: callerAccount, error: accountError } = await adminClient
+      .from('profiles')
+      .select('account_type')
+      .eq('id', userData.user.id)
+      .single();
+
+    if (accountError || !callerAccount) {
+      return new Response(JSON.stringify({ error: 'Failed to look up account' }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+    if (callerAccount.account_type === 'demo') {
+      return new Response(JSON.stringify({ error: 'This is a demo account and cannot invite a sitter.' }), {
+        status: 403,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     // Only needed here for the email body's owner_name — the
     // test/demo suppression check itself now lives in sendEmail()
     // (passed sentByUserId below), not here.
