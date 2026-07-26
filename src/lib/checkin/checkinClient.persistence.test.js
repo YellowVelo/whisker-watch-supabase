@@ -1,5 +1,13 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
+// markGreatDay/markGreatDaysBulk/markOffTough/markOffToughBulk now call
+// assertNotDemoAccount() (spec 0018) before writing — mocked as a no-op
+// here since these tests are about persistence-payload shape, not the
+// demo-account guard (which has its own coverage elsewhere).
+vi.mock('@/lib/demoWriteGuard', () => ({
+  assertNotDemoAccount: vi.fn().mockResolvedValue('user-1'),
+}));
+
 // Daily Check-In, Vibe & Trends (spec v5) — persistence tests for the two
 // signals that replace every prior score: Vibe (status) and Symptom Count.
 // entities/supabase are mocked so these exercise checkinClient.js's actual

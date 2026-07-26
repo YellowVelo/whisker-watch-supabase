@@ -1,50 +1,7 @@
 import { supabase } from './supabaseClient';
-import { isDemoAccount } from '@/lib/accountType';
-import { toast } from '@/components/ui/use-toast';
+import { assertNotDemoAccount } from '@/lib/demoWriteGuard';
 
-// Thrown by the demo-account write guard below. A dedicated class (rather
-// than a plain Error) lets any future caller recognize this specific case
-// with `instanceof`, though today nothing needs to — the toast is already
-// fired before this is thrown, so callers just need the promise to reject.
-export class DemoAccountBlockedError extends Error {}
-
-// account_type rarely changes mid-session, and writes can happen often —
-// cache it per user instead of re-querying profiles on every single write.
-// Mirrors the accountTypeCache pattern in src/lib/analytics.js.
-const accountTypeCache = new Map(); // userId -> { accountType, fetchedAt }
-const ACCOUNT_TYPE_CACHE_TTL_MS = 5 * 60 * 1000;
-
-// Demo accounts (account_type = 'demo') can view everything but must never
-// write — this is the single choke point (per Technical Standards, all data
-// access goes through entityClient.js) that enforces that. Returns the
-// caller's user id so create/bulkCreate/upsert can reuse it for created_by
-// instead of fetching it twice.
-async function assertNotDemoAccount() {
-  const { data: userData } = await supabase.auth.getUser();
-  const userId = userData?.user?.id;
-  if (!userId) return userId;
-
-  let accountType;
-  const cached = accountTypeCache.get(userId);
-  if (cached && Date.now() - cached.fetchedAt < ACCOUNT_TYPE_CACHE_TTL_MS) {
-    accountType = cached.accountType;
-  } else {
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('account_type')
-      .eq('id', userId)
-      .single();
-    accountType = profile?.account_type ?? 'production';
-    accountTypeCache.set(userId, { accountType, fetchedAt: Date.now() });
-  }
-
-  if (isDemoAccount({ account_type: accountType })) {
-    toast({ variant: 'destructive', description: "This is a demo — changes aren't saved here." });
-    throw new DemoAccountBlockedError('Demo accounts cannot write data');
-  }
-
-  return userId;
-}
+export { DemoAccountBlockedError } from '@/lib/demoWriteGuard';
 
 /**
  * Mimics the Base44 SDK's per-entity interface:
