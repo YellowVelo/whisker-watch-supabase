@@ -31,6 +31,8 @@
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import { sendEmail } from '../_shared/email/sendEmail.ts';
 import { EmailServiceError } from '../_shared/email/types.ts';
+import { getValidatedAppUrl } from '../_shared/appUrl.ts';
+import { isAlreadyRegisteredError } from '../_shared/authErrors.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!;
@@ -40,10 +42,6 @@ const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
-
-function isAlreadyRegisteredError(error) {
-  return error?.message?.toLowerCase().includes('already registered') || error?.status === 422;
-}
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -122,13 +120,10 @@ Deno.serve(async (req) => {
 
     // Use the app's own (owned) domain — required by the email system's
     // CTA allowlist (isSafeEmailUrl only permits www.wyskerwatch.com and
-    // localhost). Same trailing-slash/scheme guard as invite-co-owner.
-    const rawAppUrl = Deno.env.get('APP_URL') ?? 'https://www.wyskerwatch.com';
-    const appUrl = rawAppUrl.replace(/\/+$/, '');
-    try {
-      new URL(appUrl);
-    } catch {
-      console.error('APP_URL is not a valid absolute URL:', rawAppUrl);
+    // localhost). See _shared/appUrl.ts for the trailing-slash/scheme
+    // validation this shares with invite-co-owner and sign-up.
+    const appUrl = getValidatedAppUrl();
+    if (!appUrl) {
       return new Response(JSON.stringify({ error: 'Server misconfiguration: invalid APP_URL' }), {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },

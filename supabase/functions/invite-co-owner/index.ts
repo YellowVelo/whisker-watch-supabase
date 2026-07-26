@@ -51,6 +51,8 @@
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import { sendEmail } from '../_shared/email/sendEmail.ts';
 import { EmailServiceError } from '../_shared/email/types.ts';
+import { getValidatedAppUrl } from '../_shared/appUrl.ts';
+import { isAlreadyRegisteredError } from '../_shared/authErrors.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!;
@@ -60,10 +62,6 @@ const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
-
-function isAlreadyRegisteredError(error) {
-  return error?.message?.toLowerCase().includes('already registered') || error?.status === 422;
-}
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -114,18 +112,11 @@ Deno.serve(async (req) => {
     // Use the app's own (owned) domain — required by the email system's
     // CTA allowlist (isSafeEmailUrl only permits www.wyskerwatch.com and
     // localhost). This must match one of those allowed hosts or sendEmail
-    // below will reject accept_url as unsafe. Trailing slash(es) are
-    // stripped so `${appUrl}/accept-invite` never produces a double slash
-    // that the frontend's exact-match route wouldn't resolve; a missing
-    // scheme (e.g. APP_URL set to "www.wyskerwatch.com" instead of
-    // "https://www.wyskerwatch.com") is caught here with a clear error
-    // instead of failing later as an opaque "unsafe URL" rejection.
-    const rawAppUrl = Deno.env.get('APP_URL') ?? 'https://www.wyskerwatch.com';
-    const appUrl = rawAppUrl.replace(/\/+$/, '');
-    try {
-      new URL(appUrl);
-    } catch {
-      console.error('APP_URL is not a valid absolute URL:', rawAppUrl);
+    // below will reject accept_url as unsafe. See _shared/appUrl.ts for
+    // the trailing-slash/scheme validation this shares with invite-sitter
+    // and sign-up.
+    const appUrl = getValidatedAppUrl();
+    if (!appUrl) {
       return new Response(JSON.stringify({ error: 'Server misconfiguration: invalid APP_URL' }), {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },

@@ -6,11 +6,13 @@ import { Label } from '@/components/ui/label';
 import { Link } from 'react-router-dom';
 import { Loader2, Heart, MailCheck } from 'lucide-react';
 
-// Uses Supabase's default email-confirmation flow: signUp() sends a
-// confirmation link (not a 6-digit code). The user clicks it, lands
-// back in the app already authenticated, and AuthContext's
-// onAuthStateChange listener picks up the new session automatically.
-// No OTP-entry screen, no Supabase dashboard config required.
+// Calls the sign-up Edge Function (supabase/functions/sign-up/index.ts)
+// instead of supabase.auth.signUp() directly, so the confirmation email
+// is our own branded template (via Resend) instead of Supabase's default
+// one — see docs/features/0021_Branded_Signup_Confirmation_Email_Specification_v1.md.
+// The function creates the account server-side and sends a link to
+// /verify-email; clicking it lands the user back in the app already
+// authenticated, the same end result as the old flow.
 export default function Register() {
   const [firstName, setFirstName] = useState('');
   const [email, setEmail] = useState('');
@@ -23,17 +25,23 @@ export default function Register() {
   const handleRegister = async (e) => {
     e.preventDefault();
     if (password !== confirm) { setError('Passwords do not match'); return; }
+    if (password.length < 8) { setError('Password must be at least 8 characters'); return; }
     setLoading(true); setError('');
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        emailRedirectTo: window.location.origin,
-        data: { first_name: firstName.trim() || undefined },
+    const { error } = await supabase.functions.invoke('sign-up', {
+      body: {
+        action: 'signup',
+        email,
+        password,
+        first_name: firstName.trim() || undefined,
       },
     });
     if (error) {
-      setError(error.message || 'Registration failed');
+      // The Edge Function returns a JSON { error } body on non-2xx
+      // responses (bad input, rate-limited, provider failure) — supabase-js
+      // doesn't surface that message on `error` itself, so read it from the
+      // raw response when available, falling back to a generic message.
+      const serverMessage = await error?.context?.json?.().then((b) => b?.error).catch(() => null);
+      setError(serverMessage || 'Registration failed. Please try again.');
       setLoading(false);
       return;
     }
