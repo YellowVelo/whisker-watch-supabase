@@ -48,17 +48,3 @@ export async function assertNotDemoAccount() {
 
   return userId;
 }
-
-// Shared copy for every inline "something went wrong" message a write flow
-// shows — one place to keep this consistent, per the product decision that
-// a blocked demo write must always say *why*, not just "try again" (which
-// reads as transient and invites retrying something that will never work).
-export const DEMO_BLOCKED_MESSAGE = "This is a demo — changes aren't saved here.";
-
-// For call sites that catch a write error and set their own inline message
-// (rather than relying solely on the toast assertNotDemoAccount already
-// fired): swap in the demo-specific message when that's what happened,
-// otherwise fall back to the caller's normal error text.
-export function friendlyErrorMessage(err, fallback) {
-  return err instanceof DemoAccountBlockedError ? DEMO_BLOCKED_MESSAGE : fallback;
-}

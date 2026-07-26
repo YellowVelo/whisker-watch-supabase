@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { X, Loader2 } from 'lucide-react';
 import { CATEGORIES, getOptionsForSpecies, getCategory } from '@/lib/checkin/config';
 import { markOffToughBulk } from '@/lib/checkin/checkinClient';
-import { friendlyErrorMessage } from '@/lib/demoWriteGuard';
+import { DemoAccountBlockedError } from '@/lib/demoWriteGuard';
 import { track } from '@/lib/analytics';
 import { Textarea } from '@/components/ui/textarea';
 import { PALETTE } from '@/lib/toneColors';
@@ -74,7 +74,11 @@ export default function BulkApplySheet({ pet, dates, onClose, onSaved }) {
       onSaved?.(dates);
     } catch (err) {
       console.error(err);
-      setError(friendlyErrorMessage(err, 'Unable to save some of these days. Please try again.'));
+      // A blocked demo write already showed its own toast (demoWriteGuard.js)
+      // — no need to duplicate that message in this inline banner too.
+      if (!(err instanceof DemoAccountBlockedError)) {
+        setError('Unable to save some of these days. Please try again.');
+      }
       setStage('details');
     }
   };

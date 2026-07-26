@@ -6,7 +6,7 @@ import VibeIcon from '@/components/VibeIcon';
 import DailyCheckInSheet from '@/components/DailyCheckInSheet';
 import BulkApplySheet from './BulkApplySheet';
 import { getCheckInsForDateRange, markGreatDaysBulk } from '@/lib/checkin/checkinClient';
-import { friendlyErrorMessage } from '@/lib/demoWriteGuard';
+import { DemoAccountBlockedError } from '@/lib/demoWriteGuard';
 import { track } from '@/lib/analytics';
 
 // Spec 0015 (Multi-Day Catch-Up Check-In). Calendar/exceptions UI (PR 2)
@@ -194,7 +194,11 @@ export default function CatchUpFlow({ pets, missedDaysByPet, onClose, onPetProgr
       setStep('complete');
     } catch (err) {
       console.error(err);
-      setFinishError(friendlyErrorMessage(err, "Couldn't finish catch up — check your connection and try again."));
+      // A blocked demo write already showed its own toast (demoWriteGuard.js)
+      // — no need to duplicate that message in this inline banner too.
+      if (!(err instanceof DemoAccountBlockedError)) {
+        setFinishError("Couldn't finish catch up — check your connection and try again.");
+      }
     } finally {
       setFinishing(false);
     }
