@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { Sun, Minus, CloudRainWind, CloudHail, Clock } from 'lucide-react';
+import { Sun, Minus, Cloud, CloudLightning, Clock } from 'lucide-react';
 import { PALETTE } from '@/lib/toneColors';
 
 // One-line Daily Check-In status row nested directly under a pet's card on
@@ -7,10 +7,14 @@ import { PALETTE } from '@/lib/toneColors';
 // Check-Ins" list. Covers every state: not completed (tappable prompt),
 // Great/Off/Tough Day completed (links to Trends), and error — never
 // collapses these into one generic "done" state.
+//
+// Off/Tough icons match VibeIcon.jsx's Cloud/CloudLightning pair (spec
+// 0015) — this banner used to have its own older CloudRainWind/CloudHail
+// icons, which read as inconsistent next to the Pet Profile/Home cards.
 const CONFIG = {
   great: { Icon: Sun, color: PALETTE.teal, text: (name) => `${name} had a Great Day` },
-  off: { Icon: CloudRainWind, color: PALETTE.amber, text: (name) => `${name} had an Off Day` },
-  tough: { Icon: CloudHail, color: PALETTE.amber, text: (name) => `${name} had a Tough Day` },
+  off: { Icon: Cloud, color: PALETTE.amber, text: (name) => `${name} had an Off Day` },
+  tough: { Icon: CloudLightning, color: PALETTE.amber, text: (name) => `${name} had a Tough Day` },
   skipped: { Icon: Minus, color: 'rgba(255,255,255,0.4)', text: (name) => `${name} skipped today` },
 };
 
