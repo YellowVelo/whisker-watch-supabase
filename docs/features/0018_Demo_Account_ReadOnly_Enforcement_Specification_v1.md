@@ -1,6 +1,6 @@
 # 0018_Demo_Account_ReadOnly_Enforcement_Specification_v1
 
-**Status:** Draft
+**Status:** Implemented (2026-07-26). Live on `wysker-watch-dev`, `wysker-watch-staging`, and `Whisker-Watch` (prod).
 **Date:** 2026-07-25
 **Related files:** `src/api/entityClient.js`, `src/lib/accountType.js`, `src/components/AccountTypeBanner.jsx`, `src/components/InviteCoOwnerDialog.jsx`, `src/components/InviteSitterDialog.jsx`, `src/components/PetProfileContent.jsx`, `supabase/functions/delete-pet/index.ts`, `supabase/functions/invite-co-owner/index.ts`, `supabase/functions/invite-sitter/index.ts`, `docs/foundation/0006 Technical Standards.md`, `docs/launch-punch-list.md` (P2)
 

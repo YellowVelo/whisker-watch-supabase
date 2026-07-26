@@ -163,6 +163,8 @@ observation_types (1) ─── (N) observation_options, observations, pet_basel
 
 Every pet-scoped table's policies are `is_pet_owner(pet_id, auth.uid())` (migration 0004's `security definer` function), which returns true if the calling user is either the pet's `created_by` or a linked row in `pet_co_owners`. This means co-owners have full parity with the original owner everywhere, including delete, by design. Sitter access is a narrower, separate grant scoped only to `pet_sit_logs`/`pet_sitter_access` for a specific sitting period, matched by email or `sitter_user_id`. `observation_types`/`observation_options` are the only pet-adjacent tables with no owner scoping — they're global reference data. `profiles.role` and `profiles.account_type` can only be changed by a service-role process, never by the user themself.
 
+A separate trigger, `prevent_demo_account_writes()` (migration 0036), blocks writes from `account_type = 'demo'` sessions on 14 pet-scoped tables (`pets`, `daily_check_ins`, `observations`, `medications`, `vaccinations`, `bloodwork`, `pet_foods`, `pet_baselines`, `pet_onboarding`, `symptom_logs`, `food_logs`, `pet_co_owners`, `pet_sits`, `pet_sit_logs`, `pet_sitter_access`) — this is independent of and in addition to the `is_pet_owner()` RLS policies above, not a replacement for them.
+
 6. Baseline Model — current state (important, since two systems exist)
 
 There are two baseline mechanisms in the schema right now, at different levels of maturity:

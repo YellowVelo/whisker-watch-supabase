@@ -21,8 +21,8 @@ Current model in one line: `daily_check_ins.status` is `great` / `off` / `tough`
 - `src/api/aiClient.js` + `supabase/functions/ask-vet-assistant` — AI features via Anthropic API through a Supabase Edge Function
 - `src/lib/checkin/{scoring,config,chipLabels,checkinClient}.js` — current Vibe/symptom-count logic
 - `src/components/catchup/` (`CatchUpFlow.jsx`, `BulkApplySheet.jsx`) — multi-day Catch-Up Check-In UI (2+ missed days), see `0015_MultiDay_CatchUp_CheckIn_Specification_v1.md`. The single-day "catch up yesterday" flow still lives in `DailyCheckInSheet.jsx`/`DailyCheckInModal.jsx`, unchanged.
-- Deployed on Cloudflare Workers (`wrangler.jsonc`). A manual-deploy gate exists in the Cloudflare dashboard — not represented in-repo config.
-- Three separate Supabase projects exist: `Whisker-Watch` (prod), `wysker-watch-dev` (local dev), `wysker-watch-staging`. Local `.env` points at `wysker-watch-dev` — confirmed 2026-07-21, see `.env.example`. This corrects an earlier, stale version of this file that claimed local dev and prod shared one project.
+- Deployed on Cloudflare Workers (`wrangler.jsonc`). A manual-deploy gate exists in the Cloudflare dashboard — not represented in-repo config. **Frontend deploys are done manually by Lynn, not Claude.**
+- Three separate Supabase projects exist: `Whisker-Watch` (prod), `wysker-watch-dev` (local dev), `wysker-watch-staging`. Local `.env` points at `wysker-watch-dev` — confirmed 2026-07-21, see `.env.example`. This corrects an earlier, stale version of this file that claimed local dev and prod shared one project. **Backend changes (migrations, Edge Functions) should be pushed to all three projects as part of shipping — this is manual, not automated, and has been missed before (see `0006 Technical Standards.md` §11).**
 - CI (`.github/workflows/ci.yml`) runs lint/vitest/build + Edge Function integration tests, required on `main` via branch protection as of 2026-07-24 — note: this gates PR merges; an account with bypass permission can still push directly without CI blocking it (see `docs/launch-punch-list.md` P0).
 
 ## Working conventions

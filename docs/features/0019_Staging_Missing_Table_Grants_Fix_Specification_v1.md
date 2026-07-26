@@ -1,6 +1,6 @@
 # 0019_Staging_Missing_Table_Grants_Fix_Specification_v1
 
-**Status:** Draft
+**Status:** Implemented (2026-07-26). Migration 0035 applied to all three environments — confirmed via `supabase migration list` before each push, no migration-history conflicts on any project.
 **Date:** 2026-07-25
 **Related files:** `supabase/migrations/` (new migration), `docs/launch-punch-list.md` (P2)
 
