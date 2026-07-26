@@ -71,10 +71,24 @@ export interface SendEmailParams {
   sentByUserId?: string;
 }
 
-export interface SendEmailResult {
-  success: true;
-  messageId: string | null;
-  // True only when this send was skipped because sentByUserId resolved
-  // to a test/demo account — no Resend call was made.
-  suppressed?: boolean;
-}
+// A discriminated union, not an interface with optional fields: this
+// makes `suppressionReason` a compile-time-required companion of
+// `suppressed: true`, rather than a field a future suppression path in
+// sendEmail.ts could forget to set. Callers (invite-co-owner,
+// invite-sitter) branch on `result.suppressed` to narrow to the variant
+// that actually has `suppressionReason` — TypeScript will flag it if a
+// new sendEmail() code path ever returns `suppressed: true` without also
+// providing one of the two known reasons.
+export type SendEmailResult =
+  | { success: true; messageId: string | null; suppressed?: false }
+  | {
+      success: true;
+      messageId: null;
+      suppressed: true;
+      // 'test_or_demo_account': the sending account (sentByUserId) is
+      // test/demo. 'recipient_suppressed': the recipient address has a
+      // previously-bounced/complained-and-not-cleared row in
+      // email_suppressions (see the resend-webhook Edge Function and
+      // migration 0038).
+      suppressionReason: 'test_or_demo_account' | 'recipient_suppressed';
+    };

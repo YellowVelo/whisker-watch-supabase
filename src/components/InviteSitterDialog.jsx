@@ -58,8 +58,15 @@ export default function InviteSitterDialog({ petSitId, open, onOpenChange }) {
         setSuccessMsg(`${cleanEmail} added as a sitter, but the invite email could not be sent. Try inviting them again — if it keeps failing, they can also use "Forgot password" on the login screen with this email.`);
       } else if (fnResp.data?.reason === 'test_or_demo_account') {
         setSuccessMsg(`${cleanEmail} added as a sitter. No real email was sent (test/demo accounts don't send production email) — they'll see this pet sit on their next login.`);
-      } else if (fnResp.data?.sent === false) {
+      } else if (fnResp.data?.reason === 'recipient_suppressed') {
+        setSuccessMsg(`${cleanEmail} added as a sitter, but Wysker Watch couldn't email them — this address has previously failed to receive mail from us. They can still be reached another way to get set up with access.`);
+      } else if (fnResp.data?.reason === 'exists') {
         setSuccessMsg(`${cleanEmail} already has a Whisker Watch account and can now see this pet sit.`);
+      } else if (fnResp.data?.sent === false) {
+        // Defensive fallback for a reason value not handled above (e.g. a
+        // future suppression cause sendEmail() forgot to label) — see
+        // InviteCoOwnerDialog.jsx's matching branch for the full rationale.
+        setSuccessMsg(`${cleanEmail} added as a sitter, but no invite email was sent. Try inviting them again if this seems wrong.`);
       } else {
         setSuccessMsg(`Invite sent to ${cleanEmail}!`);
       }

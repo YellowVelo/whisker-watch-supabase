@@ -80,13 +80,22 @@ export default function InviteCoOwnerDialog({ petId, petName, open, onOpenChange
       setSuccessMsg(`${cleanEmail} added as co-owner, but the invite email could not be sent. Try inviting them again — if it keeps failing, they can also use "Forgot password" on the login screen with this email.`);
     } else if (fnResp.data?.reason === 'test_or_demo_account') {
       setSuccessMsg(`${cleanEmail} added as co-owner. No real email was sent (test/demo accounts don't send production email) — they'll see ${petName || 'the pet'} on their next login.`);
-    } else if (fnResp.data?.sent === false) {
+    } else if (fnResp.data?.reason === 'recipient_suppressed') {
+      setSuccessMsg(`${cleanEmail} added as co-owner, but Wysker Watch couldn't email them — this address has previously failed to receive mail from us. They can still be reached another way to get set up with access.`);
+    } else if (fnResp.data?.reason === 'exists') {
       // By this point invite-co-owner has already checked
       // email_has_password() and confirmed this is a genuinely
       // registered account, not just a stuck pending invite (those now
       // get a real re-invite email sent automatically instead of
       // landing here — see the Edge Function's header comment).
       setSuccessMsg(`${cleanEmail} already has a Whisker Watch account and can now see ${petName || 'this pet'}.`);
+    } else if (fnResp.data?.sent === false) {
+      // Defensive fallback for a reason value not handled above (e.g. a
+      // future suppression cause sendEmail() forgot to label). Showing
+      // this generic, honest copy is deliberately safer than falling
+      // through to the "already has an account" message above, which
+      // would be actively false for a case this branch doesn't recognize.
+      setSuccessMsg(`${cleanEmail} added as co-owner, but no invite email was sent. Try inviting them again if this seems wrong.`);
     } else {
       setSuccessMsg(`Invite sent to ${cleanEmail}!`);
     }

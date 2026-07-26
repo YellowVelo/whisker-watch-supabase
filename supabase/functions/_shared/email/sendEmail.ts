@@ -12,11 +12,11 @@
 // is still logged). It never throws the raw Resend error message;
 // callers only ever see one of the EmailErrorCode values.
 //
-// Known, deliberately deferred gaps (not implemented here):
-//   - Updating email_logs after Resend accepts a message but delivery
-//     later bounces/fails (would require a Resend webhook receiver).
-//     A row's `status: 'sent'` therefore means "accepted by the
-//     provider," not "confirmed delivered."
+// A row's `status: 'sent'` means "accepted by the provider," not
+// "confirmed delivered" — the resend-webhook Edge Function (migration
+// 0038) updates delivered_at/bounced_at/complained_at on this same row
+// later, asynchronously, once Resend reports what actually happened.
+// See docs/features/0020_Resend_Bounce_Delivery_Webhook_Specification_v1.md.
 
 import { createClient, type SupabaseClient } from 'jsr:@supabase/supabase-js@2';
 import { renderTemplate } from './renderTemplate.ts';
@@ -161,18 +161,34 @@ export async function sendEmail(params: SendEmailParams): Promise<SendEmailResul
 
   const admin = getAdminClient();
 
-  // Test/demo accounts must never trigger a real outbound email. This
-  // is checked (and logged) before the idempotency claim, template
-  // render, or anything Resend-related — a suppressed send never gets
-  // that far. sentByUserId is optional: a caller with no single acting
-  // user (e.g. an ops/scheduled call through the send-email endpoint)
-  // just gets no suppression check, same as before this existed.
+  // Test/demo-account suppression and recipient-address suppression are
+  // two independent lookups (one keyed on sentByUserId against profiles,
+  // one keyed on recipientEmail against email_suppressions) — kicked off
+  // together via Promise.all rather than one fully awaited before the
+  // other starts, so a real send only pays for one network round-trip's
+  // worth of latency here, not two. Both are still checked (and logged)
+  // before the idempotency claim, template render, or anything
+  // Resend-related — a suppressed send never gets that far.
+  const suppressionQuery = admin
+    .from('email_suppressions')
+    .select('reason')
+    .eq('email', recipientEmail)
+    .is('cleared_at', null)
+    .maybeSingle();
+
+  let suppressionResult: Awaited<typeof suppressionQuery>;
+
+  // sentByUserId is optional: a caller with no single acting user (e.g.
+  // an ops/scheduled call through the send-email endpoint) just gets no
+  // account-type suppression check, same as before this existed.
   if (sentByUserId) {
-    const { data: senderProfile } = await admin
-      .from('profiles')
-      .select('account_type')
-      .eq('id', sentByUserId)
-      .single();
+    const [profileResult, resolvedSuppression] = await Promise.all([
+      admin.from('profiles').select('account_type').eq('id', sentByUserId).single(),
+      suppressionQuery,
+    ]);
+    suppressionResult = resolvedSuppression;
+
+    const senderProfile = profileResult.data;
     if (senderProfile?.account_type === 'test' || senderProfile?.account_type === 'demo') {
       await insertLog(admin, {
         recipientEmail,
@@ -181,8 +197,49 @@ export async function sendEmail(params: SendEmailParams): Promise<SendEmailResul
         relatedEntityType,
         relatedEntityId,
       });
-      return { success: true, messageId: null, suppressed: true };
+      return { success: true, messageId: null, suppressed: true, suppressionReason: 'test_or_demo_account' };
     }
+  } else {
+    suppressionResult = await suppressionQuery;
+  }
+
+  // Recipient-address suppression: an address that previously hard-
+  // bounced or was reported as spam (see migration 0038 and the
+  // resend-webhook Edge Function) and hasn't since been cleared via
+  // clear-email-suppression. This applies to every caller, regardless of
+  // sentByUserId — a dead/complaining address is a property of the
+  // recipient, not the sender. A lookup failure here fails closed (does
+  // NOT proceed to send) — sending to a known-bad address is worse than
+  // a delayed send, the same posture as a missing RESEND_API_KEY below.
+  const { data: suppressionRow, error: suppressionError } = suppressionResult;
+
+  if (suppressionError) {
+    console.error('email_suppressions lookup failed:', suppressionError.message);
+    await insertLog(admin, {
+      recipientEmail,
+      templateName,
+      status: 'failed',
+      errorCode: 'provider_error',
+      errorMessage: 'Unable to verify recipient suppression status',
+      relatedEntityType,
+      relatedEntityId,
+    });
+    throw new EmailServiceError('provider_error', 'Unable to process this request right now');
+  }
+
+  if (suppressionRow) {
+    await insertLog(admin, {
+      recipientEmail,
+      templateName,
+      status: 'suppressed',
+      errorMessage:
+        suppressionRow.reason === 'bounced'
+          ? 'recipient previously hard-bounced'
+          : 'recipient previously complained',
+      relatedEntityType,
+      relatedEntityId,
+    });
+    return { success: true, messageId: null, suppressed: true, suppressionReason: 'recipient_suppressed' };
   }
 
   let claimedLogId: string | null = null;

@@ -25,6 +25,7 @@
 //   { sent: true }                        — invite (or re-invite) email sent
 //   { sent: false, reason: 'exists' }     — already a registered Whisker Watch user
 //   { sent: false, reason: 'test_or_demo_account' } — inviter is test/demo, no real email sent
+//   { sent: false, reason: 'recipient_suppressed' } — invitee's address previously bounced/complained, no real email sent
 //   { error: string }                     — something went wrong
 
 import { createClient } from 'jsr:@supabase/supabase-js@2';
@@ -265,7 +266,11 @@ Deno.serve(async (req) => {
       });
 
       if (emailResult.suppressed) {
-        return new Response(JSON.stringify({ sent: false, reason: 'test_or_demo_account' }), {
+        // suppressionReason distinguishes "sending account is test/demo"
+        // from "this recipient address previously bounced/complained" —
+        // see types.ts. The two mean different things to the frontend
+        // (InviteSitterDialog.jsx branches on this reason string).
+        return new Response(JSON.stringify({ sent: false, reason: emailResult.suppressionReason }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
