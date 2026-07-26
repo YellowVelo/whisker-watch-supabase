@@ -21,7 +21,6 @@
 
 import { entities } from '@/api/entities';
 import { supabase } from '@/api/supabaseClient';
-import { assertNotDemoAccount } from '@/lib/demoWriteGuard';
 import { resolveDailyAttributeCount, computeAttributeDirection, computeSymptomCount } from './scoring';
 import { CATEGORIES, getCategory, HEALTH_ATTRIBUTES, WELLBEING_ATTRIBUTES, COUNTED_CATEGORIES } from './config';
 import { todayInTimezone, yesterdayInTimezone, dateStrInTimezone, dateStrForInstant } from '@/lib/timezone';
@@ -340,7 +339,6 @@ function buildBaselineObservations(catalog) {
 // atomic call (spec 0016), so a failure partway through can no longer
 // leave the check-in row saved without its observations.
 export async function markGreatDay(petId, date = todayStr(), source = 'app') {
-  await assertNotDemoAccount();
   const catalog = await loadObservationCatalog();
   const payload = {
     pet_id: petId,
@@ -384,7 +382,6 @@ function chunkArray(array, size) {
 // rest normally.
 export async function markGreatDaysBulk(petId, dates, source = 'catch_up') {
   if (dates.length === 0) return { checkIns: [] };
-  await assertNotDemoAccount();
   const catalog = await loadObservationCatalog();
   const observations = buildBaselineObservations(catalog);
   const completedAt = new Date().toISOString();
@@ -504,7 +501,6 @@ function rowsToObservationPayload(catalog, rows) {
 }
 
 export async function markOffTough(petId, date, status, selections, source = 'app') {
-  await assertNotDemoAccount();
   const catalog = await loadObservationCatalog();
   const { rows, symptomCounts } = buildObservationRows(catalog, selections);
   // markOffTough resolves every counted category for the full day (see
@@ -536,7 +532,6 @@ export async function markOffTough(petId, date, status, selections, source = 'ap
 // exact position is always known and each chunk's write is atomic.
 export async function markOffToughBulk(petId, dates, status, selections, source = 'catch_up') {
   if (dates.length === 0) return { checkIns: [] };
-  await assertNotDemoAccount();
   const catalog = await loadObservationCatalog();
   const { rows, symptomCounts } = buildObservationRows(catalog, selections);
   const symptomCount = computeSymptomCount(symptomCounts);

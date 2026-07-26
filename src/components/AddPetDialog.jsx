@@ -8,7 +8,6 @@ import { Textarea } from '@/components/ui/textarea';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { uploadFile } from '@/api/storageClient';
 import { entities } from '@/api/entities';
-import { DemoAccountBlockedError } from '@/lib/demoWriteGuard';
 import { track } from '@/lib/analytics';
 import { computeLifeStage } from '@/lib/lifeStage';
 import { getOrCreatePetOnboarding } from '@/lib/onboardingClient';
@@ -207,11 +206,7 @@ export default function AddPetDialog({ open, onOpenChange, onSuccess, returnTo =
     } catch (err) {
       console.error('Failed to save pet:', err);
       setSaving(false);
-      // A blocked demo write already showed its own toast (demoWriteGuard.js)
-      // — no need to duplicate that message in this inline banner too.
-      if (!(err instanceof DemoAccountBlockedError)) {
-        setError('Unable to create pet. Please try again.');
-      }
+      setError('Unable to create pet. Please try again.');
       return;
     }
 

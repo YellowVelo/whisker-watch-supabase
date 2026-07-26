@@ -1,7 +1,4 @@
 import { supabase } from './supabaseClient';
-import { assertNotDemoAccount } from '@/lib/demoWriteGuard';
-
-export { DemoAccountBlockedError } from '@/lib/demoWriteGuard';
 
 /**
  * Mimics the Base44 SDK's per-entity interface:
@@ -95,10 +92,10 @@ export function createEntityClient(tableName) {
     },
 
     async create(payload) {
-      const userId = await assertNotDemoAccount();
+      const { data: userData } = await supabase.auth.getUser();
       const row = {
         ...toDbKeys(payload),
-        created_by: userId,
+        created_by: userData?.user?.id,
       };
       const { data, error } = await supabase
         .from(tableName)
@@ -110,10 +107,10 @@ export function createEntityClient(tableName) {
     },
 
     async bulkCreate(payloads) {
-      const userId = await assertNotDemoAccount();
+      const { data: userData } = await supabase.auth.getUser();
       const rows = payloads.map((p) => ({
         ...toDbKeys(p),
-        created_by: userId,
+        created_by: userData?.user?.id,
       }));
       const { data, error } = await supabase
         .from(tableName)
@@ -130,10 +127,10 @@ export function createEntityClient(tableName) {
     // can both see "no existing row" and both insert, and the second
     // insert fails on the unique constraint instead of merging cleanly.
     async upsert(payload, conflictColumns) {
-      const userId = await assertNotDemoAccount();
+      const { data: userData } = await supabase.auth.getUser();
       const row = {
         ...toDbKeys(payload),
-        created_by: userId,
+        created_by: userData?.user?.id,
       };
       const { data, error } = await supabase
         .from(tableName)
@@ -145,7 +142,6 @@ export function createEntityClient(tableName) {
     },
 
     async update(id, payload) {
-      await assertNotDemoAccount();
       const { data, error } = await supabase
         .from(tableName)
         .update(toDbKeys(payload))
@@ -157,7 +153,6 @@ export function createEntityClient(tableName) {
     },
 
     async delete(id) {
-      await assertNotDemoAccount();
       const { error } = await supabase.from(tableName).delete().eq('id', id);
       if (error) throw error;
       return true;

@@ -26,7 +26,6 @@ import { getPetLabel } from '@/lib/speciesConfig';
 import { computeDetailedAge } from '@/lib/lifeStage';
 import { PALETTE, RING_COLOR } from '@/lib/toneColors';
 import { useAuth } from '@/lib/AuthContext';
-import { isDemoAccount } from '@/lib/accountType';
 import { detectTimezone, dateStrInTimezone } from '@/lib/timezone';
 import AttributeTrendChip from '@/components/AttributeTrendChip';
 import VibeIcon, { vibeAccessibleLabel } from '@/components/VibeIcon';
@@ -415,10 +414,6 @@ export default function PetProfileContent({ petId, onReload, expanded = true, on
     }
   };
   const handleDeletePet = async () => {
-    if (isDemoAccount(user)) {
-      setDeletePetError("This is a demo — changes aren't saved here.");
-      return;
-    }
     setDeletingPet(true);
     setDeletePetError('');
     try {

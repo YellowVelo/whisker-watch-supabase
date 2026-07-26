@@ -1,6 +1,5 @@
 import { useRef, useState } from 'react';
 import { entities } from '@/api/entities';
-import { DemoAccountBlockedError } from '@/lib/demoWriteGuard';
 import { track } from '@/lib/analytics';
 import ChoiceCard from './ChoiceCard';
 import ConditionsCard from './ConditionsCard';
@@ -61,11 +60,7 @@ export default function OnboardingWizard({ pet, row, onRowChange, onComplete }) 
       await fn();
     } catch (err) {
       console.error('Failed to save onboarding step:', err);
-      // A blocked demo write already showed its own toast (demoWriteGuard.js)
-      // — no need to duplicate that message in this inline banner too.
-      if (!(err instanceof DemoAccountBlockedError)) {
-        setSaveError("Couldn't save that — check your connection and try again.");
-      }
+      setSaveError("Couldn't save that — check your connection and try again.");
     } finally {
       savingRef.current = false;
       setSaving(false);

@@ -1,6 +1,6 @@
 # 0018_Demo_Account_ReadOnly_Enforcement_Specification_v1
 
-**Status:** Implemented (2026-07-26). Live on `wysker-watch-dev`, `wysker-watch-staging`, and `Whisker-Watch` (prod).
+**Status:** Reverted (2026-07-26). Was implemented and deployed to all three environments the same day, then rolled back after unresolved confusion verifying the frontend messaging behavior in the live app — see migration `0037_revert_prevent_demo_account_writes.sql` and punch list. All three code layers (entityClient.js guard, DB trigger, Edge Function guards) and the client-side pre-checks have been reverted; demo accounts are writable again, same as before this spec.
 **Date:** 2026-07-25
 **Related files:** `src/api/entityClient.js`, `src/lib/accountType.js`, `src/components/AccountTypeBanner.jsx`, `src/components/InviteCoOwnerDialog.jsx`, `src/components/InviteSitterDialog.jsx`, `src/components/PetProfileContent.jsx`, `supabase/functions/delete-pet/index.ts`, `supabase/functions/invite-co-owner/index.ts`, `supabase/functions/invite-sitter/index.ts`, `docs/foundation/0006 Technical Standards.md`, `docs/launch-punch-list.md` (P2)
 

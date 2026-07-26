@@ -1,16 +1,11 @@
 import { useState } from 'react';
 import { entities } from '@/api/entities';
 import { supabase } from '@/api/supabaseClient';
-import { useAuth } from '@/lib/AuthContext';
-import { isDemoAccount } from '@/lib/accountType';
-import { toast } from '@/components/ui/use-toast';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { UserPlus, Trash2, Mail, CheckCircle2 } from 'lucide-react';
-
-const DEMO_MESSAGE = "This is a demo — changes aren't saved here.";
 
 // Invite a co-owner (e.g. a spouse) to a pet. Unlike sitter access,
 // a co-owner gets full owner-level rights: editing, logging, and
@@ -18,7 +13,6 @@ const DEMO_MESSAGE = "This is a demo — changes aren't saved here.";
 // owner can manage this list — co-owners can't invite/remove others
 // (matches the "full parity, owner-managed" decision).
 export default function InviteCoOwnerDialog({ petId, petName, open, onOpenChange }) {
-  const { user } = useAuth();
   const [email, setEmail] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -42,10 +36,6 @@ export default function InviteCoOwnerDialog({ petId, petName, open, onOpenChange
   const handleInvite = async (e) => {
     e.preventDefault();
     if (!email.trim() || !petId) return;
-    if (isDemoAccount(user)) {
-      toast({ variant: 'destructive', description: DEMO_MESSAGE });
-      return;
-    }
     setSaving(true);
     setError('');
     setSuccessMsg('');
@@ -107,10 +97,6 @@ export default function InviteCoOwnerDialog({ petId, petName, open, onOpenChange
   };
 
   const handleRemove = async (id) => {
-    if (isDemoAccount(user)) {
-      toast({ variant: 'destructive', description: DEMO_MESSAGE });
-      return;
-    }
     await entities.PetCoOwner.delete(id);
     load();
   };
