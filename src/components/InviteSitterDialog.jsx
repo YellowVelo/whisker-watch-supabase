@@ -1,13 +1,19 @@
 import { useState } from 'react';
 import { entities } from '@/api/entities';
 import { supabase } from '@/api/supabaseClient';
+import { useAuth } from '@/lib/AuthContext';
+import { isDemoAccount } from '@/lib/accountType';
+import { toast } from '@/components/ui/use-toast';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { UserPlus, Trash2, Mail, CheckCircle2 } from 'lucide-react';
 
+const DEMO_MESSAGE = "This is a demo — changes aren't saved here.";
+
 export default function InviteSitterDialog({ petSitId, open, onOpenChange }) {
+  const { user } = useAuth();
   const [email, setEmail] = useState('');
   const [saving, setSaving] = useState(false);
   const [accesses, setAccesses] = useState([]);
@@ -30,6 +36,10 @@ export default function InviteSitterDialog({ petSitId, open, onOpenChange }) {
   const handleInvite = async (e) => {
     e.preventDefault();
     if (!email.trim() || !petSitId) return;
+    if (isDemoAccount(user)) {
+      toast({ variant: 'destructive', description: DEMO_MESSAGE });
+      return;
+    }
     setSaving(true);
     setSuccessMsg('');
     const { data: userData } = await supabase.auth.getUser();
@@ -70,6 +80,10 @@ export default function InviteSitterDialog({ petSitId, open, onOpenChange }) {
   };
 
   const handleRemove = async (id) => {
+    if (isDemoAccount(user)) {
+      toast({ variant: 'destructive', description: DEMO_MESSAGE });
+      return;
+    }
     await entities.PetSitterAccess.delete(id);
     load();
   };

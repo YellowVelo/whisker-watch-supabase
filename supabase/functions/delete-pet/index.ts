@@ -88,6 +88,24 @@ Deno.serve(async (req) => {
     // write notifications and reassign ownership for another user.
     const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
+    // ── Guard: demo accounts cannot delete/transfer pets ─────────────────
+    // The write below happens via the service-role client, which bypasses
+    // RLS (and the prevent_demo_account_writes trigger, which only sees
+    // writes made under the caller's own session) — so this check is the
+    // only thing stopping a demo account here.
+    const { data: callerAccount, error: accountError } = await admin
+      .from('profiles')
+      .select('account_type')
+      .eq('id', userId)
+      .single();
+
+    if (accountError || !callerAccount) {
+      return json({ error: 'Failed to look up account' }, 500);
+    }
+    if (callerAccount.account_type === 'demo') {
+      return json({ error: 'This is a demo account and cannot delete pets.' }, 403);
+    }
+
     // Prefer the caller's first name in notifications shown to the
     // other party — falling back to email only if they never set one
     // (there's no full profile/settings UI yet for editing this).
