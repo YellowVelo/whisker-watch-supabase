@@ -8,7 +8,6 @@ import PageNotFound from './lib/PageNotFound';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 import ProtectedRoute from '@/components/ProtectedRoute';
-import BottomTabBar from './components/BottomTabBar';
 import AccountTypeBanner from './components/AccountTypeBanner';
 import OfflineBanner from './components/OfflineBanner';
 import IosInstallBanner from './components/IosInstallBanner';
@@ -20,15 +19,13 @@ import PetTrends from './pages/PetTrends';
 import Timeline from './pages/Timeline';
 import PetProfileTabs from './pages/PetProfileTabs';
 import PetOnboarding from './pages/PetOnboarding';
+import PetSitter from './pages/PetSitter';
 import PetSymptoms from './pages/PetSymptoms';
 import PetFood from './pages/PetFood';
-import Insurance from './pages/Insurance';
-import Documents from './pages/Documents';
 import About from './pages/About';
 import VetExport from './pages/VetExport';
 import Settings from './pages/Settings';
-import PetSitterMenu from './pages/PetSitterMenu';
-import AIMenu from './pages/AIMenu';
+import AskWyskerRedirect from './components/AskWyskerRedirect';
 import Account from './pages/Account';
 import Privacy from './pages/Privacy';
 import PrivacyPolicySection from './pages/PrivacyPolicySection';
@@ -77,24 +74,29 @@ const AuthenticatedApp = () => {
           <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/accept-invite" element={<AcceptInvite />} />
           <Route path="/verify-email" element={<VerifyEmail />} />
+          {/* Authenticated, but outside the App Shell by design (spec 0023) — no persistent header/bottom nav */}
+          <Route element={<ProtectedRoute unauthenticatedElement={<Navigate to="/login" replace />} shell={false} />}>
+            <Route path="/pet/:petId/onboarding" element={<PetOnboarding />} />
+          </Route>
           <Route element={<ProtectedRoute unauthenticatedElement={<Navigate to="/login" replace />} />}>
             <Route path="/" element={<Home />} />
+            <Route path="/pet-sitter" element={<PetSitter />} />
             <Route path="/notifications" element={<Notifications />} />
             <Route path="/pets" element={<Pets />} />
             <Route path="/pet/:petId" element={<PetProfile />} />
             <Route path="/pet/:petId/trends" element={<PetTrends />} />
             <Route path="/pet/:petId/timeline" element={<Timeline />} />
             <Route path="/pet/:petId/profile" element={<PetProfileTabs />} />
-            <Route path="/pet/:petId/onboarding" element={<PetOnboarding />} />
             <Route path="/pet/:petId/symptoms" element={<PetSymptoms />} />
             <Route path="/pet/:petId/food" element={<PetFood />} />
-            <Route path="/pet/:petId/insurance" element={<Insurance />} />
-            <Route path="/pet/:petId/documents" element={<Documents />} />
             <Route path="/pet/:petId/export" element={<VetExport />} />
             <Route path="/about" element={<About />} />
             <Route path="/settings" element={<Settings />} />
-            <Route path="/settings/pet-sitter" element={<PetSitterMenu />} />
-            <Route path="/settings/ai" element={<AIMenu />} />
+            {/* PetSitterMenu.jsx / AIMenu.jsx are deleted (spec 0023 step 12)
+                — these routes stay alive as compatibility redirects for
+                old links. */}
+            <Route path="/settings/pet-sitter" element={<Navigate to="/pet-sitter" replace />} />
+            <Route path="/settings/ai" element={<AskWyskerRedirect to="/" />} />
             <Route path="/account" element={<Account />} />
             <Route path="/privacy" element={<Privacy />} />
             <Route path="/privacy/:sectionId" element={<PrivacyPolicySection />} />
@@ -106,7 +108,6 @@ const AuthenticatedApp = () => {
           <Route path="*" element={<PageNotFound />} />
         </Routes>
       </AnimatePresence>
-      <BottomTabBar />
     </>
   );
 };

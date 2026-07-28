@@ -67,15 +67,17 @@ export default function AcceptInvite() {
 
   const handleSuccess = () => {
     if (isSitterInvite) {
-      // Not /pets: that screen's own "My Pets" list only distinguishes
+      // The household Pet Sitter page (spec 0023 step 6) — not /pets,
+      // since that screen's own "My Pets" list only distinguishes
       // owned/co-owned pets from sitter-only ones for the bottom-nav case
-      // (see src/lib/petsClient.js's getSitterOnlyPetIds and Pets.jsx) —
-      // landing here first goes straight to the dedicated Pet Sitter
-      // directory instead.
-      window.location.href = '/settings/pet-sitter';
+      // (see src/lib/petsClient.js's getSitterOnlyPetIds and Pets.jsx).
+      window.location.href = '/pet-sitter';
       return;
     }
-    window.location.href = petId ? `/pet/${petId}` : '/';
+    // Lands on Pets with the pet's card scrolled into view (collapsed, not
+    // expanded — spec 0023 decision) rather than the retiring standalone
+    // /pet/:petId page.
+    window.location.href = petId ? `/pets?highlight=${petId}` : '/';
   };
 
   if (status === 'verifying') {

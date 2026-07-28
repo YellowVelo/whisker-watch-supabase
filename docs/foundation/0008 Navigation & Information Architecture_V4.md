@@ -11,6 +11,19 @@ Revision note: originally written for the Navigation Refresh feature (Home/Pets/
 
 **Updated in place again (2026-07-18).** The previous revision described a snapshot that was itself already stale by the time it was written/imported (2026-07-15) — most consequentially, the dedicated "Pet Profiles" Menu directory it describes as the primary path to Pet Profile **no longer exists at all** (no route, no component file), the Wellness Score/5-ring Pet Profile header it describes was retired along with Wellness Score V1/Health Score V2 in favor of the Vibe + Symptom Count model (migration 0026, 2026-07-13), `WellnessCard`/`CheckInCard` were replaced by `PetSummaryCard`/`CheckInStatusBanner`, and the Menu item list is missing three items (Pet Sitter, AI, Terms of Service) added after this document's prior revision. Every section below was re-verified against current code as of this pass; sections not flagged as corrected were confirmed still accurate.
 
+**Superseded in large part (2026-07-28) by spec `0023` (App Shell / Navigation IA refactor, `docs/features/0023_App_Shell_Navigation_IA_Refactor_Specification_v1.md`), which is now the authoritative source for current navigation.** That spec's own Implementation Summary is the single best place to see the full current picture. The most consequential changes this document's sections below do **not** yet reflect line-by-line:
+
+- **A persistent App Shell now wraps every authenticated screen** — a header (brand identity, global "Ask Wysker" action, notifications) above the content, and the same three-destination bottom nav below it, both fixed across navigation. Previously there was no persistent header of any kind.
+- **CareMenu (the per-pet slide-out hamburger menu) is gone — the file was deleted, not just deprecated.** Every section below that mentions it (Pet Profile, Trends, Menu, "CareMenu (in-context quick nav)") is describing a component that no longer exists in the codebase.
+- **Pet Sitter moved from a Menu-nested directory (`/settings/pet-sitter`, `PetSitterMenu.jsx` — deleted) to a prominent Home-launched, household-level page (`/pet-sitter`, `PetSitter.jsx`)**, reachable via a card on Home below the pet summary cards. The bottom nav marks **Home** active while it's open, not a fourth tab.
+- **AI moved from a Menu-nested directory (`/settings/ai`, `AIMenu.jsx` — deleted) and a per-pet tab (`PetProfileTabs.jsx`'s "ai" tab — retired) to a global header action**, opening a non-navigating overlay sheet from anywhere in the app, pre-scoped to whichever pet/screen you were on when you opened it.
+- **The standalone `/pet/:petId` Pet Profile page is retired** — it's now a compatibility redirect to `/pets` (the pet's card scrolled into view, collapsed). The section below describing it as a real rendered page is describing the pre-2026-07-28 state.
+- **`PetProfileTabs.jsx`'s "History" tab is retired — its data (symptom-log detail) now shows directly in Timeline's chronological event rows** instead of a separate screen.
+- **Insurance and Documents are deleted outright** (routes, files, and their `/pet/:petId/insurance` / `/pet/:petId/documents` URLs all now 404) — confirmed dead placeholders with zero real functionality or entry points, not orphaned-but-kept.
+- **Menu's item list simplified** — Pet Sitter and AI rows removed (see above), an About row added (CareMenu was previously the only path to `/about`).
+
+Every section below that isn't corrected by one of the points above (Home's basic layout, Pets' inline expand-in-place pattern, Trends, Timeline's core structure, the Preferences/Support placeholders, Privacy/Terms) was still accurate as of this pass. Sections describing CareMenu, the old Menu item list, the old Pet Sitter/AI Menu directories, and the standalone Pet Profile page should be read as historical context for how the app used to work, not current fact.
+
 Navigation Philosophy
 
 Every navigation decision supports one or more of these goals:
@@ -31,6 +44,8 @@ Pets (`/pets`)
 Menu (`/settings` — the route path was kept for backward compatibility; only the label changed)
 
 No other persistent navigation item exists. The nav bar is `role="navigation"` with `aria-current="page"` on the active link (not the ARIA tabs pattern). The Pets tab is marked active for both `/pets` and any `/pet/:id...` route.
+
+**Updated 2026-07-28 (spec 0023):** the Home tab is now also marked active for `/pet-sitter` (the household Pet Sitter page, launched from Home — see below). The Menu tab is now marked active for all of Menu's own subpages (`/account`, `/notifications`, `/privacy`, `/terms`, `/preferences`, `/support`, `/about`), not just the bare `/settings` route — this had been a real gap (found while adding test coverage) where navigating off `/settings` into any of its subpages left no tab highlighted at all.
 
 Home
 
@@ -172,9 +187,11 @@ Until that decision lands, here's what CareMenu currently does: `src/components/
 
 Routing (as implemented in `src/App.jsx`)
 
+**Superseded 2026-07-28 — see spec 0023's route migration table for the authoritative current list.** Kept below for historical reference only; several rows now redirect elsewhere or no longer exist.
+
 Public: `/login`, `/register`, `/forgot-password`, `/reset-password`
 
-Protected:
+Protected (pre-2026-07-28 state):
 ```
 /                              Home
 /notifications                 Notifications
@@ -198,6 +215,19 @@ Protected:
 /terms                          Terms of Service (real screen)
 /preferences                    Preferences (placeholder)
 /support                        Support (placeholder)
+```
+
+Current state (2026-07-28, spec 0023) — what changed from the table above:
+```
+/pet-sitter                     NEW — household Pet Sitter page, launched from Home
+/pet/:petId                     Now a redirect → /pets (pet scrolled into view, collapsed)
+/pet/:petId/insurance            DELETED — 404s, no longer routed
+/pet/:petId/documents            DELETED — 404s, no longer routed
+/pet/:petId/profile?tab=history  Now a redirect → /pet/:petId/timeline
+/pet/:petId/profile?tab=petsit   Now a redirect → /pet-sitter
+/pet/:petId/profile?tab=ai       Now opens the global Ask Wysker sheet, pet-scoped
+/settings/pet-sitter             Now a redirect → /pet-sitter
+/settings/ai                     Now opens the global Ask Wysker sheet, general mode
 ```
 
 Routing diagram:

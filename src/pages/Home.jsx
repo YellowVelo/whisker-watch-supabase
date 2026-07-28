@@ -1,10 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { PawPrint, Sparkles, ChevronRight, CalendarClock } from 'lucide-react';
+import { PawPrint, Sparkles, ChevronRight, CalendarClock, UsersRound } from 'lucide-react';
 import { entities } from '@/api/entities';
 import PetSummaryCard from '../components/PetSummaryCard';
 import CheckInStatusBanner from '../components/CheckInStatusBanner';
-import NotificationBell from '../components/NotificationBell';
 import DailyCheckInModal from '../components/DailyCheckInModal';
 import CatchUpFlow from '../components/catchup/CatchUpFlow';
 import PageTransition from '../components/PageTransition';
@@ -18,7 +17,6 @@ import {
 } from '@/lib/checkin/checkinClient';
 import { getWeightSummariesForPets } from '@/lib/checkin/petProfileClient';
 import { getActiveMedicationCountsForPets } from '@/lib/petsClient';
-import { getUnreadCount } from '@/lib/notifications/notificationClient';
 import { buildGreeting } from '@/lib/greeting';
 import { useAuth } from '@/lib/AuthContext';
 import { detectTimezone } from '@/lib/timezone';
@@ -63,7 +61,6 @@ export default function Home() {
   const [checkInsUnavailable, setCheckInsUnavailable] = useState(false);
   const [medicationCounts, setMedicationCounts] = useState({}); // pet_id -> count
   const [incompleteOnboardingIds, setIncompleteOnboardingIds] = useState(new Set());
-  const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [stale, setStale] = useState(false);
@@ -96,10 +93,9 @@ export default function Home() {
       const petIds = activePets.map((p) => p.id);
 
       if (petIds.length) {
-        const [todayRowsR, yesterdayRowsR, unreadR, medCountsR] = await Promise.allSettled([
+        const [todayRowsR, yesterdayRowsR, medCountsR] = await Promise.allSettled([
           getCheckInsForPets(petIds, todayStr()),
           getCheckInsForPets(petIds, yesterdayStr()),
-          getUnreadCount(),
           getActiveMedicationCountsForPets(petIds),
         ]);
 
@@ -117,9 +113,6 @@ export default function Home() {
         const yesterdayRows = yesterdayRowsR.status === 'fulfilled' ? yesterdayRowsR.value : {};
         setYesterdayCheckIns(yesterdayRows);
         if (yesterdayRowsR.status === 'rejected') console.error(yesterdayRowsR.reason);
-
-        if (unreadR.status === 'fulfilled') setUnreadCount(unreadR.value);
-        else console.error(unreadR.reason);
 
         setMedicationCounts(medCountsR.status === 'fulfilled' ? medCountsR.value : {});
         if (medCountsR.status === 'rejected') console.error(medCountsR.reason);
@@ -180,7 +173,6 @@ export default function Home() {
         setCheckInsUnavailable(false);
         setMedicationCounts({});
         setIncompleteOnboardingIds(new Set());
-        setUnreadCount(await getUnreadCount());
       }
       setLoadError(false);
       setStale(false);
@@ -348,7 +340,6 @@ export default function Home() {
             <p className="text-[14px] text-white/50">{greeting}</p>
             <h1 className="text-[28px] font-bold text-foreground tracking-tight leading-tight mt-0.5">How are your pets today?</h1>
           </div>
-          <NotificationBell unreadCount={unreadCount} />
         </div>
       </header>
 
@@ -412,6 +403,21 @@ export default function Home() {
                 ))}
               </div>
             )}
+
+            <Link
+              to="/pet-sitter"
+              className="flex items-center gap-3 rounded-2xl px-4 py-4 active:opacity-80 transition-opacity"
+              style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}
+            >
+              <div className="h-11 w-11 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(45,212,191,0.14)' }}>
+                <UsersRound className="h-5 w-5 text-teal-300" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-base font-semibold text-foreground">Pet Sitter</p>
+                <p className="text-sm text-muted-foreground">Manage sitting periods and sitter access</p>
+              </div>
+              <ChevronRight className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+            </Link>
           </div>
         )}
       </main>

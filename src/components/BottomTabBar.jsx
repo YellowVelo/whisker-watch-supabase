@@ -1,10 +1,20 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Home, PawPrint, Menu } from 'lucide-react';
 
-const tabs = [
-  { path: '/', label: 'Home', icon: Home, isActive: (p) => p === '/' },
+// Menu's own account/settings/support/legal subpages (Account,
+// Notifications, Privacy, Terms, Preferences, Support, About) previously
+// activated no tab at all once you navigated off the bare /settings route —
+// found while writing tests for spec 0023 step 11, and a real miss against
+// the original written requirement ("Menu is active for account, settings,
+// support, and legal routes"), not just a style nit.
+const MENU_PATHS = ['/settings', '/account', '/notifications', '/privacy', '/terms', '/preferences', '/support', '/about'];
+
+// Exported so active-tab logic can be unit tested against the exact
+// production array (spec 0023 step 11) rather than a copy that could drift.
+export const tabs = [
+  { path: '/', label: 'Home', icon: Home, isActive: (p) => p === '/' || p === '/pet-sitter' },
   { path: '/pets', label: 'Pets', icon: PawPrint, isActive: (p) => p === '/pets' || p.startsWith('/pet/') },
-  { path: '/settings', label: 'Menu', icon: Menu, isActive: (p) => p === '/settings' },
+  { path: '/settings', label: 'Menu', icon: Menu, isActive: (p) => MENU_PATHS.some((base) => p === base || p.startsWith(`${base}/`)) },
 ];
 
 export default function BottomTabBar() {

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { PawPrint, Plus, Activity, Rainbow, Home as HomeIcon, Cat, Dog } from 'lucide-react';
 import { entities } from '@/api/entities';
 import { getSitterOnlyPetIds } from '@/lib/petsClient';
@@ -20,6 +20,7 @@ export default function Pets() {
   const highlightTimeoutRef = useRef(null);
   const location = useLocation();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   // Cards start collapsed unless opened via a deep link/route state (e.g.
   // returning from a pet's full profile page, or right after adding a pet).
   const [expandedPetId, setExpandedPetId] = useState(location.state?.expandPetId || null);
@@ -31,6 +32,24 @@ export default function Pets() {
     setExpandedPetId(location.state.expandPetId);
     navigate('.', { replace: true, state: {} });
   }, [location.state, navigate]);
+
+  // ?highlight=<petId> — the retired standalone Pet Profile page, plus the
+  // onboarding "Start Check-in" and accept-invite flows, all land here
+  // (spec 0023 step 10) with the target pet's card scrolled into view and
+  // briefly highlighted, but deliberately left collapsed rather than
+  // auto-expanded. Waits for loadData() to finish so cardRefs are actually
+  // populated before attempting to scroll.
+  useEffect(() => {
+    const highlightId = searchParams.get('highlight');
+    if (!highlightId || loading) return;
+    setHighlightedPetId(highlightId);
+    requestAnimationFrame(() => {
+      cardRefs.current[highlightId]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+    clearTimeout(highlightTimeoutRef.current);
+    highlightTimeoutRef.current = setTimeout(() => setHighlightedPetId((id) => (id === highlightId ? null : id)), 4000);
+    setSearchParams((prev) => { prev.delete('highlight'); return prev; }, { replace: true });
+  }, [searchParams, loading, setSearchParams]);
 
   const loadData = useCallback(async () => {
     let petList;

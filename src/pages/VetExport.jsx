@@ -3,8 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { entities } from '@/api/entities';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/use-toast';
-import { ArrowLeft, Menu, FileDown, PawPrint } from 'lucide-react';
-import CareMenu from '@/components/CareMenu';
+import { ArrowLeft, FileDown, PawPrint } from 'lucide-react';
 import { downloadVetReport } from '@/lib/checkin/vetReportClient';
 
 // Vet Export Feature Spec v2 §4.2 — this page does not fetch report data
@@ -18,7 +17,6 @@ export default function VetExport() {
   const { petId } = useParams();
   const navigate = useNavigate();
   const { toast } = useToast();
-  const [careOpen, setCareOpen] = useState(false);
   const [pet, setPet] = useState(null);
   const [loading, setLoading] = useState(true);
   const [downloading, setDownloading] = useState(false);
@@ -51,11 +49,7 @@ export default function VetExport() {
         <button onClick={() => navigate(-1)} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
           <ArrowLeft className="h-4 w-4" /> Back
         </button>
-        <button onClick={() => setCareOpen(true)} className="h-9 w-9 rounded-full bg-secondary flex items-center justify-center">
-          <Menu className="h-5 w-5" />
-        </button>
       </div>
-      <CareMenu open={careOpen} onOpenChange={setCareOpen} petId={petId} petName={pet?.name} />
 
       <div className="max-w-lg mx-auto px-6 py-10">
         <div className="flex items-center gap-3 mb-6">

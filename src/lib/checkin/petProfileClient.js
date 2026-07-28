@@ -112,6 +112,25 @@ export function getVaccinationSummary(vaccinations) {
 // There is no dedicated timeline/event table (Nav & IA: Timeline was a
 // placeholder); this assembles real events from the tables that already
 // represent discrete moments in the pet's history, most-recent first.
+// Compact one-line summary of a symptom_log row's notable fields — the
+// detail PetProfileTabs' retiring "History" tab (LogHistory.jsx) used to
+// show on its own screen, now folded directly into the Timeline event row
+// instead of living in a second place (spec 0023 step 10). Deliberately a
+// condensed summary, not a full replica of the richer chip UI PetSymptoms.jsx
+// (the "Weight" card's full symptom-log history) already provides for this
+// same data — that screen stays the place for full per-log detail.
+function summarizeSymptomLog(log) {
+  const parts = [];
+  if (log.appetite) parts.push(`Appetite: ${log.appetite}`);
+  if (log.energy_level) parts.push(`Energy: ${log.energy_level}`);
+  if (log.vomiting > 0) parts.push(`Vomiting ×${log.vomiting}`);
+  if (log.stool_quality && log.stool_quality !== 'None') parts.push(`Stool: ${log.stool_quality}`);
+  if (log.pain_signs) parts.push('Pain signs');
+  if (log.medication_given) parts.push('Meds given');
+  if (log.weight_grams != null) parts.push(`${(log.weight_grams / 453.592).toFixed(1)} lbs`);
+  return parts.length ? `Symptom log — ${parts.join(', ')}` : 'Symptom log recorded';
+}
+
 export async function getTimelineEvents(petId, limit = 200) {
   const [checkIns, medications, vaccinations, symptomLogs] = await Promise.all([
     entities.DailyCheckIn.filter({ pet_id: petId }, '-check_in_date', limit),
@@ -121,9 +140,14 @@ export async function getTimelineEvents(petId, limit = 200) {
   ]);
 
   const events = [
+    // 'great'/'off'/'tough'/'skipped' — the enum migration 0026 introduced.
+    // Previously checked against 'normal', a retired value, which meant
+    // every non-skipped check-in mislabeled as "changes logged" here, even
+    // Great Days (fixed alongside the History→Timeline merge, spec 0023
+    // step 10, since it's the exact line this work already touches).
     ...checkIns.map((c) => ({
       id: `checkin-${c.id}`, date: c.check_in_date, type: 'check_in',
-      title: c.status === 'normal' ? 'Daily check-in — everything normal' : c.status === 'skipped' ? 'Daily check-in skipped' : 'Daily check-in — changes logged',
+      title: c.status === 'great' ? 'Daily check-in — everything normal' : c.status === 'skipped' ? 'Daily check-in skipped' : 'Daily check-in — changes logged',
     })),
     ...medications.filter((m) => m.start_date).map((m) => ({
       id: `med-${m.id}`, date: m.start_date, type: 'medication', title: `Started ${m.name}`,
@@ -132,7 +156,7 @@ export async function getTimelineEvents(petId, limit = 200) {
       id: `vax-${v.id}`, date: v.date_given, type: 'vaccination', title: `${v.vaccine_name} administered`,
     })),
     ...symptomLogs.map((s) => ({
-      id: `log-${s.id}`, date: s.date, type: 'symptom_log', title: 'Symptom log recorded',
+      id: `log-${s.id}`, date: s.date, type: 'symptom_log', title: summarizeSymptomLog(s),
     })),
   ];
 

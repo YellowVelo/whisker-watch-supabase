@@ -5,7 +5,7 @@ import { supabase } from '@/api/supabaseClient';
 import {
   ChevronRight, ChevronDown, Share2, Pencil, Trash2, Rainbow,
   Cat, Dog, UtensilsCrossed, Zap, Scale, HeartPulse, ClipboardList,
-  Pill, Utensils, ShieldCheck, TrendingUp, Clock, FileText, FileDown, Droplets, Footprints, Loader2,
+  Pill, Utensils, ShieldCheck, TrendingUp, Clock, FileText, FileDown, Droplets, Footprints, Loader2, LineChart,
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
@@ -392,7 +392,11 @@ export default function PetProfileContent({ petId, onReload, expanded = true, on
   useEffect(() => { onReload?.(reloadAll); }, [onReload, reloadAll]);
 
   useEffect(() => {
-    if (searchParams.get('startCheckin') === '1') {
+    // Scoped to this specific pet's id, not a bare flag — this component
+    // renders once per pet on the Pets screen (spec 0023 step 10), so a
+    // bare '1' would fire the check-in sheet open for every pet card at
+    // once instead of just the intended one.
+    if (searchParams.get('startCheckin') === petId) {
       track('daily_check_in_started', { pet_id: petId, check_in_date: todayStr(timezone) });
       setCheckInOpen(true);
       setSearchParams((prev) => { prev.delete('startCheckin'); return prev; }, { replace: true });
@@ -710,6 +714,18 @@ export default function PetProfileContent({ petId, onReload, expanded = true, on
                 onClick={() => setCheckInOpen(true)} error={errors.observations}
               />
             )}
+
+            {/* ── TRENDS ── */}
+            {/* Previously reachable from Pets only via the collapsed-state
+                Wellbeing chips (see AttributeTrendChip above) — this card
+                makes it a first-class, discoverable destination from the
+                expanded view too (spec 0023 step 7). Trends itself is
+                unchanged; this only adds a link to it. */}
+            <NavCard
+              icon={LineChart} iconBg="rgba(111,183,255,0.15)" iconColor={PALETTE.sky}
+              title="Trends" subtitle="Range charts and patterns over time"
+              to={`/pet/${petId}/trends`}
+            />
 
             {/* ── VET EXPORT ── */}
             <NavCard

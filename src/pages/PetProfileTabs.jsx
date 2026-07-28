@@ -2,23 +2,19 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams, Link, Navigate, useSearchParams, useNavigate } from 'react-router-dom';
 import { entities } from '@/api/entities';
 import { Tabs, TabsContent } from '@/components/ui/tabs';
-import { ArrowLeft, Plus, X, Rainbow, Cat, Dog, Sparkles, MessageCircle, Menu } from 'lucide-react';
+import { ArrowLeft, Plus, X, Rainbow, Cat, Dog } from 'lucide-react';
 import SymptomLogForm from '../components/SymptomLogForm';
 import MemorialDialog from '../components/MemorialDialog';
-import CareMenu from '../components/CareMenu';
-import LogHistory from '../components/LogHistory';
 import MedicationSection from '../components/MedicationSection';
 import BaselineSection from '../components/BaselineSection';
 import FoodSection from '../components/FoodSection';
 import BloodworkSection from '../components/BloodworkSection';
-import PetSittingSection from '../components/PetSittingSection';
 import VaccinationSection from '../components/VaccinationSection';
-import PetAIInsights from '../components/PetAIInsights';
-import PetAIChat from '../components/PetAIChat';
 import ExportCalendarButton from '../components/ExportCalendarButton';
 import PageTransition from '../components/PageTransition';
 import usePullToRefresh from '../hooks/usePullToRefresh';
 import PullToRefreshIndicator from '../components/PullToRefreshIndicator';
+import AskWyskerRedirect from '../components/AskWyskerRedirect';
 
 const conditionColors = {
   IBD: 'bg-amber-100 text-amber-800', CKD: 'bg-blue-100 text-blue-800',
@@ -31,16 +27,16 @@ export default function PetProfileTabs() {
   const { petId } = useParams();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const defaultTab = searchParams.get('tab') || 'history';
+  // 'history' used to be the default (matching the old tab order) but that
+  // tab now immediately redirects to Timeline (spec 0023 step 10) — default
+  // to a tab that actually renders content instead of bouncing every bare
+  // /pet/:petId/profile visit (e.g. PetOnboarding's "View Profile" link).
+  const defaultTab = searchParams.get('tab') || 'medications';
   const [pet, setPet] = useState(null);
-  const [logs, setLogs] = useState([]);
   const [medications, setMedications] = useState([]);
-  const [bloodwork, setBloodwork] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [aiTab, setAiTab] = useState('insights');
   const [sheetOpen, setSheetOpen] = useState(false);
   const [memorialOpen, setMemorialOpen] = useState(false);
-  const [careOpen, setCareOpen] = useState(false);
   const [activeTab, setActiveTab] = useState(defaultTab);
 
   useEffect(() => { setActiveTab(defaultTab); }, [defaultTab]);
@@ -48,16 +44,15 @@ export default function PetProfileTabs() {
 
   const loadData = useCallback(async () => {
     setLoading(true);
-    const [petData, logData, medData, bwData] = await Promise.all([
+    // SymptomLog and Bloodwork fetches removed here (spec 0023 step 10) —
+    // their only consumers were LogHistory and PetAIInsights, both retired;
+    // BloodworkSection/PetSymptoms.jsx fetch their own data independently.
+    const [petData, medData] = await Promise.all([
       entities.Pet.get(petId),
-      entities.SymptomLog.filter({ pet_id: petId }, '-date', 200),
       entities.Medication.filter({ pet_id: petId }, '-start_date', 50),
-      entities.Bloodwork.filter({ pet_id: petId }, '-date', 20),
     ]);
     setPet(petData);
-    setLogs(logData);
     setMedications(medData);
-    setBloodwork(bwData);
     setLoading(false);
   }, [petId]);
 
@@ -102,9 +97,6 @@ export default function PetProfileTabs() {
             <ArrowLeft className="h-5 w-5" />
           </button>
           <div className="flex items-center gap-2">
-            <button onClick={() => setCareOpen(true)} className="h-9 w-9 rounded-full bg-black/20 backdrop-blur-sm flex items-center justify-center text-white hover:bg-black/30 transition-colors">
-              <Menu className="h-5 w-5" />
-            </button>
             <ExportCalendarButton petId={petId} petName={pet?.name} iconOnly />
           </div>
         </div>
@@ -152,9 +144,11 @@ export default function PetProfileTabs() {
 
 
           <TabsContent value="history" className="mt-0">
-            <div className="bg-card rounded-2xl border border-border p-4 shadow-sm">
-              <LogHistory logs={logs} />
-            </div>
+            {/* History folded into Timeline (spec 0023 step 10) — its data
+                (symptom log detail) now shows directly in Timeline's
+                chronological event rows instead of living on a second
+                screen. */}
+            <Navigate to={`/pet/${petId}/timeline`} replace />
           </TabsContent>
           <TabsContent value="trends" className="mt-0">
             {/* This tab's own charts moved to the dedicated Trends screen's
@@ -188,31 +182,16 @@ export default function PetProfileTabs() {
             </div>
           </TabsContent>
           <TabsContent value="petsit" className="mt-0">
-            <div className="bg-card rounded-2xl border border-border p-4 shadow-sm">
-              <PetSittingSection petId={petId} />
-            </div>
+            {/* Pet Sitter's primary home is now the household /pet-sitter
+                page (spec 0023 step 6), which already supports scoping a
+                sit to one pet — no pet-scoped tab needed anymore. */}
+            <Navigate to="/pet-sitter" replace />
           </TabsContent>
           <TabsContent value="ai" className="mt-0">
-            <div className="bg-card rounded-2xl border border-border p-4 shadow-sm">
-              <div className="flex gap-2 mb-4">
-                <button
-                  onClick={() => setAiTab('insights')}
-                  className={`flex-1 py-2 rounded-xl text-sm font-medium transition-colors ${
-                    aiTab === 'insights' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:text-foreground'
-                  }`}
-                ><Sparkles className="h-3.5 w-3.5 inline mr-1" /> Insights</button>
-                <button
-                  onClick={() => setAiTab('chat')}
-                  className={`flex-1 py-2 rounded-xl text-sm font-medium transition-colors ${
-                    aiTab === 'chat' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:text-foreground'
-                  }`}
-                ><MessageCircle className="h-3.5 w-3.5 inline mr-1" /> Ask a Question</button>
-              </div>
-              {aiTab === 'insights'
-                ? <PetAIInsights pet={pet} logs={logs} medications={medications} bloodwork={bloodwork} />
-                : <PetAIChat pet={pet} medications={medications} />
-              }
-            </div>
+            {/* AI's primary home is now the global Ask Wysker header
+                action (spec 0023 step 5) — this opens the same sheet,
+                pre-scoped to this pet, then lands on Trends underneath. */}
+            <AskWyskerRedirect petId={petId} screen="Profile" to={`/pet/${petId}/trends`} />
           </TabsContent>
         </Tabs>
 
@@ -253,8 +232,7 @@ export default function PetProfileTabs() {
           <div className="px-4 py-5 pb-32">
             <SymptomLogForm
               petId={petId}
-              onOptimisticUpdate={(tempLog) => {
-                setLogs(prev => [tempLog, ...prev]);
+              onOptimisticUpdate={() => {
                 setSheetOpen(false);
               }}
               onSuccess={loadData}
@@ -263,7 +241,6 @@ export default function PetProfileTabs() {
         </div>
       )}
       <MemorialDialog pet={pet} open={memorialOpen} onOpenChange={setMemorialOpen} onSuccess={loadData} />
-      <CareMenu open={careOpen} onOpenChange={setCareOpen} petId={petId} petName={pet?.name} />
     </div>
     </PageTransition>
   );

@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { Outlet } from 'react-router-dom';
 import { useAuth } from '@/lib/AuthContext';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
+import AppShell from '@/components/AppShell';
 
 const DefaultFallback = () => (
   <div className="fixed inset-0 flex items-center justify-center">
@@ -9,7 +10,9 @@ const DefaultFallback = () => (
   </div>
 );
 
-export default function ProtectedRoute({ fallback = <DefaultFallback />, unauthenticatedElement }) {
+// shell=false is used for authenticated routes that sit outside the App
+// Shell by design (spec 0023) — currently just Pet Onboarding.
+export default function ProtectedRoute({ fallback = <DefaultFallback />, unauthenticatedElement, shell = true }) {
   const { isAuthenticated, isLoadingAuth, authChecked, authError, checkUserAuth } = useAuth();
 
   useEffect(() => {
@@ -33,5 +36,5 @@ export default function ProtectedRoute({ fallback = <DefaultFallback />, unauthe
     return unauthenticatedElement;
   }
 
-  return <Outlet />;
+  return shell ? <AppShell><Outlet /></AppShell> : <Outlet />;
 }
