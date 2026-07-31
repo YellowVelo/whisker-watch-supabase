@@ -60,7 +60,7 @@ export default function AskWyskerSheet({ open, onOpenChange, context }) {
         style={{ top: 0, paddingTop: 'calc(env(safe-area-inset-top) + 12px)' }}
       >
         <div className="min-w-0">
-          <h2 className="font-serif text-2xl flex items-center gap-2">
+          <h2 className="text-2xl font-semibold flex items-center gap-2">
             <Sparkles className="h-5 w-5 text-primary" /> Ask Wysker
           </h2>
           {pet && (

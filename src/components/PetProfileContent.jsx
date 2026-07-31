@@ -3,15 +3,16 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { entities } from '@/api/entities';
 import { supabase } from '@/api/supabaseClient';
 import {
-  ChevronRight, ChevronDown, Share2, Pencil, Trash2, Rainbow,
+  ChevronDown, Share2, Pencil, Trash2, Rainbow,
   Cat, Dog, UtensilsCrossed, Zap, Scale, HeartPulse, ClipboardList,
   Pill, Utensils, ShieldCheck, TrendingUp, Clock, FileText, FileDown, Droplets, Footprints, Loader2, LineChart,
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
 import EditPetSheet from './EditPetSheet';
 import MemorialDialog from './MemorialDialog';
+import ListRow from './ListRow';
+import BottomSheet from './BottomSheet';
+import ConfirmDeleteDialog from './ConfirmDeleteDialog';
 import DailyCheckInModal from './DailyCheckInModal';
 import { track } from '@/lib/analytics';
 import {
@@ -57,33 +58,9 @@ const OBSERVATION_SLOTS = [
 
 // Summary card shared by Baseline/Conditions/Medications/Food/Vaccinations/
 // Weight/Observations/Timeline/Health Records — icon + title + subtitle +
-// summary value + chevron, linking into the existing feature that owns
-// the detail (Feature Spec UI Components: "Navigation Cards").
-function NavCard({ icon: Icon, iconBg, iconColor, title, subtitle, value, valueColor, to, onClick, error, children }) {
-  const content = (
-    <div className="rounded-2xl px-4 py-4" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}>
-      <div className="flex items-center gap-3.5">
-        <div className="h-11 w-11 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: iconBg }}>
-          <Icon className="h-5 w-5" style={{ color: iconColor }} />
-        </div>
-        <div className="flex-1 min-w-0">
-          <p className="text-[16px] font-semibold text-white truncate">{title}</p>
-          <p className="text-[13px] text-white/40 truncate">
-            {error ? 'Unable to load' : subtitle}
-          </p>
-        </div>
-        {!error && value != null && (
-          <span className="text-base font-semibold flex-shrink-0" style={{ color: valueColor || '#fff' }}>{value}</span>
-        )}
-        {(to || onClick) && <ChevronRight className="h-4 w-4 text-white/25 flex-shrink-0" />}
-      </div>
-      {children}
-    </div>
-  );
-  if (to) return <Link to={to} className="block active:scale-[0.99] transition-transform">{content}</Link>;
-  if (onClick) return <button onClick={onClick} className="block w-full text-left active:scale-[0.99] transition-transform">{content}</button>;
-  return content;
-}
+// summary value + chevron. Design System Amendment #8 (2026-07-30): this
+// used to be its own local `NavCard` function, now the canonical `ListRow`
+// (imported below), which also replaces MenuListRow.jsx's identical pattern.
 
 function Sparkline({ points, color = PALETTE.sky }) {
   if (points.length < 2) return null;
@@ -140,26 +117,29 @@ function WeightQuickLogSheet({ petId, onClose, onSaved }) {
     onSaved();
   };
 
+  const footer = (
+    <button onClick={save} disabled={!value || saving}
+      className="w-full text-base font-bold rounded-2xl h-14 disabled:opacity-30 transition-opacity flex items-center justify-center gap-2 border-2"
+      style={{ background: 'hsl(var(--background))', borderColor: PALETTE.sky, color: '#fff' }}
+    >{saving ? <Loader2 className="h-5 w-5 animate-spin" /> : 'Save'}</button>
+  );
+
   return (
-    <div className="fixed inset-0 z-50 flex flex-col justify-end" onClick={onClose}>
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
-      <div className="relative rounded-t-3xl px-5 pt-5 pb-10 shadow-2xl" style={{ background: 'rgba(18,20,32,0.98)', border: '1px solid rgba(255,255,255,0.08)' }} onClick={(e) => e.stopPropagation()}>
-        <div className="w-10 h-1 bg-white/20 rounded-full mx-auto mb-5" />
-        <h3 className="text-2xl font-bold text-white mb-1">Log Weight</h3>
-        <p className="text-sm text-white/40 mb-5">Today · {format(new Date(), 'MMM d')}</p>
-        <input
-          type="number" step="0.1" placeholder="e.g. 9.8" inputMode="decimal" aria-label="Weight in pounds"
-          value={value} onChange={(e) => setValue(e.target.value)}
-          className="w-full rounded-2xl px-4 py-3 text-xl text-center font-bold text-white focus:outline-none focus:ring-1 focus:ring-primary border border-white/10 mb-2"
-          style={{ background: 'rgba(255,255,255,0.08)' }}
-        />
-        <p className="text-sm text-center text-white/30 mb-5">pounds</p>
-        <button onClick={save} disabled={!value || saving}
-          className="w-full text-base font-bold rounded-2xl h-14 disabled:opacity-30 transition-opacity flex items-center justify-center gap-2"
-          style={{ background: PALETTE.sky, color: '#0D0F1A' }}
-        >{saving ? <Loader2 className="h-5 w-5 animate-spin" /> : 'Save'}</button>
-      </div>
-    </div>
+    <BottomSheet
+      titleId="weight-log-title"
+      title="Log Weight"
+      subtitle={<p className="text-sm text-tier-tertiary mt-1">Today · {format(new Date(), 'MMM d')}</p>}
+      onClose={onClose}
+      footer={footer}
+    >
+      <input
+        type="number" step="0.1" placeholder="e.g. 9.8" inputMode="decimal" aria-label="Weight in pounds"
+        value={value} onChange={(e) => setValue(e.target.value)}
+        className="w-full rounded-2xl px-4 py-3 text-xl text-center font-bold text-white focus:outline-none focus:ring-1 focus:ring-primary border border-white/10 mb-2"
+        style={{ background: 'rgba(255,255,255,0.08)' }}
+      />
+      <p className="text-sm text-center text-tier-tertiary">pounds</p>
+    </BottomSheet>
   );
 }
 
@@ -170,7 +150,7 @@ function ExpandToggle({ expanded, onToggleExpanded }) {
       type="button"
       onClick={onToggleExpanded}
       aria-expanded={expanded}
-      className="w-full flex items-center justify-center gap-1.5 py-2 min-h-[44px] text-[13px] font-semibold text-white/60"
+      className="w-full flex items-center justify-center gap-1.5 py-2 min-h-[44px] text-[13px] font-semibold text-tier-secondary"
     >
       {expanded ? 'Show less' : 'Show more'}
       <ChevronDown className={`h-4 w-4 transition-transform ${expanded ? 'rotate-180' : ''}`} aria-hidden="true" />
@@ -237,7 +217,6 @@ export default function PetProfileContent({ petId, onReload, expanded = true, on
   const [memorialOpen, setMemorialOpen] = useState(false);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [deletePetStep, setDeletePetStep] = useState(0);
-  const [deletePetConfirmText, setDeletePetConfirmText] = useState('');
   const [deletingPet, setDeletingPet] = useState(false);
   const [deletePetError, setDeletePetError] = useState('');
 
@@ -405,18 +384,17 @@ export default function PetProfileContent({ petId, onReload, expanded = true, on
 
   const openDeletePetFlow = () => {
     setDeletePetError('');
-    setDeletePetConfirmText('');
     setDeletePetStep(1);
     track('pet_delete_started', { pet_id: petId });
   };
   const closeDeletePetFlow = () => {
     if (!deletingPet) {
       setDeletePetStep(0);
-      setDeletePetConfirmText('');
       setDeletePetError('');
       track('pet_delete_cancelled', { pet_id: petId });
     }
   };
+  const handleDeletePetStepChange = (step) => (step === 0 ? closeDeletePetFlow() : setDeletePetStep(step));
   const handleDeletePet = async () => {
     setDeletingPet(true);
     setDeletePetError('');
@@ -462,8 +440,8 @@ export default function PetProfileContent({ petId, onReload, expanded = true, on
   if (petError) {
     return (
       <div className="flex flex-col items-center justify-center px-6 text-center gap-4 py-16">
-        <p className="text-white/60">Unable to load profile.</p>
-        <button onClick={loadSummary} className="rounded-xl px-4 py-2 text-sm font-semibold" style={{ background: PALETTE.sky, color: '#0D0F1A' }}>Retry</button>
+        <p className="text-tier-secondary">Unable to load profile.</p>
+        <button onClick={loadSummary} className="rounded-xl px-4 py-2 text-sm font-semibold border-2" style={{ background: 'hsl(var(--background))', borderColor: PALETTE.sky, color: '#fff' }}>Retry</button>
       </div>
     );
   }
@@ -504,16 +482,16 @@ export default function PetProfileContent({ petId, onReload, expanded = true, on
           {pet.photo_url ? (
             <img src={pet.photo_url} alt={pet.name} className={`w-full h-full object-cover ${isMemorial ? 'grayscale' : ''}`} />
           ) : pet.species === 'Dog' ? (
-            <Dog className="h-10 w-10 text-white/40" />
+            <Dog className="h-10 w-10 text-tier-tertiary" />
           ) : (
-            <Cat className="h-10 w-10 text-white/40" />
+            <Cat className="h-10 w-10 text-tier-tertiary" />
           )}
         </div>
         <h2 className="text-[28px] font-bold text-white mt-3 leading-tight">{pet.name}</h2>
-        <p className="text-[14px] text-white/45 mt-0.5">
+        <p className="text-[14px] text-tier-tertiary mt-0.5">
           {getPetLabel(pet.species)}{pet.breed ? ` · ${pet.breed}` : ''}{pet.sex ? ` · ${pet.sex}` : ''}
         </p>
-        {age && <p className="text-[14px] text-white/45">{age}</p>}
+        {age && <p className="text-[14px] text-tier-tertiary">{age}</p>}
 
         {pet.conditions?.length > 0 && (
           <div className="flex flex-wrap justify-center gap-2 mt-3">
@@ -555,9 +533,9 @@ export default function PetProfileContent({ petId, onReload, expanded = true, on
                 retired 5-ring row (spec: "single Vibe icon, same icon and
                 color rules as Home"). */}
             {context === 'pets' ? (
-              <div className="rounded-2xl px-4 py-4" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}>
+              <div className="rounded-2xl px-4 py-4 bg-card border border-border">
                 {wellbeingUnavailable ? (
-                  <p className="text-base text-white/40 text-center py-4">Unable to load wellbeing.</p>
+                  <p className="text-base text-tier-tertiary text-center py-4">Unable to load wellbeing.</p>
                 ) : (
                   <div className="grid grid-cols-2 gap-2">
                     {WELLBEING_ATTRIBUTES.map((code) => (
@@ -574,9 +552,9 @@ export default function PetProfileContent({ petId, onReload, expanded = true, on
                 )}
               </div>
             ) : (
-              <div className="rounded-2xl px-4 pt-5 pb-4" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}>
+              <div className="rounded-2xl px-4 pt-5 pb-4 bg-card border border-border">
                 {errors.weight ? (
-                  <p className="text-base text-white/40 text-center py-4">Unable to load wellness summary.</p>
+                  <p className="text-base text-tier-tertiary text-center py-4">Unable to load wellness summary.</p>
                 ) : (
                   <div className="flex items-center justify-between gap-3">
                     <button onClick={() => setCheckInOpen(true)} aria-label={`Open Daily Check-In. Current Vibe: ${vibeAccessibleLabel(vibeStatus)}.`} className="flex flex-col items-center gap-1.5">
@@ -586,7 +564,7 @@ export default function PetProfileContent({ petId, onReload, expanded = true, on
                       </p>
                     </button>
                     <button onClick={() => setWeightLogOpen(true)} aria-label="Log weight" className="flex flex-col items-center gap-1.5">
-                      <Scale className="h-6 w-6 text-white/40" aria-hidden="true" />
+                      <Scale className="h-6 w-6 text-tier-tertiary" aria-hidden="true" />
                       <p className="text-[15px] font-semibold text-white">{weightValLbs ? `${weightValLbs} lbs` : 'No Data'}</p>
                     </button>
                   </div>
@@ -606,7 +584,7 @@ export default function PetProfileContent({ petId, onReload, expanded = true, on
             <ActionPill icon={Pencil} label="Edit Pet" onClick={() => setEditOpen(true)} />
             <ActionPill icon={Trash2} label="Delete Pet" danger onClick={openDeletePetFlow} disabled={!isOnline} />
             {shareFeedback && (
-              <p role="status" className="text-center text-sm text-white/50 w-full">{shareFeedback}</p>
+              <p role="status" className="text-center text-sm text-tier-tertiary w-full">{shareFeedback}</p>
             )}
           </div>
         )}
@@ -621,11 +599,11 @@ export default function PetProfileContent({ petId, onReload, expanded = true, on
               <ActionPill icon={Trash2} label="Delete Pet" danger onClick={openDeletePetFlow} disabled={!isOnline} />
             </div>
             {shareFeedback && (
-              <p role="status" className="text-center text-sm text-white/50">{shareFeedback}</p>
+              <p role="status" className="text-center text-sm text-tier-tertiary">{shareFeedback}</p>
             )}
 
             {/* ── BASELINE ── */}
-            <NavCard
+            <ListRow
               icon={HeartPulse} iconBg="rgba(76,199,176,0.15)" iconColor={PALETTE.teal}
               title="Baseline" subtitle={baselineSubtitle}
               value={baselineValue} valueColor={baselineState === 'complete' ? PALETTE.teal : PALETTE.amber}
@@ -635,7 +613,7 @@ export default function PetProfileContent({ petId, onReload, expanded = true, on
             {/* ── CONDITIONS ── */}
             {/* No dedicated Condition Management screen exists yet — conditions
                 are edited via the Edit Pet sheet's condition chips. */}
-            <NavCard
+            <ListRow
               icon={ClipboardList} iconBg="rgba(244,199,107,0.15)" iconColor={PALETTE.amber}
               title="Conditions" subtitle={conditionsCount > 0 ? 'Chronic conditions and diagnoses' : 'No conditions added.'}
               value={conditionsCount > 0 ? conditionsCount : 'Add Condition'}
@@ -644,7 +622,7 @@ export default function PetProfileContent({ petId, onReload, expanded = true, on
             />
 
             {/* ── MEDICATIONS ── */}
-            <NavCard
+            <ListRow
               icon={Pill} iconBg="rgba(111,183,255,0.15)" iconColor={PALETTE.sky}
               title="Medications" subtitle={medicationsCount > 0 ? `${medicationsCount} active medication${medicationsCount === 1 ? '' : 's'}` : 'No medications.'}
               value={medicationsCount > 0 ? medicationsCount : 'Add Medication'}
@@ -653,7 +631,7 @@ export default function PetProfileContent({ petId, onReload, expanded = true, on
             />
 
             {/* ── FOOD ── */}
-            <NavCard
+            <ListRow
               icon={Utensils} iconBg="rgba(76,199,176,0.15)" iconColor={PALETTE.teal}
               title="Food" subtitle={foodsCount > 0 ? `${foodsCount} active food${foodsCount === 1 ? '' : 's'}` : 'No food configured.'}
               value={foodsCount > 0 ? foodsCount : 'Add Food'}
@@ -662,7 +640,7 @@ export default function PetProfileContent({ petId, onReload, expanded = true, on
             />
 
             {/* ── VACCINATIONS ── */}
-            <NavCard
+            <ListRow
               icon={ShieldCheck} iconBg="rgba(111,183,255,0.15)" iconColor={PALETTE.sky}
               title="Vaccinations" subtitle={vaxSummary.total === 0 ? 'No vaccinations recorded.' : vaxSummary.isOverdue ? 'Overdue' : 'Up to date'}
               value={vaxSummary.total === 0 ? 'Add Vaccination' : `${vaxSummary.current} / ${vaxSummary.total}`}
@@ -671,7 +649,7 @@ export default function PetProfileContent({ petId, onReload, expanded = true, on
             />
 
             {/* ── WEIGHT ── */}
-            <NavCard
+            <ListRow
               icon={Scale} iconBg="rgba(169,174,181,0.15)" iconColor={PALETTE.gray}
               title="Weight"
               subtitle={weightValLbs
@@ -683,11 +661,11 @@ export default function PetProfileContent({ petId, onReload, expanded = true, on
               <div className="flex justify-end mt-1">
                 {weightSummary?.sparkline?.length >= 2 ? <Sparkline points={weightSummary.sparkline} /> : <WeightPlaceholderChart />}
               </div>
-            </NavCard>
+            </ListRow>
 
             {/* ── OBSERVATIONS ── */}
             {checkedInToday ? (
-              <NavCard
+              <ListRow
                 icon={TrendingUp} iconBg="rgba(244,199,107,0.15)" iconColor={PALETTE.amber}
                 title="Observations" subtitle="Trends and recent observations"
                 value="Today" valueColor={PALETTE.amber}
@@ -698,16 +676,16 @@ export default function PetProfileContent({ petId, onReload, expanded = true, on
                     const { label: value, tone } = getChipState(code, todayCheckIn?.status, todayObservationValues);
                     return (
                       <div key={code} className="rounded-xl px-1.5 py-2 flex flex-col items-center gap-1 text-center" style={{ background: 'rgba(255,255,255,0.04)' }}>
-                        <Icon className="h-3.5 w-3.5 text-white/40" />
-                        <p className="text-[13px] text-white/40 truncate w-full">{label}</p>
+                        <Icon className="h-3.5 w-3.5 text-tier-tertiary" />
+                        <p className="text-[13px] text-tier-tertiary truncate w-full">{label}</p>
                         <p className="text-[13px] font-semibold truncate w-full" style={{ color: RING_COLOR[tone] }}>{value}</p>
                       </div>
                     );
                   })}
                 </div>
-              </NavCard>
+              </ListRow>
             ) : (
-              <NavCard
+              <ListRow
                 icon={TrendingUp} iconBg="rgba(244,199,107,0.15)" iconColor={PALETTE.amber}
                 title="Observations" subtitle="No observations yet."
                 value="Start Daily Check-In" valueColor={PALETTE.amber}
@@ -721,21 +699,21 @@ export default function PetProfileContent({ petId, onReload, expanded = true, on
                 makes it a first-class, discoverable destination from the
                 expanded view too (spec 0023 step 7). Trends itself is
                 unchanged; this only adds a link to it. */}
-            <NavCard
+            <ListRow
               icon={LineChart} iconBg="rgba(111,183,255,0.15)" iconColor={PALETTE.sky}
               title="Trends" subtitle="Range charts and patterns over time"
               to={`/pet/${petId}/trends`}
             />
 
             {/* ── VET EXPORT ── */}
-            <NavCard
+            <ListRow
               icon={FileDown} iconBg="rgba(244,199,107,0.15)" iconColor={PALETTE.amber}
               title="Vet Report" subtitle="Download a clinic-ready health report"
               to={`/pet/${petId}/export`}
             />
 
             {/* ── TIMELINE ── */}
-            <NavCard
+            <ListRow
               icon={Clock} iconBg="rgba(169,174,181,0.15)" iconColor={PALETTE.gray}
               title="Timeline" subtitle={timelineCount ? 'Complete health history' : "Events will appear as your pet's health history grows."}
               value={timelineCount ? `${timelineCount} Event${timelineCount === 1 ? '' : 's'}` : null}
@@ -746,7 +724,7 @@ export default function PetProfileContent({ petId, onReload, expanded = true, on
             {/* Links to the existing Bloodwork tab (real data the count is
                 derived from) rather than the unrelated Documents placeholder,
                 so the number shown here always matches what's on the other side. */}
-            <NavCard
+            <ListRow
               icon={FileText} iconBg="rgba(111,183,255,0.15)" iconColor={PALETTE.sky}
               title="Health Records" subtitle={healthRecordsCount ? 'Lab results, vet visits, and documents' : 'No records uploaded.'}
               value={healthRecordsCount ? `${healthRecordsCount} File${healthRecordsCount === 1 ? '' : 's'}` : 'Add Record'}
@@ -778,83 +756,45 @@ export default function PetProfileContent({ petId, onReload, expanded = true, on
       <EditPetSheet pet={pet} open={editOpen} onOpenChange={setEditOpen} onSuccess={() => { setEditOpen(false); reloadAll(); }} />
       <MemorialDialog pet={pet} open={memorialOpen} onOpenChange={setMemorialOpen} onSuccess={() => { setMemorialOpen(false); reloadAll(); }} />
 
-      {/* Delete Pet — Step 1: Warning */}
-      <Dialog open={deletePetStep === 1} onOpenChange={(v) => !v && closeDeletePetFlow()}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="font-serif text-2xl text-destructive">Delete {pet.name}?</DialogTitle>
-          </DialogHeader>
-          <DialogDescription asChild>
-            <div className="space-y-3 text-base text-muted-foreground">
-              {isPrimaryOwner && hasLinkedCoOwner ? (
-                <>
-                  <p>
-                    You share {pet.name} with a co-owner. Removing {pet.name} from your account will
-                    transfer full ownership to your co-owner — you'll no longer have access to their profile,
-                    logs, medications, records, or photos.
-                  </p>
-                  <p>Your co-owner will keep {pet.name} and all of their health history.</p>
-                </>
-              ) : !isPrimaryOwner ? (
+      {/* Delete Pet — two-step type-to-confirm flow */}
+      <ConfirmDeleteDialog
+        step={deletePetStep}
+        onOpenChange={handleDeletePetStepChange}
+        title={`Delete ${pet.name}?`}
+        warning={
+          <div className="space-y-3 text-base text-muted-foreground">
+            {isPrimaryOwner && hasLinkedCoOwner ? (
+              <>
                 <p>
-                  You'll be removed as a co-owner of {pet.name}. The primary owner keeps full access and
-                  all of {pet.name}'s health history.
+                  You share {pet.name} with a co-owner. Removing {pet.name} from your account will
+                  transfer full ownership to your co-owner — you'll no longer have access to their profile,
+                  logs, medications, records, or photos.
                 </p>
-              ) : (
-                <p>
-                  This will permanently delete {pet.name} and all information connected to them, including
-                  logs, medications, records, photos, and reports.
-                </p>
-              )}
-              <p>This will not delete your Wysker Watch account or any other pets.</p>
-              <p className="font-medium text-foreground">This cannot be undone.</p>
-            </div>
-          </DialogDescription>
-          <DialogFooter className="mt-2 gap-2">
-            <button onClick={closeDeletePetFlow} className="flex-1 h-10 rounded-lg border border-border text-sm font-medium hover:bg-secondary transition-colors">Cancel</button>
-            <button
-              onClick={() => setDeletePetStep(2)}
-              className="flex-1 h-10 rounded-lg bg-destructive text-destructive-foreground text-sm font-medium hover:bg-destructive/90 transition-colors"
-            >
-              Continue
-            </button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Delete Pet — Step 2: Type pet name to confirm */}
-      <Dialog open={deletePetStep === 2} onOpenChange={(v) => !v && closeDeletePetFlow()}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="font-serif text-2xl text-destructive">Confirm Deletion</DialogTitle>
-          </DialogHeader>
-          <DialogDescription asChild>
-            <div className="space-y-3 text-base text-muted-foreground">
-              <p>Type <strong className="text-foreground font-mono">{pet.name}</strong> to confirm.</p>
-            </div>
-          </DialogDescription>
-          <Input
-            value={deletePetConfirmText}
-            onChange={(e) => setDeletePetConfirmText(e.target.value)}
-            placeholder={pet.name}
-            className="font-mono"
-            autoCapitalize="none"
-            autoCorrect="off"
-            disabled={deletingPet}
-          />
-          {deletePetError && <p className="text-base text-destructive">{deletePetError}</p>}
-          <DialogFooter className="mt-2 gap-2">
-            <button onClick={closeDeletePetFlow} disabled={deletingPet} className="flex-1 h-10 rounded-lg border border-border text-sm font-medium hover:bg-secondary transition-colors disabled:opacity-50">Cancel</button>
-            <button
-              onClick={handleDeletePet}
-              disabled={deletePetConfirmText !== pet.name || deletingPet || !isOnline}
-              className="flex-1 h-10 rounded-lg bg-destructive text-destructive-foreground text-sm font-medium hover:bg-destructive/90 transition-colors disabled:opacity-40"
-            >
-              {deletingPet ? 'Deleting…' : 'Delete Pet'}
-            </button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+                <p>Your co-owner will keep {pet.name} and all of their health history.</p>
+              </>
+            ) : !isPrimaryOwner ? (
+              <p>
+                You'll be removed as a co-owner of {pet.name}. The primary owner keeps full access and
+                all of {pet.name}'s health history.
+              </p>
+            ) : (
+              <p>
+                This will permanently delete {pet.name} and all information connected to them, including
+                logs, medications, records, photos, and reports.
+              </p>
+            )}
+            <p>This will not delete your Wysker Watch account or any other pets.</p>
+            <p className="font-medium text-foreground">This cannot be undone.</p>
+          </div>
+        }
+        confirmText={pet.name}
+        confirmLabel="Delete Pet"
+        confirmingLabel="Deleting…"
+        confirming={deletingPet}
+        confirmDisabled={!isOnline}
+        error={deletePetError}
+        onConfirm={handleDeletePet}
+      />
     </div>
   );
 }

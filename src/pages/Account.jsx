@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChevronLeft, User } from 'lucide-react';
+import IconButton from '../components/IconButton';
 import PageTransition from '../components/PageTransition';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -166,10 +167,8 @@ export default function Account() {
       <div className="min-h-screen pb-24">
         <header style={{ paddingTop: 'env(safe-area-inset-top)' }}>
           <div className="max-w-2xl mx-auto px-4 py-4 flex items-center gap-3">
-            <button onClick={() => navigate(-1)} aria-label="Back" className="h-9 w-9 rounded-full bg-white/8 flex items-center justify-center flex-shrink-0">
-              <ChevronLeft className="h-5 w-5 text-white" />
-            </button>
-            <h1 className="font-serif text-[28px]">Profile</h1>
+            <IconButton icon={ChevronLeft} onClick={() => navigate(-1)} aria-label="Back" />
+            <h1 className="text-[28px] font-semibold">Profile</h1>
           </div>
         </header>
 

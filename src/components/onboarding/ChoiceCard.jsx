@@ -6,7 +6,7 @@ export default function ChoiceCard({ eyebrow, title, question, options, value, o
     <div className="flex flex-col gap-6">
       <div className="space-y-1.5">
         {eyebrow && <p className="text-xs font-semibold uppercase tracking-widest text-primary/70">{eyebrow}</p>}
-        <h2 className="font-serif text-2xl text-foreground leading-snug">{title}</h2>
+        <h2 className="text-2xl font-semibold text-foreground leading-snug">{title}</h2>
         {question && <p className="text-base text-muted-foreground">{question}</p>}
       </div>
       <div className="flex flex-col gap-3" role="radiogroup" aria-label={question || title}>

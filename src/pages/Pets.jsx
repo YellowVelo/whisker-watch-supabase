@@ -113,11 +113,11 @@ export default function Pets() {
                 <PawPrint className="h-6 w-6 text-primary flex-shrink-0" aria-hidden="true" />
                 <h1 className="text-[28px] font-bold text-foreground tracking-tight leading-tight">My Pets</h1>
               </div>
-              <p className="text-[14px] text-white/45 mt-1">All the pets in your care, in one place.</p>
+              <p className="text-[14px] text-tier-tertiary mt-1">All the pets in your care, in one place.</p>
             </div>
             <button
               onClick={() => setShowAdd(true)}
-              className="flex items-center gap-1.5 rounded-full bg-primary text-primary-foreground px-4 h-10 text-sm font-semibold flex-shrink-0 active:opacity-80 transition-opacity"
+              className="flex items-center gap-1.5 rounded-full bg-background text-white border-2 border-primary px-4 h-10 text-sm font-semibold flex-shrink-0 active:opacity-80 transition-opacity"
             >
               <Plus className="h-4 w-4" /> Add Pet
             </button>
@@ -138,13 +138,13 @@ export default function Pets() {
               <div className="h-20 w-20 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
                 <PawPrint className="h-10 w-10 text-primary" />
               </div>
-              <h2 className="font-serif text-2xl mb-2">No pets yet</h2>
+              <h2 className="text-2xl font-semibold mb-2">No pets yet</h2>
               <p className="text-muted-foreground mb-6 max-w-sm mx-auto">
                 Add your first pet to begin tracking their health.
               </p>
               <button
                 onClick={() => setShowAdd(true)}
-                className="inline-flex items-center gap-2 rounded-md bg-primary text-primary-foreground px-5 h-10 text-sm font-medium"
+                className="inline-flex items-center gap-2 rounded-md bg-background text-white border-2 border-primary px-5 h-10 text-sm font-medium"
               >
                 <Plus className="h-4 w-4" /> Add Pet
               </button>
@@ -157,7 +157,7 @@ export default function Pets() {
                     <Activity className="h-4 w-4 text-primary flex-shrink-0" aria-hidden="true" />
                     <h2 className="text-[13px] font-bold tracking-widest uppercase text-primary">Active Pets</h2>
                   </div>
-                  <p className="text-[13px] text-white/40 mb-3">Pets you monitor every day</p>
+                  <p className="text-[13px] text-tier-tertiary mb-3">Pets you monitor every day</p>
                   <div className="space-y-3">
                     {activePets.map((pet) => (
                       <ExpandablePetProfileCard
@@ -192,7 +192,7 @@ export default function Pets() {
                     <Rainbow className="h-4 w-4 text-purple-400 flex-shrink-0" aria-hidden="true" />
                     <h2 className="text-[13px] font-bold tracking-widest uppercase text-purple-400">Rainbow Bridge</h2>
                   </div>
-                  <p className="text-[13px] text-white/40 mb-3">Pets who will always be with us</p>
+                  <p className="text-[13px] text-tier-tertiary mb-3">Pets who will always be with us</p>
                   <div className="space-y-3">
                     {memorialPets.map((pet) => (
                       <ExpandablePetProfileCard
@@ -223,16 +223,15 @@ function SitterPetRow({ pet }) {
   return (
     <Link
       to={`/pet/${pet.id}/trends`}
-      className="flex items-center gap-3 rounded-2xl px-4 py-3 active:opacity-80 transition-opacity"
-      style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)' }}
+      className="flex items-center gap-3 rounded-2xl px-4 py-3 active:opacity-80 transition-opacity bg-card border border-border"
     >
       <div className="h-11 w-11 rounded-full overflow-hidden flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(255,255,255,0.06)' }}>
         {pet.photo_url ? (
           <img src={pet.photo_url} alt="" className="w-full h-full object-cover" />
         ) : pet.species === 'Dog' ? (
-          <Dog className="h-5 w-5 text-white/40" />
+          <Dog className="h-5 w-5 text-tier-tertiary" />
         ) : (
-          <Cat className="h-5 w-5 text-white/40" />
+          <Cat className="h-5 w-5 text-tier-tertiary" />
         )}
       </div>
       <p className="text-base font-semibold text-white truncate">{pet.name}</p>

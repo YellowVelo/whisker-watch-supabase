@@ -337,7 +337,7 @@ export default function Home() {
       <header style={{ paddingTop: 'env(safe-area-inset-top)' }}>
         <div className="max-w-2xl mx-auto px-5 py-6 flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-[14px] text-white/50">{greeting}</p>
+            <p className="text-[14px] text-tier-tertiary">{greeting}</p>
             <h1 className="text-[28px] font-bold text-foreground tracking-tight leading-tight mt-0.5">How are your pets today?</h1>
           </div>
         </div>
@@ -355,9 +355,9 @@ export default function Home() {
             <div className="h-20 w-20 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
               <PawPrint className="h-10 w-10 text-primary" />
             </div>
-            <h2 className="font-serif text-2xl mb-2">Welcome to Wysker Watch</h2>
+            <h2 className="text-2xl font-semibold mb-2">Welcome to Wysker Watch</h2>
             <p className="text-muted-foreground mb-6 max-w-sm mx-auto">Let's add your first pet.</p>
-            <Link to="/pets" className="inline-flex items-center gap-2 rounded-md bg-primary text-primary-foreground px-5 h-10 text-sm font-medium">
+            <Link to="/pets" className="inline-flex items-center gap-2 rounded-md bg-background text-white border-2 border-primary px-5 h-10 text-sm font-medium">
               Add Pet
             </Link>
           </div>
@@ -406,8 +406,7 @@ export default function Home() {
 
             <Link
               to="/pet-sitter"
-              className="flex items-center gap-3 rounded-2xl px-4 py-4 active:opacity-80 transition-opacity"
-              style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}
+              className="flex items-center gap-3 rounded-2xl px-4 py-4 active:opacity-80 transition-opacity bg-card border border-border"
             >
               <div className="h-11 w-11 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(45,212,191,0.14)' }}>
                 <UsersRound className="h-5 w-5 text-teal-300" />
@@ -484,7 +483,7 @@ function CompleteProfileBanner({ petId, petName }) {
 function CatchUpBanner({ petName, onCatchUp }) {
   return (
     <div className="text-center py-2">
-      <p className="text-[13px] text-white/40 flex items-center justify-center gap-1.5">
+      <p className="text-[13px] text-tier-tertiary flex items-center justify-center gap-1.5">
         <CalendarClock className="h-3.5 w-3.5" aria-hidden="true" />
         Yesterday wasn't logged for {petName}.
       </p>
@@ -502,7 +501,7 @@ function CatchUpBanner({ petName, onCatchUp }) {
 function MultiDayCatchUpBanner({ petName, missedCount, onCatchUp }) {
   return (
     <div className="text-center py-2">
-      <p className="text-[13px] text-white/40 flex items-center justify-center gap-1.5">
+      <p className="text-[13px] text-tier-tertiary flex items-center justify-center gap-1.5">
         <CalendarClock className="h-3.5 w-3.5" aria-hidden="true" />
         {missedCount} days weren't logged for {petName}.
       </p>

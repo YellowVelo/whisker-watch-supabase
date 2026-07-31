@@ -4,13 +4,14 @@ import { entities } from '@/api/entities';
 import { ArrowLeft, Plus, X, UtensilsCrossed, Zap, Heart, Activity, Droplets, Droplet, Scale, AlertTriangle, Pill, AlertCircle, ClipboardList } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import SymptomLogForm from '../components/SymptomLogForm';
+import IconButton from '../components/IconButton';
 import PageTransition from '../components/PageTransition';
 import { PALETTE } from '@/lib/toneColors';
 
 function Chip({ icon: Icon, label, danger }) {
   return (
     <span
-      className={`inline-flex items-center gap-1 text-xs rounded-full px-2 py-0.5 ${danger ? 'text-red-400 border border-red-500/20' : 'text-white/60 border border-white/10'}`}
+      className={`inline-flex items-center gap-1 text-xs rounded-full px-2 py-0.5 ${danger ? 'text-red-400 border border-red-500/20' : 'text-tier-secondary border border-white/10'}`}
       style={{ background: danger ? 'rgba(239,68,68,0.1)' : 'rgba(255,255,255,0.06)' }}
     >
       {Icon && <Icon className="h-3 w-3" />}
@@ -55,9 +56,7 @@ export default function PetSymptoms() {
           className="sticky z-20 bg-background/80 backdrop-blur-xl border-b border-white/8 px-4 py-3 flex items-center justify-between"
           style={{ top: 'var(--account-banner-height, 0px)', paddingTop: 'calc(env(safe-area-inset-top) + 12px)' }}
         >
-          <button onClick={() => navigate(-1)} aria-label="Back" className="w-9 h-9 rounded-full flex items-center justify-center bg-white/8">
-            <ArrowLeft className="h-5 w-5 text-white" />
-          </button>
+          <IconButton icon={ArrowLeft} onClick={() => navigate(-1)} aria-label="Back" />
           <h1 className="text-[28px] font-semibold text-white">Symptom Timeline</h1>
           <button
             onClick={() => setLogOpen(true)}
@@ -75,10 +74,10 @@ export default function PetSymptoms() {
         ) : logs.length === 0 ? (
           <div className="text-center py-24 px-6">
             <div className="mx-auto mb-4 w-16 h-16 rounded-full flex items-center justify-center bg-white/6">
-              <ClipboardList className="h-7 w-7 text-white/40" />
+              <ClipboardList className="h-7 w-7 text-tier-tertiary" />
             </div>
             <h2 className="text-2xl font-semibold text-white mb-1">No logs yet</h2>
-            <p className="text-base text-white/40 mb-6 max-w-xs mx-auto">
+            <p className="text-base text-tier-tertiary mb-6 max-w-xs mx-auto">
               Start tracking daily symptoms to build a timeline you can review and share with your vet.
             </p>
             <button
@@ -93,7 +92,7 @@ export default function PetSymptoms() {
           <div className="max-w-2xl mx-auto px-4 py-5">
             {Object.entries(groups).map(([month, monthLogs]) => (
               <div key={month} className="mb-6">
-                <p className="text-xs font-bold uppercase tracking-widest text-white/30 mb-3 px-1">{month}</p>
+                <p className="text-xs font-bold uppercase tracking-widest text-tier-tertiary mb-3 px-1">{month}</p>
                 <div className="relative pl-6">
                   <div className="absolute left-[7px] top-1 bottom-1 w-px bg-white/10" />
                   <div className="space-y-3">
@@ -107,12 +106,11 @@ export default function PetSymptoms() {
                             style={{ background: PALETTE.teal, boxShadow: '0 0 8px rgba(76,199,176,0.5)' }}
                           />
                           <div
-                            className="rounded-2xl p-4"
-                            style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}
+                            className="rounded-2xl p-4 bg-card border border-border"
                           >
                             <div className="flex items-baseline gap-2 mb-3">
                               <p className="text-sm font-bold text-white">{d}</p>
-                              <p className="text-xs text-white/30">{weekday}</p>
+                              <p className="text-xs text-tier-tertiary">{weekday}</p>
                             </div>
                             <div className="flex flex-wrap gap-1.5">
                               {log.appetite && <Chip icon={UtensilsCrossed} label={log.appetite} />}
@@ -126,7 +124,7 @@ export default function PetSymptoms() {
                               {log.medication_given && <Chip icon={Pill} label="Meds given" />}
                               {log.nausea_symptoms?.length > 0 && <Chip icon={AlertCircle} label={`Nausea: ${log.nausea_symptoms.join(', ')}`} danger />}
                             </div>
-                            {log.notes && <p className="text-base text-white/50 mt-3 italic">{log.notes}</p>}
+                            {log.notes && <p className="text-base text-tier-tertiary mt-3 italic">{log.notes}</p>}
                           </div>
                         </div>
                       );

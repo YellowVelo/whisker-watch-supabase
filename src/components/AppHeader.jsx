@@ -17,15 +17,15 @@ export default function AppHeader() {
 
   return (
     <header
-      className="sticky top-0 z-40 backdrop-blur-xl border-b"
-      style={{ background: 'rgba(10,12,22,0.92)', borderColor: 'rgba(255,255,255,0.08)', paddingTop: 'env(safe-area-inset-top)' }}
+      className="sticky top-0 z-40 backdrop-blur-xl border-b border-border bg-background/90"
+      style={{ paddingTop: 'env(safe-area-inset-top)' }}
     >
       <div className="max-w-2xl mx-auto px-4 h-14 flex items-center justify-between gap-3">
         <div className="flex items-center gap-2 min-w-0">
           <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
             <Heart className="h-4 w-4 text-primary" />
           </div>
-          <span className="font-serif text-lg truncate">Wysker Watch</span>
+          <span className="text-lg font-semibold truncate">Wysker Watch</span>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
           <AskWyskerAction />

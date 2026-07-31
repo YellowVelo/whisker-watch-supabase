@@ -30,8 +30,8 @@ export default function BottomTabBar() {
 
   return (
     <div
-      className="fixed bottom-0 left-0 right-0 z-50 backdrop-blur-xl border-t"
-      style={{ background: 'rgba(10,12,22,0.92)', borderColor: 'rgba(255,255,255,0.08)', paddingBottom: 'env(safe-area-inset-bottom)' }}
+      className="fixed bottom-0 left-0 right-0 z-50 backdrop-blur-xl border-t border-border bg-background/90"
+      style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
       role="navigation"
       aria-label="Primary"
     >

@@ -39,9 +39,9 @@ function PetPhoto({ pet, size, memorial }) {
           className={`w-full h-full object-cover ${memorial ? 'grayscale' : ''}`}
         />
       ) : pet.species === 'Dog' ? (
-        <Dog className="h-1/2 w-1/2 text-white/40" />
+        <Dog className="h-1/2 w-1/2 text-tier-tertiary" />
       ) : (
-        <Cat className="h-1/2 w-1/2 text-white/40" />
+        <Cat className="h-1/2 w-1/2 text-tier-tertiary" />
       )}
     </div>
   );
@@ -63,7 +63,7 @@ export default function PetSummaryCard({
   const identity = (
     <>
       <p className="text-[28px] font-bold text-white leading-tight truncate">{pet.name}</p>
-      <p className="text-[13px] text-white/45 mt-0.5 truncate">
+      <p className="text-[13px] text-tier-tertiary mt-0.5 truncate">
         {getPetLabel(pet.species)}{pet.breed ? ` · ${pet.breed}` : ''}{pet.sex ? ` · ${pet.sex}` : ''}
       </p>
     </>
@@ -77,15 +77,14 @@ export default function PetSummaryCard({
         ref={cardRef}
         to={`/pet/${pet.id}/trends`}
         aria-label={`${pet.name}, in memory. View profile.`}
-        className="block rounded-2xl px-4 py-4 active:opacity-80 transition-opacity"
-        style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)' }}
+        className="block rounded-2xl px-4 py-4 active:opacity-80 transition-opacity bg-card border border-border"
       >
         <div className="flex items-center gap-3.5">
           <PetPhoto pet={pet} size={64} memorial />
           <div className="flex-1 min-w-0">
             {identity}
             {(birthYear || memorialYear) && (
-              <p className="text-[13px] text-white/35 mt-1.5 flex items-center gap-1.5">
+              <p className="text-[13px] text-tier-tertiary mt-1.5 flex items-center gap-1.5">
                 <CalendarDays className="h-3.5 w-3.5" aria-hidden="true" />
                 {birthYear && memorialYear ? `${birthYear} – ${memorialYear}` : birthYear || memorialYear}
               </p>
@@ -95,7 +94,7 @@ export default function PetSummaryCard({
             <Rainbow className="h-6 w-6 text-purple-400" aria-hidden="true" />
             <p className="text-[13px] font-semibold text-purple-400 whitespace-nowrap">In Memory</p>
           </div>
-          <ChevronRight className="h-4 w-4 text-white/25 flex-shrink-0" aria-hidden="true" />
+          <ChevronRight className="h-4 w-4 text-tier-tertiary flex-shrink-0" aria-hidden="true" />
         </div>
       </Link>
     );
@@ -111,10 +110,9 @@ export default function PetSummaryCard({
       ref={cardRef}
       to={`/pet/${pet.id}/trends`}
       aria-label={`${pet.name}. View profile.`}
-      className="block rounded-2xl px-4 py-4 active:opacity-80 transition-opacity"
+      className="block rounded-2xl px-4 py-4 active:opacity-80 transition-opacity bg-card"
       style={{
-        background: 'rgba(255,255,255,0.05)',
-        border: highlighted ? '1px solid rgba(111,183,255,0.5)' : '1px solid rgba(255,255,255,0.08)',
+        border: highlighted ? '1px solid rgba(111,183,255,0.5)' : '1px solid hsl(var(--border))',
         boxShadow: highlighted ? '0 0 0 3px rgba(111,183,255,0.15)' : undefined,
       }}
     >
@@ -124,7 +122,7 @@ export default function PetSummaryCard({
         <div className="flex-1 min-w-0">
           {identity}
           {age && (
-            <p className="text-[13px] text-white/40 mt-1 flex items-center gap-1.5">
+            <p className="text-[13px] text-tier-tertiary mt-1 flex items-center gap-1.5">
               <CalendarDays className="h-3.5 w-3.5 flex-shrink-0" aria-hidden="true" />
               {age}
             </p>
@@ -156,7 +154,7 @@ export default function PetSummaryCard({
               {vibeStatus ? { great: 'Great Day', off: 'Off Day', tough: 'Tough Day', skipped: 'Skipped' }[vibeStatus] : 'Check in today'}
             </p>
           </div>
-          <ChevronRight className="h-4 w-4 text-white/25" aria-hidden="true" />
+          <ChevronRight className="h-4 w-4 text-tier-tertiary" aria-hidden="true" />
         </div>
       </div>
 

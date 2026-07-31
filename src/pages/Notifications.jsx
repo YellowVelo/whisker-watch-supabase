@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChevronLeft, Bell } from 'lucide-react';
+import IconButton from '../components/IconButton';
 import PageTransition from '../components/PageTransition';
 import { listNotifications, markRead } from '@/lib/notifications/notificationClient';
 
@@ -28,10 +29,8 @@ export default function Notifications() {
       <div className="min-h-screen pb-24">
         <header style={{ paddingTop: 'env(safe-area-inset-top)' }}>
           <div className="max-w-2xl mx-auto px-4 py-4 flex items-center gap-3">
-            <button onClick={() => navigate(-1)} aria-label="Back" className="h-9 w-9 rounded-full bg-white/8 flex items-center justify-center flex-shrink-0">
-              <ChevronLeft className="h-5 w-5 text-white" />
-            </button>
-            <h1 className="font-serif text-[28px]">Notifications</h1>
+            <IconButton icon={ChevronLeft} onClick={() => navigate(-1)} aria-label="Back" />
+            <h1 className="text-[28px] font-semibold">Notifications</h1>
           </div>
         </header>
 
@@ -53,11 +52,11 @@ export default function Notifications() {
                 <button
                   key={n.id}
                   onClick={() => handleTap(n)}
-                  className="w-full text-left rounded-xl px-4 py-3.5 transition-opacity active:opacity-70"
-                  style={{ background: n.read ? 'rgba(255,255,255,0.03)' : 'rgba(111,183,255,0.08)', border: '1px solid rgba(255,255,255,0.08)' }}
+                  className={`w-full text-left rounded-xl px-4 py-3.5 transition-opacity active:opacity-70 border border-border ${n.read ? 'bg-card' : ''}`}
+                  style={n.read ? undefined : { background: 'rgba(111,183,255,0.08)' }}
                 >
-                  <p className="text-base text-white/90">{n.message}</p>
-                  <p className="text-sm text-white/40 mt-1">{new Date(n.created_at).toLocaleString()}</p>
+                  <p className="text-base text-tier-secondary">{n.message}</p>
+                  <p className="text-sm text-tier-tertiary mt-1">{new Date(n.created_at).toLocaleString()}</p>
                 </button>
               ))}
             </div>

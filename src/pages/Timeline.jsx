@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Clock, Pill, ShieldCheck, ClipboardList } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
+import IconButton from '../components/IconButton';
 import PageTransition from '@/components/PageTransition';
 import usePullToRefresh from '@/hooks/usePullToRefresh';
 import PullToRefreshIndicator from '@/components/PullToRefreshIndicator';
@@ -79,10 +80,8 @@ export default function Timeline() {
           style={{ top: 'var(--account-banner-height, 0px)', paddingTop: 'env(safe-area-inset-top)' }}
         >
           <div className="max-w-2xl mx-auto px-4 py-3 flex items-center gap-3">
-            <button onClick={() => navigate(-1)} className="h-9 w-9 rounded-full bg-secondary flex items-center justify-center">
-              <ArrowLeft className="h-5 w-5" />
-            </button>
-            <h1 className="font-serif text-[28px]">Timeline</h1>
+            <IconButton icon={ArrowLeft} onClick={() => navigate(-1)} aria-label="Back" />
+            <h1 className="text-[28px] font-semibold">Timeline</h1>
           </div>
         </header>
 
@@ -103,7 +102,7 @@ export default function Timeline() {
               <div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
                 <Clock className="h-8 w-8 text-primary" />
               </div>
-              <h2 className="font-serif text-2xl mb-2">No events yet</h2>
+              <h2 className="text-2xl font-semibold mb-2">No events yet</h2>
               <p className="text-base text-muted-foreground max-w-sm mx-auto">
                 Events will appear as your pet's health history grows.
               </p>
@@ -111,17 +110,17 @@ export default function Timeline() {
           ) : (
             Object.entries(groups).map(([month, monthItems]) => (
               <div key={month} className="mb-6">
-                <p className="text-xs font-bold uppercase tracking-widest text-white/30 mb-3 px-1">{month}</p>
+                <p className="text-xs font-bold uppercase tracking-widest text-tier-tertiary mb-3 px-1">{month}</p>
                 <div className="space-y-2">
                   {monthItems.map((item) => {
                     const d = format(parseISO(item.date), 'MMM d');
                     const weekday = format(parseISO(item.date), 'EEE');
                     if (item.kind === 'check_in') {
                       return (
-                        <div key={item.id} className="rounded-2xl p-4" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                        <div key={item.id} className="rounded-2xl p-4 bg-card border border-border">
                           <div className="flex items-baseline gap-2 mb-3">
                             <p className="text-sm font-bold text-white">{d}</p>
-                            <p className="text-xs text-white/30">{weekday}</p>
+                            <p className="text-xs text-tier-tertiary">{weekday}</p>
                           </div>
                           <div className="flex flex-wrap gap-1.5">
                             {item.chips.map((chip) => (
@@ -133,13 +132,13 @@ export default function Timeline() {
                     }
                     const Icon = EVENT_ICON[item.type] || Clock;
                     return (
-                      <div key={item.id} className="flex items-center gap-3 rounded-2xl px-4 py-3" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                      <div key={item.id} className="flex items-center gap-3 rounded-2xl px-4 py-3 bg-card border border-border">
                         <div className="h-9 w-9 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(255,255,255,0.08)' }}>
-                          <Icon className="h-4 w-4 text-white/60" />
+                          <Icon className="h-4 w-4 text-tier-secondary" />
                         </div>
                         <div className="min-w-0 flex-1">
                           <p className="text-sm font-medium text-white truncate">{item.title}</p>
-                          <p className="text-sm text-white/40">{d}, {format(parseISO(item.date), 'yyyy')}</p>
+                          <p className="text-sm text-tier-tertiary">{d}, {format(parseISO(item.date), 'yyyy')}</p>
                         </div>
                       </div>
                     );

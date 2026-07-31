@@ -10,15 +10,20 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Plus, Syringe, Pencil, Trash2, Bell, Upload, Loader2 } from 'lucide-react';
 import { format, parseISO, differenceInDays } from 'date-fns';
 import { getVaccines } from '@/lib/speciesConfig';
+import { PALETTE } from '@/lib/toneColors';
 
 const EMPTY_FORM = { vaccine_name: '', date_given: '', next_due_date: '', administered_by: '', lot_number: '', notes: '' };
 
+// Design System Amendment #5/#6 (2026-07-30) — sourced from the semantic
+// tone tokens (via inline style) instead of raw light-mode Tailwind
+// classes, so this reads correctly regardless of device theme. Overdue/
+// due-soon/up-to-date maps cleanly onto bad/warn/good.
 function getReminderStatus(next_due_date) {
   if (!next_due_date) return null;
   const days = differenceInDays(parseISO(next_due_date), new Date());
-  if (days < 0) return { label: `Overdue by ${Math.abs(days)}d`, color: 'bg-red-100 text-red-700 border-red-200' };
-  if (days <= 30) return { label: `Due in ${days}d`, color: 'bg-amber-100 text-amber-700 border-amber-200' };
-  return { label: `Due ${format(parseISO(next_due_date), 'MMM d, yyyy')}`, color: 'bg-green-100 text-green-700 border-green-200' };
+  if (days < 0) return { label: `Overdue by ${Math.abs(days)}d`, background: 'rgba(229,115,115,0.15)', color: PALETTE.red };
+  if (days <= 30) return { label: `Due in ${days}d`, background: 'rgba(244,199,107,0.15)', color: PALETTE.amber };
+  return { label: `Due ${format(parseISO(next_due_date), 'MMM d, yyyy')}`, background: 'rgba(76,199,176,0.15)', color: PALETTE.teal };
 }
 
 export default function VaccinationSection({ petId, species }) {
@@ -166,7 +171,7 @@ export default function VaccinationSection({ petId, species }) {
                   <div className="flex items-center gap-2 flex-wrap">
                     <p className="font-medium text-sm">{v.vaccine_name}</p>
                     {status && (
-                      <span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border ${status.color}`}>
+                      <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full" style={{ background: status.background, color: status.color }}>
                         <Bell className="h-2.5 w-2.5" /> {status.label}
                       </span>
                     )}
@@ -192,7 +197,7 @@ export default function VaccinationSection({ petId, species }) {
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle className="font-serif text-2xl">{editing ? 'Edit' : 'Add'} Vaccination</DialogTitle>
+            <DialogTitle className="text-2xl">{editing ? 'Edit' : 'Add'} Vaccination</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 mt-2">
             <div className="space-y-1.5">

@@ -22,7 +22,7 @@ export default function ConditionsCard({ petName, species, selected, onChange, o
     <div className="flex flex-col gap-6">
       <div className="space-y-1.5">
         <p className="text-xs font-semibold uppercase tracking-widest text-primary/70">Known Conditions</p>
-        <h2 className="font-serif text-2xl text-foreground leading-snug">
+        <h2 className="text-2xl font-semibold text-foreground leading-snug">
           Which conditions has {petName} been diagnosed with?
         </h2>
         <p className="text-sm text-muted-foreground">Optional — select any that apply.</p>

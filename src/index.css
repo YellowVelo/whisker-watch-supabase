@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=DM+Serif+Display&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -7,7 +7,9 @@
 @layer base {
   :root {
     --font-sans: 'Inter', sans-serif;
-    --font-serif: 'DM Serif Display', serif;
+    /* Design System Amendment #2 (2026-07-30) — Inter is the only type
+       family, everywhere. DM Serif Display is retired; the --font-serif
+       variable and the Tailwind `serif` fontFamily mapping are removed. */
     /* Design System §1 semantic palette — single source of truth for the
        tone/trend colors duplicated across PetSummaryCard, PetProfileContent,
        CheckInStatusBanner, and NotificationBell. */
@@ -16,6 +18,12 @@
     --tone-bad: #E57373;
     --tone-neutral: #A9AEB5;
     --accent-sky: #6FB7FF;
+    /* Design System Amendment #3 (2026-07-30) — the 3-tier text-opacity
+       scale. Every text-white/NN or rgba(255,255,255,0.NN) usage should
+       resolve to one of these three, not an arbitrary value. */
+    --text-primary: rgba(255, 255, 255, 1);
+    --text-secondary: rgba(255, 255, 255, 0.7);
+    --text-tertiary: rgba(255, 255, 255, 0.45);
     --background: 228 9% 10%;
     --foreground: 240 5% 96%;
     --card: 228 10% 15%;
@@ -40,6 +48,17 @@
     --chart-3: 199 89% 60%;
     --chart-4: 280 60% 65%;
     --chart-5: 0 72% 60%;
+    --chart-6: 320 70% 65%;
+    --chart-7: 25 85% 60%;
+    --chart-8: 140 60% 50%;
+    --chart-9: 230 70% 65%;
+    --chart-10: 60 70% 55%;
+    --chart-11: 300 65% 65%;
+    --chart-12: 10 75% 60%;
+    --chart-13: 190 75% 55%;
+    --chart-14: 100 55% 55%;
+    --chart-15: 260 65% 65%;
+    --chart-16: 340 75% 65%;
     --radius: 1rem;
     --sidebar-background: 228 22% 8%;
     --sidebar-foreground: 220 20% 92%;
@@ -76,6 +95,17 @@
     --chart-3: 199 89% 60%;
     --chart-4: 280 60% 65%;
     --chart-5: 0 72% 60%;
+    --chart-6: 320 70% 65%;
+    --chart-7: 25 85% 60%;
+    --chart-8: 140 60% 50%;
+    --chart-9: 230 70% 65%;
+    --chart-10: 60 70% 55%;
+    --chart-11: 300 65% 65%;
+    --chart-12: 10 75% 60%;
+    --chart-13: 190 75% 55%;
+    --chart-14: 100 55% 55%;
+    --chart-15: 260 65% 65%;
+    --chart-16: 340 75% 65%;
     --sidebar-background: 228 22% 8%;
     --sidebar-foreground: 220 20% 92%;
     --sidebar-primary: 200 83% 73%;
@@ -118,6 +148,12 @@
     min-height: unset;
   }
 }
+
+/* Design System Amendment #3 (2026-07-30) — the 3-tier text-opacity scale
+   as real utility classes, so `text-white/NN` call sites can be swept onto
+   one of exactly three values instead of an arbitrary one. */
+.text-tier-secondary { color: var(--text-secondary); }
+.text-tier-tertiary { color: var(--text-tertiary); }
 
 /* Safe area utilities */
 .pt-safe { padding-top: env(safe-area-inset-top); }

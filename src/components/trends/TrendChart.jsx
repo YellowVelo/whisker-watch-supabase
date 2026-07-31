@@ -46,7 +46,7 @@ function LineVariant({ series, range, yDomain, color = PALETTE.sky, highlightExt
         <YAxis domain={yDomain || ['auto', 'auto']} tick={{ fontSize: 10, fill: 'rgba(255,255,255,0.35)' }} axisLine={false} tickLine={false} width={32} />
         <Tooltip
           contentStyle={{ background: '#1a1d21', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, fontSize: 12 }}
-          labelStyle={{ color: 'rgba(255,255,255,0.6)' }}
+          labelStyle={{ color: 'var(--text-secondary)' }}
         />
         <Line type="monotone" dataKey="value" stroke={color} strokeWidth={2} dot={renderDot} connectNulls />
       </LineChart>
@@ -89,7 +89,7 @@ function ObservationVariant({ series, range, height = 140 }) {
         <YAxis hide domain={[0, 3]} />
         <Tooltip
           contentStyle={{ background: '#1a1d21', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, fontSize: 12 }}
-          labelStyle={{ color: 'rgba(255,255,255,0.6)' }}
+          labelStyle={{ color: 'var(--text-secondary)' }}
           formatter={(_, __, { payload }) => [observationTooltipLabel(payload), '']}
         />
         <Bar dataKey="barHeight" radius={[3, 3, 3, 3]} maxBarSize={14}>
@@ -120,7 +120,7 @@ function VomitingNauseaVariant({ series, range }) {
         <YAxis hide domain={[0, 3]} />
         <Tooltip
           contentStyle={{ background: '#1a1d21', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, fontSize: 12 }}
-          labelStyle={{ color: 'rgba(255,255,255,0.6)' }}
+          labelStyle={{ color: 'var(--text-secondary)' }}
           formatter={(value, name, { payload }) => [observationTooltipLabel(name === 'vomitingHeight' ? payload.vomiting : payload.nausea), name === 'vomitingHeight' ? 'Vomiting' : 'Nausea']}
         />
         <Bar dataKey="vomitingHeight" name="vomitingHeight" radius={[3, 3, 0, 0]} maxBarSize={10}>
@@ -143,7 +143,7 @@ export default function TrendChart({ variant, series, range, yDomain = null, col
 
 export function ObservationLegend() {
   return (
-    <div className="flex flex-col gap-1 text-[11px] text-white/40 flex-shrink-0 pl-2">
+    <div className="flex flex-col gap-1 text-[11px] text-tier-tertiary flex-shrink-0 pl-2">
       {[2, 1, 0].map((count) => (
         <div key={count} className="flex items-center gap-1.5">
           <span className="h-2 w-2 rounded-full flex-shrink-0" style={{ background: SYMPTOM_COUNT_COLOR[count] }} />

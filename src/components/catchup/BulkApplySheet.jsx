@@ -1,12 +1,13 @@
-import { useState, useEffect, useRef } from 'react';
-import { X, Loader2 } from 'lucide-react';
+import { useState } from 'react';
+import { Loader2 } from 'lucide-react';
 import { CATEGORIES, getOptionsForSpecies, getCategory } from '@/lib/checkin/config';
 import { markOffToughBulk } from '@/lib/checkin/checkinClient';
 import { track } from '@/lib/analytics';
 import { Textarea } from '@/components/ui/textarea';
 import { PALETTE } from '@/lib/toneColors';
+import PillToggle from '@/components/PillToggle';
+import BottomSheet from '@/components/BottomSheet';
 
-const FOCUSABLE = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
 const PICKER_CATEGORIES = CATEGORIES.filter((c) => c.code !== 'medication_exception');
 
 // Catch Up's (spec 0015) bulk-apply — "if several consecutive days all had
@@ -24,7 +25,6 @@ const PICKER_CATEGORIES = CATEGORIES.filter((c) => c.code !== 'medication_except
 // gets its own independent, correct row (spec: "each of those days gets
 // its own independent, correct record — not one shared row").
 export default function BulkApplySheet({ pet, dates, onClose, onSaved }) {
-  const dialogRef = useRef(null);
   const [stage, setStage] = useState('vibe'); // vibe | categories | details | saving
   const [vibeStatus, setVibeStatus] = useState(null);
   const [selectedCodes, setSelectedCodes] = useState([]);
@@ -83,153 +83,109 @@ export default function BulkApplySheet({ pet, dates, onClose, onSaved }) {
     onClose();
   };
 
-  useEffect(() => {
-    const node = dialogRef.current;
-    const focusables = () => Array.from(node?.querySelectorAll(FOCUSABLE) || []).filter((el) => !el.disabled);
-    focusables()[0]?.focus();
+  const title = (
+    <>
+      {stage === 'vibe' && `Apply to ${dates.length} days`}
+      {stage === 'categories' && 'What changed?'}
+      {(stage === 'details' || stage === 'saving') && 'A few details'}
+    </>
+  );
 
-    const onKeyDown = (e) => {
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        handleClose();
-        return;
-      }
-      if (e.key !== 'Tab') return;
-      const items = focusables();
-      if (items.length === 0) return;
-      const first = items[0];
-      const last = items[items.length - 1];
-      if (e.shiftKey && document.activeElement === first) {
-        e.preventDefault();
-        last.focus();
-      } else if (!e.shiftKey && document.activeElement === last) {
-        e.preventDefault();
-        first.focus();
-      }
-    };
+  const subtitle = (
+    <>
+      {error && <p className="text-sm text-red-400 mt-2">{error}</p>}
+      {!error && stage === 'vibe' && (
+        <p className="text-xs text-tier-tertiary mt-2">Pick what these {dates.length} days had in common — each day still gets saved on its own.</p>
+      )}
+    </>
+  );
 
-    document.addEventListener('keydown', onKeyDown);
-    return () => document.removeEventListener('keydown', onKeyDown);
-  }, [stage]);
+  const footer = (stage === 'categories' || stage === 'details' || stage === 'saving') ? (
+    <>
+      {stage === 'categories' && (
+        <button
+          onClick={() => setStage('details')}
+          disabled={selectedCodes.length === 0}
+          className="w-full text-base font-bold rounded-2xl h-14 disabled:opacity-40 transition-opacity border-2"
+          style={{ background: 'hsl(var(--background))', borderColor: PALETTE.sky, color: '#fff' }}
+        >
+          Continue
+        </button>
+      )}
+      {(stage === 'details' || stage === 'saving') && (
+        <>
+          {incompleteCodes.length > 0 && stage === 'details' && (
+            <p className="text-xs text-tier-tertiary mb-2 text-center">Answer each selected category to save</p>
+          )}
+          <button
+            onClick={handleSave}
+            disabled={stage === 'saving' || incompleteCodes.length > 0}
+            className="w-full flex items-center justify-center text-base font-bold rounded-2xl h-14 disabled:opacity-40 transition-opacity border-2"
+            style={{ background: 'hsl(var(--background))', borderColor: PALETTE.sky, color: '#fff' }}
+          >
+            {stage === 'saving' ? <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Saving {dates.length} days…</> : `Save to ${dates.length} days`}
+          </button>
+        </>
+      )}
+    </>
+  ) : null;
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col justify-end" onClick={handleClose}>
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
-      <div
-        ref={dialogRef}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="bulk-apply-title"
-        className="relative rounded-t-3xl shadow-2xl max-h-[85vh] flex flex-col"
-        style={{ background: 'rgba(18,20,32,0.98)', border: '1px solid rgba(255,255,255,0.08)' }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="px-5 pt-5 pb-3 flex-shrink-0">
-          <div className="w-10 h-1 bg-white/20 rounded-full mx-auto mb-4" />
-          <div className="flex items-center justify-between">
-            <h3 id="bulk-apply-title" className="text-xl font-bold text-white">
-              {stage === 'vibe' && `Apply to ${dates.length} days`}
-              {stage === 'categories' && 'What changed?'}
-              {(stage === 'details' || stage === 'saving') && 'A few details'}
-            </h3>
-            <button onClick={handleClose} aria-label="Close" className="h-9 w-9 rounded-full bg-white/8 flex items-center justify-center flex-shrink-0">
-              <X className="h-4 w-4 text-white" />
-            </button>
-          </div>
-          {error && <p className="text-sm text-red-400 mt-2">{error}</p>}
-          {!error && stage === 'vibe' && (
-            <p className="text-xs text-white/40 mt-2">Pick what these {dates.length} days had in common — each day still gets saved on its own.</p>
-          )}
+    <BottomSheet titleId="bulk-apply-title" title={title} subtitle={subtitle} onClose={handleClose} footer={footer} focusKey={stage}>
+      {stage === 'vibe' && (
+        <div className="space-y-3 pb-2">
+          <button
+            type="button"
+            onClick={() => chooseVibe('off')}
+            className="w-full text-left rounded-2xl px-5 py-4 text-base font-semibold min-h-[56px]"
+            style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', color: '#fff' }}
+          >
+            Off Day
+          </button>
+          <button
+            type="button"
+            onClick={() => chooseVibe('tough')}
+            className="w-full text-left rounded-2xl px-5 py-4 text-base font-semibold min-h-[56px]"
+            style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', color: '#fff' }}
+          >
+            Tough Day
+          </button>
         </div>
+      )}
 
-        <div className="px-5 overflow-y-auto flex-1 pb-2">
-          {stage === 'vibe' && (
-            <div className="space-y-3 pb-2">
-              <button
-                type="button"
-                onClick={() => chooseVibe('off')}
-                className="w-full text-left rounded-2xl px-5 py-4 text-base font-semibold min-h-[56px]"
-                style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', color: '#fff' }}
+      {stage === 'categories' && (
+        <div className="grid grid-cols-2 gap-2 pb-2">
+          {PICKER_CATEGORIES.map((cat) => {
+            const active = selectedCodes.includes(cat.code);
+            return (
+              <PillToggle
+                key={cat.code}
+                active={active}
+                onClick={() => toggleCategory(cat.code)}
+                icon={cat.icon}
+                className="justify-start rounded-2xl px-3.5 py-3 text-sm"
               >
-                Off Day
-              </button>
-              <button
-                type="button"
-                onClick={() => chooseVibe('tough')}
-                className="w-full text-left rounded-2xl px-5 py-4 text-base font-semibold min-h-[56px]"
-                style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', color: '#fff' }}
-              >
-                Tough Day
-              </button>
-            </div>
-          )}
-
-          {stage === 'categories' && (
-            <div className="grid grid-cols-2 gap-2 pb-2">
-              {PICKER_CATEGORIES.map((cat) => {
-                const Icon = cat.icon;
-                const active = selectedCodes.includes(cat.code);
-                return (
-                  <button
-                    key={cat.code}
-                    type="button"
-                    aria-pressed={active}
-                    onClick={() => toggleCategory(cat.code)}
-                    className={`flex items-center gap-2 rounded-2xl px-3.5 py-3 text-sm font-semibold transition-all min-h-[48px] ${active ? 'text-background' : 'text-white/70 border border-white/12'}`}
-                    style={active ? { background: PALETTE.sky, color: 'hsl(var(--background))' } : { background: 'rgba(255,255,255,0.05)' }}
-                  >
-                    <Icon className="h-4 w-4 flex-shrink-0" />
-                    <span className="truncate">{cat.label}</span>
-                  </button>
-                );
-              })}
-            </div>
-          )}
-
-          {(stage === 'details' || stage === 'saving') && (
-            <div className="space-y-6 pb-2">
-              {selectedCodes.map((code) => (
-                <BulkCategoryQuestion
-                  key={code}
-                  category={CATEGORIES.find((c) => c.code === code)}
-                  species={pet.species}
-                  answer={answers[code] || {}}
-                  onChange={(patch) => setAnswer(code, patch)}
-                />
-              ))}
-            </div>
-          )}
+                <span className="truncate">{cat.label}</span>
+              </PillToggle>
+            );
+          })}
         </div>
+      )}
 
-        <div className="px-5 pt-3 pb-10 flex-shrink-0" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
-          {stage === 'categories' && (
-            <button
-              onClick={() => setStage('details')}
-              disabled={selectedCodes.length === 0}
-              className="w-full text-base font-bold rounded-2xl h-14 disabled:opacity-40 transition-opacity"
-              style={{ background: PALETTE.sky, color: 'hsl(var(--background))' }}
-            >
-              Continue
-            </button>
-          )}
-          {(stage === 'details' || stage === 'saving') && (
-            <>
-              {incompleteCodes.length > 0 && stage === 'details' && (
-                <p className="text-xs text-white/40 mb-2 text-center">Answer each selected category to save</p>
-              )}
-              <button
-                onClick={handleSave}
-                disabled={stage === 'saving' || incompleteCodes.length > 0}
-                className="w-full flex items-center justify-center text-base font-bold rounded-2xl h-14 disabled:opacity-40 transition-opacity"
-                style={{ background: PALETTE.sky, color: 'hsl(var(--background))' }}
-              >
-                {stage === 'saving' ? <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Saving {dates.length} days…</> : `Save to ${dates.length} days`}
-              </button>
-            </>
-          )}
+      {(stage === 'details' || stage === 'saving') && (
+        <div className="space-y-6 pb-2">
+          {selectedCodes.map((code) => (
+            <BulkCategoryQuestion
+              key={code}
+              category={CATEGORIES.find((c) => c.code === code)}
+              species={pet.species}
+              answer={answers[code] || {}}
+              onChange={(patch) => setAnswer(code, patch)}
+            />
+          ))}
         </div>
-      </div>
-    </div>
+      )}
+    </BottomSheet>
   );
 }
 
@@ -244,7 +200,7 @@ function BulkCategoryQuestion({ category, species, answer, onChange }) {
   return (
     <div>
       <div className="flex items-center gap-2 mb-2.5">
-        <Icon className="h-4 w-4 text-white/50 flex-shrink-0" />
+        <Icon className="h-4 w-4 text-tier-tertiary flex-shrink-0" />
         <p className="text-sm font-semibold text-white">{category.label}</p>
       </div>
 
@@ -273,16 +229,14 @@ function BulkCategoryQuestion({ category, species, answer, onChange }) {
             };
 
             return (
-              <button
+              <PillToggle
                 key={opt.value}
-                type="button"
-                aria-pressed={active}
+                active={active}
                 onClick={handleClick}
-                className={`text-sm px-3.5 py-2 rounded-full border transition-colors min-h-[40px] ${active ? '' : 'text-white/60 border-white/12'}`}
-                style={active ? { background: PALETTE.sky, color: 'hsl(var(--background))', borderColor: PALETTE.sky } : { background: 'rgba(255,255,255,0.05)' }}
+                className="text-sm px-3.5 py-2 min-h-[40px]"
               >
                 {opt.label}
-              </button>
+              </PillToggle>
             );
           })}
         </div>
@@ -298,7 +252,7 @@ function BulkCategoryQuestion({ category, species, answer, onChange }) {
             onChange={(e) => onChange({ numericValue: e.target.value === '' ? null : parseFloat(e.target.value) })}
             className="w-32 rounded-xl px-3.5 py-2.5 text-sm font-semibold text-white bg-white/8 border border-white/10 focus:outline-none focus:ring-1 focus:ring-primary"
           />
-          <span className="text-xs text-white/40">lbs (optional)</span>
+          <span className="text-xs text-tier-tertiary">lbs (optional)</span>
         </div>
       )}
 
@@ -308,7 +262,7 @@ function BulkCategoryQuestion({ category, species, answer, onChange }) {
           value={answer.notes || ''}
           onChange={(e) => onChange({ notes: e.target.value })}
           rows={3}
-          className="bg-white/5 border-white/10 text-white placeholder:text-white/30"
+          className="bg-white/5 border-white/10 text-white placeholder:text-tier-tertiary"
         />
       )}
 
@@ -318,7 +272,7 @@ function BulkCategoryQuestion({ category, species, answer, onChange }) {
           placeholder="Add a note (optional)"
           value={answer.notes || ''}
           onChange={(e) => onChange({ notes: e.target.value })}
-          className="w-full mt-2 rounded-xl px-3.5 py-2 text-sm text-white bg-white/5 border border-white/10 focus:outline-none focus:ring-1 focus:ring-primary placeholder:text-white/30"
+          className="w-full mt-2 rounded-xl px-3.5 py-2 text-sm text-white bg-white/5 border border-white/10 focus:outline-none focus:ring-1 focus:ring-primary placeholder:text-tier-tertiary"
         />
       )}
     </div>

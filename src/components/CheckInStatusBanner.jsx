@@ -24,7 +24,7 @@ export default function CheckInStatusBanner({ pet, checkIn, onStartCheckIn, erro
   if (error) {
     return (
       <div className="flex items-center justify-between gap-2 rounded-xl px-3.5 py-2.5" style={{ background: 'rgba(229,115,115,0.08)' }}>
-        <span className="text-[13px] text-white/60">Unable to load {pet.name}'s check-in.</span>
+        <span className="text-[13px] text-tier-secondary">Unable to load {pet.name}'s check-in.</span>
         {onRetry && (
           <button onClick={onRetry} className="text-[13px] font-semibold text-primary flex-shrink-0 min-h-[44px] px-2">Retry</button>
         )}
@@ -39,11 +39,10 @@ export default function CheckInStatusBanner({ pet, checkIn, onStartCheckIn, erro
       <button
         type="button"
         onClick={() => onStartCheckIn?.()}
-        className="w-full flex items-center gap-2.5 rounded-xl px-3.5 py-2.5 active:opacity-80 transition-opacity min-h-[44px] text-left"
-        style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)' }}
+        className="w-full flex items-center gap-2.5 rounded-xl px-3.5 py-2.5 active:opacity-80 transition-opacity min-h-[44px] text-left bg-card border border-border"
       >
         <Clock className="h-3.5 w-3.5 flex-shrink-0" style={{ color: PALETTE.amber }} aria-hidden="true" />
-        <span className="text-[13px] font-semibold text-white/85 truncate">Start {pet.name}'s Daily Check-In</span>
+        <span className="text-[13px] font-semibold text-tier-secondary truncate">Start {pet.name}'s Daily Check-In</span>
       </button>
     );
   }
@@ -53,11 +52,10 @@ export default function CheckInStatusBanner({ pet, checkIn, onStartCheckIn, erro
   return (
     <Link
       to={trendsHref}
-      className="flex items-center gap-2.5 rounded-xl px-3.5 py-2.5 active:opacity-80 transition-opacity min-h-[44px]"
-      style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)' }}
+      className="flex items-center gap-2.5 rounded-xl px-3.5 py-2.5 active:opacity-80 transition-opacity min-h-[44px] bg-card border border-border"
     >
       <Icon className="h-3.5 w-3.5 flex-shrink-0" style={{ color }} aria-hidden="true" />
-      <span className="text-[13px] text-white/80 truncate">{text(pet.name)}</span>
+      <span className="text-[13px] text-tier-secondary truncate">{text(pet.name)}</span>
     </Link>
   );
 }

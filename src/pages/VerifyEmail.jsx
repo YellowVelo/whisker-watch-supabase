@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { supabase } from '@/api/supabaseClient';
-import { Loader2 } from 'lucide-react';
+import AuthLayout from '@/components/AuthLayout';
+import { Loader2, Mail } from 'lucide-react';
 
 // Landing page for the branded signup-confirmation email (sent via the
 // sign-up Edge Function — see supabase/functions/sign-up/index.ts) and
@@ -78,15 +79,12 @@ export default function VerifyEmail() {
 
   if (status === 'invalid') {
     return (
-      <div className="min-h-screen flex items-center justify-center px-4 bg-background">
-        <div className="w-full max-w-sm space-y-4 text-center">
-          <h1 className="font-serif text-[28px]">Link Invalid</h1>
-          <p className="text-sm text-muted-foreground">
-            This confirmation link is invalid or has expired. Try signing up again, or use "Resend confirmation
-            email" from the login screen.
-          </p>
-        </div>
-      </div>
+      <AuthLayout icon={Mail} title="Link Invalid">
+        <p className="text-sm text-muted-foreground text-center">
+          This confirmation link is invalid or has expired. Try signing up again, or use "Resend confirmation
+          email" from the login screen.
+        </p>
+      </AuthLayout>
     );
   }
 

@@ -75,7 +75,7 @@ export default function AttributeTrendChip({ label, direction = 'unknown', compa
       <DirectionIcon direction={effectiveDirection} />
       <div className="min-w-0 flex-1">
         <p className="text-[13px] font-semibold text-white truncate">{label}</p>
-        <p className="text-[12px] text-white/45 truncate">{text}</p>
+        <p className="text-[12px] text-tier-tertiary truncate">{text}</p>
       </div>
     </Wrapper>
   );

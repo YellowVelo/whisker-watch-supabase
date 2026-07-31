@@ -9,6 +9,7 @@ import { entities } from '@/api/entities';
 import { Loader2, X, Plus, UserPlus } from 'lucide-react';
 import { getConditions } from '@/lib/speciesConfig';
 import InviteCoOwnerDialog from './InviteCoOwnerDialog';
+import PillToggle from '@/components/PillToggle';
 
 export default function EditPetSheet({ pet, open, onOpenChange, onSuccess }) {
   const [saving, setSaving] = useState(false);
@@ -71,7 +72,7 @@ export default function EditPetSheet({ pet, open, onOpenChange, onSuccess }) {
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="overflow-y-auto">
         <SheetHeader>
-          <SheetTitle className="font-serif text-2xl">Edit Profile</SheetTitle>
+          <SheetTitle className="text-2xl">Edit Profile</SheetTitle>
         </SheetHeader>
         <div className="mt-5 space-y-5">
 
@@ -110,12 +111,9 @@ export default function EditPetSheet({ pet, open, onOpenChange, onSuccess }) {
               {conditions.map(c => {
                 const active = form.conditions.includes(c);
                 return (
-                  <button key={c} type="button" onClick={() => toggleCondition(c)}
-                    className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${
-                      active ? 'bg-primary text-primary-foreground border-primary' : 'bg-background text-foreground border-border hover:border-primary/50'
-                    }`}>
+                  <PillToggle key={c} active={active} onClick={() => toggleCondition(c)} className="text-xs px-3 py-1.5">
                     {c}
-                  </button>
+                  </PillToggle>
                 );
               })}
             </div>

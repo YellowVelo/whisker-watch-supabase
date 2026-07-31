@@ -1,12 +1,12 @@
-import { useState, useEffect, useRef } from 'react';
-import { X, Loader2 } from 'lucide-react';
+import { useState } from 'react';
+import { Loader2 } from 'lucide-react';
 import { CATEGORIES, getOptionsForSpecies, getCategory } from '@/lib/checkin/config';
 import { markGreatDay, markSkipped, markOffTough } from '@/lib/checkin/checkinClient';
 import { track } from '@/lib/analytics';
 import { Textarea } from '@/components/ui/textarea';
 import { PALETTE } from '@/lib/toneColors';
-
-const FOCUSABLE = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+import PillToggle from '@/components/PillToggle';
+import BottomSheet from '@/components/BottomSheet';
 
 // Medication Exception is deferred out of this round's picker (spec:
 // "not shown in this round's check-in flow ... category is not removed
@@ -32,7 +32,6 @@ const PICKER_CATEGORIES = CATEGORIES.filter((c) => c.code !== 'medication_except
 // today save purely for analytics attribution (catch_up_completed vs the
 // regular events) — it doesn't change any persistence behavior.
 export default function DailyCheckInSheet({ pet, date, onClose, onSaved, isCatchUp = false, existingCheckIn = null, dayLabel = null }) {
-  const dialogRef = useRef(null);
   // isCatchUp doesn't just change analytics attribution — it drives the
   // "today" vs "yesterday" wording throughout this sheet, since a
   // catch-up save is for a past date and showing "today" language would
@@ -148,148 +147,100 @@ export default function DailyCheckInSheet({ pet, date, onClose, onSaved, isCatch
     onClose();
   };
 
-  // Accessibility: modal traps focus and is dismissible via Escape (Nav +
-  // Daily Check-In UX Refresh spec — "Modal must trap focus" / "Modal must
-  // be dismissible using expected keyboard behavior").
-  useEffect(() => {
-    const node = dialogRef.current;
-    const focusables = () => Array.from(node?.querySelectorAll(FOCUSABLE) || []).filter((el) => !el.disabled);
-    focusables()[0]?.focus();
+  const title = (
+    <>
+      {stage === 'initial' && `How was ${pet.name}'s day ${dayWord}?`}
+      {stage === 'categories' && 'What happened?'}
+      {(stage === 'details' || stage === 'saving') && 'A few details'}
+    </>
+  );
 
-    const onKeyDown = (e) => {
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        handleClose();
-        return;
-      }
-      if (e.key !== 'Tab') return;
-      const items = focusables();
-      if (items.length === 0) return;
-      const first = items[0];
-      const last = items[items.length - 1];
-      if (e.shiftKey && document.activeElement === first) {
-        e.preventDefault();
-        last.focus();
-      } else if (!e.shiftKey && document.activeElement === last) {
-        e.preventDefault();
-        first.focus();
-      }
-    };
+  const subtitle = (
+    <>
+      {error && <p className="text-sm text-red-400 mt-2">{error}</p>}
+      {!error && stage === 'initial' && existingCheckIn?.status && (
+        <p className="text-xs text-tier-tertiary mt-2">
+          Already logged as {{ great: 'Great Day', off: 'Off Day', tough: 'Tough Day', skipped: 'Skipped' }[existingCheckIn.status] || existingCheckIn.status} for {dayWord} — saving again will update it.
+        </p>
+      )}
+    </>
+  );
 
-    document.addEventListener('keydown', onKeyDown);
-    return () => document.removeEventListener('keydown', onKeyDown);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stage]);
+  const footer = (stage === 'categories' || stage === 'details' || stage === 'saving') ? (
+    <>
+      {stage === 'categories' && (
+        <button
+          onClick={() => setStage('details')}
+          className="w-full text-base font-bold rounded-2xl h-14 transition-opacity border-2"
+          style={{ background: 'hsl(var(--background))', borderColor: PALETTE.sky, color: '#fff' }}
+        >
+          Continue
+        </button>
+      )}
+      {(stage === 'details' || stage === 'saving') && (
+        <>
+          {incompleteCodes.length > 0 && stage === 'details' && (
+            <p className="text-xs text-tier-tertiary mb-2 text-center">Answer each selected category to save</p>
+          )}
+          <button
+            onClick={handleSaveOffTough}
+            disabled={stage === 'saving' || incompleteCodes.length > 0}
+            className="w-full flex items-center justify-center text-base font-bold rounded-2xl h-14 disabled:opacity-40 transition-opacity border-2"
+            style={{ background: 'hsl(var(--background))', borderColor: PALETTE.sky, color: '#fff' }}
+          >
+            {stage === 'saving' ? <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Saving…</> : 'Save check-in'}
+          </button>
+        </>
+      )}
+    </>
+  ) : null;
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col justify-end" onClick={handleClose}>
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
-      <div
-        ref={dialogRef}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="daily-check-in-title"
-        className="relative rounded-t-3xl shadow-2xl max-h-[85vh] flex flex-col"
-        style={{ background: 'rgba(18,20,32,0.98)', border: '1px solid rgba(255,255,255,0.08)' }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="px-5 pt-5 pb-3 flex-shrink-0">
-          <div className="w-10 h-1 bg-white/20 rounded-full mx-auto mb-4" />
-          <div className="flex items-center justify-between">
-            <h3 id="daily-check-in-title" className="text-xl font-bold text-white">
-              {stage === 'initial' && `How was ${pet.name}'s day ${dayWord}?`}
-              {stage === 'categories' && 'What happened?'}
-              {(stage === 'details' || stage === 'saving') && 'A few details'}
-            </h3>
-            <button onClick={handleClose} aria-label="Close" className="h-9 w-9 rounded-full bg-white/8 flex items-center justify-center flex-shrink-0">
-              <X className="h-4 w-4 text-white" />
-            </button>
-          </div>
-          {error && <p className="text-sm text-red-400 mt-2">{error}</p>}
-          {!error && stage === 'initial' && existingCheckIn?.status && (
-            <p className="text-xs text-white/40 mt-2">
-              Already logged as {{ great: 'Great Day', off: 'Off Day', tough: 'Tough Day', skipped: 'Skipped' }[existingCheckIn.status] || existingCheckIn.status} for {dayWord} — saving again will update it.
-            </p>
-          )}
+    <BottomSheet titleId="daily-check-in-title" title={title} subtitle={subtitle} onClose={handleClose} footer={footer} focusKey={stage}>
+      {stage === 'initial' && (
+        <div className="space-y-3 pb-2">
+          <BigChoiceButton label="Great Day" onClick={handleGreatDay} />
+          <BigChoiceButton label="Off Day" onClick={() => startOffTough('off')} />
+          <BigChoiceButton label="Tough Day" onClick={() => startOffTough('tough')} />
+          <BigChoiceButton label={`Skip ${dayWord}`} subtle onClick={handleSkip} />
         </div>
+      )}
 
-        <div className="px-5 overflow-y-auto flex-1 pb-2">
-          {stage === 'initial' && (
-            <div className="space-y-3 pb-2">
-              <BigChoiceButton label="Great Day" onClick={handleGreatDay} />
-              <BigChoiceButton label="Off Day" onClick={() => startOffTough('off')} />
-              <BigChoiceButton label="Tough Day" onClick={() => startOffTough('tough')} />
-              <BigChoiceButton label={`Skip ${dayWord}`} subtle onClick={handleSkip} />
-            </div>
-          )}
-
-          {stage === 'categories' && (
-            <div className="grid grid-cols-2 gap-2 pb-2">
-              {PICKER_CATEGORIES.map((cat) => {
-                const Icon = cat.icon;
-                const active = selectedCodes.includes(cat.code);
-                return (
-                  <button
-                    key={cat.code}
-                    type="button"
-                    aria-pressed={active}
-                    onClick={() => toggleCategory(cat.code)}
-                    className={`flex items-center gap-2 rounded-2xl px-3.5 py-3 text-sm font-semibold transition-all min-h-[48px] ${active ? 'text-background' : 'text-white/70 border border-white/12'}`}
-                    style={active ? { background: PALETTE.sky, color: 'hsl(var(--background))' } : { background: 'rgba(255,255,255,0.05)' }}
-                  >
-                    <Icon className="h-4 w-4 flex-shrink-0" />
-                    <span className="truncate">{cat.label}</span>
-                  </button>
-                );
-              })}
-            </div>
-          )}
-
-          {(stage === 'details' || stage === 'saving') && (
-            <div className="space-y-6 pb-2">
-              {selectedCodes.map((code) => (
-                <CategoryQuestion
-                  key={code}
-                  category={CATEGORIES.find((c) => c.code === code)}
-                  species={pet.species}
-                  petName={pet.name}
-                  dayWord={dayWord}
-                  answer={answers[code] || {}}
-                  onChange={(patch) => setAnswer(code, patch)}
-                />
-              ))}
-            </div>
-          )}
-        </div>
-
-        <div className="px-5 pt-3 pb-10 flex-shrink-0" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
-          {stage === 'categories' && (
-            <button
-              onClick={() => setStage('details')}
-              className="w-full text-base font-bold rounded-2xl h-14 transition-opacity"
-              style={{ background: PALETTE.sky, color: 'hsl(var(--background))' }}
-            >
-              Continue
-            </button>
-          )}
-          {(stage === 'details' || stage === 'saving') && (
-            <>
-              {incompleteCodes.length > 0 && stage === 'details' && (
-                <p className="text-xs text-white/40 mb-2 text-center">Answer each selected category to save</p>
-              )}
-              <button
-                onClick={handleSaveOffTough}
-                disabled={stage === 'saving' || incompleteCodes.length > 0}
-                className="w-full flex items-center justify-center text-base font-bold rounded-2xl h-14 disabled:opacity-40 transition-opacity"
-                style={{ background: PALETTE.sky, color: 'hsl(var(--background))' }}
+      {stage === 'categories' && (
+        <div className="grid grid-cols-2 gap-2 pb-2">
+          {PICKER_CATEGORIES.map((cat) => {
+            const active = selectedCodes.includes(cat.code);
+            return (
+              <PillToggle
+                key={cat.code}
+                active={active}
+                onClick={() => toggleCategory(cat.code)}
+                icon={cat.icon}
+                className="justify-start rounded-2xl px-3.5 py-3 text-sm"
               >
-                {stage === 'saving' ? <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Saving…</> : 'Save check-in'}
-              </button>
-            </>
-          )}
+                <span className="truncate">{cat.label}</span>
+              </PillToggle>
+            );
+          })}
         </div>
-      </div>
-    </div>
+      )}
+
+      {(stage === 'details' || stage === 'saving') && (
+        <div className="space-y-6 pb-2">
+          {selectedCodes.map((code) => (
+            <CategoryQuestion
+              key={code}
+              category={CATEGORIES.find((c) => c.code === code)}
+              species={pet.species}
+              petName={pet.name}
+              dayWord={dayWord}
+              answer={answers[code] || {}}
+              onChange={(patch) => setAnswer(code, patch)}
+            />
+          ))}
+        </div>
+      )}
+    </BottomSheet>
   );
 }
 
@@ -300,7 +251,7 @@ function BigChoiceButton({ label, onClick, subtle }) {
       onClick={onClick}
       className="w-full text-left rounded-2xl px-5 py-4 text-base font-semibold transition-all active:opacity-70 min-h-[56px]"
       style={subtle
-        ? { background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.6)' }
+        ? { background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', color: 'var(--text-secondary)' }
         : { background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', color: '#fff' }}
     >
       {label}
@@ -314,7 +265,7 @@ function CategoryQuestion({ category, species, petName, dayWord, answer, onChang
   return (
     <div>
       <div className="flex items-center gap-2 mb-2.5">
-        <Icon className="h-4 w-4 text-white/50 flex-shrink-0" />
+        <Icon className="h-4 w-4 text-tier-tertiary flex-shrink-0" />
         <p className="text-sm font-semibold text-white">{category.question(petName, species, dayWord)}</p>
       </div>
 
@@ -347,16 +298,14 @@ function CategoryQuestion({ category, species, petName, dayWord, answer, onChang
             };
 
             return (
-              <button
+              <PillToggle
                 key={opt.value}
-                type="button"
-                aria-pressed={active}
+                active={active}
                 onClick={handleClick}
-                className={`text-sm px-3.5 py-2 rounded-full border transition-colors min-h-[40px] ${active ? '' : 'text-white/60 border-white/12'}`}
-                style={active ? { background: PALETTE.sky, color: 'hsl(var(--background))', borderColor: PALETTE.sky } : { background: 'rgba(255,255,255,0.05)' }}
+                className="text-sm px-3.5 py-2 min-h-[40px]"
               >
                 {opt.label}
-              </button>
+              </PillToggle>
             );
           })}
         </div>
@@ -372,7 +321,7 @@ function CategoryQuestion({ category, species, petName, dayWord, answer, onChang
             onChange={(e) => onChange({ numericValue: e.target.value === '' ? null : parseFloat(e.target.value) })}
             className="w-32 rounded-xl px-3.5 py-2.5 text-sm font-semibold text-white bg-white/8 border border-white/10 focus:outline-none focus:ring-1 focus:ring-primary"
           />
-          <span className="text-xs text-white/40">lbs (optional)</span>
+          <span className="text-xs text-tier-tertiary">lbs (optional)</span>
         </div>
       )}
 
@@ -382,7 +331,7 @@ function CategoryQuestion({ category, species, petName, dayWord, answer, onChang
           value={answer.notes || ''}
           onChange={(e) => onChange({ notes: e.target.value })}
           rows={3}
-          className="bg-white/5 border-white/10 text-white placeholder:text-white/30"
+          className="bg-white/5 border-white/10 text-white placeholder:text-tier-tertiary"
         />
       )}
 
@@ -392,7 +341,7 @@ function CategoryQuestion({ category, species, petName, dayWord, answer, onChang
           placeholder="Add a note (optional)"
           value={answer.notes || ''}
           onChange={(e) => onChange({ notes: e.target.value })}
-          className="w-full mt-2 rounded-xl px-3.5 py-2 text-sm text-white bg-white/5 border border-white/10 focus:outline-none focus:ring-1 focus:ring-primary placeholder:text-white/30"
+          className="w-full mt-2 rounded-xl px-3.5 py-2 text-sm text-white bg-white/5 border border-white/10 focus:outline-none focus:ring-1 focus:ring-primary placeholder:text-tier-tertiary"
         />
       )}
 

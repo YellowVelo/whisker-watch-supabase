@@ -348,7 +348,7 @@ export default function PetSittingSection({ petId }) {
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="sm:max-w-md max-h-[85vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="font-serif text-2xl">{editing ? 'Edit' : 'New'} Pet Sitting Period</DialogTitle>
+            <DialogTitle className="text-2xl">{editing ? 'Edit' : 'New'} Pet Sitting Period</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 mt-2">
 

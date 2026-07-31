@@ -127,7 +127,7 @@ export default function OnboardingWizard({ pet, row, onRowChange, onComplete }) 
         return (
           <div className="flex flex-col items-center text-center gap-5 py-6">
             <span className="text-5xl">🐾</span>
-            <h2 className="font-serif text-2xl text-foreground">Every pet has their own normal.</h2>
+            <h2 className="text-2xl font-semibold text-foreground">Every pet has their own normal.</h2>
             <p className="text-base text-muted-foreground max-w-sm">
               The next few questions help Wysker Watch understand what normal looks like for {petName}.
             </p>

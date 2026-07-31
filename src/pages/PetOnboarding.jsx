@@ -78,7 +78,7 @@ function CompletionScreen({ petName, onStartCheckIn, onViewProfile }) {
       <div className="h-16 w-16 rounded-full bg-primary/15 flex items-center justify-center">
         <PartyPopper className="h-8 w-8 text-primary" />
       </div>
-      <h1 className="font-serif text-3xl text-foreground">{petName}'s profile is complete!</h1>
+      <h1 className="text-3xl font-semibold text-foreground">{petName}'s profile is complete!</h1>
       <p className="text-base text-muted-foreground max-w-sm">
         Wysker Watch now understands {petName}'s normal.
       </p>

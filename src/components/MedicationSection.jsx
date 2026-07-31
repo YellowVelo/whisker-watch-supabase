@@ -7,6 +7,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Plus, Pencil, X, ShieldCheck, CheckCircle2 } from 'lucide-react';
+import { PALETTE } from '@/lib/toneColors';
 import { format, parseISO, addMonths } from 'date-fns';
 import SmartSelect from './SmartSelect';
 
@@ -23,9 +24,12 @@ const computeNextDue = (startDate, frequency) => {
   return '';
 };
 
+// Design System Amendment #5/#6 (2026-07-30) — sourced from the semantic
+// tone tokens (via inline style) instead of raw light-mode Tailwind
+// classes, so these badges look correct regardless of device theme.
 const MED_TYPE_BADGE = {
-  'Flea & Tick': { label: '🐛 Flea & Tick', classes: 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300' },
-  'Heartworm':   { label: '❤️ Heartworm',   classes: 'bg-pink-100 text-pink-700 dark:bg-pink-900/40 dark:text-pink-300' },
+  'Flea & Tick': { label: '🐛 Flea & Tick', background: 'rgba(76,199,176,0.15)', color: PALETTE.teal },
+  'Heartworm':   { label: '❤️ Heartworm',   background: 'rgba(111,183,255,0.15)', color: PALETTE.sky },
 };
 
 export default function MedicationSection({ petId }) {
@@ -135,7 +139,7 @@ export default function MedicationSection({ petId }) {
       <Dialog open={showDialog} onOpenChange={setShowDialog}>
         <DialogContent className="sm:max-w-md overflow-y-auto max-h-[90vh]">
           <DialogHeader>
-            <DialogTitle className="font-serif text-xl">{editing ? 'Edit Medication' : 'Add Medication'}</DialogTitle>
+            <DialogTitle className="text-xl">{editing ? 'Edit Medication' : 'Add Medication'}</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-1.5">
@@ -265,7 +269,10 @@ function MedButton({ med, given, onGive, onEdit, onDelete, past }) {
                                 </span>
                               )}
                               {MED_TYPE_BADGE[med.med_type] && (
-                                <span className={`text-xs px-1.5 py-0.5 rounded-full ${MED_TYPE_BADGE[med.med_type].classes}`}>
+                                <span
+                                  className="text-xs px-1.5 py-0.5 rounded-full"
+                                  style={{ background: MED_TYPE_BADGE[med.med_type].background, color: MED_TYPE_BADGE[med.med_type].color }}
+                                >
                                   {MED_TYPE_BADGE[med.med_type].label}
                                 </span>
                               )}

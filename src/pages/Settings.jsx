@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Input } from '@/components/ui/input';
 import MenuListRow from '../components/MenuListRow';
 import MenuIllustration from '../components/MenuIllustration';
+import ConfirmDeleteDialog from '../components/ConfirmDeleteDialog';
 import PageTransition from '../components/PageTransition';
 import { useToast } from '@/components/ui/use-toast';
 import { track } from '@/lib/analytics';
@@ -61,7 +62,6 @@ export default function Settings() {
 
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState('');
-  const [deleteConfirmText, setDeleteConfirmText] = useState('');
 
   // Internal-account tools (reset + seed data) — only ever shown/usable
   // when isInternalAccount(user) is true (every test account, or a demo
@@ -87,9 +87,11 @@ export default function Settings() {
   const openDeleteFlow = () => {
     track('delete_account_selected', {});
     setDeleteError('');
-    setDeleteConfirmText('');
     setActiveDialog(DIALOG.DELETE_WARNING);
   };
+
+  const deleteStep = activeDialog === DIALOG.DELETE_WARNING ? 1 : activeDialog === DIALOG.DELETE_CONFIRM ? 2 : 0;
+  const setDeleteStep = (step) => setActiveDialog(step === 1 ? DIALOG.DELETE_WARNING : step === 2 ? DIALOG.DELETE_CONFIRM : DIALOG.NONE);
 
   const handleInstallApp = async () => {
     track('install_app_selected', {});
@@ -227,7 +229,7 @@ export default function Settings() {
           <div className="max-w-2xl mx-auto px-5 py-6 flex items-start justify-between gap-3">
             <div className="min-w-0">
               <h1 className="text-[28px] font-bold text-foreground tracking-tight leading-tight">Menu</h1>
-              <p className="text-[14px] text-white/45 mt-1">Manage your account and app settings.</p>
+              <p className="text-[14px] text-tier-tertiary mt-1">Manage your account and app settings.</p>
             </div>
             <MenuIllustration />
           </div>
@@ -237,8 +239,7 @@ export default function Settings() {
           {/* User summary card */}
           <Link
             to="/account"
-            className="w-full flex items-center gap-3 rounded-2xl px-4 py-4 active:opacity-80 transition-opacity"
-            style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}
+            className="w-full flex items-center gap-3 rounded-2xl px-4 py-4 active:opacity-80 transition-opacity bg-card border border-border"
           >
             <div
               className="h-14 w-14 rounded-full flex items-center justify-center flex-shrink-0"
@@ -248,12 +249,12 @@ export default function Settings() {
             </div>
             <div className="min-w-0 flex-1">
               <p className="text-[17px] font-bold text-white truncate">{displayName}</p>
-              <p className="text-[13px] text-white/45 truncate">{email}</p>
+              <p className="text-[13px] text-tier-tertiary truncate">{email}</p>
               <span className={`inline-flex items-center gap-1 mt-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${badge.className}`}>
                 {badge.label}
               </span>
             </div>
-            <ChevronRight className="h-5 w-5 text-white/30 flex-shrink-0" aria-hidden="true" />
+            <ChevronRight className="h-5 w-5 text-tier-tertiary flex-shrink-0" aria-hidden="true" />
           </Link>
 
           {canInstall && (
@@ -270,7 +271,7 @@ export default function Settings() {
           )}
 
           {/* Primary menu */}
-          <div className="rounded-2xl overflow-hidden divide-y" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderColor: 'rgba(255,255,255,0.08)' }}>
+          <div className="rounded-2xl overflow-hidden divide-y bg-card border border-border">
             {MENU_ITEMS.map((item) => (
               <MenuListRow
                 key={item.key}
@@ -286,7 +287,7 @@ export default function Settings() {
           </div>
 
           {isInternalAccount(user) && (
-            <div className="rounded-2xl overflow-hidden divide-y" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderColor: 'rgba(255,255,255,0.08)' }}>
+            <div className="rounded-2xl overflow-hidden divide-y bg-card border border-border">
               <MenuListRow
                 icon={Sprout}
                 iconClassName="text-primary"
@@ -305,7 +306,7 @@ export default function Settings() {
           )}
 
           {/* Account actions */}
-          <div className="rounded-2xl overflow-hidden divide-y" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderColor: 'rgba(255,255,255,0.08)' }}>
+          <div className="rounded-2xl overflow-hidden divide-y bg-card border border-border">
             <MenuListRow
               icon={LogOut}
               iconClassName="text-blue-300"
@@ -327,8 +328,8 @@ export default function Settings() {
 
           {/* Security footer */}
           <div className="flex items-start gap-2 justify-center text-center px-4 py-2">
-            <Lock className="h-3.5 w-3.5 text-white/30 flex-shrink-0 mt-0.5" aria-hidden="true" />
-            <p className="text-sm text-white/35 leading-snug">
+            <Lock className="h-3.5 w-3.5 text-tier-tertiary flex-shrink-0 mt-0.5" aria-hidden="true" />
+            <p className="text-sm text-tier-tertiary leading-snug">
               Your data is encrypted and securely stored.
               <br />
               We never share your information.
@@ -340,7 +341,7 @@ export default function Settings() {
         <Dialog open={activeDialog === DIALOG.SIGN_OUT} onOpenChange={(v) => !v && closeDialog()}>
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
-              <DialogTitle className="font-serif text-2xl">Sign Out?</DialogTitle>
+              <DialogTitle className="text-2xl">Sign Out?</DialogTitle>
             </DialogHeader>
             <DialogDescription asChild>
               <p className="text-base text-muted-foreground">You'll need to sign in again to access your pets.</p>
@@ -350,7 +351,7 @@ export default function Settings() {
               <button
                 onClick={handleConfirmSignOut}
                 disabled={signingOut}
-                className="flex-1 h-10 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-40"
+                className="flex-1 h-10 rounded-lg bg-background text-white border-2 border-primary text-sm font-medium hover:bg-background/80 transition-colors disabled:opacity-40"
               >
                 {signingOut ? 'Signing Out…' : 'Sign Out'}
               </button>
@@ -358,74 +359,35 @@ export default function Settings() {
           </DialogContent>
         </Dialog>
 
-        {/* Delete Account — Step 1: Warning */}
-        <Dialog open={activeDialog === DIALOG.DELETE_WARNING} onOpenChange={(v) => !v && closeDialog()}>
-          <DialogContent className="sm:max-w-md">
-            <DialogHeader>
-              <DialogTitle className="font-serif text-2xl text-destructive">Delete Account?</DialogTitle>
-            </DialogHeader>
-            <DialogDescription asChild>
-              <div className="space-y-3 text-base text-muted-foreground">
-                <p>This will permanently delete your account and remove your access to all pets.</p>
-                <ul className="list-disc pl-4 space-y-1">
-                  <li>Pets you <strong className="text-foreground">solely own</strong> will be permanently deleted along with all their health records.</li>
-                  <li>Pets you <strong className="text-foreground">share with a co-owner</strong> will survive — ownership transfers to your co-owner.</li>
-                  <li>Your uploaded photos and documents will be permanently deleted.</li>
-                </ul>
-                <p className="font-medium text-foreground">This cannot be undone.</p>
-              </div>
-            </DialogDescription>
-            <DialogFooter className="mt-2 gap-2">
-              <button onClick={closeDialog} className="flex-1 h-10 rounded-lg border border-border text-sm font-medium hover:bg-secondary transition-colors">Cancel</button>
-              <button
-                onClick={() => setActiveDialog(DIALOG.DELETE_CONFIRM)}
-                className="flex-1 h-10 rounded-lg bg-destructive text-destructive-foreground text-sm font-medium hover:bg-destructive/90 transition-colors"
-              >
-                Continue
-              </button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-
-        {/* Delete Account — Step 2: Type DELETE to confirm */}
-        <Dialog open={activeDialog === DIALOG.DELETE_CONFIRM} onOpenChange={(v) => !v && closeDialog()}>
-          <DialogContent className="sm:max-w-md">
-            <DialogHeader>
-              <DialogTitle className="font-serif text-2xl text-destructive">Confirm Deletion</DialogTitle>
-            </DialogHeader>
-            <DialogDescription asChild>
-              <div className="space-y-3 text-base text-muted-foreground">
-                <p>Type <strong className="text-foreground font-mono">DELETE</strong> to permanently delete your account.</p>
-              </div>
-            </DialogDescription>
-            <Input
-              value={deleteConfirmText}
-              onChange={e => setDeleteConfirmText(e.target.value)}
-              placeholder="Type DELETE"
-              className="font-mono"
-              autoCapitalize="none"
-              autoCorrect="off"
-              disabled={deleting}
-            />
-            {deleteError && <p className="text-sm text-destructive">{deleteError}</p>}
-            <DialogFooter className="mt-2 gap-2">
-              <button onClick={closeDialog} disabled={deleting} className="flex-1 h-10 rounded-lg border border-border text-sm font-medium hover:bg-secondary transition-colors disabled:opacity-50">Cancel</button>
-              <button
-                onClick={handleDeleteAccount}
-                disabled={deleteConfirmText !== 'DELETE' || deleting}
-                className="flex-1 h-10 rounded-lg bg-destructive text-destructive-foreground text-sm font-medium hover:bg-destructive/90 transition-colors disabled:opacity-40"
-              >
-                {deleting ? 'Deleting…' : 'Delete My Account'}
-              </button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+        {/* Delete Account — two-step type-to-confirm flow */}
+        <ConfirmDeleteDialog
+          step={deleteStep}
+          onOpenChange={setDeleteStep}
+          title="Delete Account?"
+          warning={
+            <div className="space-y-3 text-base text-muted-foreground">
+              <p>This will permanently delete your account and remove your access to all pets.</p>
+              <ul className="list-disc pl-4 space-y-1">
+                <li>Pets you <strong className="text-foreground">solely own</strong> will be permanently deleted along with all their health records.</li>
+                <li>Pets you <strong className="text-foreground">share with a co-owner</strong> will survive — ownership transfers to your co-owner.</li>
+                <li>Your uploaded photos and documents will be permanently deleted.</li>
+              </ul>
+              <p className="font-medium text-foreground">This cannot be undone.</p>
+            </div>
+          }
+          confirmText="DELETE"
+          confirmLabel="Delete My Account"
+          confirmingLabel="Deleting…"
+          confirming={deleting}
+          error={deleteError}
+          onConfirm={handleDeleteAccount}
+        />
 
         {/* Reset Test/Demo Account — internal-only, guarded server-side too */}
         <Dialog open={activeDialog === DIALOG.RESET} onOpenChange={(v) => !v && closeDialog()}>
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
-              <DialogTitle className="font-serif text-2xl text-destructive">Reset {accountLabel} Account?</DialogTitle>
+              <DialogTitle className="text-2xl text-destructive">Reset {accountLabel} Account?</DialogTitle>
             </DialogHeader>
             <DialogDescription asChild>
               <div className="space-y-3 text-base text-muted-foreground">
@@ -451,7 +413,7 @@ export default function Settings() {
         <Dialog open={activeDialog === DIALOG.SEED} onOpenChange={(v) => !v && closeDialog()}>
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
-              <DialogTitle className="font-serif text-2xl">Seed Test Data</DialogTitle>
+              <DialogTitle className="text-2xl">Seed Test Data</DialogTitle>
             </DialogHeader>
             <DialogDescription asChild>
               <div className="space-y-2 text-base text-muted-foreground">

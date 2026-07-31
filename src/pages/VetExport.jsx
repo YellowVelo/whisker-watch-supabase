@@ -61,13 +61,13 @@ export default function VetExport() {
             </div>
           )}
           <div>
-            <h1 className="font-serif text-2xl font-bold">{pet.name}</h1>
+            <h1 className="text-2xl font-bold">{pet.name}</h1>
             {pet.breed && <p className="text-sm text-muted-foreground">{pet.breed}</p>}
           </div>
         </div>
 
         <div className="rounded-2xl border border-border bg-card p-6">
-          <h2 className="font-serif text-lg font-semibold mb-1.5">Vet Report</h2>
+          <h2 className="text-lg font-semibold mb-1.5">Vet Report</h2>
           <p className="text-sm text-muted-foreground mb-5">
             Generate a clinic-ready PDF with {pet.name}'s wellness history, observations, medications, vaccinations, diet, weight trend, and bloodwork.
           </p>

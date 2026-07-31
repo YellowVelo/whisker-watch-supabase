@@ -6,20 +6,24 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Plus, Pencil, X, ShieldCheck, Utensils } from 'lucide-react';
+import { PALETTE } from '@/lib/toneColors';
 import { format, parseISO } from 'date-fns';
 import SmartSelect from './SmartSelect';
 
 const today = () => new Date().toISOString().split('T')[0];
 const emptyFood = (petId) => ({ pet_id: petId, name: '', brand: '', food_type: '', prescription: false, start_date: today(), end_date: '', active: true, notes: '' });
 
+// Design System Amendment #5/#6 (2026-07-30) — sourced from the semantic
+// tone tokens (via inline style) instead of raw light-mode Tailwind
+// classes, so these badges look correct regardless of device theme.
 const typeColors = {
-  'Wet food': 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
-  'Dry food': 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
-  Raw: 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300',
-  'Freeze-dried': 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300',
-  Treat: 'bg-pink-100 text-pink-700 dark:bg-pink-900/40 dark:text-pink-300',
-  Supplement: 'bg-teal-100 text-teal-700 dark:bg-teal-900/40 dark:text-teal-300',
-  Other: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300',
+  'Wet food': { background: 'rgba(111,183,255,0.15)', color: PALETTE.sky },
+  'Dry food': { background: 'rgba(244,199,107,0.15)', color: PALETTE.amber },
+  Raw: { background: 'rgba(76,199,176,0.15)', color: PALETTE.teal },
+  'Freeze-dried': { background: 'rgba(169,174,181,0.15)', color: PALETTE.gray },
+  Treat: { background: 'rgba(111,183,255,0.15)', color: PALETTE.sky },
+  Supplement: { background: 'rgba(76,199,176,0.15)', color: PALETTE.teal },
+  Other: { background: 'rgba(169,174,181,0.15)', color: PALETTE.gray },
 };
 
 export default function FoodSection({ petId }) {
@@ -119,7 +123,7 @@ export default function FoodSection({ petId }) {
       <Dialog open={showDialog} onOpenChange={setShowDialog}>
         <DialogContent className="sm:max-w-md overflow-y-auto max-h-[90vh]">
           <DialogHeader>
-            <DialogTitle className="font-serif text-xl">{editing ? 'Edit Food' : 'Add Food'}</DialogTitle>
+            <DialogTitle className="text-xl">{editing ? 'Edit Food' : 'Add Food'}</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="grid grid-cols-2 gap-3">
@@ -197,7 +201,7 @@ function FoodCard({ food, onEdit, onDelete, onToggle, typeColors }) {
           </div>
           <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
             {food.food_type && (
-              <span className={`text-xs px-2 py-0.5 rounded-full ${typeColors[food.food_type] || typeColors.Other}`}>{food.food_type}</span>
+              <span className="text-xs px-2 py-0.5 rounded-full" style={typeColors[food.food_type] || typeColors.Other}>{food.food_type}</span>
             )}
             {food.prescription && (
               <span className="flex items-center gap-1 text-xs bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300 px-2 py-0.5 rounded-full">

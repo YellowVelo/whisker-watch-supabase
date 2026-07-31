@@ -38,7 +38,7 @@ export default function ObservationCard({ petId, range, code, label, icon, timez
           <p className="text-[20px] font-bold" style={{ color: data.currentLabel === 'Normal' || !data.currentLabel ? '#fff' : PALETTE.amber }}>
             {data.currentLabel || 'No Data'}
           </p>
-          <p className="text-[13px] text-white/40 mb-2">
+          <p className="text-[13px] text-tier-tertiary mb-2">
             {data.currentSubtitle || (data.hasAnyData ? "Not checked in today" : 'No recent observations')}
           </p>
           <div className="flex items-end gap-2">

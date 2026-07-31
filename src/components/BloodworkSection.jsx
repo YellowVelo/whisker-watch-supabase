@@ -11,23 +11,27 @@ import { Plus, FlaskConical, ChevronDown, ChevronUp, Pencil, Trash2, Upload, Loa
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { format, parseISO } from 'date-fns';
 
+// Design System Amendment #10 (2026-07-30) — 16 lab values need more
+// colors than the original 5 --chart-* tokens, so the token set itself
+// was extended (--chart-6 through --chart-16 in index.css) rather than
+// falling back to raw hex here.
 const FIELDS = [
-  { key: 'bun', label: 'BUN', unit: 'mg/dL', normal: '14–36', color: '#3b82f6' },
-  { key: 'creatinine', label: 'Creatinine', unit: 'mg/dL', normal: '0.6–2.4', color: '#ef4444' },
-  { key: 'sdma', label: 'SDMA', unit: 'µg/dL', normal: '<14', color: '#8b5cf6' },
-  { key: 'phosphorus', label: 'Phosphorus', unit: 'mg/dL', normal: '2.4–8.2', color: '#f59e0b' },
-  { key: 'potassium', label: 'Potassium', unit: 'mEq/L', normal: '3.5–5.8', color: '#10b981' },
-  { key: 'sodium', label: 'Sodium', unit: 'mEq/L', normal: '149–164', color: '#06b6d4' },
-  { key: 'calcium', label: 'Calcium', unit: 'mg/dL', normal: '8.8–11.9', color: '#f97316' },
-  { key: 'hematocrit', label: 'Hematocrit', unit: '%', normal: '24–45', color: '#ec4899' },
-  { key: 'hemoglobin', label: 'Hemoglobin', unit: 'g/dL', normal: '8–15', color: '#84cc16' },
-  { key: 'total_protein', label: 'Total Protein', unit: 'g/dL', normal: '5.4–8.2', color: '#6366f1' },
-  { key: 'albumin', label: 'Albumin', unit: 'g/dL', normal: '2.2–4.0', color: '#14b8a6' },
-  { key: 'alt', label: 'ALT', unit: 'U/L', normal: '10–100', color: '#f43f5e' },
-  { key: 'ast', label: 'AST', unit: 'U/L', normal: '0–48', color: '#a855f7' },
-  { key: 'alkaline_phosphatase', label: 'Alk Phos', unit: 'U/L', normal: '14–111', color: '#fb923c' },
-  { key: 'glucose', label: 'Glucose', unit: 'mg/dL', normal: '70–150', color: '#22c55e' },
-  { key: 't4', label: 'T4 Thyroid', unit: 'µg/dL', normal: '0.8–4.7', color: '#0ea5e9' },
+  { key: 'bun', label: 'BUN', unit: 'mg/dL', normal: '14–36', color: 'hsl(var(--chart-1))' },
+  { key: 'creatinine', label: 'Creatinine', unit: 'mg/dL', normal: '0.6–2.4', color: 'hsl(var(--chart-5))' },
+  { key: 'sdma', label: 'SDMA', unit: 'µg/dL', normal: '<14', color: 'hsl(var(--chart-4))' },
+  { key: 'phosphorus', label: 'Phosphorus', unit: 'mg/dL', normal: '2.4–8.2', color: 'hsl(var(--chart-2))' },
+  { key: 'potassium', label: 'Potassium', unit: 'mEq/L', normal: '3.5–5.8', color: 'hsl(var(--chart-8))' },
+  { key: 'sodium', label: 'Sodium', unit: 'mEq/L', normal: '149–164', color: 'hsl(var(--chart-3))' },
+  { key: 'calcium', label: 'Calcium', unit: 'mg/dL', normal: '8.8–11.9', color: 'hsl(var(--chart-7))' },
+  { key: 'hematocrit', label: 'Hematocrit', unit: '%', normal: '24–45', color: 'hsl(var(--chart-6))' },
+  { key: 'hemoglobin', label: 'Hemoglobin', unit: 'g/dL', normal: '8–15', color: 'hsl(var(--chart-10))' },
+  { key: 'total_protein', label: 'Total Protein', unit: 'g/dL', normal: '5.4–8.2', color: 'hsl(var(--chart-9))' },
+  { key: 'albumin', label: 'Albumin', unit: 'g/dL', normal: '2.2–4.0', color: 'hsl(var(--chart-13))' },
+  { key: 'alt', label: 'ALT', unit: 'U/L', normal: '10–100', color: 'hsl(var(--chart-16))' },
+  { key: 'ast', label: 'AST', unit: 'U/L', normal: '0–48', color: 'hsl(var(--chart-11))' },
+  { key: 'alkaline_phosphatase', label: 'Alk Phos', unit: 'U/L', normal: '14–111', color: 'hsl(var(--chart-12))' },
+  { key: 'glucose', label: 'Glucose', unit: 'mg/dL', normal: '70–150', color: 'hsl(var(--chart-14))' },
+  { key: 't4', label: 'T4 Thyroid', unit: 'µg/dL', normal: '0.8–4.7', color: 'hsl(var(--chart-15))' },
 ];
 
 const URINE_FIELDS = [
@@ -252,7 +256,7 @@ export default function BloodworkSection({ petId }) {
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="font-serif text-2xl">{editing ? 'Edit' : 'Add'} Bloodwork</DialogTitle>
+            <DialogTitle className="text-2xl">{editing ? 'Edit' : 'Add'} Bloodwork</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 mt-2">
             <div className="grid grid-cols-2 gap-3">

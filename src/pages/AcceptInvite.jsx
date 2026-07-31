@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { supabase } from '@/api/supabaseClient';
 import SetPasswordForm from '@/components/SetPasswordForm';
-import { Loader2 } from 'lucide-react';
+import AuthLayout from '@/components/AuthLayout';
+import { Loader2, Mail } from 'lucide-react';
 
 // Landing page for the co-owner invite email (sent via the send-email
 // Edge Function — see supabase/functions/invite-co-owner/index.ts) and,
@@ -90,26 +91,17 @@ export default function AcceptInvite() {
 
   if (status === 'invalid') {
     return (
-      <div className="min-h-screen flex items-center justify-center px-4 bg-background">
-        <div className="w-full max-w-sm space-y-4 text-center">
-          <h1 className="font-serif text-[28px]">Invite Link Invalid</h1>
-          <p className="text-sm text-muted-foreground">
-            This invitation link is invalid or has expired. Ask the pet owner to send a new invite.
-          </p>
-        </div>
-      </div>
+      <AuthLayout icon={Mail} title="Invite Link Invalid">
+        <p className="text-sm text-muted-foreground text-center">
+          This invitation link is invalid or has expired. Ask the pet owner to send a new invite.
+        </p>
+      </AuthLayout>
     );
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4 bg-background">
-      <div className="w-full max-w-sm space-y-6">
-        <div className="space-y-1.5">
-          <h1 className="font-serif text-[28px]">Welcome to Wysker Watch</h1>
-          <p className="text-sm text-muted-foreground">Create a password to finish accepting your invitation.</p>
-        </div>
-        <SetPasswordForm submitLabel="Continue" onSuccess={handleSuccess} />
-      </div>
-    </div>
+    <AuthLayout icon={Mail} title="Welcome to Wysker Watch" subtitle="Create a password to finish accepting your invitation.">
+      <SetPasswordForm submitLabel="Continue" onSuccess={handleSuccess} />
+    </AuthLayout>
   );
 }

@@ -38,7 +38,7 @@ export default function VomitingNauseaCard({ petId, range, timezone }) {
     >
       {data && (
         <>
-          <p className="text-[13px] text-white/40 mb-2">
+          <p className="text-[13px] text-tier-tertiary mb-2">
             {data.vomiting.currentLabel || 'No Data'}{data.nausea.currentLabel ? ` · Nausea: ${data.nausea.currentLabel}` : ''}
           </p>
           <div className="flex items-end gap-2">

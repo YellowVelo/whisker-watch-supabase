@@ -2,11 +2,13 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useSearchParams, useNavigate, Link } from 'react-router-dom';
 import { ArrowLeft, UtensilsCrossed, Droplets, Zap, Rainbow } from 'lucide-react';
 import { entities } from '@/api/entities';
+import IconButton from '../components/IconButton';
 import PageTransition from '../components/PageTransition';
 import ObservationCard from '../components/trends/ObservationCard';
 import VomitingNauseaCard from '../components/trends/VomitingNauseaCard';
 import WeightCard from '../components/trends/WeightCard';
 import InsightSummaryCard from '../components/trends/InsightSummaryCard';
+import PillToggle from '../components/PillToggle';
 import { RANGE_OPTIONS } from '@/lib/checkin/trendsClient';
 import { getCategory, HEALTH_ATTRIBUTES, WELLBEING_ATTRIBUTES } from '@/lib/checkin/config';
 import { getPetLabel } from '@/lib/speciesConfig';
@@ -162,9 +164,7 @@ export default function PetTrends() {
       <div className="min-h-screen bg-background pb-28">
         {/* ── HEADER ── */}
         <header className="px-4 flex items-center justify-between" style={{ paddingTop: 'calc(env(safe-area-inset-top) + 12px)' }}>
-          <button onClick={() => navigate(-1)} aria-label="Back" className="w-9 h-9 rounded-full flex items-center justify-center" style={{ background: 'rgba(255,255,255,0.06)' }}>
-            <ArrowLeft className="h-5 w-5 text-white" />
-          </button>
+          <IconButton icon={ArrowLeft} onClick={() => navigate(-1)} aria-label="Back" />
           <div className="flex items-center gap-3 flex-1 min-w-0 px-3">
             <div className="h-11 w-11 rounded-full overflow-hidden flex-shrink-0" style={{ background: 'rgba(255,255,255,0.06)' }}>
               {pet.photo_url && <img src={pet.photo_url} alt={pet.name} className={`w-full h-full object-cover ${pet.is_memorial ? 'grayscale' : ''}`} />}
@@ -174,7 +174,7 @@ export default function PetTrends() {
                 {pet.name}
                 {pet.is_memorial && <Rainbow className="h-3.5 w-3.5 text-purple-400 flex-shrink-0" aria-label="In memory" />}
               </p>
-              <p className="text-[13px] text-white/45 truncate">
+              <p className="text-[13px] text-tier-tertiary truncate">
                 {pet.is_memorial ? 'In Memory · ' : ''}{getPetLabel(pet.species)}{pet.breed ? ` · ${pet.breed}` : ''}{pet.sex ? ` · ${pet.sex}` : ''}
               </p>
             </div>
@@ -203,23 +203,23 @@ export default function PetTrends() {
         <main className="max-w-2xl mx-auto px-4 pt-4">
           {activeSection === 'patterns' || activeSection === 'compare' ? (
             <div className="py-16 text-center">
-              <p className="text-[15px] font-semibold text-white/60">{SECTIONS.find((s) => s.key === activeSection)?.label} coming soon</p>
-              <p className="text-[13px] text-white/35 mt-1">This view isn't available yet.</p>
+              <p className="text-[15px] font-semibold text-tier-secondary">{SECTIONS.find((s) => s.key === activeSection)?.label} coming soon</p>
+              <p className="text-[13px] text-tier-tertiary mt-1">This view isn't available yet.</p>
             </div>
           ) : (
             <>
               {/* ── TIME RANGE SELECTOR ── */}
               <div role="group" aria-label="Time range" className="flex rounded-full p-1 mb-4" style={{ background: 'rgba(255,255,255,0.05)' }}>
                 {RANGE_OPTIONS.map((r) => (
-                  <button
+                  <PillToggle
                     key={r}
-                    aria-pressed={range === r}
+                    active={range === r}
                     onClick={() => setRange(r)}
-                    className="flex-1 py-1.5 rounded-full text-[13px] font-semibold transition-colors"
-                    style={range === r ? { background: PALETTE.sky, color: 'hsl(var(--background))' } : { color: 'rgba(255,255,255,0.5)' }}
+                    variant="segmented"
+                    className="flex-1 py-1.5 text-[13px]"
                   >
                     {r}
-                  </button>
+                  </PillToggle>
                 ))}
               </div>
 
@@ -228,15 +228,15 @@ export default function PetTrends() {
                   {/* ── HEALTH / WELLNESS GROUP TOGGLE ── */}
                   <div role="group" aria-label="Attribute group" className="flex rounded-full p-1 mb-4" style={{ background: 'rgba(255,255,255,0.05)' }}>
                     {Object.entries(GROUPS).map(([key, g]) => (
-                      <button
+                      <PillToggle
                         key={key}
-                        aria-pressed={activeGroup === key}
+                        active={activeGroup === key}
                         onClick={() => setGroup(key)}
-                        className="flex-1 py-1.5 rounded-full text-[13px] font-semibold transition-colors"
-                        style={activeGroup === key ? { background: PALETTE.sky, color: 'hsl(var(--background))' } : { color: 'rgba(255,255,255,0.5)' }}
+                        variant="segmented"
+                        className="flex-1 py-1.5 text-[13px]"
                       >
                         {g.label}
-                      </button>
+                      </PillToggle>
                     ))}
                   </div>
 

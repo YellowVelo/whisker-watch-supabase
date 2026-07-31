@@ -21,7 +21,7 @@ export default function MemorialDialog({ pet, open, onOpenChange, onSuccess }) {
     <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle className="font-serif text-2xl">🌈 Crossed the Rainbow Bridge</AlertDialogTitle>
+          <AlertDialogTitle className="text-2xl">🌈 Crossed the Rainbow Bridge</AlertDialogTitle>
           <AlertDialogDescription className="text-base leading-relaxed">
             Mark <strong>{pet?.name}</strong>'s profile as a memorial. Their health history and memories will be lovingly preserved.
           </AlertDialogDescription>
@@ -32,11 +32,7 @@ export default function MemorialDialog({ pet, open, onOpenChange, onSuccess }) {
         </div>
         <AlertDialogFooter>
           <AlertDialogCancel>Cancel</AlertDialogCancel>
-          <Button
-            onClick={handleConfirm}
-            disabled={saving}
-            className="bg-purple-600 hover:bg-purple-700 text-white"
-          >
+          <Button onClick={handleConfirm} disabled={saving}>
             {saving ? 'Saving…' : '🌈 Create Memorial'}
           </Button>
         </AlertDialogFooter>

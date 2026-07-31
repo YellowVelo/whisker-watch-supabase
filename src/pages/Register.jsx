@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Link } from 'react-router-dom';
 import { Loader2, Heart, MailCheck } from 'lucide-react';
+import AuthLayout from '@/components/AuthLayout';
 
 // Calls the sign-up Edge Function (supabase/functions/sign-up/index.ts)
 // instead of supabase.auth.signUp() directly, so the confirmation email
@@ -57,35 +58,30 @@ export default function Register() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4 bg-background">
-      <div className="w-full max-w-sm space-y-6">
-        <div className="text-center">
-          <div className="h-12 w-12 rounded-xl bg-primary/10 flex items-center justify-center mx-auto mb-3">
-            <Heart className="h-6 w-6 text-primary" />
-          </div>
-          <h1 className="font-serif text-[28px]">Create Account</h1>
+    <AuthLayout
+      icon={Heart}
+      title="Create Account"
+      footer={<p className="text-sm text-muted-foreground">Already have an account? <Link to="/login" className="text-primary hover:underline">Sign in</Link></p>}
+    >
+      {sent ? (
+        <div className="text-center space-y-3">
+          <MailCheck className="h-10 w-10 text-primary mx-auto" />
+          <p className="text-base text-muted-foreground">
+            We sent a confirmation link to <span className="font-medium">{email}</span>.
+            Click it to finish creating your account.
+          </p>
         </div>
-        {sent ? (
-          <div className="text-center space-y-3">
-            <MailCheck className="h-10 w-10 text-primary mx-auto" />
-            <p className="text-base text-muted-foreground">
-              We sent a confirmation link to <span className="font-medium">{email}</span>.
-              Click it to finish creating your account.
-            </p>
-          </div>
-        ) : (
-          <form onSubmit={handleRegister} className="space-y-4">
-            {error && <p className="text-base text-destructive text-center">{error}</p>}
-            <div className="space-y-1.5"><Label>First Name</Label><Input type="text" value={firstName} onChange={e => setFirstName(e.target.value)} maxLength={100} required /></div>
-            <div className="space-y-1.5"><Label>Email</Label><Input type="email" value={email} onChange={e => setEmail(e.target.value)} required /></div>
-            <div className="space-y-1.5"><Label>Password</Label><Input type="password" value={password} onChange={e => setPassword(e.target.value)} required /></div>
-            <div className="space-y-1.5"><Label>Confirm Password</Label><Input type="password" value={confirm} onChange={e => setConfirm(e.target.value)} required /></div>
-            <Button type="submit" className="w-full" disabled={loading}>{loading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Sign Up'}</Button>
-            <Button type="button" variant="outline" className="w-full" onClick={handleGoogleLogin}>Continue with Google</Button>
-          </form>
-        )}
-        <p className="text-center text-sm text-muted-foreground">Already have an account? <Link to="/login" className="text-primary hover:underline">Sign in</Link></p>
-      </div>
-    </div>
+      ) : (
+        <form onSubmit={handleRegister} className="space-y-4">
+          {error && <p className="text-base text-destructive text-center">{error}</p>}
+          <div className="space-y-1.5"><Label>First Name</Label><Input type="text" value={firstName} onChange={e => setFirstName(e.target.value)} maxLength={100} required /></div>
+          <div className="space-y-1.5"><Label>Email</Label><Input type="email" value={email} onChange={e => setEmail(e.target.value)} required /></div>
+          <div className="space-y-1.5"><Label>Password</Label><Input type="password" value={password} onChange={e => setPassword(e.target.value)} required /></div>
+          <div className="space-y-1.5"><Label>Confirm Password</Label><Input type="password" value={confirm} onChange={e => setConfirm(e.target.value)} required /></div>
+          <Button type="submit" className="w-full" disabled={loading}>{loading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Sign Up'}</Button>
+          <Button type="button" variant="outline" className="w-full" onClick={handleGoogleLogin}>Continue with Google</Button>
+        </form>
+      )}
+    </AuthLayout>
   );
 }

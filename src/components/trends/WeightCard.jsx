@@ -37,7 +37,7 @@ export default function WeightCard({ petId, range, timezone }) {
         <>
           <div className="flex items-baseline gap-1">
             <span className="text-[28px] font-bold text-white leading-none">{data.currentLbs}</span>
-            <span className="text-[14px] text-white/40">lbs</span>
+            <span className="text-[14px] text-tier-tertiary">lbs</span>
           </div>
           {data.deltaLbs != null && (
             <p className="text-[13px] font-medium mt-0.5 flex items-center gap-1" style={{ color: data.deltaLbs === 0 ? PALETTE.gray : PALETTE.amber }}>

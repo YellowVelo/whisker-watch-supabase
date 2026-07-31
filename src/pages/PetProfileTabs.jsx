@@ -16,13 +16,6 @@ import usePullToRefresh from '../hooks/usePullToRefresh';
 import PullToRefreshIndicator from '../components/PullToRefreshIndicator';
 import AskWyskerRedirect from '../components/AskWyskerRedirect';
 
-const conditionColors = {
-  IBD: 'bg-amber-100 text-amber-800', CKD: 'bg-blue-100 text-blue-800',
-  Diabetes: 'bg-purple-100 text-purple-800', Hyperthyroidism: 'bg-rose-100 text-rose-800',
-  Pancreatitis: 'bg-orange-100 text-orange-800', 'Liver Disease': 'bg-green-100 text-green-800',
-  Other: 'bg-gray-100 text-gray-800',
-};
-
 export default function PetProfileTabs() {
   const { petId } = useParams();
   const navigate = useNavigate();
@@ -106,15 +99,15 @@ export default function PetProfileTabs() {
               {pet?.species === 'Dog' ? <Dog className="h-8 w-8 text-primary" /> : <Cat className="h-8 w-8 text-primary" />}
             </div>
           )}
-          <h1 className={`font-serif text-4xl ${pet?.photo_url ? 'text-white drop-shadow' : 'text-foreground'}`}>{pet?.name}</h1>
-          {pet?.breed && <p className={`text-sm mt-0.5 ${pet?.photo_url ? 'text-white/80' : 'text-muted-foreground'}`}>{pet?.breed}</p>}
+          <h1 className={`text-[28px] font-semibold ${pet?.photo_url ? 'text-white drop-shadow' : 'text-foreground'}`}>{pet?.name}</h1>
+          {pet?.breed && <p className={`text-sm mt-0.5 ${pet?.photo_url ? 'text-tier-secondary' : 'text-muted-foreground'}`}>{pet?.breed}</p>}
           {pet?.nicknames?.length > 0 && (
-            <p className={`text-sm mt-0.5 italic ${pet?.photo_url ? 'text-white/70' : 'text-muted-foreground'}`}>
+            <p className={`text-sm mt-0.5 italic ${pet?.photo_url ? 'text-tier-secondary' : 'text-muted-foreground'}`}>
               also known as {pet?.nicknames.join(', ')}
             </p>
           )}
           {pet?.conditions?.length > 0 && (
-            <p className={`text-sm mt-1.5 font-medium ${pet?.photo_url ? 'text-white/70' : 'text-muted-foreground'}`}>
+            <p className={`text-sm mt-1.5 font-medium ${pet?.photo_url ? 'text-tier-secondary' : 'text-muted-foreground'}`}>
               {pet?.conditions.join(' | ')}
             </p>
           )}
@@ -199,7 +192,7 @@ export default function PetProfileTabs() {
           <div className="mt-8 pt-6 border-t border-border/50">
             <button
               onClick={() => setMemorialOpen(true)}
-              className="w-full flex items-center gap-3 px-4 py-3.5 bg-card border border-border rounded-xl text-left hover:bg-purple-50 hover:border-purple-200 transition-colors text-purple-700"
+              className="w-full flex items-center gap-3 px-4 py-3.5 bg-card border border-border rounded-xl text-left hover:bg-purple-950/30 hover:border-purple-800/40 transition-colors text-purple-300"
             >
               <Rainbow className="h-4 w-4" />
               <div>
@@ -212,10 +205,10 @@ export default function PetProfileTabs() {
 
         {pet?.is_memorial && (
           <div className="mt-8 pt-6 border-t border-border/50">
-            <div className="px-4 py-4 bg-purple-50 border border-purple-200 rounded-xl text-center">
+            <div className="px-4 py-4 bg-purple-950/20 border border-purple-800/30 rounded-xl text-center">
               <Rainbow className="h-7 w-7 mx-auto mb-1 text-purple-300" />
-              <p className="text-sm font-medium text-purple-800">Forever in our hearts</p>
-              {pet?.memorial_date && <p className="text-sm text-purple-600 mt-0.5">{new Date(pet?.memorial_date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</p>}
+              <p className="text-sm font-medium text-purple-300">Forever in our hearts</p>
+              {pet?.memorial_date && <p className="text-sm text-purple-400/70 mt-0.5">{new Date(pet?.memorial_date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</p>}
             </div>
           </div>
         )}
@@ -224,7 +217,7 @@ export default function PetProfileTabs() {
       {sheetOpen && (
         <div className="fixed inset-0 z-50 bg-background overflow-y-auto">
           <div className="sticky z-10 bg-background border-b border-border px-4 py-3 flex items-center justify-between" style={{ top: 'var(--account-banner-height, 0px)', paddingTop: 'calc(env(safe-area-inset-top) + 12px)' }}>
-            <h2 className="font-serif text-2xl">Log Symptoms</h2>
+            <h2 className="text-2xl font-semibold">Log Symptoms</h2>
             <button onClick={() => setSheetOpen(false)} className="h-9 w-9 rounded-full bg-secondary flex items-center justify-center">
               <X className="h-4 w-4" />
             </button>

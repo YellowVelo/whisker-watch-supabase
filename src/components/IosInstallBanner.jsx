@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Share, X } from 'lucide-react';
+import { PALETTE } from '@/lib/toneColors';
 
 const DISMISSED_KEY = 'ios-install-banner-dismissed';
 
@@ -39,13 +40,13 @@ export default function IosInstallBanner() {
     <div
       className="fixed inset-x-0 z-[70] flex items-center gap-3 px-4 py-3 text-sm text-white"
       style={{
-        backgroundColor: '#0D0F12',
+        backgroundColor: 'hsl(var(--background))',
         // Sits just above BottomTabBar (h-16 + its own safe-area padding)
         // instead of at bottom-0, so it doesn't cover primary navigation.
         bottom: 'calc(4rem + env(safe-area-inset-bottom))',
       }}
     >
-      <Share className="h-5 w-5 shrink-0" style={{ color: '#6FB7FF' }} />
+      <Share className="h-5 w-5 shrink-0" style={{ color: PALETTE.sky }} />
       <span className="flex-1">
         Install Wysker Watch: tap <strong>•••</strong>, then <strong>Share</strong>, then{' '}
         <strong>Add to Home Screen</strong>.
@@ -54,7 +55,7 @@ export default function IosInstallBanner() {
         type="button"
         onClick={dismiss}
         aria-label="Dismiss"
-        className="shrink-0 rounded-full p-1 text-white/70 hover:text-white"
+        className="shrink-0 rounded-full p-1 text-tier-secondary hover:text-white"
       >
         <X className="h-4 w-4" />
       </button>

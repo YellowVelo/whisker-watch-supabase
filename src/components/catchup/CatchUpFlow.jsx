@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { X, ChevronLeft, ChevronRight, CircleDashed, Minus, Check, Loader2, ClipboardList } from 'lucide-react';
 import { PALETTE } from '@/lib/toneColors';
 import VibeIcon from '@/components/VibeIcon';
+import PillToggle from '@/components/PillToggle';
 import DailyCheckInSheet from '@/components/DailyCheckInSheet';
 import BulkApplySheet from './BulkApplySheet';
 import { getCheckInsForDateRange, markGreatDaysBulk } from '@/lib/checkin/checkinClient';
@@ -243,7 +244,7 @@ export default function CatchUpFlow({ pets, missedDaysByPet, onClose, onPetProgr
         <div className="flex items-center gap-2 min-w-0">
           {step === 'exceptions' && (
             <button onClick={() => setStep('calendar')} aria-label="Back" className="h-9 w-9 -ml-2 rounded-full flex items-center justify-center flex-shrink-0">
-              <ChevronLeft className="h-5 w-5 text-white/70" />
+              <ChevronLeft className="h-5 w-5 text-tier-secondary" />
             </button>
           )}
           <h2 className="text-lg font-bold text-white truncate">
@@ -312,9 +313,9 @@ export default function CatchUpFlow({ pets, missedDaysByPet, onClose, onPetProgr
               onClick={() => setStep('exceptions')}
               className="w-full flex items-center justify-between px-5 py-4 text-sm"
             >
-              <span className="text-white/70">
+              <span className="text-tier-secondary">
                 <span className="font-semibold text-white">{missedDates.length}</span> days missed
-                {resolvedCount > 0 && <span className="text-white/40"> · {resolvedCount} saved</span>}
+                {resolvedCount > 0 && <span className="text-tier-tertiary"> · {resolvedCount} saved</span>}
               </span>
               <span className="flex items-center gap-1 font-semibold" style={{ color: PALETTE.sky }}>
                 {exceptionList.length} need details <ChevronRight className="h-4 w-4" />
@@ -322,14 +323,14 @@ export default function CatchUpFlow({ pets, missedDaysByPet, onClose, onPetProgr
             </button>
           ) : (
             <div className="px-5 py-4">
-              <p className="text-xs text-white/40 text-center mb-2">
+              <p className="text-xs text-tier-tertiary text-center mb-2">
                 {missedDates.length} days missed{resolvedCount > 0 && ` · ${resolvedCount} saved`}
               </p>
               <button
                 onClick={handleFinish}
                 disabled={finishing}
-                className="w-full flex items-center justify-center text-base font-bold rounded-2xl h-14 disabled:opacity-40 transition-opacity"
-                style={{ background: PALETTE.sky, color: 'hsl(var(--background))' }}
+                className="w-full flex items-center justify-center text-base font-bold rounded-2xl h-14 disabled:opacity-40 transition-opacity border-2"
+                style={{ background: 'hsl(var(--background))', borderColor: PALETTE.sky, color: '#fff' }}
               >
                 {finishing ? <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Finishing…</> : 'Finish Catch Up'}
               </button>
@@ -375,9 +376,9 @@ function PetSelectStep({ pets, missedDaysByPet, onSelect }) {
         >
           <div>
             <p className="text-base font-semibold text-white">{pet.name}</p>
-            <p className="text-sm text-white/50">{missedDaysByPet[pet.id]?.count || 0} days missed</p>
+            <p className="text-sm text-tier-tertiary">{missedDaysByPet[pet.id]?.count || 0} days missed</p>
           </div>
-          <ChevronRight className="h-4 w-4 text-white/40" />
+          <ChevronRight className="h-4 w-4 text-tier-tertiary" />
         </button>
       ))}
     </div>
@@ -392,16 +393,16 @@ function EntryStep({ petName, missedCount, onGetStarted, onMaybeLater }) {
       </div>
       <div>
         <h3 className="text-2xl font-bold text-white mb-2">We missed you!</h3>
-        <p className="text-base text-white/60">Let's get {petName} caught up.</p>
+        <p className="text-base text-tier-secondary">Let's get {petName} caught up.</p>
       </div>
-      <div className="w-full rounded-2xl px-4 py-4 text-sm text-white/60" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}>
+      <div className="w-full rounded-2xl px-4 py-4 text-sm text-tier-secondary" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}>
         <p className="text-white font-semibold mb-1">Looks like {missedCount} days were missed.</p>
         <p>We assume most days were Great Days unless you tell us otherwise.</p>
       </div>
-      <button onClick={onGetStarted} className="w-full text-base font-bold rounded-2xl h-14" style={{ background: PALETTE.sky, color: 'hsl(var(--background))' }}>
+      <button onClick={onGetStarted} className="w-full text-base font-bold rounded-2xl h-14 border-2" style={{ background: 'hsl(var(--background))', borderColor: PALETTE.sky, color: '#fff' }}>
         Get Started
       </button>
-      <button onClick={onMaybeLater} className="text-sm font-semibold text-white/50">
+      <button onClick={onMaybeLater} className="text-sm font-semibold text-tier-tertiary">
         Maybe later
       </button>
     </div>
@@ -417,24 +418,21 @@ const LONG_GAP_FEELINGS = [
 function LongGapPromptStep({ petName, feeling, onSelectFeeling, onContinue }) {
   return (
     <div className="flex flex-col gap-4 py-4">
-      <p className="text-sm text-white/50">This helps us get the right context. It's OK if you aren't sure about every day.</p>
+      <p className="text-sm text-tier-tertiary">This helps us get the right context. It's OK if you aren't sure about every day.</p>
       <div className="space-y-3">
         {LONG_GAP_FEELINGS.map((opt) => (
-          <button
+          <PillToggle
             key={opt.value}
+            active={feeling === opt.value}
             onClick={() => onSelectFeeling(opt.value)}
-            aria-pressed={feeling === opt.value}
-            className="w-full text-left rounded-2xl px-4 py-3.5"
-            style={feeling === opt.value
-              ? { background: PALETTE.sky, color: 'hsl(var(--background))' }
-              : { background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff' }}
+            className="w-full flex-col items-start text-left rounded-2xl px-4 py-3.5 h-auto"
           >
             <p className="text-base font-semibold">{opt.label}</p>
-            <p className={`text-sm ${feeling === opt.value ? 'opacity-80' : 'text-white/50'}`}>{petName} {opt.description}</p>
-          </button>
+            <p className={`text-sm ${feeling === opt.value ? 'opacity-80' : 'text-tier-tertiary'}`}>{petName} {opt.description}</p>
+          </PillToggle>
         ))}
       </div>
-      <button onClick={onContinue} className="w-full text-base font-bold rounded-2xl h-14 mt-2" style={{ background: PALETTE.sky, color: 'hsl(var(--background))' }}>
+      <button onClick={onContinue} className="w-full text-base font-bold rounded-2xl h-14 mt-2 border-2" style={{ background: 'hsl(var(--background))', borderColor: PALETTE.sky, color: '#fff' }}>
         Continue
       </button>
     </div>
@@ -459,27 +457,27 @@ function CalendarStep({ grid, missedDates, checkInsByDate, exceptionDates, onTog
     <div>
       <div className="flex items-center justify-between mb-3">
         <button onClick={onPrevMonth} disabled={!canGoEarlier} aria-label="Previous month" className="h-8 w-8 rounded-full flex items-center justify-center disabled:opacity-30">
-          <ChevronLeft className="h-4 w-4 text-white/70" />
+          <ChevronLeft className="h-4 w-4 text-tier-secondary" />
         </button>
         {anyExceptions && (
           <button onClick={onClearAll} className="text-xs font-semibold" style={{ color: PALETTE.sky }}>Clear All</button>
         )}
         <button onClick={onNextMonth} disabled={!canGoLater} aria-label="Next month" className="h-8 w-8 rounded-full flex items-center justify-center disabled:opacity-30">
-          <ChevronRight className="h-4 w-4 text-white/70" />
+          <ChevronRight className="h-4 w-4 text-tier-secondary" />
         </button>
       </div>
 
       <div className="grid grid-cols-7 gap-y-2 text-center">
         {WEEKDAY_LABELS.map((d) => (
-          <div key={d} className="text-xs font-medium text-white/40 pb-1">{d}</div>
+          <div key={d} className="text-xs font-medium text-tier-tertiary pb-1">{d}</div>
         ))}
         {grid.map(({ dateStr, inMonth, dayOfMonth }) => {
           const isMissed = missedSet.has(dateStr);
           if (!inMonth || !isMissed) {
             return (
               <div key={dateStr} className="flex flex-col items-center gap-1 py-1">
-                <span className={`text-xs ${inMonth ? 'text-white/25' : 'text-white/10'}`}>{dayOfMonth}</span>
-                <Minus className="h-4 w-4 text-white/10" aria-hidden="true" />
+                <span className={`text-xs ${inMonth ? 'text-tier-tertiary' : 'text-tier-tertiary'}`}>{dayOfMonth}</span>
+                <Minus className="h-4 w-4 text-tier-tertiary" aria-hidden="true" />
               </div>
             );
           }
@@ -491,14 +489,14 @@ function CalendarStep({ grid, missedDates, checkInsByDate, exceptionDates, onTog
               onClick={() => onToggle(dateStr)}
               className="flex flex-col items-center gap-1 py-1 rounded-lg active:opacity-70"
             >
-              <span className="text-xs text-white/70">{dayOfMonth}</span>
+              <span className="text-xs text-tier-secondary">{dayOfMonth}</span>
               <DayIcon checkIn={checkIn} isException={isException} />
             </button>
           );
         })}
       </div>
 
-      <p className="text-sm text-white/50 mt-5 text-center">
+      <p className="text-sm text-tier-tertiary mt-5 text-center">
         We assume these were <span style={{ color: PALETTE.sky }} className="font-semibold">Great Days</span>. Tap any day that wasn't a Great Day.
       </p>
     </div>
@@ -517,12 +515,12 @@ function CalendarStep({ grid, missedDates, checkInsByDate, exceptionDates, onTog
 // that, same as before.
 function ExceptionsStep({ dates, selectedDates, onToggleSelect, onOpenDetails, onBulkApply }) {
   if (dates.length === 0) {
-    return <p className="text-sm text-white/50 text-center py-8">No days need details right now.</p>;
+    return <p className="text-sm text-tier-tertiary text-center py-8">No days need details right now.</p>;
   }
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between mb-2">
-        <p className="text-sm text-white/50">Tap a day to select it, or open it to answer alone.</p>
+        <p className="text-sm text-tier-tertiary">Tap a day to select it, or open it to answer alone.</p>
         {selectedDates.size >= 2 && (
           <button onClick={onBulkApply} className="text-sm font-semibold" style={{ color: PALETTE.sky }}>
             Apply to {selectedDates.size} days
@@ -549,7 +547,7 @@ function ExceptionsStep({ dates, selectedDates, onToggleSelect, onOpenDetails, o
                 <CircleDashed className="h-4 w-4" style={{ color: checked ? PALETTE.sky : PALETTE.amber }} aria-hidden="true" />
                 <div>
                   <p className="text-base font-semibold text-white">{formatDayLabel(dateStr)}</p>
-                  <p className="text-sm text-white/50">{checked ? 'Selected' : 'Needs details'}</p>
+                  <p className="text-sm text-tier-tertiary">{checked ? 'Selected' : 'Needs details'}</p>
                 </div>
               </div>
               {checked && <Check className="h-4 w-4 flex-shrink-0" style={{ color: PALETTE.sky }} aria-hidden="true" />}
@@ -560,7 +558,7 @@ function ExceptionsStep({ dates, selectedDates, onToggleSelect, onOpenDetails, o
               className="h-9 w-9 rounded-full flex items-center justify-center flex-shrink-0"
               style={{ background: 'rgba(255,255,255,0.08)' }}
             >
-              <ChevronRight className="h-4 w-4 text-white/60" aria-hidden="true" />
+              <ChevronRight className="h-4 w-4 text-tier-secondary" aria-hidden="true" />
             </button>
           </div>
         );
@@ -577,9 +575,9 @@ function CompleteStep({ petName, onDone }) {
       </div>
       <div>
         <h3 className="text-2xl font-bold text-white mb-2">All caught up!</h3>
-        <p className="text-base text-white/60">{petName} is all set. You're back in sync.</p>
+        <p className="text-base text-tier-secondary">{petName} is all set. You're back in sync.</p>
       </div>
-      <button onClick={onDone} className="w-full text-base font-bold rounded-2xl h-14" style={{ background: PALETTE.sky, color: 'hsl(var(--background))' }}>
+      <button onClick={onDone} className="w-full text-base font-bold rounded-2xl h-14 border-2" style={{ background: 'hsl(var(--background))', borderColor: PALETTE.sky, color: '#fff' }}>
         Done
       </button>
     </div>

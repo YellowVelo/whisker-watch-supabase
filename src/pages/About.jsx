@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Heart } from 'lucide-react';
+import IconButton from '../components/IconButton';
 import PageTransition from '@/components/PageTransition';
 
 export default function About() {
@@ -13,10 +14,8 @@ export default function About() {
           style={{ top: 'var(--account-banner-height, 0px)', paddingTop: 'env(safe-area-inset-top)' }}
         >
           <div className="max-w-2xl mx-auto px-4 py-3 flex items-center gap-3">
-            <button onClick={() => navigate(-1)} className="h-9 w-9 rounded-full bg-secondary flex items-center justify-center">
-              <ArrowLeft className="h-5 w-5" />
-            </button>
-            <h1 className="font-serif text-[28px]">About</h1>
+            <IconButton icon={ArrowLeft} onClick={() => navigate(-1)} aria-label="Back" />
+            <h1 className="text-[28px] font-semibold">About</h1>
           </div>
         </header>
         <div className="max-w-2xl mx-auto px-4 py-10">
@@ -24,7 +23,7 @@ export default function About() {
             <div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
               <Heart className="h-8 w-8 text-primary" />
             </div>
-            <h2 className="font-serif text-3xl mb-2">Wysker Watch</h2>
+            <h2 className="text-3xl font-semibold mb-2">Wysker Watch</h2>
             <p className="text-base text-muted-foreground max-w-sm mx-auto">
               Track daily symptoms for your cats and dogs with chronic conditions. Spot patterns and share insights with your vet.
             </p>

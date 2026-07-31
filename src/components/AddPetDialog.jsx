@@ -14,6 +14,7 @@ import { getOrCreatePetOnboarding } from '@/lib/onboardingClient';
 import { Loader2, Camera } from 'lucide-react';
 import { getPetEmoji, getPetLabel } from '@/lib/speciesConfig';
 import { PALETTE } from '@/lib/toneColors';
+import PillToggle from '@/components/PillToggle';
 
 const PRECISION_OPTIONS = [
   { value: 'EXACT', label: 'Exact date' },
@@ -62,16 +63,14 @@ function DateInfoFields({ precision, parts, onPrecisionChange, onPartsChange, id
     <div className="space-y-2">
       <div className="flex flex-wrap gap-2">
         {PRECISION_OPTIONS.map(opt => (
-          <button
+          <PillToggle
             key={opt.value}
-            type="button"
+            active={precision === opt.value}
             onClick={() => onPrecisionChange(opt.value)}
-            className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${
-              precision === opt.value ? 'bg-primary text-primary-foreground border-primary' : 'bg-background text-foreground border-border hover:border-primary/50'
-            }`}
+            className="text-xs px-3 py-1.5"
           >
             {opt.label}
-          </button>
+          </PillToggle>
         ))}
       </div>
       {precision === 'EXACT' && (
@@ -275,7 +274,7 @@ export default function AddPetDialog({ open, onOpenChange, onSuccess, returnTo =
       <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
         {step !== 'success' && (
           <DialogHeader>
-            <DialogTitle className="font-serif text-2xl">
+            <DialogTitle className="text-2xl">
               {species ? `Add a ${label}` : 'Add a Pet'}
             </DialogTitle>
           </DialogHeader>
@@ -462,7 +461,7 @@ export default function AddPetDialog({ open, onOpenChange, onSuccess, returnTo =
         {step === 'success' && (
           <div className="py-6 flex flex-col items-center gap-3 text-center">
             <span className="text-5xl">🐾</span>
-            <p className="font-serif text-2xl">{createdPetName} has been added!</p>
+            <p className="text-2xl font-semibold">{createdPetName} has been added!</p>
             <p className="text-sm text-muted-foreground max-w-xs">
               Let's spend a few minutes teaching Wysker Watch about {createdPetName}. This helps us recognize meaningful changes over time.
             </p>

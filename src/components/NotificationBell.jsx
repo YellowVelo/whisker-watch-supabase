@@ -1,18 +1,19 @@
-import { Link } from 'react-router-dom';
 import { Bell } from 'lucide-react';
 import { PALETTE } from '@/lib/toneColors';
+import IconButton from '@/components/IconButton';
 
 // Notification entry point for Home. Badge only renders when unread
 // notifications exist; hidden otherwise (per Home Feature Spec #2).
+// Design System Amendment #11 (2026-07-30) — shares the same IconButton
+// component as every other circular icon button, no "header action" exception.
 export default function NotificationBell({ unreadCount }) {
   return (
-    <Link
+    <IconButton
       to="/notifications"
       aria-label={unreadCount > 0 ? `Notifications, ${unreadCount} unread` : 'Notifications'}
-      className="relative h-11 w-11 rounded-full flex items-center justify-center flex-shrink-0 active:opacity-70 transition-opacity"
-      style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)' }}
+      icon={Bell}
+      iconClassName="text-tier-secondary"
     >
-      <Bell className="h-5 w-5 text-white/80" />
       {unreadCount > 0 && (
         <span
           className="absolute top-1.5 right-1.5 h-2.5 w-2.5 rounded-full"
@@ -20,6 +21,6 @@ export default function NotificationBell({ unreadCount }) {
           aria-hidden="true"
         />
       )}
-    </Link>
+    </IconButton>
   );
 }

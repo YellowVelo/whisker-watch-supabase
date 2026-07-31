@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/api/supabaseClient';
 import SetPasswordForm from '@/components/SetPasswordForm';
+import AuthLayout from '@/components/AuthLayout';
+import { KeyRound } from 'lucide-react';
 
 // NOTE: Supabase's password-reset flow differs from Base44's. Clicking the
 // emailed reset link logs the user into a temporary "recovery" session
@@ -18,15 +20,12 @@ export default function ResetPassword() {
   }, []);
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4 bg-background">
-      <div className="w-full max-w-sm space-y-6">
-        <h1 className="font-serif text-[28px]">Set New Password</h1>
-        <SetPasswordForm
-          submitLabel="Reset Password"
-          disabled={!sessionReady}
-          onSuccess={() => { window.location.href = '/login'; }}
-        />
-      </div>
-    </div>
+    <AuthLayout icon={KeyRound} title="Set New Password">
+      <SetPasswordForm
+        submitLabel="Reset Password"
+        disabled={!sessionReady}
+        onSuccess={() => { window.location.href = '/login'; }}
+      />
+    </AuthLayout>
   );
 }
