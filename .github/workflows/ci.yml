@@ -66,16 +66,18 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_DEV_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.sb_publishable }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.sb_secret }}
+          # Legacy-JWT-format service_role credential for wysker-watch-dev,
+          # not the opaque sb_secret_ key used elsewhere — send-email and
+          # clear-email-suppression's auth check decodes a `role` claim off
+          # this token (see their header comments on getJwtRole), which an
+          # opaque key can't provide. See index.test.ts's header comment for
+          # the full caveat this resolves.
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.DEV_LEGACY_JWT_SECRET }}
           TEST2_EMAIL: ${{ secrets.SUPABASE_DEV_TEST2_EMAIL }}
           TEST2_PASSWORD: ${{ secrets.SUPABASE_DEV_TEST2_PASSWORD }}
           # Must match the RESEND_WEBHOOK_SECRET configured on
           # wysker-watch-dev's resend-webhook function — a test value,
-          # Resend itself is never involved in these tests. See
-          # index.test.ts's header comment for a caveat on the one test
-          # in this file that also depends on SUPABASE_SERVICE_ROLE_KEY
-          # being a legacy-JWT-format credential, not the opaque
-          # sb_secret_ format `secrets.sb_secret` is documented as above.
+          # Resend itself is never involved in these tests.
           RESEND_WEBHOOK_SECRET: ${{ secrets.RESEND_WEBHOOK_SECRET }}
         run: |
           deno test --allow-net --allow-env --node-modules-dir=none \

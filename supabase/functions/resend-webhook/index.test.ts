@@ -18,18 +18,11 @@
 // until cleared'): it calls send-email and clear-email-suppression over
 // HTTP with a service_role bearer token, the same way send-email's own
 // design has always required (see its header comment on getJwtRole).
-// CI's SUPABASE_SERVICE_ROLE_KEY secret (ci.yml's `secrets.sb_secret`) is
-// documented elsewhere in this repo as the *newer opaque* sb_secret_...
-// key format, not a legacy JWT — and send-email/clear-email-suppression's
-// auth check specifically expects a decodable JWT `role` claim. If CI's
-// secret is genuinely opaque-format, Supabase's own gateway (or this
-// function's getJwtRole check) will reject it before ever reaching the
-// suppression logic this test means to exercise, and this one test will
-// fail for that reason — a pre-existing gap in what CI can exercise, not a
-// bug in the suppression logic itself. If that happens, this test needs a
-// real legacy-JWT-format service-role credential for wysker-watch-dev
-// wired into CI, not a change to clear-email-suppression's auth pattern
-// (which deliberately mirrors send-email's, per the feature spec).
+// That auth check specifically expects a decodable JWT `role` claim, not
+// the newer opaque sb_secret_... key format used elsewhere in CI — so
+// ci.yml wires this one test's SUPABASE_SERVICE_ROLE_KEY to
+// `secrets.DEV_LEGACY_JWT_SECRET`, a legacy-JWT-format service-role
+// credential for wysker-watch-dev, instead of `secrets.sb_secret`.
 //
 // Run: deno test --allow-net --allow-env supabase/functions/resend-webhook/index.test.ts
 
