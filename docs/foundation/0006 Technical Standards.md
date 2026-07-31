@@ -214,6 +214,10 @@ As of 2026-07-24, this is real for `delete-pet`/`delete-account` specifically �
 
 Test database migrations
 
+Browser/E2E Tests
+
+As of 2026-07-31, a Playwright suite (`e2e/*.spec.js`, run via `npm run test:e2e`) covers Login, Add Pet, Daily Check-In, Vet Report generation, and Pet Sitter navigation against real `wysker-watch-dev` data, using a saved session (`e2e/global-setup.js`) rather than re-logging-in per test. Local/manual-only for now — not wired into CI (see `0024_Playwright_E2E_Testing_Specification_v1.md`). "Test daily check‑in flow" under Manual QA below is now partially automated by this suite.
+
 Manual QA
 
 Test daily check‑in flow

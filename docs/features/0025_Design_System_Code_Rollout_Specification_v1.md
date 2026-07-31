@@ -1,6 +1,6 @@
 # 0025 Design System Code Rollout — Specification v1
 
-**Status:** Draft
+**Status:** Implemented (2026-07-31)
 **Date:** 2026-07-30
 **Related files:** `src/components/ui/button.jsx`, `src/index.css`, `src/lib/PageNotFound.jsx`, `src/pages/{PetProfileTabs,Home,Pets,Settings,About,Notifications,Timeline,Privacy,Terms,Account,Preferences,Support,VetExport,Login,Register,ForgotPassword,ResetPassword,AcceptInvite,VerifyEmail,PetSymptoms,PetFood,PetSitter,PetTrends}.jsx`, `src/components/{AuthLayout,MedicationSection,FoodSection,VaccinationSection,BloodworkSection,MemorialDialog,OfflineBanner,IosInstallBanner,EditPetSheet,DailyCheckInSheet,PetProfileContent,MenuListRow,PetSummaryCard,CheckInStatusBanner,ExpandablePetProfileCard,AppHeader,BottomTabBar,AddPetDialog}.jsx`, `src/components/catchup/{CatchUpFlow,BulkApplySheet}.jsx`, `src/components/ui/{card,dialog,sheet}.jsx`, `docs/foundation/0005 Design System.md`, `docs/launch-punch-list.md`
 
