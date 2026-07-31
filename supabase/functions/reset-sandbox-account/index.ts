@@ -115,6 +115,23 @@ Deno.serve(async (req) => {
       console.warn('Error clearing co-owner links (continuing):', coOwnerError.message);
     }
 
+    // ── Delete pet-sitting periods this account created as the owner ────
+    // pet_sits.pet_ids is a plain uuid[] column, not a foreign key to
+    // pets — deleting the owned pets above does NOT cascade-delete a
+    // pet_sits row that references them, so it has to be done explicitly
+    // here. pet_sit_logs and pet_sitter_access both have `on delete
+    // cascade` foreign keys to pet_sits.id, so removing the pet_sits row
+    // takes those with it in one step.
+    const { error: petSitsError } = await admin
+      .from('pet_sits')
+      .delete()
+      .eq('created_by', userId);
+
+    if (petSitsError) {
+      console.error('Error deleting pet sits:', petSitsError);
+      return json({ error: 'Failed to delete pet sits' }, 500);
+    }
+
     // ── Clean up any remaining Storage objects under this user's folder ─
     // .list() only returns a page at a time (100 by default). Since we
     // delete each page immediately, the offset is always 0 — deleting

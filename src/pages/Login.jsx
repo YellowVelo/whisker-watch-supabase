@@ -6,8 +6,11 @@ import { Label } from '@/components/ui/label';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Loader2, Heart, CheckCircle2 } from 'lucide-react';
 import AuthLayout from '@/components/AuthLayout';
+import { resetSandboxAccount } from '@/lib/accountClient';
+import { SEED_SCENARIOS } from '@/lib/seedTestData';
 
 const RESEND_COOLDOWN_SECONDS = 60;
+const DEMO_SHOWCASE_SCENARIO = SEED_SCENARIOS.find((s) => s.key === 'demo_showcase');
 
 // Detects the "email not confirmed" login failure. Prefers the
 // structured error code (supabase-js exposes `code` on AuthError as of
@@ -25,6 +28,7 @@ export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [settingUpDemo, setSettingUpDemo] = useState(false);
   const [error, setError] = useState('');
   const [showResend, setShowResend] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
@@ -39,7 +43,7 @@ export default function Login() {
     setError('');
     setShowResend(false);
     setResendError('');
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) {
       setError(error.message || 'Login failed');
       if (isEmailNotConfirmedError(error)) {
@@ -48,6 +52,42 @@ export default function Login() {
       setLoading(false);
       return;
     }
+
+    // Demo account (spec 0026): every login resets the account back to the
+    // standard Maple/Cooper baseline first, no exception for the demo
+    // admin — nothing done during a demo login survives past that login
+    // for anyone. Also kicks out any other session already signed into
+    // this same shared login, so two visitors can never edit the same
+    // live data at once.
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('account_type')
+      .eq('id', data.user.id)
+      .single();
+
+    if (profile?.account_type === 'demo') {
+      setSettingUpDemo(true);
+      try {
+        await supabase.auth.signOut({ scope: 'others' });
+
+        const { data: resetData, error: resetError } = await resetSandboxAccount();
+        if (resetError || !resetData?.success) {
+          setError(resetError?.message ?? resetData?.error ?? 'Could not set up the demo account. Please try again.');
+          setSettingUpDemo(false);
+          setLoading(false);
+          return;
+        }
+
+        await DEMO_SHOWCASE_SCENARIO.run();
+      } catch (err) {
+        console.error('Demo account setup failed:', err);
+        setError('Could not set up the demo account. Please try again.');
+        setSettingUpDemo(false);
+        setLoading(false);
+        return;
+      }
+    }
+
     window.location.href = '/';
   };
 
@@ -138,7 +178,11 @@ export default function Login() {
           <Input id="login-password" type="password" value={password} onChange={e => setPassword(e.target.value)} required />
         </div>
         <Button type="submit" className="w-full" disabled={loading}>
-          {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Sign In'}
+          {settingUpDemo ? (
+            <span className="flex items-center gap-2"><Loader2 className="h-4 w-4 animate-spin" /> Setting up your demo…</span>
+          ) : loading ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : 'Sign In'}
         </Button>
         <Button type="button" variant="outline" className="w-full" onClick={handleGoogleLogin}>
           Continue with Google
