@@ -1,5 +1,7 @@
 import { useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
+import IconButton from './IconButton';
 
 const FOCUSABLE = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
 
@@ -47,7 +49,18 @@ export default function BottomSheet({ titleId = 'bottom-sheet-title', title, sub
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusKey]);
 
-  return (
+  // Portaled to document.body (launch-punch-list P4) — rendered inline,
+  // this sheet's `fixed inset-0` isn't actually pinned to the real
+  // viewport: PageTransition.jsx wraps every page in a Framer Motion
+  // `motion.div`, which applies a `transform` even at rest, and per the
+  // CSS spec any transformed ancestor becomes the containing block for
+  // `position: fixed` descendants. So instead of anchoring to the ~800px
+  // visible viewport, it was anchoring to the page's full (often 3000px+)
+  // scrollable height — invisible when the sheet opens near scrollY≈0,
+  // but the footer (e.g. "Continue") renders off-screen once the caller
+  // has scrolled the page down first. Same fix already proven in this
+  // codebase by CatchUpFlow.jsx's identical portal.
+  return createPortal((
     <div className="fixed inset-0 z-50 flex flex-col justify-end" onClick={onClose}>
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
       <div
@@ -62,9 +75,7 @@ export default function BottomSheet({ titleId = 'bottom-sheet-title', title, sub
           <div className="w-10 h-1 bg-white/20 rounded-full mx-auto mb-4" />
           <div className="flex items-center justify-between">
             <h3 id={titleId} className="text-xl font-bold text-white">{title}</h3>
-            <button onClick={onClose} aria-label="Close" className="h-9 w-9 rounded-full bg-white/8 flex items-center justify-center flex-shrink-0">
-              <X className="h-4 w-4 text-white" />
-            </button>
+            <IconButton icon={X} onClick={onClose} aria-label="Close" />
           </div>
           {subtitle}
         </div>
@@ -72,9 +83,9 @@ export default function BottomSheet({ titleId = 'bottom-sheet-title', title, sub
         <div className="px-5 overflow-y-auto flex-1 pb-2">{children}</div>
 
         {footer && (
-          <div className="px-5 pt-3 pb-10 flex-shrink-0 border-t border-border">{footer}</div>
+          <div className="px-5 pt-3 flex-shrink-0 border-t border-border" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 1.5rem)' }}>{footer}</div>
         )}
       </div>
     </div>
-  );
+  ), document.body);
 }

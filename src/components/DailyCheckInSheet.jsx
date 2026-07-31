@@ -249,10 +249,8 @@ function BigChoiceButton({ label, onClick, subtle }) {
     <button
       type="button"
       onClick={onClick}
-      className="w-full text-left rounded-2xl px-5 py-4 text-base font-semibold transition-all active:opacity-70 min-h-[56px]"
-      style={subtle
-        ? { background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', color: 'var(--text-secondary)' }
-        : { background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', color: '#fff' }}
+      className="w-full text-left rounded-2xl px-5 py-4 text-base font-semibold transition-all active:opacity-70 min-h-[56px] bg-card border border-border"
+      style={{ color: subtle ? 'var(--text-secondary)' : '#fff' }}
     >
       {label}
     </button>
@@ -319,7 +317,7 @@ function CategoryQuestion({ category, species, petName, dayWord, answer, onChang
             placeholder="Weight"
             value={answer.numericValue ?? ''}
             onChange={(e) => onChange({ numericValue: e.target.value === '' ? null : parseFloat(e.target.value) })}
-            className="w-32 rounded-xl px-3.5 py-2.5 text-sm font-semibold text-white bg-white/8 border border-white/10 focus:outline-none focus:ring-1 focus:ring-primary"
+            className="w-32 rounded-xl px-3.5 py-2.5 text-sm font-semibold text-white bg-card border border-border focus:outline-none focus:ring-1 focus:ring-primary"
           />
           <span className="text-xs text-tier-tertiary">lbs (optional)</span>
         </div>
@@ -331,7 +329,7 @@ function CategoryQuestion({ category, species, petName, dayWord, answer, onChang
           value={answer.notes || ''}
           onChange={(e) => onChange({ notes: e.target.value })}
           rows={3}
-          className="bg-white/5 border-white/10 text-white placeholder:text-tier-tertiary"
+          className="bg-card border-border text-white placeholder:text-tier-tertiary"
         />
       )}
 

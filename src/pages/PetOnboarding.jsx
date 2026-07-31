@@ -57,7 +57,7 @@ export default function PetOnboarding() {
       <CompletionScreen
         petName={pet.name}
         onStartCheckIn={() => navigate(`/pets?highlight=${petId}&startCheckin=${petId}`)}
-        onViewProfile={() => navigate(`/pet/${petId}/profile`)}
+        onViewProfile={() => navigate('/pets', { state: { expandPetId: petId } })}
       />
     );
   }

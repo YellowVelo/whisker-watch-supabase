@@ -50,6 +50,8 @@ Avoid side effects in UI components
 
 Use descriptive variable names (e.g., petId, not id)
 
+**Found 2026-07-31, spec 0028:** a shared clickable row/card component (`ListRow.jsx`) rendered as a `<Link>` (an `<a>` tag) with a `w-full` class but no explicit `display` — since anchors default to `display: inline`, and `width: 100%` has no effect on inline elements, every row silently shrink-wrapped to its own content width instead of stretching, with no error or warning. When building a shared component that can render as different tags (`<Link>`/`<button>`/`<div>`) to get one full-width, consistently-sized result across all of them, set `display` explicitly (e.g. `block`) rather than relying on each tag's own default — `<a>`, `<button>`, and `<div>` don't all default to the same one.
+
 Folder Structure
 
 src/

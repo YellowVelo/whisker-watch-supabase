@@ -17,12 +17,17 @@ import { getDisplayName } from '@/lib/profileName';
 import { SEED_SCENARIOS } from '@/lib/seedTestData';
 import { deleteAccount, resetSandboxAccount, signOutBestEffort } from '@/lib/accountClient';
 import { useInstallPrompt } from '@/lib/useInstallPrompt';
+import { PALETTE } from '@/lib/toneColors';
 
+// Design System Amendment #6 (2026-07-30) — account-type color now sourced
+// from the semantic tone tokens instead of raw Tailwind colors (spec 0028):
+// Owner = sky (identity accent), Test = good/teal, Demo = warn/amber,
+// Production = bad/red.
 const ACCOUNT_TYPE_BADGES = {
-  production: { label: 'Production', className: 'text-emerald-400 bg-emerald-400/10' },
-  test: { label: 'Test', className: 'text-amber-400 bg-amber-400/10' },
-  demo: { label: 'Demo', className: 'text-violet-400 bg-violet-400/10' },
-  owner: { label: 'Owner', className: 'text-sky-400 bg-sky-400/10' },
+  production: { label: 'Production', color: PALETTE.red, background: 'rgba(229,115,115,0.15)' },
+  test: { label: 'Test', color: PALETTE.teal, background: 'rgba(76,199,176,0.15)' },
+  demo: { label: 'Demo', color: PALETTE.amber, background: 'rgba(244,199,107,0.15)' },
+  owner: { label: 'Owner', color: PALETTE.sky, background: 'rgba(111,183,255,0.15)' },
 };
 
 // Pet Sitter and AI were removed from here (spec 0023 step 9) — both now
@@ -249,7 +254,10 @@ export default function Settings() {
             <div className="min-w-0 flex-1">
               <p className="text-[17px] font-bold text-white truncate">{displayName}</p>
               <p className="text-[13px] text-tier-tertiary truncate">{email}</p>
-              <span className={`inline-flex items-center gap-1 mt-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${badge.className}`}>
+              <span
+                className="inline-flex items-center gap-1 mt-1.5 rounded-full px-2.5 py-0.5 text-[13px] font-semibold"
+                style={{ color: badge.color, background: badge.background }}
+              >
                 {badge.label}
               </span>
             </div>
@@ -308,16 +316,16 @@ export default function Settings() {
           <div className="rounded-2xl overflow-hidden divide-y bg-card border border-border">
             <MenuListRow
               icon={LogOut}
-              iconClassName="text-blue-300"
-              iconBg="rgba(96,165,250,0.14)"
+              iconColor={PALETTE.sky}
+              iconBg="rgba(111,183,255,0.14)"
               title="Sign Out"
               subtitle="Sign out of Wysker Watch"
               onClick={handleSignOutSelected}
             />
             <MenuListRow
               icon={Trash2}
-              iconClassName="text-destructive"
-              iconBg="rgba(248,113,113,0.14)"
+              iconColor={PALETTE.red}
+              iconBg="rgba(229,115,115,0.14)"
               destructive
               title="Delete Account"
               subtitle="Permanently delete your account and all data"

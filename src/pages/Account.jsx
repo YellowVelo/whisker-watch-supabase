@@ -190,8 +190,7 @@ export default function Account() {
           {baseline && (
             <div className="space-y-6 py-4">
               <div
-                className="rounded-2xl p-4 space-y-4"
-                style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}
+                className="rounded-2xl p-4 space-y-4 bg-card border border-border"
               >
                 <div className="space-y-1.5">
                   <Label htmlFor="first-name">First Name</Label>
@@ -222,8 +221,7 @@ export default function Account() {
               </div>
 
               <div
-                className="rounded-2xl p-4 space-y-3"
-                style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}
+                className="rounded-2xl p-4 space-y-3 bg-card border border-border"
               >
                 <Label id="timezone-label" htmlFor="timezone-select">Timezone</Label>
                 {detectionFailed && !timezone ? (

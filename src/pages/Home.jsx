@@ -21,6 +21,7 @@ import { buildGreeting } from '@/lib/greeting';
 import { useAuth } from '@/lib/AuthContext';
 import { detectTimezone } from '@/lib/timezone';
 import { track } from '@/lib/analytics';
+import { PALETTE } from '@/lib/toneColors';
 
 // Builds Home's Weight chip state from petProfileClient's
 // getWeightSummariesForPets (batched — Weight stays on symptom_logs per
@@ -408,8 +409,8 @@ export default function Home() {
               to="/pet-sitter"
               className="flex items-center gap-3 rounded-2xl px-4 py-4 active:opacity-80 transition-opacity bg-card border border-border"
             >
-              <div className="h-11 w-11 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(45,212,191,0.14)' }}>
-                <UsersRound className="h-5 w-5 text-teal-300" />
+              <div className="h-11 w-11 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(76,199,176,0.15)' }}>
+                <UsersRound className="h-5 w-5" style={{ color: PALETTE.teal }} />
               </div>
               <div className="min-w-0 flex-1">
                 <p className="text-base font-semibold text-foreground">Pet Sitter</p>

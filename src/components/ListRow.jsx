@@ -18,7 +18,12 @@ export default function ListRow({
       <div className="flex items-center gap-3.5">
         <div
           className={`rounded-full flex items-center justify-center flex-shrink-0 ${standalone ? 'h-11 w-11' : 'h-10 w-10'}`}
-          style={{ background: iconBg || 'rgba(255,255,255,0.06)' }}
+          // Default fallback for callers that omit iconBg (spec 0028,
+          // Amendment #6) — rgba(169,174,181,x) is --tone-neutral's own
+          // hex tinted, matching the same rgba-of-token-hex convention
+          // already used everywhere else in this codebase (CSS var()
+          // can't take an inline alpha suffix the way a literal hex can).
+          style={{ background: iconBg || 'rgba(169,174,181,0.15)' }}
         >
           <Icon className={`h-5 w-5 ${iconClassName || 'text-white/80'}`} style={iconColor ? { color: iconColor } : undefined} aria-hidden="true" />
         </div>
@@ -38,7 +43,15 @@ export default function ListRow({
   );
 
   const standaloneClass = standalone ? 'rounded-2xl px-4 py-4 bg-card border border-border' : 'px-4 py-3.5 min-h-[64px]';
-  const className = `w-full text-left active:opacity-80 transition-opacity ${standaloneClass}`;
+  // `block` is required here, not cosmetic: when this renders as a <Link>
+  // (an <a> tag), the browser default display is `inline`, and `w-full`
+  // (width: 100%) has no effect on inline elements per the CSS spec — the
+  // row was silently shrink-wrapping to its own content width instead of
+  // stretching, which is why row width/chevron position drifted based on
+  // title/subtitle length. <button> (the onClick path) defaults to
+  // inline-block, which already respects width, so that path never showed
+  // the bug — only `to`-based rows did.
+  const className = `w-full block text-left active:opacity-80 transition-opacity ${standaloneClass}`;
 
   if (to) return <Link to={to} onClick={onClick} className={className}>{content}</Link>;
   if (onClick) return <button type="button" onClick={onClick} className={className}>{content}</button>;

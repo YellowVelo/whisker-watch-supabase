@@ -35,10 +35,10 @@ export default function InsightSummaryCard({ petId, petName, range, timezone }) 
   const { loading, error, summary } = state;
 
   return (
-    <div className="rounded-2xl px-4 py-4" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}>
+    <div className="rounded-2xl px-4 py-4 bg-card border border-border">
       <div className="flex items-center gap-2 mb-2">
         <Lightbulb className="h-4 w-4 text-tier-tertiary" aria-hidden="true" />
-        <p className="text-[12px] font-semibold text-tier-tertiary uppercase tracking-wide">Insight Summary</p>
+        <p className="text-[13px] font-semibold text-tier-tertiary uppercase tracking-wide">Insight Summary</p>
       </div>
 
       {loading ? (

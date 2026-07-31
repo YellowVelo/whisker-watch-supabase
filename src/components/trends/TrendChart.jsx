@@ -143,7 +143,7 @@ export default function TrendChart({ variant, series, range, yDomain = null, col
 
 export function ObservationLegend() {
   return (
-    <div className="flex flex-col gap-1 text-[11px] text-tier-tertiary flex-shrink-0 pl-2">
+    <div className="flex flex-col gap-1 text-[13px] text-tier-tertiary flex-shrink-0 pl-2">
       {[2, 1, 0].map((count) => (
         <div key={count} className="flex items-center gap-1.5">
           <span className="h-2 w-2 rounded-full flex-shrink-0" style={{ background: SYMPTOM_COUNT_COLOR[count] }} />

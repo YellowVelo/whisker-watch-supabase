@@ -35,10 +35,10 @@ export function DirectionIcon({ direction = 'unknown', className = 'h-3.5 w-3.5'
 export default function AttributeTrendChip({ label, direction = 'unknown', comparisonLabel = 'versus yesterday', state = 'ready', interactive = false, onClick }) {
   if (state === 'loading') {
     return (
-      <div className="rounded-xl px-3 py-2.5 flex items-center gap-2" style={{ background: 'rgba(255,255,255,0.04)' }} aria-busy="true">
-        <div className="h-3.5 w-3.5 rounded-full animate-pulse flex-shrink-0" style={{ background: 'rgba(255,255,255,0.1)' }} />
+      <div className="rounded-xl px-3 py-2.5 flex items-center gap-2 bg-card" aria-busy="true">
+        <div className="h-3.5 w-3.5 rounded-full animate-pulse flex-shrink-0" style={{ background: 'rgba(169,174,181,0.15)' }} />
         <div className="min-w-0 flex-1 space-y-1">
-          <div className="h-3 w-16 rounded-full animate-pulse" style={{ background: 'rgba(255,255,255,0.08)' }} />
+          <div className="h-3 w-16 rounded-full animate-pulse" style={{ background: 'rgba(169,174,181,0.15)' }} />
         </div>
       </div>
     );
@@ -69,13 +69,12 @@ export default function AttributeTrendChip({ label, direction = 'unknown', compa
       onClick={handleClick}
       role={interactive ? undefined : 'group'}
       aria-label={accessibleName}
-      className={`rounded-xl px-3 py-2.5 flex items-center gap-2 text-left ${interactive ? 'min-h-[44px] active:opacity-80 transition-opacity' : ''}`}
-      style={{ background: 'rgba(255,255,255,0.04)' }}
+      className={`rounded-xl px-3 py-2.5 flex items-center gap-2 text-left bg-card ${interactive ? 'min-h-[44px] active:opacity-80 transition-opacity' : ''}`}
     >
       <DirectionIcon direction={effectiveDirection} />
       <div className="min-w-0 flex-1">
         <p className="text-[13px] font-semibold text-white truncate">{label}</p>
-        <p className="text-[12px] text-tier-tertiary truncate">{text}</p>
+        <p className="text-[13px] text-tier-tertiary truncate">{text}</p>
       </div>
     </Wrapper>
   );

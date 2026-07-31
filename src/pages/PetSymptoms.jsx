@@ -11,8 +11,10 @@ import { PALETTE } from '@/lib/toneColors';
 function Chip({ icon: Icon, label, danger }) {
   return (
     <span
-      className={`inline-flex items-center gap-1 text-xs rounded-full px-2 py-0.5 ${danger ? 'text-red-400 border border-red-500/20' : 'text-tier-secondary border border-white/10'}`}
-      style={{ background: danger ? 'rgba(239,68,68,0.1)' : 'rgba(255,255,255,0.06)' }}
+      className="inline-flex items-center gap-1 text-[13px] rounded-full px-2 py-0.5"
+      style={danger
+        ? { color: PALETTE.red, background: 'rgba(229,115,115,0.15)' }
+        : { color: 'var(--text-secondary)', background: 'rgba(169,174,181,0.15)' }}
     >
       {Icon && <Icon className="h-3 w-3" />}
       {label}
@@ -58,13 +60,7 @@ export default function PetSymptoms() {
         >
           <IconButton icon={ArrowLeft} onClick={() => navigate(-1)} aria-label="Back" />
           <h1 className="text-[28px] font-semibold text-white">Symptom Timeline</h1>
-          <button
-            onClick={() => setLogOpen(true)}
-            className="w-9 h-9 rounded-full flex items-center justify-center"
-            style={{ background: 'rgba(76,199,176,0.15)' }}
-          >
-            <Plus className="h-5 w-5" style={{ color: PALETTE.teal }} />
-          </button>
+          <IconButton icon={Plus} onClick={() => setLogOpen(true)} aria-label="Log symptoms" iconClassName="" iconColor={PALETTE.teal} />
         </div>
 
         {loading ? (
@@ -145,9 +141,7 @@ export default function PetSymptoms() {
             style={{ top: 'var(--account-banner-height, 0px)', paddingTop: 'calc(env(safe-area-inset-top) + 12px)' }}
           >
             <h2 className="font-bold text-2xl text-white">Log Symptoms</h2>
-            <button onClick={() => setLogOpen(false)} className="h-9 w-9 rounded-full bg-white/8 flex items-center justify-center">
-              <X className="h-4 w-4 text-white" />
-            </button>
+            <IconButton icon={X} onClick={() => setLogOpen(false)} aria-label="Close" />
           </div>
           <div className="px-4 py-5 pb-32 max-w-2xl mx-auto">
             <SymptomLogForm

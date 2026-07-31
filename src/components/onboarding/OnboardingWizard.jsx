@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import { entities } from '@/api/entities';
 import { track } from '@/lib/analytics';
+import { Button } from '@/components/ui/button';
 import ChoiceCard from './ChoiceCard';
 import ConditionsCard from './ConditionsCard';
 import MedicationEntryCard from './MedicationEntryCard';
@@ -134,14 +135,14 @@ export default function OnboardingWizard({ pet, row, onRowChange, onComplete }) 
             <p className="text-sm text-muted-foreground max-w-sm">
               Later, daily check-ins will only ask what's changed.
             </p>
-            <button
+            <Button
               type="button"
               disabled={saving}
               onClick={() => saveStep({}, 'transition')}
-              className="w-full mt-2 min-h-[52px] rounded-2xl bg-primary text-primary-foreground font-medium text-base disabled:opacity-60"
+              className="w-full mt-2 min-h-[52px] rounded-2xl text-base"
             >
               Continue
-            </button>
+            </Button>
           </div>
         );
       case 'appetite':

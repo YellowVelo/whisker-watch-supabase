@@ -31,10 +31,7 @@ export default function Privacy() {
           <div
             className="rounded-2xl px-5 py-5 flex items-start gap-4 bg-card border border-border"
           >
-            <div
-              className="h-14 w-14 rounded-full flex items-center justify-center flex-shrink-0"
-              style={{ background: 'rgba(111,183,255,0.10)' }}
-            >
+            <div className="h-14 w-14 rounded-full flex items-center justify-center flex-shrink-0 bg-primary/10">
               <Shield className="h-7 w-7 text-primary" aria-hidden="true" />
             </div>
             <div className="min-w-0">

@@ -191,7 +191,7 @@ export default function PetTrends() {
               onClick={() => setSection(s.key)}
               className="pb-2.5 text-[15px] font-medium transition-colors"
               style={{
-                color: activeSection === s.key ? PALETTE.sky : 'rgba(255,255,255,0.4)',
+                color: activeSection === s.key ? PALETTE.sky : 'var(--text-tertiary)',
                 borderBottom: activeSection === s.key ? `2px solid ${PALETTE.sky}` : '2px solid transparent',
               }}
             >

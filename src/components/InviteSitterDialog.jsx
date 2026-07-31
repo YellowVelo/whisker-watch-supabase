@@ -2,12 +2,14 @@ import { useState } from 'react';
 import { entities } from '@/api/entities';
 import { supabase } from '@/api/supabaseClient';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { UserPlus, Trash2, Mail, CheckCircle2 } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import { isDemoAccount } from '@/lib/accountType';
+import { PALETTE } from '@/lib/toneColors';
 
 export default function InviteSitterDialog({ petSitId, open, onOpenChange }) {
   const { user } = useAuth();
@@ -17,6 +19,7 @@ export default function InviteSitterDialog({ petSitId, open, onOpenChange }) {
   const [loaded, setLoaded] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
   const [error, setError] = useState('');
+  const [removeConfirmId, setRemoveConfirmId] = useState(null);
 
   const load = async () => {
     if (!petSitId) return;
@@ -93,10 +96,12 @@ export default function InviteSitterDialog({ petSitId, open, onOpenChange }) {
 
   const handleRemove = async (id) => {
     await entities.PetSitterAccess.delete(id);
+    setRemoveConfirmId(null);
     load();
   };
 
   return (
+    <>
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
@@ -122,7 +127,7 @@ export default function InviteSitterDialog({ petSitId, open, onOpenChange }) {
 
         {error && <p className="text-sm text-destructive">{error}</p>}
         {successMsg && (
-          <div className="flex items-start gap-2 text-sm text-emerald-500">
+          <div className="flex items-start gap-2 text-sm" style={{ color: PALETTE.teal }}>
             <CheckCircle2 className="h-4 w-4 mt-0.5 shrink-0" />
             <span>{successMsg}</span>
           </div>
@@ -137,7 +142,7 @@ export default function InviteSitterDialog({ petSitId, open, onOpenChange }) {
                   <Mail className="h-3.5 w-3.5 text-muted-foreground" />
                   <span className="text-sm">{a.sitter_email}</span>
                 </div>
-                <button onClick={() => handleRemove(a.id)} className="text-muted-foreground hover:text-destructive transition-colors p-1">
+                <button onClick={() => setRemoveConfirmId(a.id)} className="text-muted-foreground hover:text-destructive transition-colors p-1">
                   <Trash2 className="h-3.5 w-3.5" />
                 </button>
               </div>
@@ -150,5 +155,21 @@ export default function InviteSitterDialog({ petSitId, open, onOpenChange }) {
         )}
       </DialogContent>
     </Dialog>
+
+    <AlertDialog open={!!removeConfirmId} onOpenChange={(v) => !v && setRemoveConfirmId(null)}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle className="text-2xl">Remove this sitter?</AlertDialogTitle>
+          <AlertDialogDescription className="text-base leading-relaxed">
+            They'll lose access to this pet sit. You can invite them again later if needed.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <Button variant="destructive" onClick={() => handleRemove(removeConfirmId)}>Remove</Button>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    </>
   );
 }

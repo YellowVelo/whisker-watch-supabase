@@ -3,7 +3,7 @@ import { useEffect } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import { QueryClientProvider } from '@tanstack/react-query'
 import { queryClientInstance } from '@/lib/query-client'
-import { BrowserRouter as Router, Route, Routes, useLocation, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Route, Routes, useLocation, useParams, Navigate } from 'react-router-dom';
 import PageNotFound from './lib/PageNotFound';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
@@ -17,8 +17,11 @@ import Pets from './pages/Pets';
 import PetProfile from './pages/PetProfile';
 import PetTrends from './pages/PetTrends';
 import Timeline from './pages/Timeline';
-import PetProfileTabs from './pages/PetProfileTabs';
 import PetOnboarding from './pages/PetOnboarding';
+import PetBaseline from './pages/PetBaseline';
+import PetMedications from './pages/PetMedications';
+import PetVaccinations from './pages/PetVaccinations';
+import PetHealthRecords from './pages/PetHealthRecords';
 import PetSitter from './pages/PetSitter';
 import PetSymptoms from './pages/PetSymptoms';
 import PetFood from './pages/PetFood';
@@ -39,6 +42,15 @@ import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
 import AcceptInvite from './pages/AcceptInvite';
 import VerifyEmail from './pages/VerifyEmail';
+
+// PetProfileTabs.jsx (the old hero-header pet profile screen) is retired
+// (spec 0028) — old /pet/:petId/profile links land on Pets instead, with
+// that pet's card scrolled into view and expanded, same pattern already
+// used for the retired /pet/:petId route.
+const PetProfileRedirect = () => {
+  const { petId } = useParams();
+  return <Navigate to="/pets" replace state={petId ? { expandPetId: petId } : undefined} />;
+};
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
@@ -86,7 +98,14 @@ const AuthenticatedApp = () => {
             <Route path="/pet/:petId" element={<PetProfile />} />
             <Route path="/pet/:petId/trends" element={<PetTrends />} />
             <Route path="/pet/:petId/timeline" element={<Timeline />} />
-            <Route path="/pet/:petId/profile" element={<PetProfileTabs />} />
+            {/* PetProfileTabs.jsx is deleted (spec 0028) — Baseline/Medications/
+                Vaccinations/Health Records are now standalone pages below.
+                This stays alive as a compatibility redirect for old links. */}
+            <Route path="/pet/:petId/profile" element={<PetProfileRedirect />} />
+            <Route path="/pet/:petId/baseline" element={<PetBaseline />} />
+            <Route path="/pet/:petId/medications" element={<PetMedications />} />
+            <Route path="/pet/:petId/vaccinations" element={<PetVaccinations />} />
+            <Route path="/pet/:petId/health-records" element={<PetHealthRecords />} />
             <Route path="/pet/:petId/symptoms" element={<PetSymptoms />} />
             <Route path="/pet/:petId/food" element={<PetFood />} />
             <Route path="/pet/:petId/export" element={<VetExport />} />

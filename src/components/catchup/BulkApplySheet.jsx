@@ -137,16 +137,14 @@ export default function BulkApplySheet({ pet, dates, onClose, onSaved }) {
           <button
             type="button"
             onClick={() => chooseVibe('off')}
-            className="w-full text-left rounded-2xl px-5 py-4 text-base font-semibold min-h-[56px]"
-            style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', color: '#fff' }}
+            className="w-full text-left rounded-2xl px-5 py-4 text-base font-semibold min-h-[56px] bg-card border border-border text-white"
           >
             Off Day
           </button>
           <button
             type="button"
             onClick={() => chooseVibe('tough')}
-            className="w-full text-left rounded-2xl px-5 py-4 text-base font-semibold min-h-[56px]"
-            style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', color: '#fff' }}
+            className="w-full text-left rounded-2xl px-5 py-4 text-base font-semibold min-h-[56px] bg-card border border-border text-white"
           >
             Tough Day
           </button>

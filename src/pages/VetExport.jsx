@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/use-toast';
 import { ArrowLeft, FileDown, PawPrint } from 'lucide-react';
 import { downloadVetReport } from '@/lib/checkin/vetReportClient';
+import IconButton from '@/components/IconButton';
 
 // Vet Export Feature Spec v2 §4.2 — this page does not fetch report data
 // itself. It only fetches minimal pet identity for display; the actual
@@ -45,10 +46,12 @@ export default function VetExport() {
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="border-b border-border bg-card/50 px-4 py-3 flex items-center justify-between sticky z-10" style={{ top: 'var(--account-banner-height, 0px)' }}>
-        <button onClick={() => navigate(-1)} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
-          <ArrowLeft className="h-4 w-4" /> Back
-        </button>
+      <div
+        className="sticky z-20 bg-background/80 backdrop-blur-xl border-b border-white/8 px-4 py-3 flex items-center gap-3"
+        style={{ top: 'var(--account-banner-height, 0px)', paddingTop: 'calc(env(safe-area-inset-top) + 12px)' }}
+      >
+        <IconButton icon={ArrowLeft} onClick={() => navigate(-1)} aria-label="Back" />
+        <h1 className="text-[28px] font-semibold text-white">Vet Report</h1>
       </div>
 
       <div className="max-w-lg mx-auto px-6 py-10">

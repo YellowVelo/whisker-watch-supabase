@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { X, ChevronLeft, ChevronRight, CircleDashed, Minus, Check, Loader2, ClipboardList } from 'lucide-react';
 import { PALETTE } from '@/lib/toneColors';
 import VibeIcon from '@/components/VibeIcon';
+import IconButton from '@/components/IconButton';
 import PillToggle from '@/components/PillToggle';
 import DailyCheckInSheet from '@/components/DailyCheckInSheet';
 import BulkApplySheet from './BulkApplySheet';
@@ -240,12 +241,10 @@ export default function CatchUpFlow({ pets, missedDaysByPet, onClose, onPetProgr
     // silently covered by both. z-[60] clears the tab bar; the padding
     // clears the account banner instead of hiding behind it.
     <div className="fixed inset-0 z-[60] flex flex-col bg-background" style={{ paddingTop: 'calc(var(--account-banner-height, 0px) + env(safe-area-inset-top))', paddingBottom: 'env(safe-area-inset-bottom)' }}>
-      <header className="px-5 pt-5 pb-3 flex items-center justify-between flex-shrink-0" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+      <header className="px-5 pt-5 pb-3 flex items-center justify-between flex-shrink-0 border-b border-border">
         <div className="flex items-center gap-2 min-w-0">
           {step === 'exceptions' && (
-            <button onClick={() => setStep('calendar')} aria-label="Back" className="h-9 w-9 -ml-2 rounded-full flex items-center justify-center flex-shrink-0">
-              <ChevronLeft className="h-5 w-5 text-tier-secondary" />
-            </button>
+            <IconButton icon={ChevronLeft} onClick={() => setStep('calendar')} aria-label="Back" />
           )}
           <h2 className="text-lg font-bold text-white truncate">
             {step === 'petSelect' && 'Catch Up Check-In'}
@@ -256,9 +255,7 @@ export default function CatchUpFlow({ pets, missedDaysByPet, onClose, onPetProgr
             {step === 'complete' && 'All Caught Up'}
           </h2>
         </div>
-        <button onClick={handleClose} aria-label="Close" className="h-9 w-9 rounded-full bg-white/8 flex items-center justify-center flex-shrink-0">
-          <X className="h-4 w-4 text-white" />
-        </button>
+        <IconButton icon={X} onClick={handleClose} aria-label="Close" />
       </header>
 
       <div className="flex-1 overflow-y-auto px-5 py-5">
@@ -306,7 +303,7 @@ export default function CatchUpFlow({ pets, missedDaysByPet, onClose, onPetProgr
       </div>
 
       {step === 'calendar' && (
-        <div className="flex-shrink-0" style={{ borderTop: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.03)' }}>
+        <div className="flex-shrink-0 border-t border-border bg-card">
           {finishError && <p className="text-xs text-red-400 text-center pt-2">{finishError}</p>}
           {exceptionList.length > 0 ? (
             <button
@@ -371,8 +368,7 @@ function PetSelectStep({ pets, missedDaysByPet, onSelect }) {
         <button
           key={pet.id}
           onClick={() => onSelect(pet)}
-          className="w-full flex items-center justify-between rounded-2xl px-4 py-3.5 text-left"
-          style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}
+          className="w-full flex items-center justify-between rounded-2xl px-4 py-3.5 text-left bg-card border border-border"
         >
           <div>
             <p className="text-base font-semibold text-white">{pet.name}</p>
@@ -388,14 +384,14 @@ function PetSelectStep({ pets, missedDaysByPet, onSelect }) {
 function EntryStep({ petName, missedCount, onGetStarted, onMaybeLater }) {
   return (
     <div className="flex flex-col items-center text-center gap-5 py-8">
-      <div className="h-16 w-16 rounded-full flex items-center justify-center" style={{ background: 'rgba(255,255,255,0.08)' }}>
+      <div className="h-16 w-16 rounded-full flex items-center justify-center" style={{ background: 'rgba(111,183,255,0.15)' }}>
         <ClipboardList className="h-8 w-8" style={{ color: PALETTE.sky }} aria-hidden="true" />
       </div>
       <div>
         <h3 className="text-2xl font-bold text-white mb-2">We missed you!</h3>
         <p className="text-base text-tier-secondary">Let's get {petName} caught up.</p>
       </div>
-      <div className="w-full rounded-2xl px-4 py-4 text-sm text-tier-secondary" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}>
+      <div className="w-full rounded-2xl px-4 py-4 text-sm text-tier-secondary bg-card border border-border">
         <p className="text-white font-semibold mb-1">Looks like {missedCount} days were missed.</p>
         <p>We assume most days were Great Days unless you tell us otherwise.</p>
       </div>
@@ -532,10 +528,8 @@ function ExceptionsStep({ dates, selectedDates, onToggleSelect, onOpenDetails, o
         return (
           <div
             key={dateStr}
-            className="w-full flex items-center gap-3 rounded-2xl px-4 py-3.5"
-            style={checked
-              ? { background: 'rgba(255,255,255,0.05)', border: `2px solid ${PALETTE.sky}` }
-              : { background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}
+            className={`w-full flex items-center gap-3 rounded-2xl px-4 py-3.5 bg-card ${checked ? '' : 'border border-border'}`}
+            style={checked ? { border: `2px solid ${PALETTE.sky}` } : undefined}
           >
             <button
               onClick={() => onToggleSelect(dateStr)}
@@ -556,7 +550,7 @@ function ExceptionsStep({ dates, selectedDates, onToggleSelect, onOpenDetails, o
               onClick={() => onOpenDetails(dateStr)}
               aria-label={`Open details for ${formatDayLabel(dateStr)}`}
               className="h-9 w-9 rounded-full flex items-center justify-center flex-shrink-0"
-              style={{ background: 'rgba(255,255,255,0.08)' }}
+              style={{ background: 'rgba(169,174,181,0.15)' }}
             >
               <ChevronRight className="h-4 w-4 text-tier-secondary" aria-hidden="true" />
             </button>
@@ -570,8 +564,8 @@ function ExceptionsStep({ dates, selectedDates, onToggleSelect, onOpenDetails, o
 function CompleteStep({ petName, onDone }) {
   return (
     <div className="flex flex-col items-center text-center gap-5 py-12">
-      <div className="h-16 w-16 rounded-full flex items-center justify-center" style={{ background: PALETTE.sky }}>
-        <Check className="h-8 w-8" style={{ color: 'hsl(var(--background))' }} />
+      <div className="h-16 w-16 rounded-full flex items-center justify-center" style={{ background: 'rgba(111,183,255,0.15)' }}>
+        <Check className="h-8 w-8" style={{ color: PALETTE.sky }} />
       </div>
       <div>
         <h3 className="text-2xl font-bold text-white mb-2">All caught up!</h3>

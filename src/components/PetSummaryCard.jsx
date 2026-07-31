@@ -130,7 +130,7 @@ export default function PetSummaryCard({
           <div className="flex flex-wrap gap-1.5 mt-2">
             {conditions ? (
               conditions.map((c) => (
-                <span key={c} className="text-[13px] font-medium px-2.5 py-1 rounded-full" style={{ background: 'rgba(255,255,255,0.08)', color: '#fff' }}>
+                <span key={c} className="text-[13px] font-medium px-2.5 py-1 rounded-full" style={{ background: 'rgba(169,174,181,0.15)', color: '#fff' }}>
                   {c}
                 </span>
               ))
@@ -140,7 +140,7 @@ export default function PetSummaryCard({
               </span>
             )}
             {medicationCount > 0 && (
-              <span className="text-[13px] font-medium px-2.5 py-1 rounded-full flex items-center gap-1" style={{ background: 'rgba(255,255,255,0.06)', color: '#fff' }}>
+              <span className="text-[13px] font-medium px-2.5 py-1 rounded-full flex items-center gap-1" style={{ background: 'rgba(169,174,181,0.15)', color: '#fff' }}>
                 <Pill className="h-3 w-3" aria-hidden="true" /> {medicationCount} Medication{medicationCount === 1 ? '' : 's'}
               </span>
             )}

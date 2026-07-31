@@ -5,8 +5,10 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Plus, Home, ChevronDown, ChevronUp, Pencil, Trash2, Check, X, UserPlus } from 'lucide-react';
 import InviteSitterDialog from './InviteSitterDialog';
+import PillToggle from './PillToggle';
 import { format, parseISO, eachDayOfInterval } from 'date-fns';
 
 const EMPTY_FORM = {
@@ -33,6 +35,7 @@ export default function PetSittingSection({ petId }) {
   const [expandedId, setExpandedId] = useState(null);
   const [sitLogs, setSitLogs] = useState({});
   const [newTask, setNewTask] = useState('');
+  const [deleteConfirmId, setDeleteConfirmId] = useState(null);
 
   const load = async () => {
     setLoading(true);
@@ -150,6 +153,7 @@ export default function PetSittingSection({ petId }) {
 
   const handleDelete = async (id) => {
     await entities.PetSit.delete(id);
+    setDeleteConfirmId(null);
     load();
   };
 
@@ -233,7 +237,7 @@ export default function PetSittingSection({ petId }) {
                     <button onClick={e => { e.stopPropagation(); openEdit(sit); }} className="text-muted-foreground hover:text-foreground">
                       <Pencil className="h-3.5 w-3.5" />
                     </button>
-                    <button onClick={e => { e.stopPropagation(); handleDelete(sit.id); }} className="text-muted-foreground hover:text-destructive">
+                    <button onClick={e => { e.stopPropagation(); setDeleteConfirmId(sit.id); }} className="text-muted-foreground hover:text-destructive">
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>
                     {expandedId === sit.id ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
@@ -358,19 +362,15 @@ export default function PetSittingSection({ petId }) {
                 <Label>Pets on this sit</Label>
                 <div className="flex flex-wrap gap-2">
                   {allPets.map(pet => (
-                    <button
+                    <PillToggle
                       key={pet.id}
-                      type="button"
+                      active={selectedPetIds.includes(pet.id)}
                       onClick={() => togglePetSelection(pet.id)}
-                      className={`flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-full border transition-colors ${
-                        selectedPetIds.includes(pet.id)
-                          ? 'bg-primary text-primary-foreground border-primary'
-                          : 'bg-background text-muted-foreground border-border hover:border-primary/50'
-                      }`}
+                      className="text-sm px-3 py-1.5 min-h-[36px]"
                     >
                       {selectedPetIds.includes(pet.id) && <Check className="h-3 w-3" />}
                       {pet.name}
-                    </button>
+                    </PillToggle>
                   ))}
                 </div>
               </div>
@@ -437,22 +437,30 @@ export default function PetSittingSection({ petId }) {
           </div>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={!!deleteConfirmId} onOpenChange={(v) => !v && setDeleteConfirmId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-2xl">Remove this sit?</AlertDialogTitle>
+            <AlertDialogDescription className="text-base leading-relaxed">
+              This removes the pet-sitting arrangement and its checklist. This can't be undone, but you can create a new sit any time.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <Button variant="destructive" onClick={() => handleDelete(deleteConfirmId)}>Remove</Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
 
 function CheckBtn({ label, checked, onToggle }) {
   return (
-    <button
-      onClick={onToggle}
-      className={`flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-full border transition-colors ${
-        checked
-          ? 'bg-primary text-primary-foreground border-primary'
-          : 'bg-background text-muted-foreground border-border hover:border-primary/50'
-      }`}
-    >
+    <PillToggle active={checked} onClick={onToggle} className="text-[13px] px-2.5 py-1.5 min-h-[36px]">
       {checked ? <Check className="h-3 w-3" /> : <X className="h-3 w-3" />}
       {label}
-    </button>
+    </PillToggle>
   );
 }

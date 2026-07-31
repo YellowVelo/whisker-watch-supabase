@@ -528,7 +528,7 @@ export default function PetProfileContent({ petId, onReload, expanded = true, on
               icon={HeartPulse} iconBg="rgba(76,199,176,0.15)" iconColor={PALETTE.teal}
               title="Baseline" subtitle={baselineSubtitle}
               value={baselineValue} valueColor={baselineState === 'complete' ? PALETTE.teal : PALETTE.amber}
-              to={`/pet/${petId}/profile?tab=baseline`} error={errors.baseline}
+              to={`/pet/${petId}/baseline`} error={errors.baseline}
             />
 
             {/* ── CONDITIONS ── */}
@@ -548,7 +548,7 @@ export default function PetProfileContent({ petId, onReload, expanded = true, on
               title="Medications" subtitle={medicationsCount > 0 ? `${medicationsCount} active medication${medicationsCount === 1 ? '' : 's'}` : 'No medications.'}
               value={medicationsCount > 0 ? medicationsCount : 'Add Medication'}
               valueColor={medicationsCount > 0 ? '#fff' : PALETTE.sky}
-              to={`/pet/${petId}/profile?tab=medications`} error={errors.medications}
+              to={`/pet/${petId}/medications`} error={errors.medications}
             />
 
             {/* ── FOOD ── */}
@@ -566,7 +566,7 @@ export default function PetProfileContent({ petId, onReload, expanded = true, on
               title="Vaccinations" subtitle={vaxSummary.total === 0 ? 'No vaccinations recorded.' : vaxSummary.isOverdue ? 'Overdue' : 'Up to date'}
               value={vaxSummary.total === 0 ? 'Add Vaccination' : `${vaxSummary.current} / ${vaxSummary.total}`}
               valueColor={vaxSummary.total === 0 ? PALETTE.sky : vaxSummary.isOverdue ? PALETTE.red : PALETTE.sky}
-              to={`/pet/${petId}/profile?tab=vaccines`} error={errors.vaccinations}
+              to={`/pet/${petId}/vaccinations`} error={errors.vaccinations}
             />
 
             {/* ── WEIGHT ── */}
@@ -649,7 +649,7 @@ export default function PetProfileContent({ petId, onReload, expanded = true, on
               icon={FileText} iconBg="rgba(111,183,255,0.15)" iconColor={PALETTE.sky}
               title="Health Records" subtitle={healthRecordsCount ? 'Lab results, vet visits, and documents' : 'No records uploaded.'}
               value={healthRecordsCount ? `${healthRecordsCount} File${healthRecordsCount === 1 ? '' : 's'}` : 'Add Record'}
-              valueColor={PALETTE.sky} to={`/pet/${petId}/profile?tab=bloodwork`} error={errors.healthRecords}
+              valueColor={PALETTE.sky} to={`/pet/${petId}/health-records`} error={errors.healthRecords}
             />
           </>
         )}
