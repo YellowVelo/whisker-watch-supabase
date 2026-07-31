@@ -275,11 +275,7 @@ Home
 Pet Trends (raw symptom counts)
 
 Tap Completed Check-In Card
-Navigate:
-
-Home
-↓
-Pet Trends
+Reopens the Daily Check-In flow, pre-filled with today's saved answers, for editing (corrected 2026-07-31, spec `0026` — previously navigated to Pet Trends instead).
 
 Tap Start Today’s Check-In
 Launch Daily Check-In flow.
@@ -329,7 +325,7 @@ Pet Trends
 
 Completed Check-In
 ↓
-Pet Trends
+Daily Check-In (reopens, pre-filled, for editing — spec `0026`)
 
 Incomplete Check-In
 ↓

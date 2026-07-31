@@ -20,9 +20,7 @@ Unlike **Home**, which answers *"How are my pets today?"*, and **Pets**, which a
 
 ## **Functional Overview**
 
-- The Pet Profile is implemented as one shared component (`PetProfileContent`) rendered in two places:
-  - **Inline, inside the Pets tab** (`context="pets"`) — expands in place via **Show More**, no page navigation.
-  - **As its own page** at `/pet/:petId` (`context="profile"`, the default) — see **Navigation** below for how this page is actually reached; it is **not** the destination when tapping a pet card on Home or Pets.
+- The Pet Profile is implemented as one shared component (`PetProfileContent`), rendered exactly one way today: **inline, inside the Pets tab** (`context="pets"`) — expands in place via **Show More**, no page navigation. A second rendering, as its own page at `/pet/:petId` (`context="profile"`), used to exist but was unreachable dead code (nothing ever linked to it after spec `0023` retired the standalone page) and was deleted in spec `0026`. `/pet/:petId` (`PetProfile.jsx`) still exists purely as a compatibility redirect to `/pets` for old bookmarks/links — it renders no Pet Profile content of its own.
 - The profile is composed of **summary cards**, each routing into existing management modules (Baseline, Conditions, Medications, Food, Vaccinations, Weight, Observations, Vet Report, Timeline, Health Records).
 - **Share, Edit Pet, Rainbow Bridge, and Delete Pet** are **always-visible action pills** in a row once the profile is expanded — they are not hidden behind an overflow/"..." menu.
 
@@ -39,18 +37,12 @@ Unlike **Home**, which answers *"How are my pets today?"*, and **Pets**, which a
 - Computed age (derived from birth date)
 - **Condition chips** — one chip per entry in `pet.conditions` (e.g. CKD, IBD, Diabetes, Arthritis). Rendered only when at least one condition exists; there is no "Healthy" default chip and no fixed enum of chip values — any string in `pet.conditions` renders as its own chip.
 
-**Today's Vibe / Weight (standalone `/pet/:petId` page only, `context="profile"`):**
-Below the identity block, a summary strip replaces what earlier spec versions described as a wellness-score display:
-- A **Vibe icon** (tap to open Daily Check-In) showing today's status — *Great Day / Off Day / Tough Day / Skipped* — or "Check in today" if no check-in exists yet for today. This mirrors Home's Vibe icon exactly; there is no numeric score anywhere on this screen.
-- A separate **Weight** control (tap to open a quick weight-log sheet) showing the most recent recorded weight in lbs, or "No Data." Weight is tracked independently of the Vibe/Daily Check-In flow — the two never combine into a single metric.
-- If today's Vibe/weight fails to load, the strip shows "Unable to load wellness summary." instead of the two controls.
-
-**Wellbeing chips (inline Pets-tab card only, `context="pets"`):** instead of the Vibe/Weight strip above, the collapsed Pets-tab card shows five directional Wellbeing chips (Energy, Mobility, Breathing, Skin/Itching, Behavior), each tappable and each deep-linking to that attribute's Trends chart. No score is shown here either.
+**Wellbeing chips:** below the identity block, the collapsed Pets-tab card shows five directional Wellbeing chips (Energy, Mobility, Breathing, Skin/Itching, Behavior), each tappable and each deep-linking to that attribute's Trends chart. No score is shown here. (A separate Vibe icon + Weight strip used to render here on the now-deleted standalone page context — see Functional Overview above; it never appears in the current app.)
 
 **Behavior:**
 - Header identity data loads first and independently of the rest of the profile.
 - **Show More / Show Less** toggles whether the action-pill row and every summary card below render at all — it does not open a menu; everything it reveals is visible inline immediately.
-- Once expanded, the action-pill row (Share / Edit Pet / Rainbow Bridge / Delete Pet) is always visible directly under the Vibe/Weight strip — not behind a further tap.
+- Once expanded, the action-pill row (Share / Edit Pet / Rainbow Bridge / Delete Pet) is always visible directly under the Wellbeing chips — not behind a further tap.
 
 ---
 
@@ -65,8 +57,8 @@ Each card displays a concise summary and routes into its respective management m
 | **Medications** | Active medication count | Opens the Medications tab (`/pet/:petId/profile?tab=medications`) | "No medications." → **Add Medication** |
 | **Food** | Active food count | Opens the Food screen (`/pet/:petId/food`) | "No food configured." → **Add Food** |
 | **Vaccinations** | Status (Up to Date / *current*/*total* / Overdue) | Opens the Vaccinations tab (`/pet/:petId/profile?tab=vaccines`) | "No vaccinations recorded." → **Add Vaccination** |
-| **Weight** | Current weight + up/down/steady delta + sparkline | Opens the Pet Symptoms/log screen (`/pet/:petId/symptoms`) — there is no dedicated "Weight History" screen | Placeholder dashed-line chart → **Record Weight** (quick weight logging itself happens via the Weight control in the header strip, not this card) |
-| **Observations** | Today's five observation chips (Appetite, Water, Energy, Stool, Activity) when a check-in exists for today | **Only interactive when no check-in exists for today** — tapping opens Daily Check-In. Once today's check-in is logged, the card becomes a static display with no tap target (there is no separate "Observation History" screen) | "No observations yet." → **Start Daily Check-In** |
+| **Weight** | Current weight + up/down/steady delta + sparkline | Opens the Pet Symptoms/log screen (`/pet/:petId/symptoms`) — there is no dedicated "Weight History" screen, and no quick-log shortcut either (a `WeightQuickLogSheet` shortcut existed in code but was unreachable dead code, deleted in spec `0026`) | Placeholder dashed-line chart → **Record Weight** |
+| **Observations** | Today's five observation chips (Appetite, Water, Energy, Stool, Activity) when a check-in exists for today | **Always interactive.** Before today's check-in exists, tapping starts one; once logged, tapping reopens today's entry for editing instead of becoming a static display (spec `0026`) | "No observations yet." → **Start Daily Check-In** |
 | **Vet Report** | CTA to export clinic‑ready report | Opens Vet Report Export (`/pet/:petId/export`) | — |
 | **Timeline** | Total event count | Opens Timeline (`/pet/:petId/timeline`) | "Events will appear as your pet's health history grows." |
 | **Health Records** | Document count | Opens the Bloodwork tab (`/pet/:petId/profile?tab=bloodwork`) — Health Records reuses Bloodwork's data rather than a separate screen, so the count always matches what's shown there | "No records uploaded." → **Add Record** |
@@ -79,10 +71,8 @@ Each card displays a concise summary and routes into its respective management m
 
 Tapping a pet card is **not** how this page is reached — on both **Home** and **Pets**, tapping a pet card navigates to that pet's **Trends** screen (`/pet/:petId/trends`), not to the Pet Profile.
 
-- **Pets → Pet Profile (inline):** tapping **Show More** on a pet's card in the Pets tab expands the shared `PetProfileContent` component **in place**, inside the Pets tab itself — this is not a page navigation, and it's the primary way most users will encounter Pet Profile content day to day.
-- **Standalone `/pet/:petId` page:** reached via two specific flows, not from a persistent nav element:
-  - Completing **Pet Onboarding**, whose final "start check-in" action links to `/pet/:petId?startCheckin=1`.
-  - Accepting a **co-owner invite** (`AcceptInvite.jsx`), which redirects to `/pet/:petId` on success.
+- **Pets → Pet Profile (inline):** tapping **Show More** on a pet's card in the Pets tab expands the shared `PetProfileContent` component **in place**, inside the Pets tab itself — this is the only way Pet Profile content is ever reached today.
+- **`/pet/:petId` (compatibility redirect only, renders no Pet Profile content):** Completing **Pet Onboarding**'s "start check-in" action and accepting a **co-owner invite** (`AcceptInvite.jsx`) both still link here, but the route just bounces to `/pets` (spec `0026`) — same as any old bookmark/link.
 
 ### **Inline Expansion**
 
@@ -91,7 +81,7 @@ Tapping a pet card is **not** how this page is reached — on both **Home** and 
 
 ### **Back Navigation**
 
-- On the standalone `/pet/:petId` page, the back button always returns to **`/pets`** (with that pet expanded there), regardless of how the page was reached — it does not track or return to a specific "originating screen."
+- `/pet/:petId` always redirects to **`/pets`** (with that pet expanded there), regardless of how it was reached.
 - Bottom navigation remains visible across all screens:
   - Home | Pets | Menu
 
@@ -108,7 +98,7 @@ No partial data should appear during loading.
 
 Display skeleton placeholders for:
 - Header (identity block)
-- Today's Vibe/Weight strip (or Wellbeing chips, in the Pets-tab context)
+- Wellbeing chips
 - Summary cards
 
 Do not display partially loaded values.
@@ -130,8 +120,8 @@ Do not display partially loaded values.
 - Food count = active foods (excluding any with an `end_date` in the past).
 - Vaccination status derives from active vaccination records.
 - Weight summary uses the latest recorded weight; a trend/sparkline only renders once at least 2 weights are recorded. Weight is logged independently of the Daily Check-In flow.
-- The Vibe icon and its label (Great Day / Off Day / Tough Day / Skipped) reflect **only today's** Daily Check-In — a check-in from a prior day never populates this screen's Vibe display. There is no numeric score, ring, or trend label anywhere on this screen; Vibe and Weight are two independent signals that never combine.
-- The Observations card similarly reflects only today's check-in — once logged, it becomes a read-only summary of today's five observation chips.
+- There is no numeric score, ring, or trend label anywhere on this screen; Vibe and Weight are two independent signals that never combine.
+- The Observations card reflects only today's check-in — once logged, it shows a summary of today's five observation chips and stays tappable, reopening today's entry for editing (spec `0026`).
 - Timeline contains all historical health events.
 - Health Records reuses the Bloodwork tab's data — there is no separate Health Records store.
 - Sharing, editing, moving to Rainbow Bridge, or deleting a pet are initiated from the always-visible action-pill row shown once the profile is expanded — none of these are behind an overflow menu.
@@ -205,12 +195,12 @@ Do not display partially loaded values.
 ## **Acceptance Criteria**
 
 A user can:
-- View complete pet identity and today's Vibe/Weight summary (or Wellbeing chips, in the Pets-tab context).
-- Reach the Pet Profile by expanding a pet's card inline in Pets (primary path), or by completing Pet Onboarding / accepting a co-owner invite (standalone-page paths).
+- View complete pet identity and Wellbeing chips.
+- Reach the Pet Profile by expanding a pet's card inline in Pets — the only path today.
 - Expand and collapse the profile inline via Show More / Show Less.
 - Access Baseline, Conditions (via Edit Pet), Medications, Food, Vaccinations, Weight, Observations, Vet Report, Timeline, and Health Records.
+- Reopen and edit today's Daily Check-In at any point after completing it, via the Observations card (spec `0026`).
 - Share, edit, delete, or memorialize a pet via the always-visible action-pill row.
-- Return to the Pets tab from the standalone page.
 - Use screen readers to identify each card and action.
 
 ---
@@ -221,7 +211,7 @@ A user can:
 - Pet without breed → omit field gracefully.
 - Pet without medications → show empty state.
 - Pet with multiple diagnoses → display all condition chips.
-- Pet without today's check‑in → Vibe control shows "Check in today"; Observations card shows "No observations yet." and becomes the tap target to start Daily Check-In.
+- Pet without today's check‑in → Observations card shows "No observations yet." and is the tap target to start Daily Check-In; once completed, the same card becomes the tap target to reopen and edit it (spec `0026`).
 - Pet with only one weight entry → show current weight, no trend/sparkline.
 - Pet with no health records → show "Add Record" prompt.
 - Shared pet → respect permission model.
@@ -249,3 +239,10 @@ This pass corrected the following against the current codebase
 8. **Corrected Health Records routing and empty-state label.** V3 implied a dedicated store and said "Upload Record"; it reuses the Bloodwork tab's data and the button reads "Add Record."
 9. **Added the two-step, co-owner-aware Delete Pet confirmation flow**, previously undocumented.
 10. **Corrected minor copy** ("Unavailable" → "Unable to load"; "No check-in yet." → "No observations yet." / "Check in today").
+
+## **Revision Notes (2026-07-31 update, spec `0026`)**
+
+This pass corrected the doc against `docs/features/0026_Edit_Todays_CheckIn_Specification_v1.md`, which found that item 2 and item 7 above were themselves already stale:
+
+1. **The standalone `/pet/:petId` page never actually rendered Pet Profile content** — spec `0023` (2026-07-28) had already turned it into a bare redirect to `/pets`, but this doc still described `context="profile"` as a live second rendering with its own Vibe icon + Weight strip + quick weight-log sheet. That code was fully unreachable and was deleted (spec `0026`) — this doc's Functional Overview, Header, Navigation, Loading States, Acceptance Criteria, and Edge Cases sections all still described it and have been updated.
+2. **The Observations card is no longer read-only once checked in.** It now stays tappable and reopens today's entry for editing, closing a gap the canonical check-in spec (`0012`, line 226) had already assumed was covered ("existing edit/re-save behavior should apply") but that no reachable UI actually provided.

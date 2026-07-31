@@ -149,7 +149,7 @@ After successful creation:
 Since "Show More" expands the card in place rather than navigating, it's worth documenting what that reveals, since it's effectively part of this screen's UI even though it's implemented as shared Pet Profile content:
 
 - Action pills: Share, Edit Pet, Rainbow Bridge (Active only), Delete Pet
-- Summary cards, in order: Baseline, Conditions (opens Edit Pet sheet — no separate Condition Management screen), Medications, Food, Vaccinations, Weight, Observations (only tappable before today's check-in exists), Vet Report, Timeline, Health Records (links to the Bloodwork tab)
+- Summary cards, in order: Baseline, Conditions (opens Edit Pet sheet — no separate Condition Management screen), Medications, Food, Vaccinations, Weight, Observations (tappable both before and after today's check-in — after, it reopens today's entry for editing, spec `0026`), Vet Report, Timeline, Health Records (links to the Bloodwork tab)
 - Delete Pet is a two-step, co-owner-aware confirmation flow
 
 See `docs/features/0009 Pet Profile Feature V4.md` for the full spec of this shared content — this document doesn't duplicate it in detail, just notes that it's reachable from here.
