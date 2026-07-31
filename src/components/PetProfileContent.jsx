@@ -5,13 +5,12 @@ import { supabase } from '@/api/supabaseClient';
 import {
   ChevronDown, Share2, Pencil, Trash2, Rainbow,
   Cat, Dog, UtensilsCrossed, Zap, Scale, HeartPulse, ClipboardList,
-  Pill, Utensils, ShieldCheck, TrendingUp, Clock, FileText, FileDown, Droplets, Footprints, Loader2, LineChart,
+  Pill, Utensils, ShieldCheck, TrendingUp, Clock, FileText, FileDown, Droplets, Footprints, LineChart,
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import EditPetSheet from './EditPetSheet';
 import MemorialDialog from './MemorialDialog';
 import ListRow from './ListRow';
-import BottomSheet from './BottomSheet';
 import ConfirmDeleteDialog from './ConfirmDeleteDialog';
 import DailyCheckInModal from './DailyCheckInModal';
 import { track } from '@/lib/analytics';
@@ -29,7 +28,6 @@ import { PALETTE, RING_COLOR } from '@/lib/toneColors';
 import { useAuth } from '@/lib/AuthContext';
 import { detectTimezone, dateStrInTimezone } from '@/lib/timezone';
 import AttributeTrendChip from '@/components/AttributeTrendChip';
-import VibeIcon, { vibeAccessibleLabel } from '@/components/VibeIcon';
 import { WELLBEING_ATTRIBUTES } from '@/lib/checkin/config';
 
 // Daily Check-In, Vibe & Trends (spec v5) — the Pets-tab card's Wellbeing
@@ -37,12 +35,6 @@ import { WELLBEING_ATTRIBUTES } from '@/lib/checkin/config';
 // order.
 const WELLBEING_CHIP_LABELS = { energy: 'Energy', mobility: 'Mobility', breathing: 'Breathing', itching: 'Skin / Itching', behavior: 'Behavior' };
 
-// `timezone` threaded through from the main component below (the signed-in
-// user's stored timezone, spec §24). WeightQuickLogSheet doesn't have
-// access to that context and keeps the UTC fallback — a late-night weight
-// log landing on the "wrong" UTC date is a pre-existing, lower-stakes gap
-// than the Vibe/Check-In "is this today" comparisons below, which this
-// feature's chips on Home now get right.
 const todayStr = (timezone) => dateStrInTimezone(timezone, 0);
 
 // Fixed Observations chip slots — labels/state come from the shared
@@ -93,56 +85,6 @@ function WeightPlaceholderChart() {
   );
 }
 
-// Minimal single-field weight log sheet — weight is the only ring metric
-// still sourced from symptom_logs (Data Model §3.8), so tapping the
-// Weight ring writes there directly instead of opening the full Daily
-// Check-In flow.
-function WeightQuickLogSheet({ petId, onClose, onSaved }) {
-  const [value, setValue] = useState('');
-  const [saving, setSaving] = useState(false);
-  const today = todayStr();
-
-  const save = async () => {
-    const lbs = parseFloat(value);
-    if (!Number.isFinite(lbs) || lbs <= 0) return;
-    setSaving(true);
-    const grams = Math.round(lbs * 453.59237);
-    const existing = await entities.SymptomLog.filter({ pet_id: petId, date: today });
-    if (existing.length) {
-      await entities.SymptomLog.update(existing[0].id, { weight_grams: grams });
-    } else {
-      await entities.SymptomLog.create({ pet_id: petId, date: today, weight_grams: grams });
-    }
-    setSaving(false);
-    onSaved();
-  };
-
-  const footer = (
-    <button onClick={save} disabled={!value || saving}
-      className="w-full text-base font-bold rounded-2xl h-14 disabled:opacity-30 transition-opacity flex items-center justify-center gap-2 border-2"
-      style={{ background: 'hsl(var(--background))', borderColor: PALETTE.sky, color: '#fff' }}
-    >{saving ? <Loader2 className="h-5 w-5 animate-spin" /> : 'Save'}</button>
-  );
-
-  return (
-    <BottomSheet
-      titleId="weight-log-title"
-      title="Log Weight"
-      subtitle={<p className="text-sm text-tier-tertiary mt-1">Today · {format(new Date(), 'MMM d')}</p>}
-      onClose={onClose}
-      footer={footer}
-    >
-      <input
-        type="number" step="0.1" placeholder="e.g. 9.8" inputMode="decimal" aria-label="Weight in pounds"
-        value={value} onChange={(e) => setValue(e.target.value)}
-        className="w-full rounded-2xl px-4 py-3 text-xl text-center font-bold text-white focus:outline-none focus:ring-1 focus:ring-primary border border-white/10 mb-2"
-        style={{ background: 'rgba(255,255,255,0.08)' }}
-      />
-      <p className="text-sm text-center text-tier-tertiary">pounds</p>
-    </BottomSheet>
-  );
-}
-
 function ExpandToggle({ expanded, onToggleExpanded }) {
   if (!onToggleExpanded) return null;
   return (
@@ -182,7 +124,7 @@ function ActionPill({ icon: Icon, label, onClick, danger, disabled }) {
 // standalone `/pet/:petId` route (PetProfile.jsx) and the expandable Pets-
 // tab card (ExpandablePetProfileCard) render the exact same data-loading
 // and business logic instead of keeping two copies in sync.
-export default function PetProfileContent({ petId, onReload, expanded = true, onToggleExpanded, context = 'profile' }) {
+export default function PetProfileContent({ petId, onReload, expanded = true, onToggleExpanded, context }) {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useAuth();
@@ -212,7 +154,6 @@ export default function PetProfileContent({ petId, onReload, expanded = true, on
   const [fullDetailsLoaded, setFullDetailsLoaded] = useState(false);
 
   const [checkInOpen, setCheckInOpen] = useState(false);
-  const [weightLogOpen, setWeightLogOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [memorialOpen, setMemorialOpen] = useState(false);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
@@ -453,7 +394,6 @@ export default function PetProfileContent({ petId, onReload, expanded = true, on
   const hasLinkedCoOwner = petCoOwners.some((c) => c.co_owner_user_id);
   const age = computeDetailedAge(pet);
   const checkedInToday = todayCheckIn?.check_in_date === todayStr(timezone);
-  const vibeStatus = checkedInToday ? (todayCheckIn?.status ?? null) : null;
 
   const vaxSummary = getVaccinationSummary(vaccinations);
   const weightValLbs = weightSummary?.currentLbs != null ? weightSummary.currentLbs.toFixed(1) : null;
@@ -519,20 +459,20 @@ export default function PetProfileContent({ petId, onReload, expanded = true, on
           <PetProfileDetailsSkeleton />
         ) : (
           <>
-            {/* ── VIBE / WELLBEING CHIPS ── */}
+            {/* ── WELLBEING CHIPS ── */}
             {/* Always visible — this and the identity block above are the
                 Pets-tab card's collapsed state (Nav + Daily Check-In UX
                 Refresh spec #6: "Collapse info after the top circles").
                 Everything below (actions + nav cards) only renders when
                 expanded.
                 Daily Check-In, Vibe & Trends (spec v5): the Pets-tab card
-                (context="pets") shows five Wellbeing directional chips —
-                no score of any kind is ever shown here. The standalone Pet
-                Profile route (context="profile", the default) shows a
-                single Vibe icon plus a separate Weight line, replacing the
-                retired 5-ring row (spec: "single Vibe icon, same icon and
-                color rules as Home"). */}
-            {context === 'pets' ? (
+                (context="pets", the only context this component is ever
+                mounted with — the former context="profile" standalone-page
+                branch was deleted in spec 0026 as unreachable dead code,
+                see docs/features/0026_Edit_Todays_CheckIn_Specification_v1.md)
+                shows five Wellbeing directional chips — no score of any
+                kind is ever shown here. */}
+            {context === 'pets' && (
               <div className="rounded-2xl px-4 py-4 bg-card border border-border">
                 {wellbeingUnavailable ? (
                   <p className="text-base text-tier-tertiary text-center py-4">Unable to load wellbeing.</p>
@@ -548,25 +488,6 @@ export default function PetProfileContent({ petId, onReload, expanded = true, on
                         onClick={() => navigate(`/pet/${petId}/trends?section=trends&group=wellness&metric=${code}`)}
                       />
                     ))}
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="rounded-2xl px-4 pt-5 pb-4 bg-card border border-border">
-                {errors.weight ? (
-                  <p className="text-base text-tier-tertiary text-center py-4">Unable to load wellness summary.</p>
-                ) : (
-                  <div className="flex items-center justify-between gap-3">
-                    <button onClick={() => setCheckInOpen(true)} aria-label={`Open Daily Check-In. Current Vibe: ${vibeAccessibleLabel(vibeStatus)}.`} className="flex flex-col items-center gap-1.5">
-                      <VibeIcon status={vibeStatus} size={40} />
-                      <p className="text-[13px] font-semibold" style={{ color: PALETTE.sky }}>
-                        {vibeStatus ? { great: 'Great Day', off: 'Off Day', tough: 'Tough Day', skipped: 'Skipped' }[vibeStatus] : 'Check in today'}
-                      </p>
-                    </button>
-                    <button onClick={() => setWeightLogOpen(true)} aria-label="Log weight" className="flex flex-col items-center gap-1.5">
-                      <Scale className="h-6 w-6 text-tier-tertiary" aria-hidden="true" />
-                      <p className="text-[15px] font-semibold text-white">{weightValLbs ? `${weightValLbs} lbs` : 'No Data'}</p>
-                    </button>
                   </div>
                 )}
               </div>
@@ -668,8 +589,8 @@ export default function PetProfileContent({ petId, onReload, expanded = true, on
               <ListRow
                 icon={TrendingUp} iconBg="rgba(244,199,107,0.15)" iconColor={PALETTE.amber}
                 title="Observations" subtitle="Trends and recent observations"
-                value="Today" valueColor={PALETTE.amber}
-                error={errors.observations}
+                value="Edit Daily Check-In" valueColor={PALETTE.amber}
+                onClick={() => setCheckInOpen(true)} error={errors.observations}
               >
                 <div className="grid grid-cols-5 gap-1.5 mt-3">
                   {OBSERVATION_SLOTS.map(({ code, label, icon: Icon }) => {
@@ -742,14 +663,6 @@ export default function PetProfileContent({ petId, onReload, expanded = true, on
           existingCheckIn={todayCheckIn}
           onClose={() => setCheckInOpen(false)}
           onComplete={() => { setCheckInOpen(false); reloadAll(); }}
-        />
-      )}
-
-      {weightLogOpen && (
-        <WeightQuickLogSheet
-          petId={petId}
-          onClose={() => setWeightLogOpen(false)}
-          onSaved={() => { setWeightLogOpen(false); reloadAll(); }}
         />
       )}
 

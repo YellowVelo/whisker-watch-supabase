@@ -57,7 +57,7 @@ Implemented in `src/pages/Home.jsx`. Shows:
 - A notification bell (`NotificationBell.jsx`, backed by `getUnreadCount()` in `src/lib/notifications/notificationClient.js`)
 - One `PetSummaryCard` per active (non-memorial) pet, ordered by most-recently-added pet first (`entities.Pet.list('-created_date')`, not alphabetical and not by check-in status) — **not** `WellnessCard`, which no longer exists. Each card shows identity, condition/medication chips (or a "Healthy" badge), a Vibe icon + label for today's status, and per-attribute direction chips (Health group + Weight) — no numeric score or ring of any kind. Directly beneath each card, a separate one-line `CheckInStatusBanner` row — **not** `CheckInCard`, which no longer exists — shows either a tappable "Start {pet}'s Daily Check-In" prompt or today's completed status.
 
-**Both `PetSummaryCard` and `CheckInStatusBanner` link out to a pet's Trends screen (`/pet/:petId/trends`), not the flat Pet Profile** — this part of the previous revision's finding still holds. Pet Profile is not reachable by tapping anything on Home; see the Pet Profile section below for its real, current entry points (a "Pet Profiles" Menu directory previously documented here no longer exists).
+**`PetSummaryCard` links out to a pet's Trends screen (`/pet/:petId/trends`); `CheckInStatusBanner` does not** (corrected 2026-07-31, spec `0026`) — once a pet has checked in today, tapping the banner reopens that check-in for editing instead of navigating anywhere. Trends remains reachable via `PetSummaryCard` and the Pets-tab Wellbeing chips. Pet Profile is not reachable by tapping anything on Home; see the Pet Profile section below for its real, current entry points (a "Pet Profiles" Menu directory previously documented here no longer exists).
 
 Card actions launch the existing Daily Check-In flow, opened from the status row (not buttons on the card itself): **Great Day / Off Day / Tough Day / Skip** — not "Everything Normal / Something Changed / Skip Today," which was the pre-Vibe-model wording.
 
@@ -73,7 +73,7 @@ Implemented in `src/pages/Pets.jsx`. Shows, in order:
 2. Pets I Sit (pets the signed-in user has sitter-only access to, via `getSitterOnlyPetIds()` in `src/lib/petsClient.js`)
 3. Rainbow Bridge (memorial pets)
 
-Active and Rainbow Bridge pet rows render `ExpandablePetProfileCard`, which embeds the shared `PetProfileContent` component (`context="pets"`) — the same component the standalone Pet Profile page uses. Collapsed, each row shows photo/species icon, name, species, breed, sex, computed age, and condition chips — **no Wellness Score or trend of any kind**; instead, five Wellbeing direction chips (Energy, Mobility, Breathing, Skin/Itching, Behavior) compare today's state to yesterday's. Tapping "Show More" expands the row **in place** to reveal the pet's full profile (action pills + all summary cards) — this is the primary, day-to-day way most owners reach Pet Profile content; see the Pet Profile section below.
+Active and Rainbow Bridge pet rows render `ExpandablePetProfileCard`, which embeds the shared `PetProfileContent` component (`context="pets"`) — the only way this component is rendered anywhere in the app today (see Pet Profile section below). Collapsed, each row shows photo/species icon, name, species, breed, sex, computed age, and condition chips — **no Wellness Score or trend of any kind**; instead, five Wellbeing direction chips (Energy, Mobility, Breathing, Skin/Itching, Behavior) compare today's state to yesterday's. Tapping "Show More" expands the row **in place** to reveal the pet's full profile (action pills + all summary cards) — this is the primary, day-to-day way most owners reach Pet Profile content; see the Pet Profile section below.
 
 "Pets I Sit" rows use a separate, deliberately lighter `SitterPetRow` component — a bare identity link with no chip UI at all — and link to `/pet/:petId/trends`, not Pet Profile. (A known, open inconsistency — sitter-shared pets show no Wellbeing information at all, unlike owned/co-owned pets.)
 
@@ -85,15 +85,14 @@ Pet Profile
 
 Purpose: the permanent, detailed record for one pet.
 
-Implemented as the shared `PetProfileContent` component (`src/components/PetProfileContent.jsx`), rendered two ways: inline inside the Pets tab (`context="pets"`, see above — this is the primary way most owners encounter it), and as its own page at `/pet/:petId` (`context="profile"`, `src/pages/PetProfile.jsx`).
+Implemented as the shared `PetProfileContent` component (`src/components/PetProfileContent.jsx`), rendered exactly one way today: inline inside the Pets tab (`context="pets"`, see above). A second rendering used to exist as its own page at `/pet/:petId` (`context="profile"`) — that code was unreachable dead code (the standalone page itself had already been retired to a redirect, see below) and was deleted in spec `0026` (2026-07-31).
 
-**The "Pet Profiles" Menu directory described in the previous revision of this document no longer exists** — no route, no component file. The standalone `/pet/:petId` page's only real entry points today are: completing Pet Onboarding (its "start check-in" link, `?startCheckin=1`), and accepting a co-owner invite (`AcceptInvite.jsx`'s post-accept redirect). Its back button always returns to `/pets` (not "wherever the user came from"). It is not linked from CareMenu, Home, or any Menu row.
+**The "Pet Profiles" Menu directory described in an earlier revision of this document no longer exists** — no route, no component file. `/pet/:petId` (`src/pages/PetProfile.jsx`) still exists, but purely as a compatibility redirect to `/pets` — it renders no Pet Profile content of its own. Completing Pet Onboarding (its "start check-in" link, `?startCheckin=1`) and accepting a co-owner invite (`AcceptInvite.jsx`'s post-accept redirect) both still link to it, but just land on `/pets` as a result. It is not linked from CareMenu, Home, or any Menu row.
 
 Header
 Photo, name, species, breed, sex, computed age, conditions ("diagnoses"). **No Wellness Score, trend, or "last updated" field** — none of these are currently displayed. Share, Edit, and Delete Pet are always-visible action pills (not a menu) shown once the profile is expanded; "Move to Rainbow Bridge" is the one action gated by `!isMemorial`. Delete is a two-step, co-owner-aware confirmation flow (warning, then type-the-pet's-name), disabled while offline.
 
-Today's Vibe / Weight
-Below the identity block (standalone page, `context="profile"` only): a Vibe icon + label for today's Daily Check-In status (Great Day/Off Day/Tough Day/Skipped/"Check in today") and a separate Weight value with quick-log access — replacing the previously-documented five score rings and `getWellnessRingScores()`, which no longer exists. The two never combine into a score. (The inline Pets-tab card instead shows the five Wellbeing chips described above.)
+Below the identity block, the inline Pets-tab card shows the five Wellbeing chips described above — no separate Vibe/Weight strip exists anywhere anymore (it only ever rendered on the now-deleted standalone-page branch, spec `0026`).
 
 Stacked sections, in this order, all using a shared `NavCard` component (icon, title, subtitle, value, link-or-button, and a built-in "Unable to load" error state):
 1. Baseline
