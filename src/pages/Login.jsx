@@ -130,12 +130,12 @@ export default function Login() {
           </div>
         )}
         <div className="space-y-1.5">
-          <Label>Email</Label>
-          <Input type="email" value={email} onChange={e => setEmail(e.target.value)} required />
+          <Label htmlFor="login-email">Email</Label>
+          <Input id="login-email" type="email" value={email} onChange={e => setEmail(e.target.value)} required />
         </div>
         <div className="space-y-1.5">
-          <Label>Password</Label>
-          <Input type="password" value={password} onChange={e => setPassword(e.target.value)} required />
+          <Label htmlFor="login-password">Password</Label>
+          <Input id="login-password" type="password" value={password} onChange={e => setPassword(e.target.value)} required />
         </div>
         <Button type="submit" className="w-full" disabled={loading}>
           {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Sign In'}
