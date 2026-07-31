@@ -1,6 +1,6 @@
 # 0026_Edit_Todays_CheckIn_Specification_v1
 
-**Status:** Implemented (2026-07-31, not yet manually verified in a running app — no Supabase credentials available in this worktree, see implementation notes)
+**Status:** Implemented and manually verified (2026-07-31) — confirmed live against `wysker-watch-dev` (`test1@wyskerwatch.com`): completing Scout's check-in changed Home's banner to "Edit Scout's Daily Check-In" (reopens the sheet instead of navigating to Trends) and changed the Pets-tab card's Observations row to "Edit Daily Check-In" (also reopens the sheet). No console or server errors either way.
 **Date:** 2026-07-31
 **Related files:** `src/components/PetProfileContent.jsx`, `src/components/CheckInStatusBanner.jsx`, `src/components/DailyCheckInModal.jsx`, `src/pages/Home.jsx`, `src/pages/PetProfile.jsx`, `docs/features/0012_DailyCheckIn_Vibe_Trends_Specification_v5.md`, `docs/foundation/0008 Navigation & Information Architecture_V4.md`, `docs/launch-punch-list.md`
 
