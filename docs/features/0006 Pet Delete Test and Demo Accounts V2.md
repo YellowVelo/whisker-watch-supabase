@@ -202,11 +202,13 @@ Provide a polished, always-resettable environment for showing Wysker Watch to ot
 
 ### Demo User Behavior
 
-A demo account can be used to view pets, profiles, timelines, logs, trends, reports, and AI summaries just like a production account. There is no separate read-only UI mode for demo viewers — the experience is governed by the same ownership and RLS rules every account uses. The internal tools that would let someone reset or reseed the demo data (§2's Reset Test Account and Seed Data) are gated behind `isInternalAccount(user)`, which for a demo account additionally requires `role = 'admin'` on the profile — so a demo login without that admin flag has no access to destructive or reseeding actions.
+**Updated 2026-07-31 (spec `0027`) — superseded from the description below.** A demo account can create, edit, and delete anything during a session — pets, check-ins, medications, vaccinations, food, weight, baseline, bloodwork, even deleting a pet entirely — with real, normal-feeling saves, exactly like a production account. Nothing is blocked, and there's no separate read-only UI mode. The catch: **nothing persists.** Every login to the demo account — by anyone, admin or not — automatically wipes the account and reseeds it back to the standard Maple/Cooper baseline (see Demo Household below) before the visitor sees anything. Only one demo session can be active at a time: logging in signs out any other browser/device already logged into the same shared login, so two visitors can never edit the same live data at once. The one exception is inviting a co-owner or a pet sitter, which is blocked outright rather than allowed-then-reset, since a real invite email that's already been sent can't be undone by a reset (see Notifications / Email below). See `docs/features/0027_Demo_Account_Auto_Reset_On_Login_Specification_v1.md` for the full mechanism and reasoning — this replaced an earlier attempt (spec `0018`) that tried blocking writes outright instead, which was built, deployed, and reverted the same day (2026-07-26) after confusion verifying its messaging.
+
+The internal tools that let someone reset or reseed the demo data on demand, independent of login (§2's Reset Test Account and Seed Data), remain gated behind `isInternalAccount(user)`, which for a demo account additionally requires `role = 'admin'` on the profile — a demo login without that admin flag still has no access to those manual tools. This is a separate, narrower gate from the automatic per-login reset above, which applies to every demo login regardless of admin status.
 
 ### Demo Admin Behavior
 
-An admin is a user whose profile has `role = 'admin'`. On the demo account, an admin can use the same Reset Test Account and Seed Data tools described in §2 to wipe the demo account's data and reseed it with the demo showcase scenario below.
+An admin is a user whose profile has `role = 'admin'`. On the demo account, an admin can use the same Reset Test Account and Seed Data tools described in §2 to wipe the demo account's data mid-session and reseed it with a different scenario for a specific demo, if needed. **This is a session-only convenience, not a way to set a new persistent baseline** — per the owner's explicit decision (spec `0027`), the admin gets no exception from the automatic per-login reset above. Whatever an admin sets up this way is wiped the same as anything else the next time anyone — including that same admin — logs into the demo account.
 
 ### Visual Indicator
 
@@ -225,11 +227,11 @@ The demo account is seeded via the `demo_showcase` scenario in `src/lib/seedTest
 
 Both pets' photos are stored under a shared Storage path (`uploads/shared/...`) outside any individual user's own folder, so the per-user storage cleanup in Reset Test Account never deletes them — every reseed of the demo account points back at the same two images.
 
-Resetting and reseeding the demo account (via the same tools as §2) restores it to this same Maple/Cooper baseline every time.
+Resetting and reseeding the demo account restores it to this same Maple/Cooper baseline every time — both via the manual tools in §2, and (as of spec `0027`) automatically on every login, with no manual action needed.
 
 ### Notifications / Email
 
-Demo accounts never trigger real reminder, marketing, or vet emails (none exist in the app), and there is no push notification infrastructure to trigger. Co-owner invite emails, the app's one live email path, are suppressed for demo accounts the same way they are for test accounts (§2).
+Demo accounts never trigger real reminder, marketing, or vet emails (none exist in the app), and there is no push notification infrastructure to trigger. Co-owner and pet-sitter invites are blocked outright for demo accounts (spec `0027`, updated 2026-07-31) — no access record is created and no Edge Function is even called, so there's nothing for the existing test/demo email-suppression logic (§2) to need to catch in the first place.
 
 ### Analytics
 
@@ -244,8 +246,8 @@ The demo household (Maple, Cooper) is entirely fictional sample data — no real
 - Demo account is separate from production and test accounts.
 - DEMO MODE banner is always visible.
 - Demo contains polished sample data (Maple, Cooper).
-- Resetting/reseeding the demo account requires `role = 'admin'` on top of `account_type = demo`.
-- Demo account cannot send real co-owner invite emails.
+- Resetting/reseeding the demo account via the manual Settings tool requires `role = 'admin'` on top of `account_type = demo`; the automatic per-login reset (spec `0027`) requires neither and runs for every demo login.
+- Demo account cannot invite a co-owner or a pet sitter at all (spec `0027`) — blocked outright, not just email-suppressed.
 - Demo data cannot affect production or test accounts.
 
 ---
