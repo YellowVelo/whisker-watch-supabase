@@ -74,10 +74,10 @@ export default function Register() {
       ) : (
         <form onSubmit={handleRegister} className="space-y-4">
           {error && <p className="text-base text-destructive text-center">{error}</p>}
-          <div className="space-y-1.5"><Label>First Name</Label><Input type="text" value={firstName} onChange={e => setFirstName(e.target.value)} maxLength={100} required /></div>
-          <div className="space-y-1.5"><Label>Email</Label><Input type="email" value={email} onChange={e => setEmail(e.target.value)} required /></div>
-          <div className="space-y-1.5"><Label>Password</Label><Input type="password" value={password} onChange={e => setPassword(e.target.value)} required /></div>
-          <div className="space-y-1.5"><Label>Confirm Password</Label><Input type="password" value={confirm} onChange={e => setConfirm(e.target.value)} required /></div>
+          <div className="space-y-1.5"><Label htmlFor="register-first-name">First Name</Label><Input id="register-first-name" type="text" value={firstName} onChange={e => setFirstName(e.target.value)} maxLength={100} required /></div>
+          <div className="space-y-1.5"><Label htmlFor="register-email">Email</Label><Input id="register-email" type="email" value={email} onChange={e => setEmail(e.target.value)} required /></div>
+          <div className="space-y-1.5"><Label htmlFor="register-password">Password</Label><Input id="register-password" type="password" value={password} onChange={e => setPassword(e.target.value)} required /></div>
+          <div className="space-y-1.5"><Label htmlFor="register-confirm-password">Confirm Password</Label><Input id="register-confirm-password" type="password" value={confirm} onChange={e => setConfirm(e.target.value)} required /></div>
           <Button type="submit" className="w-full" disabled={loading}>{loading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Sign Up'}</Button>
           <Button type="button" variant="outline" className="w-full" onClick={handleGoogleLogin}>Continue with Google</Button>
         </form>

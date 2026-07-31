@@ -34,7 +34,7 @@ export default function ForgotPassword() {
         <p className="text-base text-muted-foreground">If an account exists for {email}, you'll receive a reset link shortly.</p>
       ) : (
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-1.5"><Label>Email</Label><Input type="email" value={email} onChange={e => setEmail(e.target.value)} required /></div>
+          <div className="space-y-1.5"><Label htmlFor="forgot-password-email">Email</Label><Input id="forgot-password-email" type="email" value={email} onChange={e => setEmail(e.target.value)} required /></div>
           <Button type="submit" className="w-full" disabled={loading}>{loading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Send Reset Link'}</Button>
         </form>
       )}
