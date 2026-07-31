@@ -15,6 +15,8 @@ export default defineConfig({
     // supabase/functions/**/*.test.ts are Deno integration tests (Deno.test,
     // jsr: imports) run separately via `deno test` — vitest's default glob
     // would otherwise pick them up and fail trying to run them under Node.
-    exclude: ['**/node_modules/**', 'supabase/functions/**'],
+    // e2e/**/*.spec.js are Playwright tests, run via `npm run test:e2e` —
+    // same reason, vitest's default glob matches *.spec.js anywhere.
+    exclude: ['**/node_modules/**', 'supabase/functions/**', 'e2e/**'],
   },
 });

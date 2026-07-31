@@ -5,7 +5,6 @@ import {
   LogOut, Trash2, Lock, ChevronRight, Sprout, RotateCcw, FileText, Download, Info,
 } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
 import MenuListRow from '../components/MenuListRow';
 import MenuIllustration from '../components/MenuIllustration';
 import ConfirmDeleteDialog from '../components/ConfirmDeleteDialog';
