@@ -52,16 +52,16 @@ Each card displays a concise summary and routes into its respective management m
 
 | Card | Display | Interaction | Empty State |
 |------|----------|--------------|--------------|
-| **Baseline** | Pet's normal behavior summary | Opens the Baseline tab (`/pet/:petId/profile?tab=baseline`) | "Set up your pet's baseline." → **Set Up** (also shows an **In Progress** state if onboarding was started but not completed) |
+| **Baseline** | Pet's normal behavior summary | Opens the Baseline page (`/pet/:petId/baseline`) | "Set up your pet's baseline." → **Set Up** (also shows an **In Progress** state if onboarding was started but not completed) |
 | **Conditions** | Active diagnoses | Opens **Edit Pet** sheet — there is no separate Condition Management screen; conditions are edited as chips within Edit Pet | "No conditions added." → **Add Condition** |
-| **Medications** | Active medication count | Opens the Medications tab (`/pet/:petId/profile?tab=medications`) | "No medications." → **Add Medication** |
+| **Medications** | Active medication count | Opens the Medications page (`/pet/:petId/medications`) | "No medications." → **Add Medication** |
 | **Food** | Active food count | Opens the Food screen (`/pet/:petId/food`) | "No food configured." → **Add Food** |
-| **Vaccinations** | Status (Up to Date / *current*/*total* / Overdue) | Opens the Vaccinations tab (`/pet/:petId/profile?tab=vaccines`) | "No vaccinations recorded." → **Add Vaccination** |
+| **Vaccinations** | Status (Up to Date / *current*/*total* / Overdue) | Opens the Vaccinations page (`/pet/:petId/vaccinations`) | "No vaccinations recorded." → **Add Vaccination** |
 | **Weight** | Current weight + up/down/steady delta + sparkline | Opens the Pet Symptoms/log screen (`/pet/:petId/symptoms`) — there is no dedicated "Weight History" screen, and no quick-log shortcut either (a `WeightQuickLogSheet` shortcut existed in code but was unreachable dead code, deleted in spec `0026`) | Placeholder dashed-line chart → **Record Weight** |
 | **Observations** | Today's five observation chips (Appetite, Water, Energy, Stool, Activity) when a check-in exists for today | **Always interactive.** Before today's check-in exists, tapping starts one; once logged, tapping reopens today's entry for editing instead of becoming a static display (spec `0026`) | "No observations yet." → **Start Daily Check-In** |
 | **Vet Report** | CTA to export clinic‑ready report | Opens Vet Report Export (`/pet/:petId/export`) | — |
 | **Timeline** | Total event count | Opens Timeline (`/pet/:petId/timeline`) | "Events will appear as your pet's health history grows." |
-| **Health Records** | Document count | Opens the Bloodwork tab (`/pet/:petId/profile?tab=bloodwork`) — Health Records reuses Bloodwork's data rather than a separate screen, so the count always matches what's shown there | "No records uploaded." → **Add Record** |
+| **Health Records** | Document count | Opens the Health Records page (`/pet/:petId/health-records`) — still backed by the same Bloodwork data/component underneath, so the count always matches what's shown there | "No records uploaded." → **Add Record** |
 
 ---
 

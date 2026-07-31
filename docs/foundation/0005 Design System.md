@@ -21,7 +21,7 @@ A UI audit (`docs/Audit_Findings.md`) found the shipped app had drifted from thi
    - The two independently-built toggle/pill patterns → one shared pill/toggle component, 44px minimum height.
    - The two "type to confirm" delete dialogs → one shared `ConfirmDeleteDialog` component.
 
-**Known outlier, deliberately not addressed by this amendment:** `PetProfileTabs.jsx` has hardcoded light-mode Tailwind colors and a dead `conditionColors` map baked into an otherwise all-dark app. It needs its own dedicated code cleanup pass once the above is built out in Figma — tracked as a follow-up, not fixed here.
+**Resolved 2026-07-31, spec 0028:** `PetProfileTabs.jsx` (and its hardcoded light-mode colors, dead `conditionColors` map) is deleted — Baseline/Medications/Vaccinations/Health Records are now standalone pages built on the same tokens as the rest of the app. No outlier remains here.
 
 A follow-up full-coverage audit (checking every route and shared surface, not just the original six-page sample) found three more places the doc itself had never actually spoken to — not code drifting from a rule, but no rule existing yet. This system governs the whole app, including the parts that came later (the App Shell header and bottom tab bar, added in spec 0023, after this doc was first written) — so rather than carve out exceptions for them, the doc is extended below to cover them under the same principles already in place.
 
