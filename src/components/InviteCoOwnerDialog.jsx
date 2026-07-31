@@ -6,6 +6,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { UserPlus, Trash2, Mail, CheckCircle2 } from 'lucide-react';
+import { useAuth } from '@/lib/AuthContext';
+import { isDemoAccount } from '@/lib/accountType';
 
 // Invite a co-owner (e.g. a spouse) to a pet. Unlike sitter access,
 // a co-owner gets full owner-level rights: editing, logging, and
@@ -13,6 +15,7 @@ import { UserPlus, Trash2, Mail, CheckCircle2 } from 'lucide-react';
 // owner can manage this list — co-owners can't invite/remove others
 // (matches the "full parity, owner-managed" decision).
 export default function InviteCoOwnerDialog({ petId, petName, open, onOpenChange }) {
+  const { user } = useAuth();
   const [email, setEmail] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -39,6 +42,16 @@ export default function InviteCoOwnerDialog({ petId, petName, open, onOpenChange
     setSaving(true);
     setError('');
     setSuccessMsg('');
+
+    // Demo accounts don't invite co-owners at all (spec 0026, out of scope
+    // for the account's automatic per-login reset) — blocked here, before
+    // creating any record, rather than relying on the reset to clean it up.
+    if (isDemoAccount(user)) {
+      setError("This isn't available on the demo account.");
+      setSaving(false);
+      return;
+    }
+
     const { data: userData } = await supabase.auth.getUser();
     const me = userData?.user;
     const cleanEmail = email.trim().toLowerCase();

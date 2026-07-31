@@ -6,13 +6,17 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { UserPlus, Trash2, Mail, CheckCircle2 } from 'lucide-react';
+import { useAuth } from '@/lib/AuthContext';
+import { isDemoAccount } from '@/lib/accountType';
 
 export default function InviteSitterDialog({ petSitId, open, onOpenChange }) {
+  const { user } = useAuth();
   const [email, setEmail] = useState('');
   const [saving, setSaving] = useState(false);
   const [accesses, setAccesses] = useState([]);
   const [loaded, setLoaded] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
+  const [error, setError] = useState('');
 
   const load = async () => {
     if (!petSitId) return;
@@ -23,7 +27,7 @@ export default function InviteSitterDialog({ petSitId, open, onOpenChange }) {
 
   const handleOpenChange = (val) => {
     if (val && !loaded) load();
-    if (!val) { setEmail(''); setSuccessMsg(''); setLoaded(false); setAccesses([]); }
+    if (!val) { setEmail(''); setSuccessMsg(''); setError(''); setLoaded(false); setAccesses([]); }
     onOpenChange(val);
   };
 
@@ -32,6 +36,17 @@ export default function InviteSitterDialog({ petSitId, open, onOpenChange }) {
     if (!email.trim() || !petSitId) return;
     setSaving(true);
     setSuccessMsg('');
+    setError('');
+
+    // Demo accounts don't invite sitters at all (spec 0026, out of scope
+    // for the account's automatic per-login reset) — blocked here, before
+    // creating any record, rather than relying on the reset to clean it up.
+    if (isDemoAccount(user)) {
+      setError("This isn't available on the demo account.");
+      setSaving(false);
+      return;
+    }
+
     const { data: userData } = await supabase.auth.getUser();
     const me = userData?.user;
     const cleanEmail = email.trim().toLowerCase();
@@ -105,6 +120,7 @@ export default function InviteSitterDialog({ petSitId, open, onOpenChange }) {
           </Button>
         </form>
 
+        {error && <p className="text-sm text-destructive">{error}</p>}
         {successMsg && (
           <div className="flex items-start gap-2 text-sm text-emerald-500">
             <CheckCircle2 className="h-4 w-4 mt-0.5 shrink-0" />
