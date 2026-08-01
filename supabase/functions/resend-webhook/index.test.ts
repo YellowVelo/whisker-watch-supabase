@@ -17,28 +17,22 @@
 // A caveat on the last test ('a suppressed recipient stays suppressed
 // until cleared'): it calls send-email and clear-email-suppression over
 // HTTP with a service_role bearer token, the same way send-email's own
-// design has always required (see its header comment on getJwtRole).
-// CI's SUPABASE_SERVICE_ROLE_KEY secret (ci.yml's `secrets.sb_secret`) is
-// documented elsewhere in this repo as the *newer opaque* sb_secret_...
-// key format, not a legacy JWT — and send-email/clear-email-suppression's
-// auth check specifically expects a decodable JWT `role` claim. If CI's
-// secret is genuinely opaque-format, Supabase's own gateway (or this
-// function's getJwtRole check) will reject it before ever reaching the
-// suppression logic this test means to exercise, and this one test will
-// fail for that reason — a pre-existing gap in what CI can exercise, not a
-// bug in the suppression logic itself. An attempt to fix this by wiring in
-// a `DEV_LEGACY_JWT_SECRET` GitHub secret (2026-07-31) made things worse —
-// it broke every admin-client call in this file with "Invalid API key",
-// not just this one test — most likely because the value pasted into that
-// secret was the project's JWT *signing secret* (a raw opaque string,
-// found under Supabase dashboard Settings > API > JWT Settings) rather
-// than an actual service_role API key/JWT, or because wysker-watch-dev
-// doesn't issue legacy-format keys at all anymore. Reverted back to
-// `secrets.sb_secret`. If revisiting, confirm in the Supabase dashboard
-// whether a legacy/JWT-format service_role key exists for this project
-// before wiring a new secret in — if it doesn't exist, the fix belongs in
-// send-email/clear-email-suppression's auth check (accept the opaque
-// secret key too), not in a new CI secret.
+// design has always required (see its header comment on getJwtRole). That
+// auth check decodes a `role` claim off the token, which the opaque
+// sb_secret_... key format (used for SUPABASE_SERVICE_ROLE_KEY everywhere
+// else) can't provide — only a legacy-JWT-format service_role key works.
+// wysker-watch-dev still has legacy JWT-based anon/service_role keys
+// available (Supabase's dashboard flags them deprecated in favor of
+// publishable/secret keys, but they still work), so ci.yml wires this
+// one test's SUPABASE_SERVICE_ROLE_KEY to a dedicated `DEV_LEGACY_JWT_SECRET`
+// GitHub secret holding that legacy service_role JWT, instead of
+// `secrets.sb_secret`. Note: an earlier attempt at this (2026-07-31) briefly
+// broke every admin-client call in this file with "Invalid API key" — the
+// secret had been populated with the project's JWT *signing secret*
+// (found under Supabase dashboard Settings > API > JWT Signing Keys, a raw
+// opaque string) rather than the actual service_role key/JWT (found under
+// the Legacy API Keys section, a three-segment `eyJ...` token). If this
+// starts failing that way again, that mix-up is the first thing to check.
 //
 // Run: deno test --allow-net --allow-env supabase/functions/resend-webhook/index.test.ts
 
