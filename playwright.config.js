@@ -25,7 +25,12 @@ export default defineConfig({
     trace: 'retain-on-failure',
   },
   projects: [
-    { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
+    { name: 'chromium', use: { ...devices['Desktop Chrome'] }, testIgnore: /pwa-ios-safari\.spec\.js/ },
+    // WebKit + an iPhone UA is the closest available engine to real Mobile
+    // Safari (not identical to it) — good enough to exercise
+    // IosInstallBanner's UA-sniffing logic. Scoped to just this one file so
+    // the rest of the suite doesn't run twice.
+    { name: 'mobile-safari', use: { ...devices['iPhone 13'] }, testMatch: /pwa-ios-safari\.spec\.js/ },
   ],
   webServer: {
     command: 'npm run dev',
