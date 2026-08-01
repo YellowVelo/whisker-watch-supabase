@@ -29,17 +29,7 @@ test('a Chrome install offer received on Home still shows the Install App row af
   // Client-side navigation via the bottom tab bar's "Menu" link, not
   // page.goto() — a full page load would reset all in-memory app state
   // regardless of this fix, so it wouldn't actually exercise the bug.
-  // Uses a direct DOM .click() rather than a simulated mouse click to work
-  // around a separate, real, already-logged bug (see launch-punch-list.md,
-  // P4): Toaster's empty ToastViewport sits fixed bottom-right at this
-  // exact viewport width and physically intercepts real mouse-coordinate
-  // clicks on this tab — Playwright's own click({ force: true }) still
-  // dispatches at real screen coordinates and hits the same overlay, so it
-  // doesn't help. Calling .click() on the element itself dispatches a real,
-  // React-Router-visible click event without going through hit-testing.
-  // Not this test's concern to fix; this keeps the test testing what it's
-  // meant to test.
-  await page.getByRole('link', { name: 'Menu' }).evaluate((el) => el.click());
+  await page.getByRole('link', { name: 'Menu' }).click();
   await expect(page).toHaveURL('/settings');
 
   await expect(page.getByRole('button', { name: /Install App/ })).toBeVisible();
