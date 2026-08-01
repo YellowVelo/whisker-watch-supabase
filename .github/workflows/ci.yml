@@ -66,13 +66,7 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_DEV_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.sb_publishable }}
-          # Legacy-JWT-format service_role credential for wysker-watch-dev,
-          # not the opaque sb_secret_ key used elsewhere — send-email and
-          # clear-email-suppression's auth check decodes a `role` claim off
-          # this token (see their header comments on getJwtRole), which an
-          # opaque key can't provide. See index.test.ts's header comment for
-          # the full caveat this resolves.
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.DEV_LEGACY_JWT_SECRET }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.sb_secret }}
           TEST2_EMAIL: ${{ secrets.SUPABASE_DEV_TEST2_EMAIL }}
           TEST2_PASSWORD: ${{ secrets.SUPABASE_DEV_TEST2_PASSWORD }}
           # Must match the RESEND_WEBHOOK_SECRET configured on
