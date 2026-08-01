@@ -1,15 +1,18 @@
 import { useState, useRef, useEffect } from 'react';
 import { invokeAI } from '@/api/aiClient';
 import { Send, Stethoscope } from 'lucide-react';
+import { formatBaselineForAI } from '@/lib/baselineContext';
 
-const SYSTEM_CONTEXT = (pet, medications) => {
+const SYSTEM_CONTEXT = (pet, medications, baseline) => {
   const conditions = pet.conditions?.join(', ') || 'None noted';
   const activeMeds = medications?.filter(m => m.active).map(m => `${m.name} ${m.dosage || ''} ${m.frequency || ''}`).join(', ') || 'None';
   const age = pet.birth_date ? Math.floor((new Date() - new Date(pet.birth_date)) / (365.25 * 24 * 60 * 60 * 1000)) : null;
-  return `You are a compassionate, experienced veterinarian with 20+ years of clinical practice. You are assisting the owner of a pet named ${pet.name}, a ${age ? age + '-year-old ' : ''}${pet.species || 'cat'} (${pet.breed || 'mixed breed'}) with the following known conditions: ${conditions}. Active medications: ${activeMeds}. Answer questions clearly and practically. Always recommend consulting a licensed veterinarian for diagnosis, prescriptions, or emergencies. Keep responses concise and friendly.`;
+  const baselineSummary = formatBaselineForAI(baseline, pet.name, pet.species);
+  const baselineSentence = baselineSummary ? ` ${pet.name}'s established baseline (what's normal for them, as reported by the owner): ${baselineSummary}.` : '';
+  return `You are a compassionate, experienced veterinarian with 20+ years of clinical practice. You are assisting the owner of a pet named ${pet.name}, a ${age ? age + '-year-old ' : ''}${pet.species || 'cat'} (${pet.breed || 'mixed breed'}) with the following known conditions: ${conditions}. Active medications: ${activeMeds}.${baselineSentence} Answer questions clearly and practically. Always recommend consulting a licensed veterinarian for diagnosis, prescriptions, or emergencies. Keep responses concise and friendly.`;
 };
 
-export default function PetAIChat({ pet, medications }) {
+export default function PetAIChat({ pet, medications, baseline }) {
   const [messages, setMessages] = useState([
     { role: 'assistant', content: `Hi! I'm here to help with questions about ${pet.name}. I have their profile on file — what would you like to know?` }
   ]);
@@ -33,7 +36,7 @@ export default function PetAIChat({ pet, medications }) {
     const history = [...messages, userMsg].map(m => `${m.role === 'user' ? 'Owner' : 'Vet Assistant'}: ${m.content}`).join('\n\n');
 
     const reply = await invokeAI({
-      prompt: `${SYSTEM_CONTEXT(pet, medications)}\n\nConversation so far:\n${history}\n\nOwner's latest question: ${text}\n\nVet Assistant:`,
+      prompt: `${SYSTEM_CONTEXT(pet, medications, baseline)}\n\nConversation so far:\n${history}\n\nOwner's latest question: ${text}\n\nVet Assistant:`,
     });
 
     setMessages(prev => [...prev, { role: 'assistant', content: reply }]);

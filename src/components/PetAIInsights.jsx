@@ -3,8 +3,9 @@ import { invokeAI } from '@/api/aiClient';
 import { Sparkles, RefreshCw, AlertTriangle, CircleCheck, Lightbulb } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { PALETTE } from '@/lib/toneColors';
+import { formatBaselineForAI } from '@/lib/baselineContext';
 
-export default function PetAIInsights({ pet, logs, medications, bloodwork }) {
+export default function PetAIInsights({ pet, logs, medications, bloodwork, baseline }) {
   const [insights, setInsights] = useState(null);
   const [loading, setLoading] = useState(false);
   const [generated, setGenerated] = useState(false);
@@ -19,6 +20,7 @@ export default function PetAIInsights({ pet, logs, medications, bloodwork }) {
     const conditions = pet.conditions?.join(', ') || 'None noted';
     const species = pet.species || 'Cat';
     const age = pet.birth_date ? Math.floor((new Date() - new Date(pet.birth_date)) / (365.25 * 24 * 60 * 60 * 1000)) : null;
+    const baselineSummary = formatBaselineForAI(baseline, pet.name, pet.species);
 
     return `
 Pet Name: ${pet.name}
@@ -27,6 +29,7 @@ ${age ? `Age: ${age} years` : ''}
 Breed: ${pet.breed || 'Unknown'}
 Known Conditions: ${conditions}
 Active Medications: ${activeMeds}
+${baselineSummary ? `Established Baseline (owner-reported normal): ${baselineSummary}` : ''}
 
 Recent Health Logs (most recent first):
 ${logSummary || 'No recent logs.'}

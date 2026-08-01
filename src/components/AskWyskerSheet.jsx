@@ -21,6 +21,7 @@ export default function AskWyskerSheet({ open, onOpenChange, context }) {
   const [pet, setPet] = useState(null);
   const [logs, setLogs] = useState([]);
   const [medications, setMedications] = useState([]);
+  const [baseline, setBaseline] = useState(null);
   const [allPets, setAllPets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [aiTab, setAiTab] = useState('insights');
@@ -35,11 +36,13 @@ export default function AskWyskerSheet({ open, onOpenChange, context }) {
         entities.Pet.get(petId),
         entities.SymptomLog.filter({ pet_id: petId }, '-date', 200),
         entities.Medication.filter({ pet_id: petId }, '-start_date', 50),
+        entities.PetOnboarding.filter({ pet_id: petId }),
       ])
-        .then(([petData, logData, medData]) => {
+        .then(([petData, logData, medData, onboardingRows]) => {
           setPet(petData);
           setLogs(logData);
           setMedications(medData);
+          setBaseline(onboardingRows[0] || null);
         })
         .finally(() => setLoading(false));
     } else {
@@ -94,8 +97,8 @@ export default function AskWyskerSheet({ open, onOpenChange, context }) {
               ><MessageCircle className="h-3.5 w-3.5 inline mr-1" /> Ask a Question</button>
             </div>
             {aiTab === 'insights'
-              ? <PetAIInsights pet={pet} logs={logs} medications={medications} />
-              : <PetAIChat pet={pet} medications={medications} />
+              ? <PetAIInsights pet={pet} logs={logs} medications={medications} baseline={baseline} />
+              : <PetAIChat pet={pet} medications={medications} baseline={baseline} />
             }
           </>
         ) : (
