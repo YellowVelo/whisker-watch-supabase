@@ -179,7 +179,7 @@ Every pet-scoped table's policies are `is_pet_owner(pet_id, auth.uid())` (migrat
 
 There are two baseline mechanisms in the schema right now, at different levels of maturity:
 
-- `pet_onboarding` — fixed-form baseline (health status, medications yes/no, appetite/water/energy/mobility/bathroom), captured once during onboarding and editable afterward. This is what `BaselineSection.jsx` and the Pet Profile "Baseline" card actually read/write today.
+- `pet_onboarding` — fixed-form baseline (health status, medications yes/no, appetite/water/energy/mobility/bathroom), captured once during onboarding and editable afterward. `BaselineSection.jsx` and the Pet Profile "Baseline" card read/write it directly; as of spec `0031`, Ask Wysker (`AskWyskerSheet.jsx`/`PetAIChat.jsx`/`PetAIInsights.jsx`) also reads it to ground AI responses in the pet's actual baseline.
 - `pet_baselines` — a generalized, per-`observation_type` baseline model with confidence levels and history, built in migration 0014 alongside Daily Check-In. As of this document, it is schema-only: nothing writes to it and nothing reads from it. There is no weight baseline, no appetite baseline via this table, nothing.
 
 Any new feature (e.g. Insights) that wants a true "compared to baseline" comparison must either (a) start populating and reading `pet_baselines`, or (b) explicitly document that it's using a weaker proxy (e.g. "compared to the last logged entry") until that table is wired up. Do not assume a baseline value exists for any metric without checking.
