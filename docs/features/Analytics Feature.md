@@ -72,12 +72,18 @@ Scheduling (`pg_cron`, extension enabled in migration 0023):
 ## **3. Account Type Tagging**
 
 Four values exist (`src/lib/accountType.js`): `production`, `test`,
-`demo`, `owner`. All are attached to every event via `properties.account_type`,
-but **the rollup function does not filter by `account_type` at all** — every
-DAU/started/completed/skipped count in `analytics_daily_summary` currently
-blends production, test, demo, and owner usage together. Filtering by
-account type is only possible today by querying `analytics_events` directly
-(e.g. via the SQL Editor) and reading `properties->>'account_type'`.
+`demo`, `owner`. All are attached to every event via `properties.account_type`.
+As of migration 0043 (2026-08-01), the rollup excludes `test`-account
+events from every metric (`daily_active_users`, `returning_users`,
+`new_users`, `checkins_started`, `checkins_completed`,
+`checkins_skipped`). `demo`, `owner`, and `production` activity are still
+blended together by design — see
+[0030_Analytics_Test_Account_Filter_Specification_v1.md](0030_Analytics_Test_Account_Filter_Specification_v1.md)
+for the product decision (only synthetic QA traffic is excluded; demo and
+the owner's own real personal usage are still counted). Narrower
+filtering (e.g. excluding `demo`/`owner` too, or breaking metrics out
+per account type) is only possible today by querying `analytics_events`
+directly (e.g. via the SQL Editor) and reading `properties->>'account_type'`.
 
 ## **4. Access / Exposure**
 
@@ -111,32 +117,28 @@ only other notable properties are called out):
 
 ---
 
-# **Known Issue: `checkins_completed` has been wrong since 2026-07-13**
+# **Resolved Issue: `checkins_completed` was wrong from 2026-07-13 to 2026-08-01**
 
-`compute_daily_analytics_summary()` counts completions by querying for
-`event_name in ('daily_check_in_marked_normal', 'daily_check_in_marked_changed')`.
-**Neither event name is fired anywhere in the current codebase.** The
-Vibe model (migration 0026) replaced the old `normal`/`changed` status
-values, and the actual check-in-completion event was renamed to
-`vibe_recorded` (`DailyCheckInSheet.jsx:70,131`) — but the rollup function
-was never updated to match. Since then, `checkins_completed` in
-`analytics_daily_summary` has undercounted (visible directly in the
-Table Editor: `checkins_started` values of 9/26/13/4/5/6/7 against
-`checkins_completed` values of 6/0/1/0/0/0/0 for 2026-07-11 through
-2026-07-17 — the near-total drop-off from 07-12 onward lines up with the
-Vibe rename, not an actual collapse in real completions).
+`compute_daily_analytics_summary()` used to count completions by querying
+for `event_name in ('daily_check_in_marked_normal', 'daily_check_in_marked_changed')`
+— neither event name had been fired since the Vibe model (migration 0026)
+renamed the actual check-in-completion event to `vibe_recorded`
+(`DailyCheckInSheet.jsx:70,131`). This undercounted `checkins_completed`
+in `analytics_daily_summary` for that entire window (visible in the
+Table Editor at the time: `checkins_started` values of 9/26/13/4/5/6/7
+against `checkins_completed` values of 6/0/1/0/0/0/0 for 2026-07-11
+through 2026-07-17).
+
+**Fixed by migration 0043 (2026-08-01):** the function now queries
+`vibe_recorded` instead. All pre-existing `analytics_daily_summary` rows
+were backfilled with the corrected logic in the same migration, so
+historical and post-fix numbers are computed the same way and remain
+comparable. See
+[0030_Analytics_Test_Account_Filter_Specification_v1.md](0030_Analytics_Test_Account_Filter_Specification_v1.md).
 
 `daily_active_users`, `returning_users`, `new_users`,
-`checkins_started`, and `checkins_skipped` all query events that are
-still fired correctly and are unaffected.
-
-This is a code bug, not a documentation problem — already tracked in
-`docs/documentation-review-punch-list-2026-07-18.md` P3. Fixing it means
-a new migration updating the function to query `vibe_recorded` instead
-of the two retired event names; out of scope for this document, called
-out here so the requirement ("`checkins_completed` reflects real
-completions") is recorded even though the current implementation doesn't
-meet it.
+`checkins_started`, and `checkins_skipped` all queried events that were
+still fired correctly throughout and were never affected by this bug.
 
 ---
 
@@ -165,7 +167,7 @@ or any other real data, and this feature does nothing to change that.
 # **Business Rules**
 
 - Only authenticated users generate events — there is no anonymous/pre-login tracking.
-- Every event carries `account_type` so test/demo/internal usage can be excluded from real-user reporting, but no current query (including the rollup) actually does this filtering — it must be done manually per-query today.
+- Every event carries `account_type` so test/demo/internal usage can be excluded from real-user reporting. As of migration 0043, the rollup automatically excludes `test`-account events from every metric; `demo`/`owner` exclusion (or any finer per-account-type breakdown) still has to be done manually by querying `analytics_events` directly.
 - `analytics_daily_summary` rows are idempotent per `summary_date` — recomputing a day multiple times (as happens every hour under the current schedule) always converges to the same numbers for that day, never accumulates or double-counts.
 - Both tables are internal/operational only — never exposed to end users, never rendered in any app UI.
 - A tracking failure must never surface to the user or block the action being tracked (enforced by `track()`'s try/catch).
@@ -203,8 +205,8 @@ Current, as-built behavior:
 - ✓ A tracking failure never blocks the underlying feature
 - ✓ `analytics_daily_summary` is recomputed automatically without manual intervention
 - ✓ Recomputing the same day multiple times produces stable, non-duplicated results
-- ✗ `checkins_completed` accurately reflects real check-in completions (see Known Issue — currently false)
-- ✗ Rollup numbers can be filtered by `account_type` without a manual query (not currently possible)
+- ✓ `checkins_completed` accurately reflects real check-in completions (migration 0043, 2026-08-01)
+- ✓ Rollup numbers exclude `test`-account activity without a manual query (migration 0043, 2026-08-01) — `demo`/`owner` remain included by product decision, not filtered
 
 ---
 
@@ -228,6 +230,6 @@ Current, as-built behavior:
 
 # **Open Questions for Product**
 
-- Should the rollup filter out `test`/`demo`/`owner` account types by default, given every metric currently blends them with real production usage?
+- Resolved 2026-08-01: rollup excludes `test`; `demo`/`owner` remain included by product decision (see [0030_Analytics_Test_Account_Filter_Specification_v1.md](0030_Analytics_Test_Account_Filter_Specification_v1.md)).
 - Is an in-app or otherwise more accessible analytics view wanted, or is SQL-Editor-only access sufficient for now?
 - Separately from this feature: is the lack of any database backup/PITR being prioritized? This document doesn't change that gap, only clarifies that the analytics rollup was never meant to fill it.
