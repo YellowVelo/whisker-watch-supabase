@@ -264,7 +264,10 @@ function MedButton({ med, given, onGive, onEdit, onDelete, past }) {
             <div className="flex items-center gap-1.5 flex-wrap">
                               <p className="text-sm font-semibold">{med.name}</p>
                               {med.prescribed && (
-                                <span className="flex items-center gap-0.5 text-xs bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300 px-1.5 py-0.5 rounded-full">
+                                <span
+                                  className="flex items-center gap-0.5 text-[13px] px-1.5 py-0.5 rounded-full"
+                                  style={{ background: 'rgba(229,115,115,0.15)', color: PALETTE.red }}
+                                >
                                   <ShieldCheck className="h-2.5 w-2.5" /> Rx
                                 </span>
                               )}
@@ -295,7 +298,10 @@ function MedButton({ med, given, onGive, onEdit, onDelete, past }) {
             <div className="flex items-center gap-1.5">
               <p className="text-sm font-medium">{med.name}</p>
               {med.prescribed && (
-                <span className="flex items-center gap-0.5 text-xs bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300 px-1.5 py-0.5 rounded-full">
+                <span
+                  className="flex items-center gap-0.5 text-[13px] px-1.5 py-0.5 rounded-full"
+                  style={{ background: 'rgba(229,115,115,0.15)', color: PALETTE.red }}
+                >
                   <ShieldCheck className="h-2.5 w-2.5" /> Rx
                 </span>
               )}
