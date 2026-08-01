@@ -1,11 +1,13 @@
 import { useState } from 'react';
-import { Check, Loader2, Pill, X } from 'lucide-react';
+import { Camera, Check, Loader2, Pill, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import SmartSelect from '@/components/SmartSelect';
 import { entities } from '@/api/entities';
+import { uploadFile } from '@/api/storageClient';
+import { invokeAI } from '@/api/aiClient';
 import { FREQUENCY_OPTIONS } from '@/lib/onboardingConfig';
 
 const emptyEntry = (petId) => ({ pet_id: petId, name: '', dosage: '', frequency: '', reminder_enabled: false });
@@ -13,15 +15,57 @@ const emptyEntry = (petId) => ({ pet_id: petId, name: '', dosage: '', frequency:
 // Card 4: Medication Entry. Repeatable — each save creates a row in the
 // existing medications table (entities.Medication) rather than a
 // onboarding-only shape, so it shows up immediately in the Medications tab.
+//
+// Scan (spec 0029 FR-010) reuses the same invokeAI + ask-vet-assistant path
+// VaccinationSection.jsx already proved out, but — unlike that component,
+// which saves scan results immediately — this only pre-fills the same
+// manual-entry form below. Nothing is written until the owner reviews and
+// taps Add/Continue, per FR-010's "scanned values are never saved
+// automatically."
 export default function MedicationEntryCard({ petId, petName, onContinue, onSkip, disabled }) {
   const [form, setForm] = useState(emptyEntry(petId));
   const [saved, setSaved] = useState([]);
   const [saving, setSaving] = useState(false);
+  const [scanning, setScanning] = useState(false);
   const [error, setError] = useState(null);
 
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
   const canSave = form.name.trim().length > 0;
-  const busy = saving || disabled;
+  const busy = saving || disabled || scanning;
+
+  const handleScan = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setScanning(true);
+    setError(null);
+    try {
+      const { file_url } = await uploadFile({ file });
+      const result = await invokeAI({
+        prompt: 'You are analyzing a photo of a medication label. Extract only the fields clearly visible: name (the medication name), dosage (strength + amount per dose, e.g. "5mg"), frequency (how often it is given, matched to one of: Once daily, Twice daily, Every other day, Weekly, Monthly, As needed, Other).',
+        file_urls: [file_url],
+        response_json_schema: {
+          type: 'object',
+          properties: {
+            name: { type: 'string' },
+            dosage: { type: 'string' },
+            frequency: { type: 'string' },
+          },
+        },
+      });
+      setForm((f) => ({
+        ...f,
+        name: result?.name || f.name,
+        dosage: result?.dosage || f.dosage,
+        frequency: FREQUENCY_OPTIONS.includes(result?.frequency) ? result.frequency : f.frequency,
+      }));
+    } catch (err) {
+      console.error('Failed to scan medication label:', err);
+      setError("Couldn't read that label — you can still enter it manually below.");
+    } finally {
+      setScanning(false);
+      e.target.value = '';
+    }
+  };
 
   const saveCurrent = async () => {
     if (!canSave) return null;
@@ -85,6 +129,13 @@ export default function MedicationEntryCard({ petId, petName, onContinue, onSkip
           ))}
         </div>
       )}
+
+      <label className="flex items-center justify-center gap-2 w-full min-h-[52px] rounded-2xl border-2 border-dashed border-primary/40 text-primary font-medium text-sm cursor-pointer">
+        {scanning ? <Loader2 className="h-4 w-4 animate-spin" /> : <Camera className="h-4 w-4" />}
+        {scanning ? 'Reading label...' : 'Scan Medication Label'}
+        <input type="file" accept="image/*,.pdf" className="hidden" onChange={handleScan} disabled={busy} />
+      </label>
+      <p className="text-xs text-muted-foreground text-center -mt-4">or enter manually below — review and confirm before saving</p>
 
       <div className="space-y-4 p-4 rounded-2xl bg-card border border-border">
         <div className="space-y-1.5">

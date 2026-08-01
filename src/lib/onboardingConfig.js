@@ -91,6 +91,10 @@ export function getNextStep(step, row) {
     case 'mobility':
       return 'bathroom';
     case 'bathroom':
+      return 'vaccinations';
+    case 'vaccinations':
+      return 'review';
+    case 'review':
       return 'completed';
     default:
       return 'completed';
@@ -104,6 +108,46 @@ export function getVisibleSteps(row) {
   if (row.health_status === 'ongoing_conditions') steps.push('conditions');
   steps.push('medications');
   if (row.medications_status === 'has_medications') steps.push('medication_entry');
-  steps.push('transition', 'appetite', 'water', 'energy', 'mobility', 'bathroom');
+  steps.push('transition', 'appetite', 'water', 'energy', 'mobility', 'bathroom', 'vaccinations', 'review');
   return steps;
+}
+
+// Spec 0029: the 6 outer, user-facing steps shown as "Step X of 6" — a
+// coarser grouping over the fine-grained `current_step` values above so the
+// existing per-card navigation/autosave logic doesn't need to change shape.
+// 'pet_info' has no corresponding `current_step` value: it runs entirely
+// client-side, before the pet (and therefore the pet_onboarding row) exists.
+export const OUTER_STEPS = ['pet_info', 'health_conditions', 'medications', 'vaccinations', 'review', 'completed'];
+
+export const OUTER_STEP_LABELS = {
+  pet_info: 'Pet Information',
+  health_conditions: 'Health Conditions',
+  medications: 'Medications',
+  vaccinations: 'Vaccinations',
+  review: 'Review',
+  completed: 'Complete',
+};
+
+const INNER_TO_OUTER = {
+  health: 'health_conditions',
+  conditions: 'health_conditions',
+  transition: 'health_conditions',
+  appetite: 'health_conditions',
+  water: 'health_conditions',
+  energy: 'health_conditions',
+  mobility: 'health_conditions',
+  bathroom: 'health_conditions',
+  medications: 'medications',
+  medication_entry: 'medications',
+  vaccinations: 'vaccinations',
+  review: 'review',
+  completed: 'completed',
+};
+
+export function getOuterStep(currentStep) {
+  return INNER_TO_OUTER[currentStep] || 'health_conditions';
+}
+
+export function getOuterStepNumber(currentStep) {
+  return OUTER_STEPS.indexOf(getOuterStep(currentStep)) + 1;
 }

@@ -2,7 +2,7 @@ import { PALETTE } from '@/lib/toneColors';
 
 // Design System Amendment #8 (2026-07-30) — the canonical toggle/pill
 // button, replacing 5-6 independently hand-built copies across
-// DailyCheckInSheet, BulkApplySheet, CatchUpFlow, AddPetDialog,
+// DailyCheckInSheet, BulkApplySheet, CatchUpFlow, PetInfoCard (onboarding),
 // EditPetSheet, and PetTrends. Sky-accent is the winning color family.
 // Padding/layout (flex-1, px/py, truncate, grid placement) stays owned by
 // each call site via `className`; this component owns color, shape, and

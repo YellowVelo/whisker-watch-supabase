@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { entities } from '@/api/entities';
+import { Rainbow } from 'lucide-react';
 
 export default function MemorialDialog({ pet, open, onOpenChange, onSuccess }) {
   const [date, setDate] = useState(pet?.memorial_date || new Date().toISOString().split('T')[0]);
@@ -21,7 +22,7 @@ export default function MemorialDialog({ pet, open, onOpenChange, onSuccess }) {
     <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle className="text-2xl">🌈 Crossed the Rainbow Bridge</AlertDialogTitle>
+          <AlertDialogTitle className="flex items-center gap-2 text-2xl"><Rainbow className="h-6 w-6" /> Crossed the Rainbow Bridge</AlertDialogTitle>
           <AlertDialogDescription className="text-base leading-relaxed">
             Mark <strong>{pet?.name}</strong>'s profile as a memorial. Their health history and memories will be lovingly preserved.
           </AlertDialogDescription>
@@ -32,8 +33,8 @@ export default function MemorialDialog({ pet, open, onOpenChange, onSuccess }) {
         </div>
         <AlertDialogFooter>
           <AlertDialogCancel>Cancel</AlertDialogCancel>
-          <Button onClick={handleConfirm} disabled={saving}>
-            {saving ? 'Saving…' : '🌈 Create Memorial'}
+          <Button onClick={handleConfirm} disabled={saving} className="flex items-center gap-1.5">
+            {saving ? 'Saving…' : <><Rainbow className="h-4 w-4" /> Create Memorial</>}
           </Button>
         </AlertDialogFooter>
       </AlertDialogContent>
