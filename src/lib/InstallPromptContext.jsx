@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useState } from 'react';
 
 function isStandalone() {
   return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
@@ -11,7 +11,18 @@ function isStandalone() {
 // promptInstall() for a real button to call. Safari/Firefox never fire
 // this event; canInstall just stays false there (iOS has its own banner
 // for the manual Add to Home Screen flow instead).
-export function useInstallPrompt() {
+//
+// This must be a Context provider mounted above App.jsx's <Routes
+// key={location.pathname}> tree (see AskWyskerContext.jsx for the same
+// constraint) rather than a plain hook called from Settings.jsx. Routes
+// fully unmounts/remounts everything inside it on every navigation, and
+// beforeinstallprompt fires once, asynchronously, at an unpredictable
+// point after page load — a listener scoped to one page can easily not be
+// mounted yet when the browser fires it, silently losing the offer for
+// the whole session (spec 0032).
+const InstallPromptCtx = createContext(null);
+
+export function InstallPromptProvider({ children }) {
   const [deferredPrompt, setDeferredPrompt] = useState(null);
   const [isInstalled, setIsInstalled] = useState(isStandalone);
 
@@ -41,8 +52,14 @@ export function useInstallPrompt() {
     return choice;
   }, [deferredPrompt]);
 
-  return {
+  const value = {
     canInstall: !isInstalled && !!deferredPrompt,
     promptInstall,
   };
+
+  return <InstallPromptCtx.Provider value={value}>{children}</InstallPromptCtx.Provider>;
+}
+
+export function useInstallPrompt() {
+  return useContext(InstallPromptCtx);
 }

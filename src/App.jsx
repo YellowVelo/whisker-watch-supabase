@@ -11,6 +11,7 @@ import ProtectedRoute from '@/components/ProtectedRoute';
 import AccountTypeBanner from './components/AccountTypeBanner';
 import OfflineBanner from './components/OfflineBanner';
 import IosInstallBanner from './components/IosInstallBanner';
+import { InstallPromptProvider } from '@/lib/InstallPromptContext';
 import Home from './pages/Home';
 import Notifications from './pages/Notifications';
 import Pets from './pages/Pets';
@@ -143,10 +144,12 @@ function App() {
   return (
     <AuthProvider>
       <QueryClientProvider client={queryClientInstance}>
-        <Router>
-          <AuthenticatedApp />
-        </Router>
-        <Toaster />
+        <InstallPromptProvider>
+          <Router>
+            <AuthenticatedApp />
+          </Router>
+          <Toaster />
+        </InstallPromptProvider>
       </QueryClientProvider>
     </AuthProvider>
   )

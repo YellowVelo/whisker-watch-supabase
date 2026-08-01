@@ -2,13 +2,13 @@
 
 **Document:** `PWA Feature.md`
 
-**Status:** New as-built documentation, written 2026-07-18. This is not a
-correction of a prior draft — the PWA install/offline behavior has never
-been documented as its own feature before. Everything
-below was verified directly against `vite.config.js`, `index.html`,
-`src/lib/useInstallPrompt.js`, `src/components/OfflineBanner.jsx`,
-`src/components/IosInstallBanner.jsx`, `src/App.jsx`, and
-`src/pages/Settings.jsx`.
+**Status:** New as-built documentation, written 2026-07-18; updated
+2026-08-01 to reflect spec
+[0032_PWA_Install_Prompt_Global_Capture_Specification_v1.md](0032_PWA_Install_Prompt_Global_Capture_Specification_v1.md).
+Everything below was verified directly against `vite.config.js`,
+`index.html`, `src/lib/InstallPromptContext.jsx`,
+`src/components/OfflineBanner.jsx`, `src/components/IosInstallBanner.jsx`,
+`src/App.jsx`, and `src/pages/Settings.jsx`.
 
 **Owner:** Product
 
@@ -63,19 +63,24 @@ predate/are independent of `vite-plugin-pwa`'s own manifest handling.
 
 ## **3. Install Prompt — Chromium / Android (and Desktop Chrome/Edge)**
 
-`src/lib/useInstallPrompt.js` is the single source of install-prompt state
-for the whole app:
+`src/lib/InstallPromptContext.jsx`'s `InstallPromptProvider` is the single
+source of install-prompt state for the whole app, mounted in `App.jsx`
+outside the routed `<Routes>` tree (not scoped to any one page):
 
 - Listens for the browser's `beforeinstallprompt` event, calls `preventDefault()`, and holds onto the event (Chromium-family browsers only — Safari and Firefox never fire it).
 - Exposes `canInstall = !isInstalled && !!deferredPrompt` and an async `promptInstall()` that calls the captured event's `.prompt()`, awaits `.userChoice`, then clears the captured event (a `beforeinstallprompt` event can only be used once, win or lose).
 - Listens for `appinstalled` to flip `isInstalled` to `true` and clear any pending prompt — this fires regardless of whether the user installed via this app's own UI or the browser's own native install affordance (e.g. the address-bar install icon), so state stays correct either way.
 - `isStandalone()` (checked on mount, via `display-mode: standalone` media query or the legacy `navigator.standalone` on iOS) seeds `isInstalled` so an already-installed user never sees an install affordance.
 - This logic doesn't distinguish mobile from desktop — a desktop Chrome/Edge user who meets install criteria sees the same Settings row as an Android user.
+- **Why this must be global, not page-scoped (fixed by spec 0032, 2026-08-01):** `App.jsx`'s `<Routes key={location.pathname}>` fully unmounts and remounts everything inside it on every navigation. `beforeinstallprompt` fires once, asynchronously, at an unpredictable point after page load — a listener scoped to a single page (as this used to be, living only in `Settings.jsx` via a plain `useInstallPrompt()` hook) could easily not be mounted yet when the browser fired it, silently losing the offer for the rest of the session. Mounting the provider outside `<Routes>` (same tier as `OfflineBanner`/`IosInstallBanner`, see §6) means the listener attaches once at app load and stays alive regardless of which screen is showing.
 
-Surfaced in `src/pages/Settings.jsx`: an **"Install App"** row ("Add
-Wysker Watch to your device") renders only when `canInstall` is true.
-Tapping it fires `track('install_app_selected', {})`, awaits
-`promptInstall()`, and if the browser returned a choice, fires
+Surfaced in `src/pages/Settings.jsx`, which reads `canInstall`/
+`promptInstall` from the context via `useInstallPrompt()` (same call
+shape as before, just sourced from the provider instead of a page-local
+hook): an **"Install App"** row ("Add Wysker Watch to your device")
+renders only when `canInstall` is true. Tapping it fires
+`track('install_app_selected', {})`, awaits `promptInstall()`, and if the
+browser returned a choice, fires
 `track('install_app_prompt_result', { outcome: choice.outcome })` where
 `outcome` is the browser's own `'accepted'` or `'dismissed'`.
 
@@ -90,10 +95,20 @@ iOS never fires `beforeinstallprompt`, so it can never satisfy
 - Dismissing sets the localStorage flag permanently — there is no snooze/re-prompt window; once dismissed on a given device/browser profile, it never shows again there.
 - Fixed to the bottom of the screen, positioned just above `BottomTabBar` (`bottom: calc(4rem + env(safe-area-inset-bottom))`) so it doesn't cover primary navigation.
 
-**Gap, not handled by either path:** Firefox (desktop and Android) and
-non-Safari iOS browsers get no install nudge of any kind — `canInstall`
-never becomes true (no `beforeinstallprompt`) and `IosInstallBanner`
-explicitly excludes non-Safari iOS UAs.
+**Gap, not handled by either path — accepted for launch (decision
+confirmed 2026-08-01, spec 0032):** Firefox (desktop and Android),
+non-Safari iOS browsers, and desktop Safari (macOS) get no install nudge
+of any kind — `canInstall` never becomes true (no `beforeinstallprompt`)
+and `IosInstallBanner` explicitly requires an iOS device, so it never
+shows on desktop. No fallback banner will be built: Firefox desktop has
+no install option to point users toward at all (removed from the browser
+years ago), Firefox Android's install path lives in a different menu
+location than iOS Safari's Share-sheet flow this banner already walks
+through, and desktop Safari traffic is considered negligible — a single
+generic banner can't accurately cover all of these cases and would be
+actively wrong for Firefox desktop. Mobile iOS Safari itself is
+unaffected and not part of this gap. Revisit only if analytics later show
+meaningful traffic from these browsers.
 
 ## **5. Offline Banner**
 
@@ -109,6 +124,11 @@ explicitly excludes non-Safari iOS UAs.
 `App.jsx`'s render tree (alongside `AccountTypeBanner`), outside the routed
 `<Routes>`/`<AnimatePresence>` tree — they persist identically across every
 screen in the app, not scoped to any particular page.
+
+`InstallPromptProvider` (§3) wraps the app at an even higher level — around
+`<Router>` itself in `App.jsx` — for the same reason: it needs to exist
+before any navigation happens, so it doesn't need router context and
+sits outside everything the route tree remounts.
 
 ---
 
@@ -153,7 +173,7 @@ Settings spec — out of scope here).
 - Already-installed (standalone-mode) users see neither the Settings row nor the iOS banner.
 - Supabase requests (auth/data/storage) are never served from cache, online or offline — only the static app shell is available offline.
 - Service worker updates apply automatically and silently; there is no user-facing update prompt.
-- Firefox and non-Safari iOS browsers receive no install nudge at all (known gap — see Edge Cases).
+- Firefox, non-Safari iOS browsers, and desktop Safari receive no install nudge at all — accepted gap for launch, not planned to be built (see Edge Cases).
 - The iOS banner's dismissal is permanent and per-device — there's no re-prompt logic, no snooze, no "remind me later."
 
 ---
@@ -180,7 +200,7 @@ A user can:
 
 # **Edge Cases**
 
-- Firefox (desktop/Android) and non-Safari iOS browsers (Chrome iOS, Firefox iOS): no install nudge of any kind — not a bug, just unimplemented for these browser families.
+- Firefox (desktop/Android), non-Safari iOS browsers (Chrome iOS, Firefox iOS), and desktop Safari (macOS): no install nudge of any kind — accepted gap for launch (decision confirmed 2026-08-01, spec 0032), not planned to be built.
 - User dismisses the iOS banner, then reinstalls Safari's data or switches devices: dismissal doesn't carry over (it's per-device `localStorage`), so the banner reappears.
 - User installs via the browser's own native install affordance (e.g. address-bar icon) instead of the Settings row: `appinstalled` still fires and updates state correctly either way.
 - Desktop Chrome/Edge users meeting install criteria see the same "Install App" row as mobile Android users — not mobile-gated.
@@ -191,7 +211,7 @@ A user can:
 
 # **Implementation Notes for Claude Code**
 
-- All `beforeinstallprompt` handling lives in `useInstallPrompt.js` — don't add a second listener elsewhere; consume the existing hook.
+- All `beforeinstallprompt` handling lives in `InstallPromptContext.jsx`'s `InstallPromptProvider` — don't add a second listener elsewhere; consume the existing `useInstallPrompt()` context hook.
 - Manifest and service-worker registration are generated at build time by `vite-plugin-pwa`; nothing in `public/` or `index.html` needs to be hand-maintained for a manifest change — edit the `VitePWA({...})` config in `vite.config.js` instead.
 - To test install/offline behavior, use `vite build && vite preview` (or an actual Cloudflare Workers deploy), not `vite dev`.
 - If Capacitor wrapping ships later, revisit whether the PWA install banners should be suppressed inside the native wrapper's webview to avoid a confusing "install the app" prompt shown to a user who's already in the installed native app.
@@ -200,5 +220,7 @@ A user can:
 
 # **Open Questions for Product**
 
-- Should Firefox/non-Safari-iOS users get any install nudge, or is Chromium + iOS Safari coverage considered sufficient for now?
 - Is the permanent, no-re-prompt iOS dismissal the intended behavior, or should it expire/reappear after some interval?
+
+**Resolved:**
+- Should Firefox/non-Safari-iOS/desktop-Safari users get any install nudge? — **Decided 2026-08-01 (spec 0032): no.** Accepted as a launch gap; Chromium + iOS Safari coverage is sufficient for now. See §4's Gap note and the Edge Cases section.

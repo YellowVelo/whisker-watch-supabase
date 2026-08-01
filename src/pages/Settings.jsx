@@ -16,7 +16,7 @@ import { isDemoAccount, isInternalAccount } from '@/lib/accountType';
 import { getDisplayName } from '@/lib/profileName';
 import { SEED_SCENARIOS } from '@/lib/seedTestData';
 import { deleteAccount, resetSandboxAccount, signOutBestEffort } from '@/lib/accountClient';
-import { useInstallPrompt } from '@/lib/useInstallPrompt';
+import { useInstallPrompt } from '@/lib/InstallPromptContext';
 import { PALETTE } from '@/lib/toneColors';
 
 // Design System Amendment #6 (2026-07-30) — account-type color now sourced
