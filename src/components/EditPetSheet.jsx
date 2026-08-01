@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { uploadFile } from '@/api/storageClient';
 import { entities } from '@/api/entities';
-import { Loader2, X, Plus, UserPlus } from 'lucide-react';
+import { Loader2, X, Plus, UserPlus, Camera } from 'lucide-react';
 import { getConditions } from '@/lib/speciesConfig';
 import InviteCoOwnerDialog from './InviteCoOwnerDialog';
 import PillToggle from '@/components/PillToggle';
@@ -82,8 +82,8 @@ export default function EditPetSheet({ pet, open, onOpenChange, onSuccess }) {
             {form.photo_url && (
               <img src={form.photo_url} alt="preview" className="h-24 w-24 rounded-xl object-cover mb-2" />
             )}
-            <label className="inline-flex items-center gap-2 text-sm text-primary cursor-pointer min-h-[36px]">
-              {uploading ? <><Loader2 className="h-4 w-4 animate-spin" /> Uploading...</> : '📷 Change photo'}
+            <label className="inline-flex items-center gap-2 text-sm text-primary cursor-pointer min-h-[44px]">
+              {uploading ? <><Loader2 className="h-4 w-4 animate-spin" /> Uploading...</> : <><Camera className="h-4 w-4" /> Change photo</>}
               <input type="file" accept="image/*" className="hidden" onChange={handlePhoto} />
             </label>
           </div>

@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { invokeAI } from '@/api/aiClient';
-import { Sparkles, RefreshCw, AlertTriangle } from 'lucide-react';
+import { Sparkles, RefreshCw, AlertTriangle, CircleCheck, Lightbulb } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { PALETTE } from '@/lib/toneColors';
 
 export default function PetAIInsights({ pet, logs, medications, bloodwork }) {
   const [insights, setInsights] = useState(null);
@@ -73,9 +74,9 @@ Respond in JSON with this structure:
   };
 
   const iconFor = (type) => {
-    if (type === 'warning') return { bg: 'bg-amber-50 border-amber-200', icon: '⚠️', text: 'text-amber-800' };
-    if (type === 'positive') return { bg: 'bg-green-50 border-green-200', icon: '✅', text: 'text-green-800' };
-    return { bg: 'bg-blue-50 border-blue-200', icon: '💡', text: 'text-blue-800' };
+    if (type === 'warning') return { background: 'rgba(244,199,107,0.15)', color: PALETTE.amber, icon: AlertTriangle };
+    if (type === 'positive') return { background: 'rgba(76,199,176,0.15)', color: PALETTE.teal, icon: CircleCheck };
+    return { background: 'rgba(111,183,255,0.15)', color: PALETTE.sky, icon: Lightbulb };
   };
 
   return (
@@ -118,10 +119,11 @@ Respond in JSON with this structure:
           <div className="space-y-2">
             {insights.insights?.map((item, i) => {
               const style = iconFor(item.type);
+              const StyleIcon = style.icon;
               return (
-                <div key={i} className={`p-3.5 rounded-xl border ${style.bg}`}>
-                  <p className={`text-sm font-semibold ${style.text} mb-0.5`}>{style.icon} {item.title}</p>
-                  <p className={`text-base ${style.text} opacity-90 leading-relaxed`}>{item.detail}</p>
+                <div key={i} className="p-3.5 rounded-xl border border-transparent" style={{ background: style.background }}>
+                  <p className="flex items-center gap-1.5 text-sm font-semibold mb-0.5" style={{ color: style.color }}><StyleIcon className="h-3.5 w-3.5" /> {item.title}</p>
+                  <p className="text-base opacity-90 leading-relaxed" style={{ color: style.color }}>{item.detail}</p>
                 </div>
               );
             })}

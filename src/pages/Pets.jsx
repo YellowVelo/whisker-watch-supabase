@@ -4,7 +4,6 @@ import { PawPrint, Plus, Activity, Rainbow, Home as HomeIcon, Cat, Dog } from 'l
 import { entities } from '@/api/entities';
 import { getSitterOnlyPetIds } from '@/lib/petsClient';
 import ExpandablePetProfileCard from '../components/ExpandablePetProfileCard';
-import AddPetDialog from '../components/AddPetDialog';
 import PageTransition from '../components/PageTransition';
 import usePullToRefresh from '../hooks/usePullToRefresh';
 import PullToRefreshIndicator from '../components/PullToRefreshIndicator';
@@ -14,7 +13,6 @@ export default function Pets() {
   const [sharedPets, setSharedPets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
-  const [showAdd, setShowAdd] = useState(false);
   const [highlightedPetId, setHighlightedPetId] = useState(null);
   const cardRefs = useRef({});
   const highlightTimeoutRef = useRef(null);
@@ -85,19 +83,6 @@ export default function Pets() {
   useEffect(() => { loadData(); }, [loadData]);
   const { pullDistance, isRefreshing } = usePullToRefresh(loadData);
 
-  const handleAddSuccess = useCallback((newPetId) => {
-    loadData().then(() => {
-      if (!newPetId) return;
-      setHighlightedPetId(newPetId);
-      setExpandedPetId(newPetId);
-      requestAnimationFrame(() => {
-        cardRefs.current[newPetId]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      });
-      clearTimeout(highlightTimeoutRef.current);
-      highlightTimeoutRef.current = setTimeout(() => setHighlightedPetId((id) => (id === newPetId ? null : id)), 4000);
-    });
-  }, [loadData]);
-
   const activePets = pets.filter((p) => !p.is_memorial);
   const memorialPets = pets.filter((p) => p.is_memorial);
 
@@ -116,7 +101,7 @@ export default function Pets() {
               <p className="text-[14px] text-tier-tertiary mt-1">All the pets in your care, in one place.</p>
             </div>
             <button
-              onClick={() => setShowAdd(true)}
+              onClick={() => navigate('/pet/new/onboarding')}
               className="flex items-center gap-1.5 rounded-full bg-background text-white border-2 border-primary px-4 h-10 text-sm font-semibold flex-shrink-0 active:opacity-80 transition-opacity"
             >
               <Plus className="h-4 w-4" /> Add Pet
@@ -143,7 +128,7 @@ export default function Pets() {
                 Add your first pet to begin tracking their health.
               </p>
               <button
-                onClick={() => setShowAdd(true)}
+                onClick={() => navigate('/pet/new/onboarding')}
                 className="inline-flex items-center gap-2 rounded-md bg-background text-white border-2 border-primary px-5 h-10 text-sm font-medium"
               >
                 <Plus className="h-4 w-4" /> Add Pet
@@ -208,8 +193,6 @@ export default function Pets() {
             </>
           )}
         </main>
-
-        <AddPetDialog open={showAdd} onOpenChange={setShowAdd} onSuccess={handleAddSuccess} returnTo="/pets" />
       </div>
     </PageTransition>
   );

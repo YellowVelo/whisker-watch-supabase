@@ -1,23 +1,39 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { PawPrint } from 'lucide-react';
 import { entities } from '@/api/entities';
 import { track } from '@/lib/analytics';
 import { Button } from '@/components/ui/button';
 import ChoiceCard from './ChoiceCard';
 import ConditionsCard from './ConditionsCard';
 import MedicationEntryCard from './MedicationEntryCard';
+import VaccinationEntryCard from './VaccinationEntryCard';
+import ReviewCard from './ReviewCard';
+import OnboardingShell from './OnboardingShell';
 import {
   HEALTH_OPTIONS, MEDICATIONS_YES_NO_OPTIONS, APPETITE_OPTIONS, WATER_OPTIONS, ENERGY_OPTIONS,
   getMobilityOptions, getBathroomOptions, getNextStep, getVisibleSteps,
+  OUTER_STEPS, OUTER_STEP_LABELS, getOuterStep, getOuterStepNumber,
 } from '@/lib/onboardingConfig';
 
 // The onboarding wizard engine. Renders exactly one card per step, saves
 // the answer for that step immediately (auto-save + resume requirement),
-// and advances using getNextStep's conditional navigation.
+// and advances using getNextStep's conditional navigation. Spec 0029 adds:
+// the CatchUpFlow-style full-screen shell, a "Step X of 6" outer progress
+// bar, Back (via viewStep, see below), and "Skip for now" at any point.
 export default function OnboardingWizard({ pet, row, onRowChange, onComplete }) {
+  const navigate = useNavigate();
   const [conditionsDraft, setConditionsDraft] = useState(pet.conditions || []);
   const [saving, setSaving] = useState(false); // drives the disabled-button UI
   const [saveError, setSaveError] = useState(null);
   const petName = pet.name;
+
+  // What's currently rendered — usually equal to row.current_step, but can
+  // move backward locally via "Back"/a Review edit-link without touching
+  // the persisted current_step (which only moves forward, on a real save).
+  // Re-synced to row.current_step whenever a forward save actually lands.
+  const [viewStep, setViewStep] = useState(row.current_step);
+  useEffect(() => { setViewStep(row.current_step); }, [row.current_step]);
 
   // A useState flag alone isn't a safe re-entrancy gate: two rapid clicks
   // can both read the same stale `saving` value before React re-renders
@@ -71,11 +87,35 @@ export default function OnboardingWizard({ pet, row, onRowChange, onComplete }) 
   const saveStep = (patch, currentStep) => withSaveGuard(() => advanceStep(patch, currentStep));
 
   const visibleSteps = getVisibleSteps(row);
-  const stepIndex = visibleSteps.indexOf(row.current_step);
-  const progressLabel = stepIndex >= 0 ? `Step ${stepIndex + 1} of ${visibleSteps.length}` : null;
+  const viewIndex = visibleSteps.indexOf(viewStep);
+  // viewIndex is -1 when viewStep was reached via a Review edit-link for a
+  // step outside the pet's current conditional path (e.g. jumping into
+  // 'conditions' after answering "generally healthy", or 'medication_entry'
+  // after answering "no medications") — getVisibleSteps() only lists steps
+  // that apply given current answers, so a jumped-to step never appears in
+  // it. There's always somewhere to go back to in that case: Review, which
+  // is the only place such a jump can originate from.
+  const canGoBack = viewIndex > 0 || viewIndex === -1;
+  const handleBack = () => {
+    if (viewIndex === -1) { setViewStep('review'); return; }
+    if (canGoBack) setViewStep(visibleSteps[viewIndex - 1]);
+  };
+
+  // "Skip for now" is available from any inner step once the pet (and this
+  // row) already exists — same escape hatch AddPetDialog's success screen
+  // used to offer once, just no longer limited to that one moment.
+  const handleSkip = () => withSaveGuard(async () => {
+    track('onboarding_skipped', { pet_id: pet.id, step: viewStep });
+    const updated = await entities.PetOnboarding.update(row.id, { skipped_at: new Date().toISOString() });
+    onRowChange(updated);
+    navigate(`/pets?highlight=${pet.id}`);
+  });
+
+  const outerStep = getOuterStep(viewStep);
+  const outerStepNumber = getOuterStepNumber(viewStep);
 
   const renderCard = () => {
-    switch (row.current_step) {
+    switch (viewStep) {
       case 'health':
         return (
           <ChoiceCard
@@ -127,7 +167,7 @@ export default function OnboardingWizard({ pet, row, onRowChange, onComplete }) 
       case 'transition':
         return (
           <div className="flex flex-col items-center text-center gap-5 py-6">
-            <span className="text-5xl">🐾</span>
+            <PawPrint className="h-12 w-12 text-primary" strokeWidth={1.5} />
             <h2 className="text-2xl font-semibold text-foreground">Every pet has their own normal.</h2>
             <p className="text-base text-muted-foreground max-w-sm">
               The next few questions help Wysker Watch understand what normal looks like for {petName}.
@@ -200,32 +240,46 @@ export default function OnboardingWizard({ pet, row, onRowChange, onComplete }) 
             onSelect={(v) => saveStep({ bathroom_baseline: v }, 'bathroom')}
           />
         );
+      case 'vaccinations':
+        return (
+          <VaccinationEntryCard
+            petId={pet.id}
+            petName={petName}
+            species={pet.species}
+            disabled={saving}
+            onContinue={() => saveStep({}, 'vaccinations')}
+            onSkip={() => saveStep({}, 'vaccinations')}
+          />
+        );
+      case 'review':
+        return (
+          <ReviewCard
+            pet={pet}
+            row={row}
+            conditions={conditionsDraft}
+            disabled={saving}
+            onJumpToStep={setViewStep}
+            onFinish={() => saveStep({}, 'review')}
+          />
+        );
       default:
         return null;
     }
   };
 
   return (
-    <div className="min-h-screen bg-background px-5 pt-8 pb-10" style={{ paddingTop: 'calc(env(safe-area-inset-top) + 32px)' }}>
-      <div className="max-w-md mx-auto flex flex-col gap-8">
-        {progressLabel && (
-          <div className="space-y-2">
-            <p className="text-xs font-medium text-muted-foreground text-center">{progressLabel}</p>
-            <div className="flex gap-1.5 justify-center">
-              {visibleSteps.map((s, i) => (
-                <span
-                  key={s}
-                  className={`h-1.5 rounded-full transition-all ${i <= stepIndex ? 'bg-primary w-6' : 'bg-border w-1.5'}`}
-                />
-              ))}
-            </div>
-          </div>
-        )}
-        {saveError && (
-          <p className="text-sm text-destructive text-center" role="alert">{saveError}</p>
-        )}
-        {renderCard()}
-      </div>
-    </div>
+    <OnboardingShell
+      title={OUTER_STEP_LABELS[outerStep]}
+      stepNumber={outerStepNumber}
+      totalSteps={OUTER_STEPS.length}
+      onBack={canGoBack ? handleBack : undefined}
+      onClose={handleSkip}
+      closeLabel="Skip for now"
+    >
+      {saveError && (
+        <p className="text-sm text-destructive text-center mb-4" role="alert">{saveError}</p>
+      )}
+      {renderCard()}
+    </OnboardingShell>
   );
 }

@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { invokeAI } from '@/api/aiClient';
-import { Send } from 'lucide-react';
+import { Send, Stethoscope } from 'lucide-react';
 
 const SYSTEM_CONTEXT = (pet, medications) => {
   const conditions = pet.conditions?.join(', ') || 'None noted';
@@ -50,7 +50,7 @@ export default function PetAIChat({ pet, medications }) {
         {messages.map((msg, i) => (
           <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
             {msg.role === 'assistant' && (
-              <div className="h-7 w-7 rounded-full bg-primary/10 flex items-center justify-center mr-2 mt-0.5 shrink-0 text-sm">🩺</div>
+              <div className="h-7 w-7 rounded-full bg-primary/10 flex items-center justify-center mr-2 mt-0.5 shrink-0"><Stethoscope className="h-3.5 w-3.5 text-primary" /></div>
             )}
             <div className={`max-w-[82%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed ${
               msg.role === 'user'
@@ -63,7 +63,7 @@ export default function PetAIChat({ pet, medications }) {
         ))}
         {loading && (
           <div className="flex justify-start">
-            <div className="h-7 w-7 rounded-full bg-primary/10 flex items-center justify-center mr-2 mt-0.5 shrink-0 text-sm">🩺</div>
+            <div className="h-7 w-7 rounded-full bg-primary/10 flex items-center justify-center mr-2 mt-0.5 shrink-0"><Stethoscope className="h-3.5 w-3.5 text-primary" /></div>
             <div className="bg-muted rounded-2xl rounded-bl-sm px-4 py-3">
               <div className="flex gap-1">
                 <div className="w-2 h-2 bg-muted-foreground/40 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />

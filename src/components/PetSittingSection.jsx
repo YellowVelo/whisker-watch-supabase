@@ -6,7 +6,10 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { Plus, Home, ChevronDown, ChevronUp, Pencil, Trash2, Check, X, UserPlus } from 'lucide-react';
+import {
+  Plus, Home, ChevronDown, ChevronUp, Pencil, Trash2, Check, X, UserPlus,
+  PawPrint, UtensilsCrossed, Pill, Syringe, ClipboardList, Siren, Stethoscope, FileText,
+} from 'lucide-react';
 import InviteSitterDialog from './InviteSitterDialog';
 import PillToggle from './PillToggle';
 import { format, parseISO, eachDayOfInterval } from 'date-fns';
@@ -220,8 +223,8 @@ export default function PetSittingSection({ petId }) {
                     <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                       {sit.sitter_name && <p className="text-sm text-muted-foreground">Sitter: {sit.sitter_name}</p>}
                       {sitPets.length > 0 && (
-                        <p className="text-sm text-muted-foreground">
-                          🐾 {sitPets.map(c => c.name).join(', ')}
+                        <p className="flex items-center gap-1 text-sm text-muted-foreground">
+                          <PawPrint className="h-3.5 w-3.5" /> {sitPets.map(c => c.name).join(', ')}
                         </p>
                       )}
                     </div>
@@ -255,10 +258,10 @@ export default function PetSittingSection({ petId }) {
                         const vacs = vaccinationsByPet[pet.id] || [];
                         return (
                           <div key={pet.id} className="space-y-1.5 border-l-2 border-primary/30 pl-3">
-                            <p className="font-semibold text-sm">🐾 {pet.name}</p>
+                            <p className="flex items-center gap-1 font-semibold text-sm"><PawPrint className="h-3.5 w-3.5" /> {pet.name}</p>
                             {foods.length > 0 && (
                               <div>
-                                <p className="font-medium text-sm">🍽 Food:</p>
+                                <p className="flex items-center gap-1 font-medium text-sm"><UtensilsCrossed className="h-3.5 w-3.5" /> Food:</p>
                                 <ul className="ml-3 text-muted-foreground text-sm space-y-0.5">
                                   {foods.map(f => <li key={f.id}>• {f.name}{f.brand ? ` (${f.brand})` : ''}{f.food_type ? ` — ${f.food_type}` : ''}</li>)}
                                 </ul>
@@ -266,7 +269,7 @@ export default function PetSittingSection({ petId }) {
                             )}
                             {meds.length > 0 && (
                               <div>
-                                <p className="font-medium text-sm">💊 Medications:</p>
+                                <p className="flex items-center gap-1 font-medium text-sm"><Pill className="h-3.5 w-3.5" /> Medications:</p>
                                 <ul className="ml-3 text-muted-foreground text-sm space-y-0.5">
                                   {meds.map(m => <li key={m.id}>• {m.name}{m.dosage ? ` — ${m.dosage}` : ''}{m.frequency ? `, ${m.frequency}` : ''}{m.timing_instructions ? ` (${m.timing_instructions})` : ''}</li>)}
                                 </ul>
@@ -274,7 +277,7 @@ export default function PetSittingSection({ petId }) {
                             )}
                             {vacs.length > 0 && (
                               <div>
-                                <p className="font-medium text-sm">💉 Vaccinations on file:</p>
+                                <p className="flex items-center gap-1 font-medium text-sm"><Syringe className="h-3.5 w-3.5" /> Vaccinations on file:</p>
                                 <ul className="ml-3 text-muted-foreground text-sm space-y-0.5">
                                   {vacs.map(v => <li key={v.id}>• {v.vaccine_name}{v.next_due_date ? ` · due ${v.next_due_date}` : ''}</li>)}
                                 </ul>
@@ -285,15 +288,15 @@ export default function PetSittingSection({ petId }) {
                       })}
                       {customTasks.length > 0 && (
                         <div>
-                          <p className="font-medium text-sm">📋 Daily Tasks:</p>
+                          <p className="flex items-center gap-1 font-medium text-sm"><ClipboardList className="h-3.5 w-3.5" /> Daily Tasks:</p>
                           <ul className="ml-3 text-muted-foreground text-sm space-y-0.5">{customTasks.map((t, i) => <li key={i}>• {t}</li>)}</ul>
                         </div>
                       )}
-                      {sit.emergency_contact && <p className="text-sm"><span className="font-medium">🚨 Emergency:</span> <span className="text-muted-foreground">{sit.emergency_contact}</span></p>}
-                      {sit.vet_contact && <p className="text-sm"><span className="font-medium">🏥 Vet:</span> <span className="text-muted-foreground">{sit.vet_contact}</span></p>}
+                      {sit.emergency_contact && <p className="flex items-center gap-1 text-sm"><span className="flex items-center gap-1 font-medium"><Siren className="h-3.5 w-3.5" /> Emergency:</span> <span className="text-muted-foreground">{sit.emergency_contact}</span></p>}
+                      {sit.vet_contact && <p className="flex items-center gap-1 text-sm"><span className="flex items-center gap-1 font-medium"><Stethoscope className="h-3.5 w-3.5" /> Vet:</span> <span className="text-muted-foreground">{sit.vet_contact}</span></p>}
                       {sit.additional_instructions && (
                         <div>
-                          <p className="font-medium text-sm">📝 Additional Notes:</p>
+                          <p className="flex items-center gap-1 font-medium text-sm"><FileText className="h-3.5 w-3.5" /> Additional Notes:</p>
                           <p className="text-muted-foreground text-sm ml-3">{sit.additional_instructions}</p>
                         </div>
                       )}
@@ -366,7 +369,7 @@ export default function PetSittingSection({ petId }) {
                       key={pet.id}
                       active={selectedPetIds.includes(pet.id)}
                       onClick={() => togglePetSelection(pet.id)}
-                      className="text-sm px-3 py-1.5 min-h-[36px]"
+                      className="text-sm px-3 py-1.5 min-h-[44px]"
                     >
                       {selectedPetIds.includes(pet.id) && <Check className="h-3 w-3" />}
                       {pet.name}
@@ -458,7 +461,7 @@ export default function PetSittingSection({ petId }) {
 
 function CheckBtn({ label, checked, onToggle }) {
   return (
-    <PillToggle active={checked} onClick={onToggle} className="text-[13px] px-2.5 py-1.5 min-h-[36px]">
+    <PillToggle active={checked} onClick={onToggle} className="text-[13px] px-2.5 py-1.5 min-h-[44px]">
       {checked ? <Check className="h-3 w-3" /> : <X className="h-3 w-3" />}
       {label}
     </PillToggle>

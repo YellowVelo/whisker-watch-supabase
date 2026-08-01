@@ -63,7 +63,7 @@ export default function ExportCalendarButton({ petId, petName, iconOnly = false 
           events.push({
             uid: `med-${med.id}`,
             date: med.next_due_date,
-            title: `💊 ${petName}: ${med.name} due`,
+            title: `${petName}: ${med.name} due`,
             description: [
               med.dosage && `Dosage: ${med.dosage}`,
               med.frequency && `Frequency: ${med.frequency}`,
@@ -80,7 +80,7 @@ export default function ExportCalendarButton({ petId, petName, iconOnly = false 
           events.push({
             uid: `vax-${vax.id}`,
             date: vax.next_due_date,
-            title: `💉 ${petName}: ${vax.vaccine_name} due`,
+            title: `${petName}: ${vax.vaccine_name} due`,
             description: [
               vax.administered_by && `Vet: ${vax.administered_by}`,
               vax.notes,

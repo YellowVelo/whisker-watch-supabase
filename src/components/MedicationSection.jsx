@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Plus, Pencil, X, ShieldCheck, CheckCircle2 } from 'lucide-react';
+import { Plus, Pencil, X, ShieldCheck, CheckCircle2, Bug, Heart, Pill, Calendar, Check } from 'lucide-react';
 import { PALETTE } from '@/lib/toneColors';
 import { format, parseISO, addMonths } from 'date-fns';
 import SmartSelect from './SmartSelect';
@@ -28,9 +28,11 @@ const computeNextDue = (startDate, frequency) => {
 // tone tokens (via inline style) instead of raw light-mode Tailwind
 // classes, so these badges look correct regardless of device theme.
 const MED_TYPE_BADGE = {
-  'Flea & Tick': { label: '🐛 Flea & Tick', background: 'rgba(76,199,176,0.15)', color: PALETTE.teal },
-  'Heartworm':   { label: '❤️ Heartworm',   background: 'rgba(111,183,255,0.15)', color: PALETTE.sky },
+  'Flea & Tick': { label: 'Flea & Tick', icon: Bug, background: 'rgba(76,199,176,0.15)', color: PALETTE.teal },
+  'Heartworm':   { label: 'Heartworm',   icon: Heart, background: 'rgba(111,183,255,0.15)', color: PALETTE.sky },
 };
+
+const MED_TYPE_ICON = { 'Flea & Tick': Bug, 'Heartworm': Heart, 'General': Pill };
 
 export default function MedicationSection({ petId }) {
   const [meds, setMeds] = useState([]);
@@ -151,20 +153,23 @@ export default function MedicationSection({ petId }) {
             <div className="space-y-1.5">
               <Label className="text-sm">Medication Type</Label>
               <div className="flex gap-2">
-                {['General', 'Flea & Tick', 'Heartworm'].map(type => (
-                  <button
-                    key={type}
-                    type="button"
-                    onClick={() => set('med_type', type)}
-                    className={`flex-1 text-xs py-2 px-2 rounded-lg border transition-colors ${
-                      form.med_type === type
-                        ? 'bg-primary text-primary-foreground border-primary'
-                        : 'bg-background border-border text-muted-foreground hover:border-primary/50'
-                    }`}
-                  >
-                    {type === 'Flea & Tick' ? '🐛 Flea & Tick' : type === 'Heartworm' ? '❤️ Heartworm' : '💊 General'}
-                  </button>
-                ))}
+                {['General', 'Flea & Tick', 'Heartworm'].map(type => {
+                  const TypeIcon = MED_TYPE_ICON[type];
+                  return (
+                    <button
+                      key={type}
+                      type="button"
+                      onClick={() => set('med_type', type)}
+                      className={`flex-1 flex items-center justify-center gap-1 text-xs py-2 px-2 rounded-lg border transition-colors ${
+                        form.med_type === type
+                          ? 'bg-primary text-primary-foreground border-primary'
+                          : 'bg-background border-border text-muted-foreground hover:border-primary/50'
+                      }`}
+                    >
+                      <TypeIcon className="h-3 w-3" /> {type}
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
@@ -249,6 +254,8 @@ export default function MedicationSection({ petId }) {
 }
 
 function MedButton({ med, given, onGive, onEdit, onDelete, past }) {
+  const typeBadge = MED_TYPE_BADGE[med.med_type];
+  const TypeBadgeIcon = typeBadge?.icon;
   return (
     <div className={`border rounded-xl overflow-hidden transition-all ${given ? 'border-primary/40 bg-primary/5' : 'border-border bg-card'}`}>
       {/* Main tap area */}
@@ -264,19 +271,17 @@ function MedButton({ med, given, onGive, onEdit, onDelete, past }) {
             <div className="flex items-center gap-1.5 flex-wrap">
                               <p className="text-sm font-semibold">{med.name}</p>
                               {med.prescribed && (
-                                <span
-                                  className="flex items-center gap-0.5 text-[13px] px-1.5 py-0.5 rounded-full"
-                                  style={{ background: 'rgba(229,115,115,0.15)', color: PALETTE.red }}
-                                >
+                                <span className="flex items-center gap-0.5 text-[13px] px-1.5 py-0.5 rounded-full" style={{ background: 'rgba(229,115,115,0.15)', color: PALETTE.red }}>
                                   <ShieldCheck className="h-2.5 w-2.5" /> Rx
                                 </span>
                               )}
-                              {MED_TYPE_BADGE[med.med_type] && (
+                              {typeBadge && (
                                 <span
-                                  className="text-xs px-1.5 py-0.5 rounded-full"
-                                  style={{ background: MED_TYPE_BADGE[med.med_type].background, color: MED_TYPE_BADGE[med.med_type].color }}
+                                  className="flex items-center gap-0.5 text-xs px-1.5 py-0.5 rounded-full"
+                                  style={{ background: typeBadge.background, color: typeBadge.color }}
                                 >
-                                  {MED_TYPE_BADGE[med.med_type].label}
+                                  <TypeBadgeIcon className="h-2.5 w-2.5" />
+                                  {typeBadge.label}
                                 </span>
                               )}
                             </div>
@@ -286,8 +291,8 @@ function MedButton({ med, given, onGive, onEdit, onDelete, past }) {
               {med.timing_instructions && <p className="text-sm text-muted-foreground">{med.timing_instructions}</p>}
             </div>
           </div>
-          <span className={`text-sm font-medium flex-shrink-0 ${given ? 'text-primary' : 'text-muted-foreground'}`}>
-            {given ? 'Given ✓' : 'Tap to log'}
+          <span className={`flex items-center gap-1 text-sm font-medium flex-shrink-0 ${given ? 'text-primary' : 'text-muted-foreground'}`}>
+            {given ? <>Given <Check className="h-3.5 w-3.5" /></> : 'Tap to log'}
           </span>
         </button>
       )}
@@ -298,10 +303,7 @@ function MedButton({ med, given, onGive, onEdit, onDelete, past }) {
             <div className="flex items-center gap-1.5">
               <p className="text-sm font-medium">{med.name}</p>
               {med.prescribed && (
-                <span
-                  className="flex items-center gap-0.5 text-[13px] px-1.5 py-0.5 rounded-full"
-                  style={{ background: 'rgba(229,115,115,0.15)', color: PALETTE.red }}
-                >
+                <span className="flex items-center gap-0.5 text-[13px] px-1.5 py-0.5 rounded-full" style={{ background: 'rgba(229,115,115,0.15)', color: PALETTE.red }}>
                   <ShieldCheck className="h-2.5 w-2.5" /> Rx
                 </span>
               )}
@@ -317,8 +319,8 @@ function MedButton({ med, given, onGive, onEdit, onDelete, past }) {
       <div className="flex items-center justify-between px-4 py-1.5 border-t border-border/50 bg-muted/30">
         <div className="flex items-center gap-2 flex-wrap">
           {med.next_due_date && (
-            <p className="text-sm font-medium text-accent">
-              📅 Due {format(parseISO(med.next_due_date), 'MMM d, yyyy')}
+            <p className="flex items-center gap-1 text-sm font-medium text-accent">
+              <Calendar className="h-3.5 w-3.5" /> Due {format(parseISO(med.next_due_date), 'MMM d, yyyy')}
             </p>
           )}
           {!med.next_due_date && (med.start_date || med.end_date) && (
