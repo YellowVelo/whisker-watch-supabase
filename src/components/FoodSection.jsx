@@ -204,7 +204,10 @@ function FoodCard({ food, onEdit, onDelete, onToggle, typeColors }) {
               <span className="text-xs px-2 py-0.5 rounded-full" style={typeColors[food.food_type] || typeColors.Other}>{food.food_type}</span>
             )}
             {food.prescription && (
-              <span className="flex items-center gap-1 text-xs bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300 px-2 py-0.5 rounded-full">
+              <span
+                className="flex items-center gap-1 text-[13px] px-2 py-0.5 rounded-full"
+                style={{ background: 'rgba(229,115,115,0.15)', color: PALETTE.red }}
+              >
                 <ShieldCheck className="h-3 w-3" /> Rx
               </span>
             )}
