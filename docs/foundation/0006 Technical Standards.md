@@ -212,7 +212,7 @@ Integration Tests
 
 Test Edge Functions
 
-As of 2026-07-24, this is real for `delete-pet`/`delete-account` specifically — 8 Deno integration tests (`supabase/functions/{delete-pet,delete-account}/index.test.ts`) run against real `wysker-watch-dev` data via `.github/workflows/ci.yml`, required on `main`. Not yet extended to other Edge Functions.
+As of 2026-07-31, this covers `delete-pet`/`delete-account` (8 Deno integration tests) and `resend-webhook` (11 Deno integration tests, `supabase/functions/resend-webhook/index.test.ts`) — all run against real `wysker-watch-dev` data via `.github/workflows/ci.yml`, required on `main`. The resend-webhook suite needed one extra secret beyond the others' pattern: its one suppression-round-trip test calls `send-email`/`clear-email-suppression` with a service_role bearer token, and those functions' auth check needs a legacy-JWT-format credential (a decodable `role` claim) rather than the newer opaque `sb_secret_...` key used elsewhere in CI — wired in as the `DEV_LEGACY_JWT_SECRET` GitHub secret. Not yet extended to other Edge Functions beyond these three.
 
 Test database migrations
 

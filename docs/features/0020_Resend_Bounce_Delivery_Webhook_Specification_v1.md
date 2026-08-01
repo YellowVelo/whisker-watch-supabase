@@ -522,7 +522,12 @@ Following the existing Deno integration-test convention in this repo
 
 CI's `edge-functions` job will need `RESEND_WEBHOOK_SECRET` (a test value)
 added alongside its existing `SUPABASE_DEV_*` secrets to exercise signature
-verification in these tests.
+verification in these tests. One test ("a suppressed recipient stays
+suppressed until cleared") additionally needs a legacy-JWT-format
+service_role credential — the `DEV_LEGACY_JWT_SECRET` GitHub secret —
+since `send-email`/`clear-email-suppression`'s auth check can't decode a
+`role` claim from the newer opaque `sb_secret_...` key format used for
+`SUPABASE_SERVICE_ROLE_KEY` elsewhere in CI.
 
 ### Constraints from CLAUDE.md / locked decisions
 
