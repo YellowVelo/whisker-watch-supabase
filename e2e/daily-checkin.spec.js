@@ -50,7 +50,11 @@ test('a logged-in owner can complete a same-day check-in and see it reflected', 
   await expect(greatDayButton).toBeVisible();
   await greatDayButton.click();
 
-  // Scoped to this specific pet — other pets from previous runs of this
-  // same-day test may already show the identical text.
-  await expect(page.getByText(`${petName} had a Great Day`)).toBeVisible();
+  // Spec 0026 replaced this row's old per-Vibe "{name} had a Great Day"
+  // text with a reachable edit path: once checked in, the row becomes a
+  // button that reopens today's check-in instead of navigating to Trends,
+  // labeled "Edit {name}'s Daily Check-In" regardless of which Vibe was
+  // picked. Scoped to this specific pet — other pets from previous runs
+  // of this same-day test may already show the identical label.
+  await expect(page.getByRole('button', { name: `Edit ${petName}'s Daily Check-In` })).toBeVisible();
 });

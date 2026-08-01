@@ -1,8 +1,14 @@
 // This is the test most likely to catch a hang in Add Pet, because it
 // checks the flow reaches a real end state (the pet visibly listed),
-// not just that "Create Pet" was clicked. Also the test that would
-// catch an RLS misconfiguration on the pets table's insert policy,
-// which can't be ruled out just by reading the migration.
+// not just that "Continue" was clicked. Also the test that would catch
+// an RLS misconfiguration on the pets table's insert policy, which can't
+// be ruled out just by reading the migration.
+//
+// Rewritten for spec 0029 (Onboarding Refresh): Add Pet no longer opens a
+// pop-up dialog — "Add Pet" navigates to /pet/new/onboarding, and Pet
+// Information is Step 1 of the full-screen onboarding wizard. "Skip for
+// now" now lives in the wizard's header (available from Step 2 onward),
+// not on a one-time success screen.
 import { test, expect } from './fixtures.js';
 import { createClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
@@ -30,10 +36,12 @@ test.afterEach(async () => {
   }
 });
 
-test('a logged-in owner can add a pet and see it appear in the list', async ({ page }) => {
+test('a logged-in owner can add a pet, skip onboarding, and see it appear in the list', async ({ page }) => {
   await page.goto('/pets');
 
   await page.getByRole('button', { name: 'Add Pet' }).click();
+  await expect(page).toHaveURL(/\/pet\/new\/onboarding/);
+
   await page.getByRole('button', { name: /Dog/ }).click();
 
   await page.locator('#pet-name').fill(PET_NAME);
@@ -43,9 +51,12 @@ test('a logged-in owner can add a pet and see it appear in the list', async ({ p
   // identical picker in the DOM, so .first() targets Birth Date's.
   await page.getByRole('button', { name: "I don't know" }).first().click();
 
-  await page.getByRole('button', { name: 'Create Pet' }).click();
+  await page.getByRole('button', { name: 'Continue' }).click();
 
-  await expect(page.getByText(`${PET_NAME} has been added!`)).toBeVisible();
+  // Landing on Step 2 (Health Conditions) confirms the pet — and its
+  // pet_onboarding row — were actually created.
+  await expect(page.getByText('Step 2 of 6')).toBeVisible();
+
   await page.getByRole('button', { name: 'Skip for now' }).click();
 
   await expect(page.getByRole('heading', { name: PET_NAME })).toBeVisible();
