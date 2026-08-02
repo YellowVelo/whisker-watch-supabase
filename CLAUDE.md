@@ -19,6 +19,7 @@ Current model in one line: `daily_check_ins.status` is `great` / `off` / `tough`
 - `src/api/entities.js` — entity CRUD
 - `src/api/storageClient.js` — file uploads
 - `src/api/aiClient.js` + `supabase/functions/ask-vet-assistant` — AI features via Anthropic API through a Supabase Edge Function
+- `src/lib/aiGuardrails.js` — shared AI safety guardrails (spec 0041): emergency-keyword hard-stop, the `urgent`-flag backstop, and the disclaimer text every AI-facing prompt must use. Check here before writing a new AI-facing prompt or disclaimer — 3 near-duplicate copies existed before 2026-08-02.
 - `src/lib/checkin/{scoring,config,chipLabels,checkinClient}.js` — current Vibe/symptom-count logic
 - `src/components/catchup/` (`CatchUpFlow.jsx`, `BulkApplySheet.jsx`) — multi-day Catch-Up Check-In UI (2+ missed days), see `0015_MultiDay_CatchUp_CheckIn_Specification_v1.md`. The single-day "catch up yesterday" flow still lives in `DailyCheckInSheet.jsx`/`DailyCheckInModal.jsx`, unchanged.
 - `src/components/{BottomSheet,ConfirmDeleteDialog,IconButton,ListRow,PillToggle}.jsx` — shared primitives from spec 0025's de-duplication pass. Check here before hand-rolling a new bottom sheet/pill-toggle/back-button/delete-confirmation/nav-row — 5+ separate copies of these existed before 2026-07-31.

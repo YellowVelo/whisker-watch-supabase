@@ -493,7 +493,7 @@ All 12 steps of the staged plan shipped. What's actually true of the app now:
 - `EditPetSheet.jsx`'s slide-in panel renders permanently off-screen (severe, pre-existing, isolated to that one file)
 - Pets screen showing every pet duplicated on the shared test account (pre-existing, not yet confirmed as data vs. rendering)
 - `navigateToLogin()` console error on protected routes while logged out (pre-existing)
-- Ask Wysker's sheet shows which screen it opened from but doesn't feed that into the AI prompt, only which pet (deliberate scope boundary, not a bug)
+- ~~Ask Wysker's sheet shows which screen it opened from but doesn't feed that into the AI prompt, only which pet~~ — resolved 2026-08-02, spec `0041`.
 - Persistent header font and the pet-detail hero-banner treatment — real visual-consistency concerns raised during testing, explicitly out of this spec's non-goals (not a visual redesign); needs its own decision/spec before any work starts
 
 See `docs/launch-punch-list.md` for the authoritative, up-to-date status of every item above.
