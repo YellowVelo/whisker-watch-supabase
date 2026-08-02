@@ -4,6 +4,8 @@
 // screens can share one source of truth for titles/subtitles/icons/body
 // content — mirrors src/lib/privacyPolicyContent.js exactly.
 
+import { getLegalSection } from './legalContent';
+
 export const TOS_LAST_UPDATED = 'July 10, 2026';
 
 export const TOS_SECTIONS = [
@@ -207,6 +209,5 @@ export const TOS_LAST_UPDATED_SECTION = {
 };
 
 export function getTermsOfServiceSection(sectionId) {
-  if (sectionId === TOS_LAST_UPDATED_SECTION.id) return TOS_LAST_UPDATED_SECTION;
-  return TOS_SECTIONS.find((s) => s.id === sectionId) ?? null;
+  return getLegalSection(TOS_SECTIONS, TOS_LAST_UPDATED_SECTION, sectionId);
 }
