@@ -3,54 +3,11 @@ import { ChevronLeft } from 'lucide-react';
 import IconButton from '../components/IconButton';
 import PageTransition from '../components/PageTransition';
 import { getTermsOfServiceSection, TOS_LAST_UPDATED, TOS_LAST_UPDATED_SECTION } from '@/lib/termsOfServiceContent';
-
-// Renders a body link: mailto: links stay in-tab, external http(s) links
-// open in a new tab (leaving the app while reading legal text shouldn't
-// lose the user's place). Mirrors PrivacyPolicySection.jsx's BodyLink.
-function BodyLink({ href, text }) {
-  const isExternal = href.startsWith('http');
-  return (
-    <a
-      href={href}
-      className="text-primary underline underline-offset-2"
-      {...(isExternal ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
-    >
-      {text}
-    </a>
-  );
-}
+import { BodyBlock } from '../components/legalContentBlocks';
 
 // Detail screen for a single Terms of Service section, reached by tapping a
 // row on the Terms of Service list (Terms.jsx). One route/component for all
 // sections since they share the same paragraph/bullet-list body shape.
-function BodyBlock({ block }) {
-  if (block.type === 'paragraph') {
-    return <p className="text-base text-tier-secondary leading-relaxed">{block.text}</p>;
-  }
-  if (block.type === 'subheading') {
-    return <h2 className="text-[17px] font-semibold text-white mt-2">{block.text}</h2>;
-  }
-  if (block.type === 'link') {
-    return <p className="text-base leading-relaxed"><BodyLink href={block.href} text={block.text} /></p>;
-  }
-  if (block.type === 'bullets') {
-    return (
-      <ul className="space-y-3">
-        {block.items.map((item, i) => (
-          <li key={i} className="text-base text-tier-secondary leading-relaxed flex gap-2">
-            <span className="text-primary flex-shrink-0" aria-hidden="true">•</span>
-            <span>
-              {item.label && <span className="font-semibold text-white">{item.label}. </span>}
-              {item.text}
-              {item.link && <> <BodyLink href={item.link.href} text={item.link.text} />.</>}
-            </span>
-          </li>
-        ))}
-      </ul>
-    );
-  }
-  return null;
-}
 
 export default function TermsOfServiceSection() {
   const navigate = useNavigate();

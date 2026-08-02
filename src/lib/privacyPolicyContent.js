@@ -3,6 +3,8 @@
 // markdown file directly so the list screen and detail screens can share
 // one source of truth for titles/subtitles/icons/body content.
 
+import { getLegalSection } from './legalContent';
+
 export const PRIVACY_POLICY_LAST_UPDATED = 'June 30, 2026';
 
 export const PRIVACY_POLICY_SECTIONS = [
@@ -121,6 +123,5 @@ export const PRIVACY_POLICY_LAST_UPDATED_SECTION = {
 };
 
 export function getPrivacyPolicySection(sectionId) {
-  if (sectionId === PRIVACY_POLICY_LAST_UPDATED_SECTION.id) return PRIVACY_POLICY_LAST_UPDATED_SECTION;
-  return PRIVACY_POLICY_SECTIONS.find((s) => s.id === sectionId) ?? null;
+  return getLegalSection(PRIVACY_POLICY_SECTIONS, PRIVACY_POLICY_LAST_UPDATED_SECTION, sectionId);
 }
