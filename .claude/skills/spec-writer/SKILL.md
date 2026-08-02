@@ -69,11 +69,44 @@ reasons this request might be more complicated than it looks:
   conventions for rules that must not be silently violated (e.g. "X is
   never derived from Y" style constraints). If the request looks like it
   would conflict, this is a required flag, not optional.
+- **Design System compliance.** Read `docs/foundation/0005 Design System.md`
+  in full, including the numbered Amendments block at the top — it's the
+  locked, current ruleset, and it changes over time, so don't work from
+  memory of it. For any UI described in the request (and for any
+  mockup/screenshot the user provides), check it against that doc before
+  drafting. Two failure modes, handled differently:
+  - **A new one-off violation** the feature would introduce (raw hex,
+    sub-13px text, an emoji-as-icon, a hand-rolled card/sheet/toggle
+    instead of the canonical shared component, etc.) — fix it in the
+    draft itself. Don't carry a violation forward from a mockup just
+    because the mockup drew it that way; if a provided mockup conflicts
+    with the locked doc, say so explicitly and specify the compliant
+    alternative instead.
+  - **An existing systemic violation the feature would extend** (a
+    shared component like `Button` or `IconButton` already has a
+    non-compliant default baked in, and every consumer — including this
+    new feature — inherits it silently). Don't just fix your own call
+    sites. Flag it as a component-level issue, note how many other
+    places already depend on the same non-compliant default (a real grep
+    count, not a guess), and recommend the fix land once at the
+    component level rather than being patched per-instance across
+    specs — this is the "6+ violations found in one pass" failure mode
+    spec 0028 already flagged; the goal is to stop rediscovering the same
+    systemic issue feature by feature.
 - **Existing spec convention.** Glob for the numbered spec docs, read the
   most recent 1-2 for numbering/format/voice, and determine the next
   number.
 - **Schema.** Locate and read the relevant schema/migration files for the
   area being touched.
+- **E2E test conventions and constraints.** Skim `e2e/` for how this
+  repo's Playwright suite works before assuming a feature can be tested
+  the way you'd expect. It signs in via a saved fixture session and has
+  **no privileged access** — no service-role key, and RLS on several
+  tables blocks even the signed-in test user from writing what a spec
+  might assume is writable (e.g. system-generated rows only a cron job
+  or Edge Function can create). If this feature's data can't be
+  seeded/verified by a normal user session, note that now — it's a real
+  constraint on the test plan, not a detail to discover mid-implementation.
 
 Compile everything found into a running list of **Findings** before moving
 to step 2. Findings are not optional color — they directly shape the
@@ -99,17 +132,35 @@ clarifying questions before drafting, informed by what step 1 turned up:
 ### 3. Draft the spec
 
 Use `references/spec-template.md`. Order: Functional Requirements →
-Acceptance Criteria → Visual Reference (tie any provided image explicitly
-to the requirement it illustrates) → Technical Spec (real file paths,
-schema changes, from step 1) → **Repo Findings & Risks** (tech debt,
-orphaned code, duplicate functionality, locked-decision conflicts — in
-plain language, not developer jargon) → Non-Goals → Open Questions.
+Acceptance Criteria → **Test Plan** (maps to Acceptance Criteria, see
+below) → Visual Reference (tie any provided image explicitly to the
+requirement it illustrates) → Technical Spec (real file paths, schema
+changes, Design System compliance, from step 1) → **Repo Findings & Risks**
+(tech debt, orphaned code, duplicate functionality, locked-decision
+conflicts — in plain language, not developer jargon) → Non-Goals → Open
+Questions.
 
 The **Repo Findings & Risks** section is not optional and is not just a
 restatement of step 1 — it's the plain-language translation the user needs
 since she can't read the code herself. If step 1 found nothing concerning,
 say that explicitly ("No existing duplicate functionality or orphaned code
 found near this area") rather than omitting the section.
+
+The **Test Plan** section is not optional either. For each Acceptance
+Criterion, state whether it will get a Playwright test, and if not, say
+why — "not UI-observable," "requires infrastructure outside a normal user
+session," etc. "Skipped it" is not an acceptable reason on its own; an
+explicit one is. Where a criterion needs test data outside what a normal
+signed-in session can create (server-only writes, cron-only functions,
+admin-only tables — see the E2E investigation step above), say how the
+test will get that data, reusing whatever pattern this repo has already
+settled on (e.g. shelling out to the Supabase CLI against the linked
+project, never a service-role key added to `.env.playwright`) rather than
+re-deciding it fresh next time.
+
+The **Technical Spec** section's Design System compliance line is not
+optional either, even when the answer is "no UI changes" or "checked, no
+conflicts found" — say so explicitly rather than omitting it.
 
 ### 4. Self-review before presenting — mandatory, every time
 
@@ -121,8 +172,18 @@ that a non-developer would never catch. Check:
 - Does anything in the draft duplicate or conflict with something found in
   step 1?
 - Does anything contradict a locked decision in CLAUDE.md?
+- Does anything in the draft (or a mockup it's based on) conflict with a
+  locked rule in `docs/foundation/0005 Design System.md`? Did a systemic,
+  component-level violation get flagged as such, rather than quietly
+  patched in just this feature's call sites?
 - Is every acceptance criterion actually testable, or does one just sound
   testable?
+- Does the Test Plan's tests actually work if run in a different order,
+  or does one test's action (marking something read, consuming a
+  single seeded row, etc.) silently change the state a later test
+  assumes is still there? Shared fixture data mutated by an earlier
+  test breaking a later one is a real bug this has caused before, not a
+  hypothetical.
 - Does the technical spec introduce new debt (a quick hack, a special
   case, an inconsistent pattern) without saying so plainly?
 - Is there a claim in the technical spec that isn't actually backed by
@@ -151,3 +212,9 @@ sequential number, matching filename pattern from step 1.
 - This skill is a safeguard, not a substitute for the user's own review.
   Its job is to make risks visible in language she can act on — not to
   make the decision for her.
+- Once implementation happens (whether in this session or a later one),
+  running the Test Plan's Playwright tests is required before considering
+  the work done — treat it the same as running lint, not as an optional
+  extra. A manual browser check passing once proves the feature works
+  today; the automated test is what proves it still works the next time
+  something nearby changes.

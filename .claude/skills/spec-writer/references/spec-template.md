@@ -20,6 +20,19 @@ names — what a user/stakeholder would say, not a developer.
 
 Testable, still non-technical. Given/when/then works well.
 
+## Test Plan
+
+Maps to Acceptance Criteria above, one line each:
+
+- {Acceptance criterion} → {Playwright test that covers it, or an
+  explicit reason it won't get one — "not UI-observable," "requires
+  infrastructure outside a normal user session," etc. Not "skipped."}
+- **Seeding/access constraints:** {if any criterion needs test data a
+  normal signed-in session can't create — server-only writes, cron-only
+  functions, admin-only tables — say how the test will get it (e.g. the
+  Supabase-CLI-against-linked-project pattern already used in this repo's
+  suite), or "none — everything is reachable via a normal user session."}
+
 ## Visual Reference
 
 - {Image description} → illustrates requirement(s) {X}
@@ -30,6 +43,11 @@ Testable, still non-technical. Given/when/then works well.
 - **Schema:** {new/changed tables, columns, migration file}
 - **Components/files touched:** {real paths from repo investigation}
 - **API / edge functions:** {relevant changes}
+- **Design System compliance:** {checked against
+  `docs/foundation/0005 Design System.md` including its Amendments —
+  conflicts found and how the draft resolves them, systemic
+  component-level issues flagged separately from one-off fixes, or "no
+  conflicts found"}
 - **Constraints from CLAUDE.md / locked decisions:** {respected or flagged
   exception}
 
