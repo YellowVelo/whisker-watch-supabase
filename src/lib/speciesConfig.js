@@ -1,7 +1,6 @@
 // Expanded per spec 0029 FR-008. Species tags decide which conditions show
-// per species (e.g. FLUTD is cats-only); categories drive ConditionsCard's
-// grouped display. getConditions() keeps its original flat-array shape so
-// EditPetSheet.jsx's existing chip rendering needs no changes.
+// per species (e.g. FLUTD is cats-only); categories drive ConditionsPicker's
+// grouped display.
 //
 // 'Allergies' and 'Liver Disease' are carried over from the pre-expansion
 // lists (not in the spec's suggested categories) so no existing pet's
@@ -72,8 +71,6 @@ export const getConditionCategories = (species) => {
   }
   return result;
 };
-
-export const getConditions = (species) => Object.values(getConditionCategories(species)).flat();
 
 export const getPetLabel = (species) => species === 'Dog' ? 'Dog' : 'Cat';
 

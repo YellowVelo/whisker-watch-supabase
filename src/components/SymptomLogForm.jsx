@@ -96,7 +96,7 @@ export default function SymptomLogForm({ petId, onOptimisticUpdate, onSuccess })
                 key={symptom}
                 type="button"
                 onClick={() => set('nausea_symptoms', checked ? form.nausea_symptoms.filter(s => s !== symptom) : [...form.nausea_symptoms, symptom])}
-                className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${
+                className={`text-[13px] px-3 py-1.5 rounded-full border transition-colors ${
                   checked ? 'bg-primary text-primary-foreground border-primary' : 'bg-background text-foreground border-border hover:border-primary/50'
                 }`}
               >

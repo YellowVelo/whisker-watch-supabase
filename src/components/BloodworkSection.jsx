@@ -159,7 +159,7 @@ export default function BloodworkSection({ petId }) {
         <p className="text-sm text-muted-foreground">{records.length} record{records.length !== 1 ? 's' : ''}</p>
         <div className="flex gap-2 flex-wrap">
           {importing && (
-            <span className="flex items-center gap-1.5 text-xs text-muted-foreground px-2">
+            <span className="flex items-center gap-1.5 text-sm text-muted-foreground px-2">
               <Loader2 className="h-3.5 w-3.5 animate-spin" /> Scanning...
             </span>
           )}
@@ -184,7 +184,7 @@ export default function BloodworkSection({ petId }) {
             <select
               value={chartField}
               onChange={e => setChartField(e.target.value)}
-              className="text-xs border border-border rounded-md px-2 py-1 bg-background"
+              className="text-sm border border-border rounded-md px-2 py-1 bg-background"
             >
               {FIELDS.map(f => <option key={f.key} value={f.key}>{f.label}</option>)}
             </select>
@@ -274,7 +274,7 @@ export default function BloodworkSection({ petId }) {
               </div>
             </div>
 
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider pt-1">Blood Values — leave blank if not reported</p>
+            <p className="text-[13px] font-semibold text-muted-foreground uppercase tracking-wider pt-1">Blood Values — leave blank if not reported</p>
             <div className="grid grid-cols-2 gap-3">
               {FIELDS.map(f => (
                 <div key={f.key} className="space-y-1">
@@ -290,7 +290,7 @@ export default function BloodworkSection({ petId }) {
               ))}
             </div>
 
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider pt-1">Urinalysis</p>
+            <p className="text-[13px] font-semibold text-muted-foreground uppercase tracking-wider pt-1">Urinalysis</p>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label className="text-sm">Urine Specific Gravity</Label>

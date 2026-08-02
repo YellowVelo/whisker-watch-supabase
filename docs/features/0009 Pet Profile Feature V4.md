@@ -53,7 +53,7 @@ Each card displays a concise summary and routes into its respective management m
 | Card | Display | Interaction | Empty State |
 |------|----------|--------------|--------------|
 | **Baseline** | Pet's normal behavior summary | Opens the Baseline page (`/pet/:petId/baseline`) | "Set up your pet's baseline." → **Set Up** (also shows an **In Progress** state if onboarding was started but not completed) |
-| **Conditions** | Active diagnoses | Opens **Edit Pet** sheet — there is no separate Condition Management screen; conditions are edited as chips within Edit Pet | "No conditions added." → **Add Condition** |
+| **Conditions** | Active diagnoses | Opens a dedicated **Conditions** page (`/pet/:petId/conditions`) — a grouped, searchable condition picker, separate from Edit Pet (spec `0036`) | "No conditions added." → **Add Condition** |
 | **Medications** | Active medication count | Opens the Medications page (`/pet/:petId/medications`) | "No medications." → **Add Medication** |
 | **Food** | Active food count | Opens the Food screen (`/pet/:petId/food`) | "No food configured." → **Add Food** |
 | **Vaccinations** | Status (Up to Date / *current*/*total* / Overdue) | Opens the Vaccinations page (`/pet/:petId/vaccinations`) | "No vaccinations recorded." → **Add Vaccination** |
@@ -115,7 +115,7 @@ Do not display partially loaded values.
 ## **Business Rules**
 
 - Computed age derives from birth date.
-- Condition count = number of entries in `pet.conditions`; conditions are edited via the Edit Pet sheet, not a dedicated Condition Management screen.
+- Condition count = number of entries in `pet.conditions`; conditions are edited via a dedicated Conditions page (`/pet/:petId/conditions`), separate from Edit Pet, as of spec `0036`.
 - Medication count = active medications.
 - Food count = active foods (excluding any with an `end_date` in the past).
 - Vaccination status derives from active vaccination records.
@@ -124,7 +124,7 @@ Do not display partially loaded values.
 - The Observations card reflects only today's check-in — once logged, it shows a summary of today's five observation chips and stays tappable, reopening today's entry for editing (spec `0026`).
 - Timeline contains all historical health events.
 - Health Records reuses the Bloodwork tab's data — there is no separate Health Records store.
-- Sharing, editing, moving to Rainbow Bridge, or deleting a pet are initiated from the always-visible action-pill row shown once the profile is expanded — none of these are behind an overflow menu.
+- Sharing, editing, moving to Rainbow Bridge, or deleting a pet are initiated from the always-visible action-pill row shown once the profile is expanded — none of these are behind an overflow menu. Edit Pet opens a dedicated page (`/pet/:petId/edit`), not a sliding panel, as of spec `0036`.
 - Deleting a pet is a two-step confirmation flow (warning dialog, then type-the-pet's-name-to-confirm) that calls the `delete-pet` Edge Function. The warning copy is co-owner-aware: a sole owner is told the pet and all its data will be permanently deleted; a primary owner with a linked co-owner is told ownership will transfer to that co-owner instead; a non-primary co-owner is told they'll simply be removed from the pet, which the primary owner keeps.
 - Shared pets respect the permission model.
 - Memorial pets remain viewable; editing is limited (no action-pill row except Share, Edit Pet, and Delete Pet — Rainbow Bridge is not offered again once a pet is already memorialized).
@@ -246,3 +246,11 @@ This pass corrected the doc against `docs/features/0026_Edit_Todays_CheckIn_Spec
 
 1. **The standalone `/pet/:petId` page never actually rendered Pet Profile content** — spec `0023` (2026-07-28) had already turned it into a bare redirect to `/pets`, but this doc still described `context="profile"` as a live second rendering with its own Vibe icon + Weight strip + quick weight-log sheet. That code was fully unreachable and was deleted (spec `0026`) — this doc's Functional Overview, Header, Navigation, Loading States, Acceptance Criteria, and Edge Cases sections all still described it and have been updated.
 2. **The Observations card is no longer read-only once checked in.** It now stays tappable and reopens today's entry for editing, closing a gap the canonical check-in spec (`0012`, line 226) had already assumed was covered ("existing edit/re-save behavior should apply") but that no reachable UI actually provided.
+
+## **Revision Notes (2026-08-02 update, spec `0036`)**
+
+This pass corrected the doc against `docs/features/0036_Edit_Pet_Conditions_Page_Split_Specification_v1.md`:
+
+1. **`EditPetSheet.jsx` is deleted.** It's replaced by two routed pages: `PetEdit.jsx` (`/pet/:petId/edit`) for pet-identity fields, and `PetConditions.jsx` (`/pet/:petId/conditions`) for conditions. The Conditions card and Edit Pet action pill now route to two different destinations instead of both opening the same sheet.
+2. **Edit Pet now exposes fields that were previously locked after pet creation** — sex, spayed/neutered status, color/markings, gotcha day, microchip number, and AKC registration. These aren't part of what the Pet Profile screen itself displays (out of scope for this doc), but the change means Edit Pet is no longer a strict subset of "photo/name/breed/birth date/conditions" as V4 implied.
+3. **The free-text `pets.medications` legacy field was removed from the UI** (the database column is untouched). It was never displayed anywhere in the app and had no effect on the Medications card/count.

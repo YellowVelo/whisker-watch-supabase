@@ -160,7 +160,7 @@ export default function MedicationSection({ petId }) {
                       key={type}
                       type="button"
                       onClick={() => set('med_type', type)}
-                      className={`flex-1 flex items-center justify-center gap-1 text-xs py-2 px-2 rounded-lg border transition-colors ${
+                      className={`flex-1 flex items-center justify-center gap-1 text-[13px] py-2 px-2 rounded-lg border transition-colors ${
                         form.med_type === type
                           ? 'bg-primary text-primary-foreground border-primary'
                           : 'bg-background border-border text-muted-foreground hover:border-primary/50'
@@ -277,7 +277,7 @@ function MedButton({ med, given, onGive, onEdit, onDelete, past }) {
                               )}
                               {typeBadge && (
                                 <span
-                                  className="flex items-center gap-0.5 text-xs px-1.5 py-0.5 rounded-full"
+                                  className="flex items-center gap-0.5 text-[13px] px-1.5 py-0.5 rounded-full"
                                   style={{ background: typeBadge.background, color: typeBadge.color }}
                                 >
                                   <TypeBadgeIcon className="h-2.5 w-2.5" />

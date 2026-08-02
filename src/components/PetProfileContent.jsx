@@ -8,7 +8,6 @@ import {
   Pill, Utensils, ShieldCheck, TrendingUp, Clock, FileText, FileDown, Droplets, Footprints, LineChart,
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
-import EditPetSheet from './EditPetSheet';
 import MemorialDialog from './MemorialDialog';
 import ListRow from './ListRow';
 import ConfirmDeleteDialog from './ConfirmDeleteDialog';
@@ -27,13 +26,7 @@ import { computeDetailedAge } from '@/lib/lifeStage';
 import { PALETTE, RING_COLOR } from '@/lib/toneColors';
 import { useAuth } from '@/lib/AuthContext';
 import { detectTimezone, dateStrInTimezone } from '@/lib/timezone';
-import AttributeTrendChip from '@/components/AttributeTrendChip';
-import { WELLBEING_ATTRIBUTES } from '@/lib/checkin/config';
-
-// Daily Check-In, Vibe & Trends (spec v5) — the Pets-tab card's Wellbeing
-// chips, always Energy/Mobility/Breathing/Skin-Itching/Behavior in this
-// order.
-const WELLBEING_CHIP_LABELS = { energy: 'Energy', mobility: 'Mobility', breathing: 'Breathing', itching: 'Skin / Itching', behavior: 'Behavior' };
+import WellbeingChipGrid from '@/components/WellbeingChipGrid';
 
 const todayStr = (timezone) => dateStrInTimezone(timezone, 0);
 
@@ -154,7 +147,6 @@ export default function PetProfileContent({ petId, onReload, expanded = true, on
   const [fullDetailsLoaded, setFullDetailsLoaded] = useState(false);
 
   const [checkInOpen, setCheckInOpen] = useState(false);
-  const [editOpen, setEditOpen] = useState(false);
   const [memorialOpen, setMemorialOpen] = useState(false);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [deletePetStep, setDeletePetStep] = useState(0);
@@ -474,22 +466,13 @@ export default function PetProfileContent({ petId, onReload, expanded = true, on
                 kind is ever shown here. */}
             {context === 'pets' && (
               <div className="rounded-2xl px-4 py-4 bg-card border border-border">
-                {wellbeingUnavailable ? (
-                  <p className="text-base text-tier-tertiary text-center py-4">Unable to load wellbeing.</p>
-                ) : (
-                  <div className="grid grid-cols-2 gap-2">
-                    {WELLBEING_ATTRIBUTES.map((code) => (
-                      <AttributeTrendChip
-                        key={code}
-                        label={WELLBEING_CHIP_LABELS[code]}
-                        direction={wellbeingDirections?.[code]}
-                        state={!wellbeingDirections ? 'loading' : !checkedInToday ? 'no-checkin' : 'ready'}
-                        interactive
-                        onClick={() => navigate(`/pet/${petId}/trends?section=trends&group=wellness&metric=${code}`)}
-                      />
-                    ))}
-                  </div>
-                )}
+                <WellbeingChipGrid
+                  directions={wellbeingDirections}
+                  unavailable={wellbeingUnavailable}
+                  checkedInToday={checkedInToday}
+                  interactive
+                  onChipClick={(code) => navigate(`/pet/${petId}/trends?section=trends&group=wellness&metric=${code}`)}
+                />
               </div>
             )}
 
@@ -502,7 +485,7 @@ export default function PetProfileContent({ petId, onReload, expanded = true, on
         {showDetails && isMemorial && (
           <div className="flex items-center gap-2 flex-wrap justify-center">
             <ActionPill icon={Share2} label="Share" onClick={handleShare} />
-            <ActionPill icon={Pencil} label="Edit Pet" onClick={() => setEditOpen(true)} />
+            <ActionPill icon={Pencil} label="Edit Pet" onClick={() => navigate(`/pet/${petId}/edit`)} />
             <ActionPill icon={Trash2} label="Delete Pet" danger onClick={openDeletePetFlow} disabled={!isOnline} />
             {shareFeedback && (
               <p role="status" className="text-center text-sm text-tier-tertiary w-full">{shareFeedback}</p>
@@ -515,7 +498,7 @@ export default function PetProfileContent({ petId, onReload, expanded = true, on
             {/* ── ACTIONS ── */}
             <div className="flex items-center gap-2 flex-wrap justify-center">
               <ActionPill icon={Share2} label="Share" onClick={handleShare} />
-              <ActionPill icon={Pencil} label="Edit Pet" onClick={() => setEditOpen(true)} />
+              <ActionPill icon={Pencil} label="Edit Pet" onClick={() => navigate(`/pet/${petId}/edit`)} />
               <ActionPill icon={Rainbow} label="Rainbow Bridge" onClick={() => setMemorialOpen(true)} />
               <ActionPill icon={Trash2} label="Delete Pet" danger onClick={openDeletePetFlow} disabled={!isOnline} />
             </div>
@@ -532,14 +515,14 @@ export default function PetProfileContent({ petId, onReload, expanded = true, on
             />
 
             {/* ── CONDITIONS ── */}
-            {/* No dedicated Condition Management screen exists yet — conditions
-                are edited via the Edit Pet sheet's condition chips. */}
+            {/* Spec 0036: own routed page, separate from Edit Pet — reuses
+                onboarding's grouped + searchable condition picker. */}
             <ListRow
               icon={ClipboardList} iconBg="rgba(244,199,107,0.15)" iconColor={PALETTE.amber}
               title="Conditions" subtitle={conditionsCount > 0 ? 'Chronic conditions and diagnoses' : 'No conditions added.'}
               value={conditionsCount > 0 ? conditionsCount : 'Add Condition'}
               valueColor={conditionsCount > 0 ? '#fff' : PALETTE.amber}
-              onClick={() => setEditOpen(true)}
+              to={`/pet/${petId}/conditions`}
             />
 
             {/* ── MEDICATIONS ── */}
@@ -666,7 +649,6 @@ export default function PetProfileContent({ petId, onReload, expanded = true, on
         />
       )}
 
-      <EditPetSheet pet={pet} open={editOpen} onOpenChange={setEditOpen} onSuccess={() => { setEditOpen(false); reloadAll(); }} />
       <MemorialDialog pet={pet} open={memorialOpen} onOpenChange={setMemorialOpen} onSuccess={() => { setMemorialOpen(false); reloadAll(); }} />
 
       {/* Delete Pet — two-step type-to-confirm flow */}

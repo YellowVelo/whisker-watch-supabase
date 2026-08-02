@@ -304,7 +304,7 @@ export default function CatchUpFlow({ pets, missedDaysByPet, onClose, onPetProgr
 
       {step === 'calendar' && (
         <div className="flex-shrink-0 border-t border-border bg-card">
-          {finishError && <p className="text-xs text-red-400 text-center pt-2">{finishError}</p>}
+          {finishError && <p className="text-[13px] text-red-400 text-center pt-2">{finishError}</p>}
           {exceptionList.length > 0 ? (
             <button
               onClick={() => setStep('exceptions')}
@@ -320,7 +320,7 @@ export default function CatchUpFlow({ pets, missedDaysByPet, onClose, onPetProgr
             </button>
           ) : (
             <div className="px-5 py-4">
-              <p className="text-xs text-tier-tertiary text-center mb-2">
+              <p className="text-[13px] text-tier-tertiary text-center mb-2">
                 {missedDates.length} days missed{resolvedCount > 0 && ` · ${resolvedCount} saved`}
               </p>
               <button
@@ -456,7 +456,7 @@ function CalendarStep({ grid, missedDates, checkInsByDate, exceptionDates, onTog
           <ChevronLeft className="h-4 w-4 text-tier-secondary" />
         </button>
         {anyExceptions && (
-          <button onClick={onClearAll} className="text-xs font-semibold" style={{ color: PALETTE.sky }}>Clear All</button>
+          <button onClick={onClearAll} className="text-[13px] font-semibold" style={{ color: PALETTE.sky }}>Clear All</button>
         )}
         <button onClick={onNextMonth} disabled={!canGoLater} aria-label="Next month" className="h-8 w-8 rounded-full flex items-center justify-center disabled:opacity-30">
           <ChevronRight className="h-4 w-4 text-tier-secondary" />
@@ -465,14 +465,14 @@ function CalendarStep({ grid, missedDates, checkInsByDate, exceptionDates, onTog
 
       <div className="grid grid-cols-7 gap-y-2 text-center">
         {WEEKDAY_LABELS.map((d) => (
-          <div key={d} className="text-xs font-medium text-tier-tertiary pb-1">{d}</div>
+          <div key={d} className="text-[13px] font-medium text-tier-tertiary pb-1">{d}</div>
         ))}
         {grid.map(({ dateStr, inMonth, dayOfMonth }) => {
           const isMissed = missedSet.has(dateStr);
           if (!inMonth || !isMissed) {
             return (
               <div key={dateStr} className="flex flex-col items-center gap-1 py-1">
-                <span className={`text-xs ${inMonth ? 'text-tier-tertiary' : 'text-tier-tertiary'}`}>{dayOfMonth}</span>
+                <span className={`text-[13px] ${inMonth ? 'text-tier-tertiary' : 'text-tier-tertiary'}`}>{dayOfMonth}</span>
                 <Minus className="h-4 w-4 text-tier-tertiary" aria-hidden="true" />
               </div>
             );
@@ -485,7 +485,7 @@ function CalendarStep({ grid, missedDates, checkInsByDate, exceptionDates, onTog
               onClick={() => onToggle(dateStr)}
               className="flex flex-col items-center gap-1 py-1 rounded-lg active:opacity-70"
             >
-              <span className="text-xs text-tier-secondary">{dayOfMonth}</span>
+              <span className="text-[13px] text-tier-secondary">{dayOfMonth}</span>
               <DayIcon checkIn={checkIn} isException={isException} />
             </button>
           );
