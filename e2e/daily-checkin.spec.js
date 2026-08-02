@@ -41,8 +41,7 @@ test('a logged-in owner can complete a same-day check-in and see it reflected', 
   const startButton = page.getByRole('button', { name: /Start .+'s Daily Check-In/ }).first();
   const petName = (await startButton.textContent()).match(/Start (.+)'s Daily Check-In/)[1];
   const petLink = page.getByRole('link', { name: `${petName}. View profile.` });
-  const href = await petLink.getAttribute('href');
-  checkInPetId = href.match(/\/pet\/([^/]+)\//)[1];
+  checkInPetId = await petLink.getAttribute('data-pet-id');
 
   await startButton.click();
 

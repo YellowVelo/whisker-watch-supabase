@@ -70,6 +70,7 @@ export default function Home() {
   const [catchUpPet, setCatchUpPet] = useState(null); // which pet the open Catch Up flow is scoped to
   const hasLoadedOnceRef = useRef(false);
   const hasAutoLaunchedRef = useRef(false);
+  const loadRequestIdRef = useRef(0);
   const location = useLocation();
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -86,8 +87,19 @@ export default function Home() {
   }, [location.state, navigate, toast]);
 
   const loadData = useCallback(async () => {
+    // Guards against a slower, earlier-started reload finishing after a
+    // later one and silently overwriting its fresher state — Home can
+    // trigger overlapping reloads (initial mount, the auto-detected→profile
+    // timezone swap re-running this callback, pull-to-refresh, Retry) with
+    // no other coordination between them. Only the reload holding the
+    // current requestId when it reaches a commit point is allowed to
+    // apply its results; a stale one just stops updating state.
+    const requestId = ++loadRequestIdRef.current;
+    const isStale = () => loadRequestIdRef.current !== requestId;
+
     try {
       const petList = await entities.Pet.list('-created_date');
+      if (isStale()) return;
       setPets(petList);
 
       const activePets = petList.filter((p) => !p.is_memorial);
@@ -99,6 +111,7 @@ export default function Home() {
           getCheckInsForPets(petIds, yesterdayStr()),
           getActiveMedicationCountsForPets(petIds),
         ]);
+        if (isStale()) return;
 
         let todayRows = {};
         if (todayRowsR.status === 'fulfilled') {
@@ -119,9 +132,12 @@ export default function Home() {
         if (medCountsR.status === 'rejected') console.error(medCountsR.reason);
 
         try {
-          setAttributeDirections(await getHealthAttributeDirectionsForPets(petIds, todayRows, yesterdayRows));
+          const directions = await getHealthAttributeDirectionsForPets(petIds, todayRows, yesterdayRows);
+          if (isStale()) return;
+          setAttributeDirections(directions);
           setAttributesUnavailable(false);
         } catch (err) {
+          if (isStale()) return;
           console.error(err);
           setAttributeDirections({});
           setAttributesUnavailable(true);
@@ -129,8 +145,10 @@ export default function Home() {
 
         try {
           const weightSummaries = await getWeightSummariesForPets(petIds);
+          if (isStale()) return;
           setWeightStates(Object.fromEntries(activePets.map((p) => [p.id, buildWeightState(weightSummaries[p.id])])));
         } catch (err) {
+          if (isStale()) return;
           console.error(err);
           setWeightStates(Object.fromEntries(activePets.map((p) => [p.id, { direction: null, comparisonLabel: 'Not enough data', unavailable: true }])));
         }
@@ -143,6 +161,7 @@ export default function Home() {
           const missedResults = await Promise.allSettled(
             activePets.map((pet) => getMissedDaysForPet(pet.id, { timezone, userCreatedAt: user?.created_at, petCreatedAt: pet.created_at })),
           );
+          if (isStale()) return;
           const missedByPet = {};
           activePets.forEach((pet, i) => {
             const result = missedResults[i];
@@ -155,6 +174,7 @@ export default function Home() {
           });
           setMissedDaysByPet(missedByPet);
         } catch (err) {
+          if (isStale()) return;
           console.error(err);
           setMissedDaysByPet({});
         }
@@ -162,6 +182,7 @@ export default function Home() {
         // A pet with no onboarding row, or a row that isn't completed yet,
         // still needs "Complete {PetName}'s Profile" surfaced.
         const onboardingRows = await entities.PetOnboarding.list();
+        if (isStale()) return;
         const completedIds = new Set(onboardingRows.filter((r) => r.completed_at).map((r) => r.pet_id));
         setIncompleteOnboardingIds(new Set(activePets.filter((p) => !completedIds.has(p.id)).map((p) => p.id)));
       } else {
@@ -178,6 +199,7 @@ export default function Home() {
       setLoadError(false);
       setStale(false);
     } catch (err) {
+      if (isStale()) return;
       console.error(err);
       if (hasLoadedOnceRef.current) {
         setStale(true); // keep showing cached data
@@ -185,8 +207,10 @@ export default function Home() {
         setLoadError(true);
       }
     } finally {
-      hasLoadedOnceRef.current = true;
-      setLoading(false);
+      if (!isStale()) {
+        hasLoadedOnceRef.current = true;
+        setLoading(false);
+      }
     }
   }, [timezone, user?.created_at]);
 
@@ -488,7 +512,7 @@ function CatchUpBanner({ petName, onCatchUp }) {
         <CalendarClock className="h-3.5 w-3.5" aria-hidden="true" />
         Yesterday wasn't logged for {petName}.
       </p>
-      <button onClick={onCatchUp} className="text-[13px] font-semibold text-primary mt-1">
+      <button onClick={onCatchUp} className="text-[13px] font-semibold text-primary mt-1 min-h-[44px] px-2 inline-flex items-center justify-center">
         Catch up yesterday
       </button>
     </div>
@@ -506,7 +530,7 @@ function MultiDayCatchUpBanner({ petName, missedCount, onCatchUp }) {
         <CalendarClock className="h-3.5 w-3.5" aria-hidden="true" />
         {missedCount} days weren't logged for {petName}.
       </p>
-      <button onClick={onCatchUp} className="text-[13px] font-semibold text-primary mt-1">
+      <button onClick={onCatchUp} className="text-[13px] font-semibold text-primary mt-1 min-h-[44px] px-2 inline-flex items-center justify-center">
         Catch up now
       </button>
     </div>

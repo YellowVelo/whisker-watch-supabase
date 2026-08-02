@@ -1,4 +1,4 @@
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { Cat, Dog, Heart, Pill, CalendarDays, ChevronRight, Rainbow } from 'lucide-react';
 import AttributeTrendChip, { DIRECTION_CONFIG } from '@/components/AttributeTrendChip';
 import VibeIcon, { vibeAccessibleLabel } from '@/components/VibeIcon';
@@ -53,7 +53,21 @@ export default function PetSummaryCard({
 }) {
   const navigate = useNavigate();
 
-  // Chips sit inside the card's own <Link to=".../trends"> — AttributeTrendChip
+  // The card itself is a plain tappable box, not a real <a> — it contains
+  // several nested real <button>s (the chips below), and a button nested
+  // inside a link is invalid markup that can confuse assistive tech, so
+  // the outer card can't be a real link here. handleCardActivate/
+  // handleCardKeyDown reproduce link-like click + keyboard (Enter/Space)
+  // navigation by hand instead.
+  const goToPet = () => navigate(`/pet/${pet.id}/trends`);
+  const handleCardKeyDown = (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      goToPet();
+    }
+  };
+
+  // Chips sit inside the card's own tappable area — AttributeTrendChip
   // itself stops that outer navigation when interactive, so this only needs
   // to supply where the tap should actually go.
   const goToMetric = (metric) => () => {
@@ -73,11 +87,15 @@ export default function PetSummaryCard({
     const birthYear = pet.birth_date ? new Date(pet.birth_date).getFullYear() : null;
     const memorialYear = pet.memorial_date ? new Date(pet.memorial_date).getFullYear() : null;
     return (
-      <Link
+      <div
         ref={cardRef}
-        to={`/pet/${pet.id}/trends`}
+        role="link"
+        tabIndex={0}
+        data-pet-id={pet.id}
         aria-label={`${pet.name}, in memory. View profile.`}
-        className="block rounded-2xl px-4 py-4 active:opacity-80 transition-opacity bg-card border border-border"
+        onClick={goToPet}
+        onKeyDown={handleCardKeyDown}
+        className="block rounded-2xl px-4 py-4 active:opacity-80 transition-opacity bg-card border border-border cursor-pointer"
       >
         <div className="flex items-center gap-3.5">
           <PetPhoto pet={pet} size={64} memorial />
@@ -96,7 +114,7 @@ export default function PetSummaryCard({
           </div>
           <ChevronRight className="h-4 w-4 text-tier-tertiary flex-shrink-0" aria-hidden="true" />
         </div>
-      </Link>
+      </div>
     );
   }
 
@@ -106,11 +124,15 @@ export default function PetSummaryCard({
   const vibeStatus = checkIn?.status ?? null;
 
   return (
-    <Link
+    <div
       ref={cardRef}
-      to={`/pet/${pet.id}/trends`}
+      role="link"
+      tabIndex={0}
+      data-pet-id={pet.id}
       aria-label={`${pet.name}. View profile.`}
-      className="block rounded-2xl px-4 py-4 active:opacity-80 transition-opacity bg-card"
+      onClick={goToPet}
+      onKeyDown={handleCardKeyDown}
+      className="block rounded-2xl px-4 py-4 active:opacity-80 transition-opacity bg-card cursor-pointer"
       style={{
         border: highlighted ? '1px solid rgba(111,183,255,0.5)' : '1px solid hsl(var(--border))',
         boxShadow: highlighted ? '0 0 0 3px rgba(111,183,255,0.15)' : undefined,
@@ -182,6 +204,6 @@ export default function PetSummaryCard({
           />
         </div>
       </div>
-    </Link>
+    </div>
   );
 }
