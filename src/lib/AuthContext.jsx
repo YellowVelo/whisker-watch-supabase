@@ -11,7 +11,7 @@ const AuthContext = createContext();
  *
  * Keeps the exact same shape consumers rely on (useAuth() ->
  * { user, isAuthenticated, isLoadingAuth, authError, authChecked,
- *   logout, navigateToLogin, checkUserAuth, ... }) so ProtectedRoute.jsx
+ *   logout, checkUserAuth, ... }) so ProtectedRoute.jsx
  * and App.jsx don't need to change.
  *
  * "user" now includes the merged profiles row (role, etc.) alongside
@@ -183,10 +183,6 @@ export const AuthProvider = ({ children }) => {
     window.location.href = '/login';
   };
 
-  const navigateToLogin = () => {
-    window.location.href = '/login';
-  };
-
   return (
     <AuthContext.Provider value={{
       user,
@@ -201,7 +197,6 @@ export const AuthProvider = ({ children }) => {
       authChecked,
       profileLoadError,
       logout,
-      navigateToLogin,
       checkUserAuth,
       refreshProfile,
     }}>

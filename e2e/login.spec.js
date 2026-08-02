@@ -23,3 +23,24 @@ test('a real account can sign in with email and password and land on a logged-in
   await expect(page.getByRole('link', { name: 'Menu' })).toBeVisible();
   await expect(page).toHaveURL('/');
 });
+
+// Regression test for a punch-list item (spec 0040): App.jsx used to have
+// an authError.type === 'auth_required' branch that called navigateToLogin()
+// during render — a React anti-pattern that logs a console error even
+// though the redirect itself still worked. That branch was dead (nothing
+// ever set authError.type to 'auth_required') and has been removed; this
+// confirms the still-working redirect (via ProtectedRoute's declarative
+// <Navigate>) stays clean. Reuses the file-wide logged-out storageState
+// set above.
+test('visiting a protected URL while logged out redirects to login with no console errors', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', (err) => errors.push(err.message));
+  page.on('console', (msg) => {
+    if (msg.type() === 'error') errors.push(msg.text());
+  });
+
+  await page.goto('/pets');
+
+  await expect(page).toHaveURL('/login');
+  expect(errors).toEqual([]);
+});
