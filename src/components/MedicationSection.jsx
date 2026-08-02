@@ -243,7 +243,7 @@ export default function MedicationSection({ petId }) {
               </div>
               <Switch checked={form.reminder_enabled} onCheckedChange={v => set('reminder_enabled', v)} />
             </div>
-            <Button type="submit" className="w-full min-h-[44px]" disabled={saving || !form.name.trim()}>
+            <Button type="submit" className="w-full" disabled={saving || !form.name.trim()}>
               {saving ? 'Saving...' : editing ? 'Save Changes' : 'Add to Medication List'}
             </Button>
           </form>

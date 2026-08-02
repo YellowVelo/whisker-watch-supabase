@@ -166,7 +166,7 @@ export default function FoodSection({ petId }) {
               </div>
               <Switch checked={form.active} onCheckedChange={v => set('active', v)} />
             </div>
-            <Button type="submit" className="w-full min-h-[44px]" disabled={saving || !form.name.trim()}>
+            <Button type="submit" className="w-full" disabled={saving || !form.name.trim()}>
               {saving ? 'Saving...' : editing ? 'Save Changes' : 'Add to Food List'}
             </Button>
           </form>

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { entities } from '@/api/entities';
 import { Button } from '@/components/ui/button';
+import IconButton from './IconButton';
 import { CalendarDays, Loader2 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 
@@ -109,14 +110,13 @@ export default function ExportCalendarButton({ petId, petName, iconOnly = false 
 
   if (iconOnly) {
     return (
-      <button
+      <IconButton
+        icon={loading ? Loader2 : CalendarDays}
+        iconClassName={loading ? 'text-foreground animate-spin' : 'text-foreground'}
         onClick={handleExport}
+        aria-label="Export to Calendar"
         disabled={loading}
-        title="Export to Calendar"
-        className="inline-flex items-center gap-1.5 text-xs text-tier-secondary bg-black/20 backdrop-blur-sm hover:bg-black/30 border border-white/20 rounded-full px-3 py-1.5 transition-colors disabled:opacity-50"
-      >
-        {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CalendarDays className="h-3.5 w-3.5" />}
-      </button>
+      />
     );
   }
 
