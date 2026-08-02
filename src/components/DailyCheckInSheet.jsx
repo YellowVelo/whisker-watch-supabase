@@ -159,7 +159,7 @@ export default function DailyCheckInSheet({ pet, date, onClose, onSaved, isCatch
     <>
       {error && <p className="text-sm text-red-400 mt-2">{error}</p>}
       {!error && stage === 'initial' && existingCheckIn?.status && (
-        <p className="text-xs text-tier-tertiary mt-2">
+        <p className="text-[13px] text-tier-tertiary mt-2">
           Already logged as {{ great: 'Great Day', off: 'Off Day', tough: 'Tough Day', skipped: 'Skipped' }[existingCheckIn.status] || existingCheckIn.status} for {dayWord} — saving again will update it.
         </p>
       )}
@@ -180,7 +180,7 @@ export default function DailyCheckInSheet({ pet, date, onClose, onSaved, isCatch
       {(stage === 'details' || stage === 'saving') && (
         <>
           {incompleteCodes.length > 0 && stage === 'details' && (
-            <p className="text-xs text-tier-tertiary mb-2 text-center">Answer each selected category to save</p>
+            <p className="text-[13px] text-tier-tertiary mb-2 text-center">Answer each selected category to save</p>
           )}
           <button
             onClick={handleSaveOffTough}
@@ -319,7 +319,7 @@ function CategoryQuestion({ category, species, petName, dayWord, answer, onChang
             onChange={(e) => onChange({ numericValue: e.target.value === '' ? null : parseFloat(e.target.value) })}
             className="w-32 rounded-xl px-3.5 py-2.5 text-sm font-semibold text-white bg-card border border-border focus:outline-none focus:ring-1 focus:ring-primary"
           />
-          <span className="text-xs text-tier-tertiary">lbs (optional)</span>
+          <span className="text-[13px] text-tier-tertiary">lbs (optional)</span>
         </div>
       )}
 

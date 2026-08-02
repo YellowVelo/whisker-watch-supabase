@@ -59,7 +59,7 @@ export default function DateInfoFields({ precision, parts, onPrecisionChange, on
             key={opt.value}
             active={precision === opt.value}
             onClick={() => onPrecisionChange(opt.value)}
-            className="text-xs px-3 py-1.5"
+            className="text-[13px] px-3 py-1.5"
           >
             {opt.label}
           </PillToggle>

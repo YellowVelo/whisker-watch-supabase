@@ -55,7 +55,7 @@ export default function ReviewCard({ pet, row, conditions, onJumpToStep, onFinis
   return (
     <div className="flex flex-col gap-6">
       <div className="space-y-1.5">
-        <p className="text-xs font-semibold uppercase tracking-widest text-primary/70">Review</p>
+        <p className="text-[13px] font-semibold uppercase tracking-widest text-primary/70">Review</p>
         <h2 className="text-2xl font-semibold text-foreground leading-snug">Review your information</h2>
         <p className="text-sm text-muted-foreground">Here's what we've got so far.</p>
       </div>

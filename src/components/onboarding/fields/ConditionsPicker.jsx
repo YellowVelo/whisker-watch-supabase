@@ -43,7 +43,7 @@ export default function ConditionsPicker({ species, selected, onChange, disabled
       <div className="flex flex-col gap-4">
         {Object.entries(filteredCategories).map(([category, conditions]) => (
           <div key={category} className="space-y-2">
-            <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">{category}</p>
+            <p className="text-[13px] font-semibold uppercase tracking-widest text-muted-foreground">{category}</p>
             <div className="flex flex-wrap gap-2">
               {conditions.map((c) => {
                 const active = selected.includes(c);

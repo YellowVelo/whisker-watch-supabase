@@ -201,7 +201,7 @@ function FoodCard({ food, onEdit, onDelete, onToggle, typeColors }) {
           </div>
           <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
             {food.food_type && (
-              <span className="text-xs px-2 py-0.5 rounded-full" style={typeColors[food.food_type] || typeColors.Other}>{food.food_type}</span>
+              <span className="text-[13px] px-2 py-0.5 rounded-full" style={typeColors[food.food_type] || typeColors.Other}>{food.food_type}</span>
             )}
             {food.prescription && (
               <span

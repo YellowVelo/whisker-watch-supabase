@@ -156,7 +156,7 @@ export default function InviteCoOwnerDialog({ petId, petName, open, onOpenChange
 
         {loaded && coOwners.length > 0 && (
           <div className="mt-2 space-y-2">
-            <Label className="text-xs text-muted-foreground uppercase tracking-wide">Co-Owners</Label>
+            <Label className="text-[13px] text-muted-foreground uppercase tracking-wide">Co-Owners</Label>
             {coOwners.map(c => (
               <div key={c.id} className="flex items-center justify-between bg-secondary rounded-lg px-3 py-2">
                 <div className="flex items-center gap-2">

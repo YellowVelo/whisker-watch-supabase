@@ -20,7 +20,7 @@ function ChipPill({ label, tone }) {
   const danger = tone === 'warn';
   return (
     <span
-      className={`inline-flex items-center text-xs rounded-full px-2 py-0.5 ${danger ? 'border border-red-500/20' : 'border border-white/10'}`}
+      className={`inline-flex items-center text-[13px] rounded-full px-2 py-0.5 ${danger ? 'border border-red-500/20' : 'border border-white/10'}`}
       style={{ background: danger ? 'rgba(239,68,68,0.1)' : 'rgba(255,255,255,0.06)', color: danger ? TONE_COLOR.warn : 'rgba(255,255,255,0.6)' }}
     >
       {label}
@@ -110,7 +110,7 @@ export default function Timeline() {
           ) : (
             Object.entries(groups).map(([month, monthItems]) => (
               <div key={month} className="mb-6">
-                <p className="text-xs font-bold uppercase tracking-widest text-tier-tertiary mb-3 px-1">{month}</p>
+                <p className="text-[13px] font-bold uppercase tracking-widest text-tier-tertiary mb-3 px-1">{month}</p>
                 <div className="space-y-2">
                   {monthItems.map((item) => {
                     const d = format(parseISO(item.date), 'MMM d');
@@ -120,7 +120,7 @@ export default function Timeline() {
                         <div key={item.id} className="rounded-2xl p-4 bg-card border border-border">
                           <div className="flex items-baseline gap-2 mb-3">
                             <p className="text-sm font-bold text-white">{d}</p>
-                            <p className="text-xs text-tier-tertiary">{weekday}</p>
+                            <p className="text-[13px] text-tier-tertiary">{weekday}</p>
                           </div>
                           <div className="flex flex-wrap gap-1.5">
                             {item.chips.map((chip) => (

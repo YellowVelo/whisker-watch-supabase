@@ -155,7 +155,7 @@ export default function PetInfoCard({ onCreated }) {
     return (
       <div className="flex flex-col gap-6">
         <div className="space-y-1.5 text-center">
-          <p className="text-xs font-semibold uppercase tracking-widest text-primary/70">Pet Information</p>
+          <p className="text-[13px] font-semibold uppercase tracking-widest text-primary/70">Pet Information</p>
           <h2 className="text-2xl font-semibold text-foreground leading-snug">What kind of pet are you adding?</h2>
         </div>
         <div className="grid grid-cols-2 gap-4">

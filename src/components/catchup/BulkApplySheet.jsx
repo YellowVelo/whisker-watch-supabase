@@ -95,7 +95,7 @@ export default function BulkApplySheet({ pet, dates, onClose, onSaved }) {
     <>
       {error && <p className="text-sm text-red-400 mt-2">{error}</p>}
       {!error && stage === 'vibe' && (
-        <p className="text-xs text-tier-tertiary mt-2">Pick what these {dates.length} days had in common — each day still gets saved on its own.</p>
+        <p className="text-[13px] text-tier-tertiary mt-2">Pick what these {dates.length} days had in common — each day still gets saved on its own.</p>
       )}
     </>
   );
@@ -115,7 +115,7 @@ export default function BulkApplySheet({ pet, dates, onClose, onSaved }) {
       {(stage === 'details' || stage === 'saving') && (
         <>
           {incompleteCodes.length > 0 && stage === 'details' && (
-            <p className="text-xs text-tier-tertiary mb-2 text-center">Answer each selected category to save</p>
+            <p className="text-[13px] text-tier-tertiary mb-2 text-center">Answer each selected category to save</p>
           )}
           <button
             onClick={handleSave}
@@ -250,7 +250,7 @@ function BulkCategoryQuestion({ category, species, answer, onChange }) {
             onChange={(e) => onChange({ numericValue: e.target.value === '' ? null : parseFloat(e.target.value) })}
             className="w-32 rounded-xl px-3.5 py-2.5 text-sm font-semibold text-white bg-white/8 border border-white/10 focus:outline-none focus:ring-1 focus:ring-primary"
           />
-          <span className="text-xs text-tier-tertiary">lbs (optional)</span>
+          <span className="text-[13px] text-tier-tertiary">lbs (optional)</span>
         </div>
       )}
 
