@@ -4,6 +4,7 @@ import { entities } from '@/api/entities';
 import PetAIInsights from './PetAIInsights';
 import PetAIChat from './PetAIChat';
 import GeneralAskWyskerChat from './GeneralAskWyskerChat';
+import AIDisclaimerBanner from './AIDisclaimerBanner';
 
 // Global "Ask Wysker" overlay (spec 0023 step 5) — a non-navigating
 // full-screen sheet, opened from AppHeader. Reuses PetAIInsights/PetAIChat
@@ -76,6 +77,7 @@ export default function AskWyskerSheet({ open, onOpenChange, context }) {
       </div>
 
       <div className="px-4 py-5 pb-32 max-w-2xl mx-auto">
+        <AIDisclaimerBanner />
         {loading ? (
           <div className="text-center py-16">
             <div className="w-8 h-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin mx-auto" />
@@ -97,8 +99,8 @@ export default function AskWyskerSheet({ open, onOpenChange, context }) {
               ><MessageCircle className="h-3.5 w-3.5 inline mr-1" /> Ask a Question</button>
             </div>
             {aiTab === 'insights'
-              ? <PetAIInsights pet={pet} logs={logs} medications={medications} baseline={baseline} />
-              : <PetAIChat pet={pet} medications={medications} baseline={baseline} />
+              ? <PetAIInsights pet={pet} logs={logs} medications={medications} baseline={baseline} screen={screen} />
+              : <PetAIChat pet={pet} medications={medications} baseline={baseline} screen={screen} />
             }
           </>
         ) : (

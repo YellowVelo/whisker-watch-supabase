@@ -4,9 +4,12 @@ import { Sparkles, RefreshCw, AlertTriangle, CircleCheck, Lightbulb } from 'luci
 import { Button } from '@/components/ui/button';
 import { PALETTE } from '@/lib/toneColors';
 import { formatBaselineForAI } from '@/lib/baselineContext';
+import { AI_DISCLAIMER_SENTENCE, URGENT_FLAG_INSTRUCTION } from '@/lib/aiGuardrails';
+import AIEmergencyNotice from './AIEmergencyNotice';
 
-export default function PetAIInsights({ pet, logs, medications, bloodwork, baseline }) {
+export default function PetAIInsights({ pet, logs, medications, bloodwork, baseline, screen }) {
   const [insights, setInsights] = useState(null);
+  const [urgent, setUrgent] = useState(false);
   const [loading, setLoading] = useState(false);
   const [generated, setGenerated] = useState(false);
 
@@ -30,6 +33,7 @@ Breed: ${pet.breed || 'Unknown'}
 Known Conditions: ${conditions}
 Active Medications: ${activeMeds}
 ${baselineSummary ? `Established Baseline (owner-reported normal): ${baselineSummary}` : ''}
+${screen ? `The owner just came from ${pet.name}'s ${screen} screen, so lean toward that topic first if it's relevant.` : ''}
 
 Recent Health Logs (most recent first):
 ${logSummary || 'No recent logs.'}
@@ -39,9 +43,10 @@ ${logSummary || 'No recent logs.'}
   const generateInsights = async () => {
     setLoading(true);
     setGenerated(true);
+    setUrgent(false);
     const context = buildContext();
     const result = await invokeAI({
-      prompt: `You are a compassionate, experienced veterinarian with 20+ years of clinical practice reviewing a pet's health record. Analyze the following medical data and provide 3-5 specific, actionable observations or concerns. Focus on trends, anomalies, or patterns in the data. Be concise and practical. Always end with a brief reminder to consult a licensed veterinarian for diagnosis or treatment decisions.
+      prompt: `You are a compassionate, experienced veterinarian with 20+ years of clinical practice reviewing a pet's health record. Analyze the following medical data and provide 3-5 specific, actionable observations or concerns. Focus on trends, anomalies, or patterns in the data. Be concise and practical. ${AI_DISCLAIMER_SENTENCE} ${URGENT_FLAG_INSTRUCTION}
 
 ${context}
 
@@ -51,7 +56,8 @@ Respond in JSON with this structure:
   "insights": [
     { "type": "warning|info|positive", "title": "Short title", "detail": "1-2 sentences" }
   ],
-  "disclaimer": "brief disclaimer"
+  "disclaimer": "brief disclaimer",
+  "urgent": false
 }`,
       response_json_schema: {
         type: "object",
@@ -68,10 +74,21 @@ Respond in JSON with this structure:
               }
             }
           },
-          disclaimer: { type: "string" }
+          disclaimer: { type: "string" },
+          urgent: { type: "boolean" }
         }
       }
     });
+
+    // Backstop: discard the generated analysis entirely and show only the
+    // hard-stop redirect if the AI flagged this as urgent — same principle
+    // as PetAIChat, no AI-generated content shown for a real emergency.
+    if (result?.urgent) {
+      setUrgent(true);
+      setInsights(null);
+      setLoading(false);
+      return;
+    }
     setInsights(result);
     setLoading(false);
   };
@@ -105,6 +122,8 @@ Respond in JSON with this structure:
           <p className="text-sm text-muted-foreground">Reviewing {pet.name}'s health records…</p>
         </div>
       )}
+
+      {urgent && !loading && <AIEmergencyNotice petName={pet.name} />}
 
       {insights && !loading && (
         <div className="space-y-3">
