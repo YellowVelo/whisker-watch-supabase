@@ -26,3 +26,8 @@ export async function listNotifications() {
 export async function markRead(id) {
   return entities.Notification.update(id, { read: true });
 }
+
+export async function snoozeNotification(id) {
+  const snoozed_until = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+  return entities.Notification.update(id, { read: true, snoozed_until });
+}

@@ -1,14 +1,17 @@
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import { entities } from '@/api/entities';
 import VaccinationSection from '../components/VaccinationSection';
+import ExportCalendarButton from '../components/ExportCalendarButton';
 import IconButton from '../components/IconButton';
 import PageTransition from '../components/PageTransition';
 
 export default function PetVaccinations() {
   const { petId } = useParams();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const editId = searchParams.get('edit');
   const [pet, setPet] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -28,7 +31,8 @@ export default function PetVaccinations() {
           style={{ top: 'var(--account-banner-height, 0px)', paddingTop: 'calc(env(safe-area-inset-top) + 12px)' }}
         >
           <IconButton icon={ArrowLeft} onClick={() => navigate(-1)} aria-label="Back" />
-          <h1 className="text-[28px] font-semibold text-white">Vaccinations</h1>
+          <h1 className="text-[28px] font-semibold text-white flex-1">Vaccinations</h1>
+          {pet && <ExportCalendarButton petId={petId} petName={pet.name} iconOnly />}
         </div>
         <div className="max-w-2xl mx-auto px-4 py-5">
           {loading ? (
@@ -38,7 +42,7 @@ export default function PetVaccinations() {
           ) : !pet ? (
             <div className="text-center py-20"><p className="text-muted-foreground">Pet not found.</p></div>
           ) : (
-            <VaccinationSection petId={petId} species={pet.species} />
+            <VaccinationSection petId={petId} species={pet.species} initialEditId={editId} />
           )}
         </div>
       </div>

@@ -1,13 +1,10 @@
 # Launch Punch List
 
-Tracked list of everything outstanding before Wysker Watch goes live, ranked
-by priority. Rewritten 2026-07-18 from scratch against current code (the
-2026-07-10 version is retired — most of its P1 tier described a native-app
-blocker list that didn't distinguish "needed for the PWA" from "needed for
-the App/Play Store," which caused real confusion). Every item below was
-re-verified against `src/`, `supabase/`, and this session's feature specs;
-items that no longer apply (because the underlying model was replaced, or
-the work already shipped) were dropped rather than carried forward stale.
+Tracked list of everything outstanding before Wysker Watch goes into Alpha testing, ranked by priority. 
+
+This is a revised version, separating what needs to be done for Alpha testing versus revisions after testing begins.
+
+Rewritten 2026-07-18 from scratch against current code (the 2026-07-10 version is retired — most of its P1 tier described a native-app blocker list that didn't distinguish "needed for the PWA" from "needed for the App/Play Store," which caused real confusion). Every item below was re-verified against `src/`, `supabase/`, and this session's feature specs; items that no longer apply (because the underlying model was replaced, or the work already shipped) were dropped rather than carried forward stale.
 
 Check items off as they're resolved. Add new items at the bottom of their
 tier, don't renumber existing ones.
@@ -25,22 +22,6 @@ reckless — one already caused a real incident.
 - [x] **No automated test coverage on the destructive Edge Functions — resolved.** 8 Deno integration tests (`supabase/functions/delete-pet/index.test.ts`, `supabase/functions/delete-account/index.test.ts`) run against real `wysker-watch-dev` data over HTTP — sole-owner delete, co-owner transfer, co-owner leave, and no-access-403 for both functions. Also added a guard to `delete-account` refusing (403) for `account_type in ('test','demo')`, protecting the shared `test1@`/`test2@`/`demo1@` identities from ever being deleted outright (mirroring `reset-sandbox-account`'s existing "never touches the login row" guarantee) — verified live against `test2@wyskerwatch.com`.
 - [x] **CI was broken on `main` for several days without blocking pushes — resolved 2026-08-01.** Two independent regressions: (1) `.env.test` (dummy Supabase env vars needed for `vitest`) was accidentally deleted 2026-07-31 while cleaning up `.gitignore` for the new Playwright suite, breaking the `frontend` job; restored. (2) The `resend-webhook` suite's one suppression-round-trip test needs a legacy-JWT-format service_role credential that the newer opaque `sb_secret_...` key can't provide — a `DEV_LEGACY_JWT_SECRET` GitHub secret was added, but was twice populated with the wrong value (the project's JWT *signing secret* rather than the actual service_role JWT) before being corrected. Both jobs are green on `main` as of commit `2091605`. Underscores the existing gotcha above: none of this blocked pushes to `main` the whole time it was broken.
 
----
-
-## P1 — App Store blockers (native shell only — do NOT confuse with PWA below)
-
-Nothing in this tier is required for the current web/PWA experience. It's
-only required to appear in the Apple App Store or Google Play Store.
-
-- [ ] **Capacitor wrapping for iOS/Android.** Not started — no `ios`/`android` folders, no `capacitor.config` anywhere in the repo. This is the root blocker; everything else in this tier cascades from this decision.
-- [ ] **Universal Links / App Links (mobile deep linking).** `https://www.wyskerwatch.com/accept-invite?...` links need to open the app directly, not a browser, once it's a real native app — reviewers will test the invite flow. Needs `apple-app-site-association` + `assetlinks.json` hosted at `www.wyskerwatch.com/.well-known/`, iOS Associated Domains capability, Android `intent-filter` with `autoVerify="true"`, and Capacitor's `@capacitor/app` `appUrlOpen` listener wired to route the incoming URL. Requires an Apple Developer account.
-- [ ] **Store submission assets don't exist.** App icons (all required sizes), screenshots, store listing copy, privacy manifest, permissions justification — none of this exists since there's no native project to hold them yet.
-- [ ] **PWA install banners should probably be suppressed inside the native wrapper.** Once Capacitor exists, a user already inside the installed native app shouldn't see "Install App" prompts meant for the web version. Not urgent until Capacitor work actually starts.
-
-**Resolved since the last version of this list** — no longer blockers:
-- [x] In-app Terms of Service and Privacy Policy screens (`src/pages/Terms.jsx`, `src/pages/Privacy.jsx`) — both live, reachable from Menu.
-
----
 
 ## PWA — install & offline experience (separate from App Store; ships today, no native shell needed)
 
@@ -126,6 +107,8 @@ but never built.
 
 - [ ] Direction-read defense-in-depth (ordering + first-match dedup in `checkinClient.js`) is a safety net, not a guarantee — it only holds because prior observations are cleared first. If that invariant is ever removed, the dedup stops guaranteeing correctness. Re-verified 2026-07-25: the clear-then-insert pattern is unchanged, and the new `markGreatDaysBulk` follows the same pattern.
 - [ ] **`npm run typecheck` has 279 pre-existing errors across 56 files (re-confirmed 2026-07-25, was 274/51 on 2026-07-21) and isn't run in CI.** The script exists in `package.json` but nothing appears to have been gating on its output — errors span nearly every shared UI primitive (`tabs`/`select`/`switch`/`textarea`/`label`/`sheet`/`drawer`/`alert-dialog`/`radio-group`, same untyped-`forwardRef` root cause already fixed for `Button`/`Input`/`Dialog`) plus real prop-shape mismatches in app components (`MenuListRow`, `PetSymptoms.jsx`, `PetTrends.jsx`, `Register.jsx`, `AuthContext.jsx`). Fixing the shared-primitive cases is probably mechanical (cast to `any`, same pattern as the three already done); the app-component cases need actual review since they may reflect real prop-contract drift, not just inference noise. `.github/workflows/ci.yml` deliberately does not run `npm run typecheck` yet — see its inline comment.
+- [ ] **`Button`'s `size="sm"` (`h-8`/32px height, bakes in `text-xs`/12px) falls under both the Design System's 44px touch-target floor (§8) and its 13px type floor (Amendment #7) — found 2026-08-02 auditing spec 0034's changes.** Not a one-off: 15 uses across 10 files as of this writing (`BloodworkSection.jsx`, `EditPetSheet.jsx`, `ExportCalendarButton.jsx`, `FoodSection.jsx`, `InviteCoOwnerDialog.jsx`, `InviteSitterDialog.jsx`, `MedicationSection.jsx`, `PetSittingSection.jsx`, `VaccinationSection.jsx`, `Notifications.jsx`). This is baked into the shared `Button` component's `sm` size definition itself (`src/components/ui/button.jsx`), not a mistake repeated independently in each file — fixing it means deciding a new compliant `sm` size (or dropping the variant) once, not editing 15 call sites piecemeal. `size="default"` isn't a fix either — it's `h-9`/36px, still short of 44px.
+- [ ] **`ExportCalendarButton.jsx`'s `iconOnly` mode is a hand-rolled circular button (`bg-black/20` backdrop) instead of the shared `IconButton` component — violates Amendment #11 ("icon buttons are one component everywhere").** Pre-existing (not introduced by spec 0034), but that spec reconnected this button to two real page headers (`PetVaccinations.jsx`, `PetMedications.jsx`) that render it every time now — previously it was orphaned, unreachable from any screen, so the inconsistency was invisible. No precise count of how many other hand-rolled icon-only buttons exist elsewhere in the app — a rough grep returned 26 files but is too noisy (catches pills/avatars/other `rounded-full` elements, not just icon buttons) to trust as a real number; would need an actual per-file read to size accurately.
 
 **Resolved since the last version of this list:**
 - [x] **Demo/test account-type lowercase-literal drift risk — resolved, or was never real.** Re-checked 2026-07-25: searched every `.jsx` file for bare `'test'`/`'demo'` string literals; the only hit is `AccountTypeBanner.jsx`, where they're just its own internal `variant` value (derived from `isTestAccount(user)`/`isDemoAccount(user)`, the shared helpers), not a comparison against `account_type` bypassing those helpers. No actual drift-risk instance found anywhere in the current codebase.
@@ -135,11 +118,7 @@ but never built.
 
 ## Not scoped yet (mentioned, no design exists)
 
-- [ ] **Surface Baseline to Pet Sitters.** Raised 2026-08-01 alongside spec `0031` (per-pet baseline in Ask Wysker's AI context): a sitter understanding what's normal for a pet they're watching is important, but `SitterPetRow` (`src/pages/Pets.jsx:205`) is currently a bare identity link — photo and name only, no baseline or Wellbeing info of any kind (same underlying gap already flagged separately above under P4, "Shared/co-owned pets show no Wellbeing chips"). No design exists yet for what/how much of `pet_onboarding`'s baseline to show a sitter, or where.
-- [ ] **Surface Baseline in Vet Export.** Raised 2026-08-01, same session as above. `VetExport.jsx` currently has no baseline section — confirmed via search, no reference to baseline data anywhere in the file. A vet seeing the owner-reported baseline (normal appetite/water/energy/mobility/bathroom) alongside the wellness history/observations/medications it already includes could be useful context. No design exists yet.
 - [ ] **Terms of Service acceptance at signup.** Confirmed — `Register.jsx` has no checkbox, no "I agree" language, no gate of any kind. The spec only ever asked for the readable screen, not an acceptance gate. Flag separately if this is actually needed for launch (many jurisdictions/stores expect explicit consent, not just a reachable page).
 - [x] **Weekly/monthly "no-guilt" check-in cadence — addressed, closed 2026-08-01.** Confirmed with Lynn: `0015_MultiDay_CatchUp_CheckIn_Specification_v1.md`'s Catch Up flow covers this philosophy goal (no-guilt, flexible-cadence check-in). No separate design needed.
 - [ ] Auto-populate agent to keep demo data fresh on a schedule — deferred pending the check-in data model, which is now built; still unstarted.
-- [ ] Native push reminders (blocked on Capacitor; calendar `.ics` export works as a stopgap today).
-- [ ] **Drag-to-reorder pets on Home.** Descoped from `0015_MultiDay_CatchUp_CheckIn_Specification_v1.md`'s pet-selection screen on 2026-07-25 — the underlying mockup showed drag-to-reorder there, but the app has no `order`/`sort` column on `pets` and no drag UI anywhere today. Owner decision: build it as its own feature on Home (not inside Catch Up), scope/spec separately when picked up.
 - [x] **0007's "Catch-Up Reminder" section — confirmed accurate, closed 2026-08-01.** Already corrected by an earlier doc-updater pass (commit `434f9cf1`, 2026-07-25) the same day spec 0015 shipped; re-verified against current `Home.jsx`/`checkinClient.js` routing logic, no drift found. (Also confirmed separately: Catch-Up requiring today's own check-in afterward is intentional, not a bug — `getMissedDaysForPet` caps the gap at yesterday by design, `src/lib/checkin/checkinClient.js:100`, and today's check-in is always a standing separate action.)

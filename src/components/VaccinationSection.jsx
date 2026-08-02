@@ -26,7 +26,7 @@ function getReminderStatus(next_due_date) {
   return { label: `Due ${format(parseISO(next_due_date), 'MMM d, yyyy')}`, background: 'rgba(76,199,176,0.15)', color: PALETTE.teal };
 }
 
-export default function VaccinationSection({ petId, species }) {
+export default function VaccinationSection({ petId, species, initialEditId }) {
   const [vaccines, setVaccines] = useState([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -34,6 +34,7 @@ export default function VaccinationSection({ petId, species }) {
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [scanning, setScanning] = useState(false);
+  const [autoOpenedId, setAutoOpenedId] = useState(null);
 
   const load = async () => {
     setLoading(true);
@@ -52,6 +53,18 @@ export default function VaccinationSection({ petId, species }) {
     setForm({ vaccine_name: v.vaccine_name || '', date_given: v.date_given || '', next_due_date: v.next_due_date || '', administered_by: v.administered_by || '', lot_number: v.lot_number || '', notes: v.notes || '' });
     setDialogOpen(true);
   };
+
+  // Deep link from a vaccination-due notification (spec 0034): open that
+  // record's edit form once vaccines have loaded, but only once per id so
+  // the dialog doesn't reopen if the owner closes it.
+  useEffect(() => {
+    if (!initialEditId || loading || autoOpenedId === initialEditId) return;
+    const match = vaccines.find(v => v.id === initialEditId);
+    if (match) {
+      openEdit(match);
+      setAutoOpenedId(initialEditId);
+    }
+  }, [initialEditId, loading, vaccines, autoOpenedId]);
 
   const handleSave = async () => {
     setSaving(true);
