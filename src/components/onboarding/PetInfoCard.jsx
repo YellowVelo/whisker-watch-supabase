@@ -3,23 +3,14 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { uploadFile } from '@/api/storageClient';
 import { entities } from '@/api/entities';
 import { track } from '@/lib/analytics';
 import { computeLifeStage } from '@/lib/lifeStage';
-import { Loader2, Camera, Cat as CatIcon, Dog as DogIcon } from 'lucide-react';
-import { getPetLabel } from '@/lib/speciesConfig';
-import { getBreeds } from '@/lib/breedConfig';
+import { Loader2, Cat as CatIcon, Dog as DogIcon } from 'lucide-react';
 import { PALETTE } from '@/lib/toneColors';
-import PillToggle from '@/components/PillToggle';
-
-const PRECISION_OPTIONS = [
-  { value: 'EXACT', label: 'Exact date' },
-  { value: 'MONTH_YEAR', label: 'Month & year' },
-  { value: 'YEAR', label: 'Year only' },
-  { value: 'UNKNOWN', label: "I don't know" },
-];
+import PetIdentityFields from './fields/PetIdentityFields';
+import { resolveDate, isDateInfoValid } from './fields/DateInfoFields';
 
 const emptyForm = {
   name: '', breed: '', photo_url: '', color_markings: '',
@@ -31,87 +22,15 @@ const emptyForm = {
   notes: '',
 };
 
-function resolveDate(precision, { exact, monthYear, year }) {
-  if (precision === 'EXACT') return exact || null;
-  if (precision === 'MONTH_YEAR') return monthYear ? `${monthYear}-01` : null;
-  if (precision === 'YEAR') return year ? `${year}-01-01` : null;
-  return null;
-}
-
-function isDateInfoValid(precision, parts) {
-  if (!precision) return false;
-  if (precision === 'UNKNOWN') return true;
-  if (precision === 'EXACT') {
-    if (!parts.exact) return false;
-    return new Date(parts.exact) <= new Date();
-  }
-  if (precision === 'MONTH_YEAR') {
-    if (!parts.monthYear) return false;
-    return parts.monthYear <= new Date().toISOString().slice(0, 7);
-  }
-  if (precision === 'YEAR') {
-    if (!parts.year) return false;
-    return Number(parts.year) <= new Date().getFullYear();
-  }
-  return false;
-}
-
-function DateInfoFields({ precision, parts, onPrecisionChange, onPartsChange, idPrefix }) {
-  return (
-    <div className="space-y-2">
-      <div className="flex flex-wrap gap-2">
-        {PRECISION_OPTIONS.map(opt => (
-          <PillToggle
-            key={opt.value}
-            active={precision === opt.value}
-            onClick={() => onPrecisionChange(opt.value)}
-            className="text-xs px-3 py-1.5"
-          >
-            {opt.label}
-          </PillToggle>
-        ))}
-      </div>
-      {precision === 'EXACT' && (
-        <Input
-          type="date"
-          id={`${idPrefix}-exact`}
-          aria-label="Exact date"
-          value={parts.exact}
-          max={new Date().toISOString().slice(0, 10)}
-          onChange={e => onPartsChange({ ...parts, exact: e.target.value })}
-        />
-      )}
-      {precision === 'MONTH_YEAR' && (
-        <Input
-          type="month"
-          id={`${idPrefix}-month-year`}
-          aria-label="Month and year"
-          value={parts.monthYear}
-          max={new Date().toISOString().slice(0, 7)}
-          onChange={e => onPartsChange({ ...parts, monthYear: e.target.value })}
-        />
-      )}
-      {precision === 'YEAR' && (
-        <Input
-          type="number"
-          id={`${idPrefix}-year`}
-          aria-label="Year"
-          inputMode="numeric"
-          placeholder={`e.g. ${new Date().getFullYear() - 3}`}
-          value={parts.year}
-          max={new Date().getFullYear()}
-          onChange={e => onPartsChange({ ...parts, year: e.target.value })}
-        />
-      )}
-    </div>
-  );
-}
-
 // Onboarding Step 1 (spec 0029): merges the retired AddPetDialog's
 // species -> form flow directly into the wizard. Nothing is saved until
 // submit — there is no pet, and therefore no pet_onboarding row, until
 // then, so this card manages its own local draft state rather than using
 // the wizard's per-step autosave pattern.
+// Spec 0036: the actual identity fields (name/breed/sex/dates/microchip/
+// AKC/notes) now live in the shared PetIdentityFields, also used by the
+// Edit Pet page — this card supplies the species-choice step, the
+// creation-only Starting Weight field, and the create/submit handling.
 export default function PetInfoCard({ onCreated }) {
   const [step, setStep] = useState('species'); // species | form
   const [saving, setSaving] = useState(false);
@@ -232,10 +151,6 @@ export default function PetInfoCard({ onCreated }) {
     onCreated(created.id, payload.name);
   };
 
-  const SpeciesIcon = species === 'Dog' ? DogIcon : CatIcon;
-  const label = getPetLabel(species);
-  const breeds = species ? getBreeds(species) : [];
-
   if (step === 'species') {
     return (
       <div className="flex flex-col gap-6">
@@ -271,106 +186,11 @@ export default function PetInfoCard({ onCreated }) {
         &larr; change species
       </button>
 
-      <div className="flex flex-col items-center gap-2">
-        <div className="relative h-24 w-24 rounded-full bg-primary/10 flex items-center justify-center overflow-hidden border-2 border-dashed border-primary/30">
-          {form.photo_url ? (
-            <img src={form.photo_url} alt={label} className="h-full w-full object-cover" />
-          ) : uploading ? (
-            <Loader2 className="h-7 w-7 text-primary animate-spin" />
-          ) : (
-            <SpeciesIcon className="h-8 w-8 text-primary" strokeWidth={1.5} />
-          )}
-        </div>
-        <label className="cursor-pointer flex items-center gap-1.5 text-sm text-primary hover:text-primary/80 transition-colors min-h-[44px]">
-          <Camera className="h-4 w-4" />
-          {form.photo_url ? 'Change photo' : 'Add photo'}
-          <input type="file" accept="image/*" className="hidden" onChange={handlePhotoChange} disabled={uploading} />
-        </label>
-      </div>
+      <PetIdentityFields species={species} form={form} set={set} uploading={uploading} onPhotoChange={handlePhotoChange} showNotes={false} />
 
-      <div className="space-y-1.5">
-        <Label htmlFor="pet-name">Name *</Label>
-        <Input id="pet-name" required maxLength={100} value={form.name} onChange={e => set('name', e.target.value)} placeholder={`e.g. ${species === 'Dog' ? 'Buddy' : 'Luna'}`} />
-      </div>
-
-      <div className="space-y-1.5">
-        <Label htmlFor="pet-breed">Breed</Label>
-        <Input
-          id="pet-breed"
-          list="pet-breed-suggestions"
-          value={form.breed}
-          onChange={e => set('breed', e.target.value)}
-          placeholder={species === 'Dog' ? 'e.g. Labrador, or Mixed' : 'e.g. Siamese, or Mixed'}
-        />
-        <datalist id="pet-breed-suggestions">
-          {breeds.map((b) => <option key={b} value={b} />)}
-        </datalist>
-      </div>
-
-      <div className="space-y-1.5">
-        <Label htmlFor="pet-markings">Color / Markings</Label>
-        <Input id="pet-markings" maxLength={200} value={form.color_markings} onChange={e => set('color_markings', e.target.value)} placeholder="Optional" />
-      </div>
-
-      <div className="space-y-1.5">
-        <Label id="sex-label">Sex *</Label>
-        <RadioGroup aria-labelledby="sex-label" value={form.sex} onValueChange={v => set('sex', v)} className="grid-flow-col auto-cols-max gap-4">
-          {['Female', 'Male', 'Unknown'].map(v => (
-            <label key={v} className="flex items-center gap-1.5 text-sm cursor-pointer min-h-[44px]">
-              <RadioGroupItem value={v} id={`sex-${v}`} />
-              {v}
-            </label>
-          ))}
-        </RadioGroup>
-      </div>
-
-      <div className="space-y-1.5">
-        <Label id="altered-label">Spayed / Neutered *</Label>
-        <RadioGroup aria-labelledby="altered-label" value={form.altered_status} onValueChange={v => set('altered_status', v)} className="grid-flow-col auto-cols-max gap-4">
-          {['Yes', 'No', 'Unknown'].map(v => (
-            <label key={v} className="flex items-center gap-1.5 text-sm cursor-pointer min-h-[44px]">
-              <RadioGroupItem value={v} id={`altered-${v}`} />
-              {v}
-            </label>
-          ))}
-        </RadioGroup>
-      </div>
-
-      <div className="space-y-1.5">
-        <Label>Birth Date *</Label>
-        <DateInfoFields
-          idPrefix="birth"
-          precision={form.birthPrecision}
-          parts={birthParts}
-          onPrecisionChange={v => { set('birthPrecision', v); track('birth_date_precision_selected', { field: 'birth_date', precision: v }); }}
-          onPartsChange={p => setForm(f => ({ ...f, birthDate: p.exact, birthMonthYear: p.monthYear, birthYear: p.year }))}
-        />
-        {form.birthPrecision && !birthValid && (
-          <p className="text-base" style={{ color: PALETTE.red }}>Please enter a valid, non-future date.</p>
-        )}
-        {lifeStage && (
-          <p className="text-sm text-muted-foreground">Life stage: <span className="font-medium text-foreground">{lifeStage}</span></p>
-        )}
-      </div>
-
-      <div className="space-y-1.5">
-        <Label>Gotcha Day</Label>
-        <DateInfoFields
-          idPrefix="gotcha"
-          precision={form.gotchaPrecision}
-          parts={gotchaParts}
-          onPrecisionChange={v => { set('gotchaPrecision', v === form.gotchaPrecision ? '' : v); track('birth_date_precision_selected', { field: 'gotcha_date', precision: v }); }}
-          onPartsChange={p => setForm(f => ({ ...f, gotchaDate: p.exact, gotchaMonthYear: p.monthYear, gotchaYear: p.year }))}
-        />
-        {gotchaBeforeBirth && (
-          <p className="text-base" style={{ color: PALETTE.red }}>Gotcha day can't be before the birth date.</p>
-        )}
-      </div>
-
-      <div className="space-y-1.5">
-        <Label htmlFor="microchip">Microchip Number</Label>
-        <Input id="microchip" maxLength={50} value={form.microchip_number} onChange={e => set('microchip_number', e.target.value)} placeholder="Optional" />
-      </div>
+      {lifeStage && (
+        <p className="text-sm text-muted-foreground -mt-2">Life stage: <span className="font-medium text-foreground">{lifeStage}</span></p>
+      )}
 
       <div className="space-y-1.5">
         <Label htmlFor="starting-weight">Starting Weight (lbs)</Label>
@@ -380,48 +200,6 @@ export default function PetInfoCard({ onCreated }) {
         )}
         <p className="text-sm text-muted-foreground">Logs today's weight to {petLabelForWeightHint(species)} Trends — you can log again anytime.</p>
       </div>
-
-      {species === 'Dog' && (
-        <div className="space-y-3 rounded-xl border border-border p-3">
-          <div className="space-y-1.5">
-            <Label id="akc-label">Registered with AKC?</Label>
-            <RadioGroup
-              aria-labelledby="akc-label"
-              value={form.akc_registered ? 'Yes' : 'No'}
-              onValueChange={v => {
-                const registered = v === 'Yes';
-                set('akc_registered', registered);
-                if (registered) track('akc_toggle_enabled');
-                if (!registered) setForm(f => ({ ...f, akc_registered: false, akc_registered_name: '', akc_registration_number: '', breeder: '' }));
-              }}
-              className="grid-flow-col auto-cols-max gap-4"
-            >
-              {['Yes', 'No'].map(v => (
-                <label key={v} className="flex items-center gap-1.5 text-sm cursor-pointer min-h-[44px]">
-                  <RadioGroupItem value={v} id={`akc-${v}`} />
-                  {v}
-                </label>
-              ))}
-            </RadioGroup>
-          </div>
-          {form.akc_registered && (
-            <>
-              <div className="space-y-1.5">
-                <Label htmlFor="akc-registered-name">Registered Name</Label>
-                <Input id="akc-registered-name" value={form.akc_registered_name} onChange={e => set('akc_registered_name', e.target.value)} placeholder="Optional" />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="akc-registration-number">AKC Registration Number</Label>
-                <Input id="akc-registration-number" value={form.akc_registration_number} onChange={e => set('akc_registration_number', e.target.value)} placeholder="Optional" />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="breeder">Breeder</Label>
-                <Input id="breeder" value={form.breeder} onChange={e => set('breeder', e.target.value)} placeholder="Optional" />
-              </div>
-            </>
-          )}
-        </div>
-      )}
 
       <div className="space-y-1.5">
         <Label htmlFor="pet-notes">Notes</Label>

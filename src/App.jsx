@@ -20,6 +20,8 @@ import PetTrends from './pages/PetTrends';
 import Timeline from './pages/Timeline';
 import PetOnboarding from './pages/PetOnboarding';
 import PetBaseline from './pages/PetBaseline';
+import PetEdit from './pages/PetEdit';
+import PetConditions from './pages/PetConditions';
 import PetMedications from './pages/PetMedications';
 import PetVaccinations from './pages/PetVaccinations';
 import PetHealthRecords from './pages/PetHealthRecords';
@@ -104,6 +106,8 @@ const AuthenticatedApp = () => {
                 This stays alive as a compatibility redirect for old links. */}
             <Route path="/pet/:petId/profile" element={<PetProfileRedirect />} />
             <Route path="/pet/:petId/baseline" element={<PetBaseline />} />
+            <Route path="/pet/:petId/edit" element={<PetEdit />} />
+            <Route path="/pet/:petId/conditions" element={<PetConditions />} />
             <Route path="/pet/:petId/medications" element={<PetMedications />} />
             <Route path="/pet/:petId/vaccinations" element={<PetVaccinations />} />
             <Route path="/pet/:petId/health-records" element={<PetHealthRecords />} />
