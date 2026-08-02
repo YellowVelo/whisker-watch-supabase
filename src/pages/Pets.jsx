@@ -3,10 +3,16 @@ import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-do
 import { PawPrint, Plus, Activity, Rainbow, Home as HomeIcon, Cat, Dog } from 'lucide-react';
 import { entities } from '@/api/entities';
 import { getSitterOnlyPetIds } from '@/lib/petsClient';
+import { getCheckIn, getWellbeingDirections, yesterdayStr as yesterdayStrTz } from '@/lib/checkin/checkinClient';
+import { useAuth } from '@/lib/AuthContext';
+import { detectTimezone, dateStrInTimezone } from '@/lib/timezone';
 import ExpandablePetProfileCard from '../components/ExpandablePetProfileCard';
+import WellbeingChipGrid from '../components/WellbeingChipGrid';
 import PageTransition from '../components/PageTransition';
 import usePullToRefresh from '../hooks/usePullToRefresh';
 import PullToRefreshIndicator from '../components/PullToRefreshIndicator';
+
+const todayStr = (timezone) => dateStrInTimezone(timezone, 0);
 
 export default function Pets() {
   const [pets, setPets] = useState([]);
@@ -203,21 +209,59 @@ export default function Pets() {
 // ExpandablePetProfileCard used for owned/co-owned pets, since a sitter
 // doesn't have owner-level management rights over these pets.
 function SitterPetRow({ pet }) {
+  const { user } = useAuth();
+  const timezone = user?.timezone || detectTimezone() || 'UTC';
+  const [wellbeingDirections, setWellbeingDirections] = useState(null);
+  const [wellbeingUnavailable, setWellbeingUnavailable] = useState(false);
+  const [checkedInToday, setCheckedInToday] = useState(false);
+
+  // Spec 0037 — read-only Wellbeing chips for a sitter, mirroring the
+  // owner's Pets-tab card (PetProfileContent, context="pets") but never
+  // interactive: the whole row is already a single tap target to Trends,
+  // so a clickable chip nested inside it would be invalid, broken markup.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const todayCheckIn = await getCheckIn(pet.id, todayStr(timezone));
+        const yesterdayCheckIn = await getCheckIn(pet.id, yesterdayStrTz(timezone));
+        const directions = await getWellbeingDirections(pet.id, todayCheckIn, yesterdayCheckIn);
+        if (cancelled) return;
+        setWellbeingDirections(directions);
+        setCheckedInToday(todayCheckIn?.check_in_date === todayStr(timezone));
+        setWellbeingUnavailable(false);
+      } catch (err) {
+        if (cancelled) return;
+        console.error(err);
+        setWellbeingDirections(null);
+        setWellbeingUnavailable(true);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [pet.id, timezone]);
+
   return (
     <Link
       to={`/pet/${pet.id}/trends`}
-      className="flex items-center gap-3 rounded-2xl px-4 py-3 active:opacity-80 transition-opacity bg-card border border-border"
+      className="flex flex-col gap-3 rounded-2xl px-4 py-3 active:opacity-80 transition-opacity bg-card border border-border"
     >
-      <div className="h-11 w-11 rounded-full overflow-hidden flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(255,255,255,0.06)' }}>
-        {pet.photo_url ? (
-          <img src={pet.photo_url} alt="" className="w-full h-full object-cover" />
-        ) : pet.species === 'Dog' ? (
-          <Dog className="h-5 w-5 text-tier-tertiary" />
-        ) : (
-          <Cat className="h-5 w-5 text-tier-tertiary" />
-        )}
+      <div className="flex items-center gap-3">
+        <div className="h-11 w-11 rounded-full overflow-hidden flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(255,255,255,0.06)' }}>
+          {pet.photo_url ? (
+            <img src={pet.photo_url} alt="" className="w-full h-full object-cover" />
+          ) : pet.species === 'Dog' ? (
+            <Dog className="h-5 w-5 text-tier-tertiary" />
+          ) : (
+            <Cat className="h-5 w-5 text-tier-tertiary" />
+          )}
+        </div>
+        <p className="text-base font-semibold text-white truncate">{pet.name}</p>
       </div>
-      <p className="text-base font-semibold text-white truncate">{pet.name}</p>
+      <WellbeingChipGrid
+        directions={wellbeingDirections}
+        unavailable={wellbeingUnavailable}
+        checkedInToday={checkedInToday}
+      />
     </Link>
   );
 }

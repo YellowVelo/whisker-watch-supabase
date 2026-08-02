@@ -104,7 +104,7 @@ Displayed only when the signed-in user has active **sitter-only** access (`PetSi
 
 Header: **PETS I SIT**
 
-Rows use a separate, deliberately lighter `SitterPetRow` component — a bare identity link (photo/species icon, name) with **no chip UI of any kind**: no condition chips, no Wellbeing chips, no medication count. This is a known, undecided gap, not a design decision documented anywhere as intentional. Tapping a row **does** navigate — to that pet's Trends screen (`/pet/:petId/trends`), not Pet Profile, and not an inline expansion like Active Pets get.
+Rows use a separate, deliberately lighter `SitterPetRow` component — an identity link (photo/species icon, name) plus the same 5 read-only Wellbeing chips an owner sees on Active Pets (via the shared `WellbeingChipGrid` component), but non-interactive — tapping a chip does nothing separate from tapping the row, since the row itself is already a single tap target to Trends and a clickable chip nested inside it would be invalid markup. No condition chips or medication count. Resolved 2026-08-02, spec `0037` — previously this was a known, undecided gap. Tapping a row **does** navigate — to that pet's Trends screen (`/pet/:petId/trends`), not Pet Profile, and not an inline expansion like Active Pets get.
 
 ---
 
@@ -165,7 +165,7 @@ See `docs/features/0009 Pet Profile Feature V4.md` for the full spec of this sha
 - Status Chips
 - Today's Log Chips (Wellbeing only)
 - Show More / Show Less toggle — **not** a Chevron; there is no separate chevron affordance
-- `SitterPetRow` (bare identity link, Pets I Sit section only)
+- `SitterPetRow` (identity link + read-only Wellbeing chips, Pets I Sit section only)
 - Rainbow Bridge Card
 - Empty State
 - Loading Skeleton
@@ -280,7 +280,7 @@ Pet remains selectable/expandable.
 - PETS does **not** display Vibe.
 - PETS does **not** display Health attributes or Weight (on the collapsed card — Weight does appear inside the expanded Weight nav card).
 - Active/Rainbow Bridge cards expand in place via "Show More" — they are **not** tappable as a single navigation target, and there is no chevron.
-- Pets I Sit rows **are** a single navigation target (to Trends), with no chip UI and no expansion.
+- Pets I Sit rows **are** a single navigation target (to Trends), showing read-only Wellbeing chips with no expansion.
 - Pet Profile (in the sense of the full detail view) is reached through the expanded card on this screen, not a separate destination navigated to from a tap.
 - No editing occurs from the collapsed card view; editing happens inside the expanded card via the action pills and nav cards.
 - Delete Pet is available from the expanded card's action-pill row, not a separate menu — and is a two-step, co-owner-aware confirmation flow, not a single-step action.
@@ -344,7 +344,7 @@ A user can:
 - ✓ Expand a card in place to reach full Pet Profile content (Baseline/Conditions/Medications/Food/Vaccinations/Weight/Observations/Vet Report/Timeline/Health Records)
 - ✓ Add a new pet
 - ✓ Return to Pets after pet creation
-- ✓ View pets shared by a sitter, separately, with a bare identity link only
+- ✓ View pets shared by a sitter, separately, with an identity link and read-only Wellbeing chips
 - ✓ View Rainbow Bridge pets separately
 - ✓ Expand memorial pet cards the same way as active ones
 - ✓ Refresh the screen
@@ -400,7 +400,7 @@ written:
 
 1. **Corrected card-tap navigation — the most significant fix.** V2 said the entire card is tappable and navigates to Pet Profile, with a chevron affordance. Neither exists: Active/Rainbow Bridge cards expand **in place** via "Show More," with no navigation and no chevron at all.
 2. **Corrected the Navigation Flow section** to match: "Home → Pet Profile" and "Pets → Pet Profile" are both wrong. Home goes to Trends; Pets expands inline.
-3. **Added the missing Pets I Sit section entirely** — V2 only described Active Pets and Rainbow Bridge, omitting a real, existing third section (sitter-shared pets, bare identity link, no chips, links to Trends).
+3. **Added the missing Pets I Sit section entirely** — V2 only described Active Pets and Rainbow Bridge, omitting a real, existing third section (sitter-shared pets, bare identity link, no chips, links to Trends). (Since resolved — see spec `0037`, which added read-only Wellbeing chips to this row.)
 4. **Corrected Status Chips.** V2 implied a semi-fixed example set including "Healthy" as a fallback value. There's no fallback chip on this screen at all — if a pet has no conditions, nothing renders. ("Healthy" is a real fallback, but only on Home's unrelated `PetSummaryCard`.)
 5. **Corrected the Medication Chip claim.** V2 said every card shows a medication count chip. The collapsed Pets-tab card never shows one — that only exists inside the expanded Medications nav card.
 6. **Corrected the Error State copy** ("Unavailable" → "Unable to load," confirmed against `AttributeTrendChip.jsx`).

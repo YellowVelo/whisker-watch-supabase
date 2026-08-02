@@ -26,13 +26,7 @@ import { computeDetailedAge } from '@/lib/lifeStage';
 import { PALETTE, RING_COLOR } from '@/lib/toneColors';
 import { useAuth } from '@/lib/AuthContext';
 import { detectTimezone, dateStrInTimezone } from '@/lib/timezone';
-import AttributeTrendChip from '@/components/AttributeTrendChip';
-import { WELLBEING_ATTRIBUTES } from '@/lib/checkin/config';
-
-// Daily Check-In, Vibe & Trends (spec v5) — the Pets-tab card's Wellbeing
-// chips, always Energy/Mobility/Breathing/Skin-Itching/Behavior in this
-// order.
-const WELLBEING_CHIP_LABELS = { energy: 'Energy', mobility: 'Mobility', breathing: 'Breathing', itching: 'Skin / Itching', behavior: 'Behavior' };
+import WellbeingChipGrid from '@/components/WellbeingChipGrid';
 
 const todayStr = (timezone) => dateStrInTimezone(timezone, 0);
 
@@ -472,22 +466,13 @@ export default function PetProfileContent({ petId, onReload, expanded = true, on
                 kind is ever shown here. */}
             {context === 'pets' && (
               <div className="rounded-2xl px-4 py-4 bg-card border border-border">
-                {wellbeingUnavailable ? (
-                  <p className="text-base text-tier-tertiary text-center py-4">Unable to load wellbeing.</p>
-                ) : (
-                  <div className="grid grid-cols-2 gap-2">
-                    {WELLBEING_ATTRIBUTES.map((code) => (
-                      <AttributeTrendChip
-                        key={code}
-                        label={WELLBEING_CHIP_LABELS[code]}
-                        direction={wellbeingDirections?.[code]}
-                        state={!wellbeingDirections ? 'loading' : !checkedInToday ? 'no-checkin' : 'ready'}
-                        interactive
-                        onClick={() => navigate(`/pet/${petId}/trends?section=trends&group=wellness&metric=${code}`)}
-                      />
-                    ))}
-                  </div>
-                )}
+                <WellbeingChipGrid
+                  directions={wellbeingDirections}
+                  unavailable={wellbeingUnavailable}
+                  checkedInToday={checkedInToday}
+                  interactive
+                  onChipClick={(code) => navigate(`/pet/${petId}/trends?section=trends&group=wellness&metric=${code}`)}
+                />
               </div>
             )}
 
