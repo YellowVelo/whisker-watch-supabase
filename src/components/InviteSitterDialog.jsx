@@ -135,7 +135,7 @@ export default function InviteSitterDialog({ petSitId, open, onOpenChange }) {
 
         {loaded && accesses.length > 0 && (
           <div className="mt-2 space-y-2">
-            <Label className="text-xs text-muted-foreground uppercase tracking-wide">Invited Sitters</Label>
+            <Label className="text-[13px] text-muted-foreground uppercase tracking-wide">Invited Sitters</Label>
             {accesses.map(a => (
               <div key={a.id} className="flex items-center justify-between bg-secondary rounded-lg px-3 py-2">
                 <div className="flex items-center gap-2">

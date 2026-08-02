@@ -88,7 +88,7 @@ export default function PetSymptoms() {
           <div className="max-w-2xl mx-auto px-4 py-5">
             {Object.entries(groups).map(([month, monthLogs]) => (
               <div key={month} className="mb-6">
-                <p className="text-xs font-bold uppercase tracking-widest text-tier-tertiary mb-3 px-1">{month}</p>
+                <p className="text-[13px] font-bold uppercase tracking-widest text-tier-tertiary mb-3 px-1">{month}</p>
                 <div className="relative pl-6">
                   <div className="absolute left-[7px] top-1 bottom-1 w-px bg-white/10" />
                   <div className="space-y-3">
@@ -106,7 +106,7 @@ export default function PetSymptoms() {
                           >
                             <div className="flex items-baseline gap-2 mb-3">
                               <p className="text-sm font-bold text-white">{d}</p>
-                              <p className="text-xs text-tier-tertiary">{weekday}</p>
+                              <p className="text-[13px] text-tier-tertiary">{weekday}</p>
                             </div>
                             <div className="flex flex-wrap gap-1.5">
                               {log.appetite && <Chip icon={UtensilsCrossed} label={log.appetite} />}

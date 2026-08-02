@@ -114,7 +114,7 @@ export default function VaccinationEntryCard({ petId, petName, species, onContin
   return (
     <div className="flex flex-col gap-6">
       <div className="space-y-1.5">
-        <p className="text-xs font-semibold uppercase tracking-widest text-primary/70">Vaccinations</p>
+        <p className="text-[13px] font-semibold uppercase tracking-widest text-primary/70">Vaccinations</p>
         <h2 className="text-2xl font-semibold text-foreground leading-snug">
           Add {petName}'s vaccinations
         </h2>
@@ -140,7 +140,7 @@ export default function VaccinationEntryCard({ petId, petName, species, onContin
         {scanning ? 'Reading record...' : 'Scan Vaccination Record'}
         <input type="file" accept="image/*,.pdf" className="hidden" onChange={handleScan} disabled={busy} />
       </label>
-      <p className="text-xs text-muted-foreground text-center -mt-4">or enter manually below — review and confirm before saving</p>
+      <p className="text-[13px] text-muted-foreground text-center -mt-4">or enter manually below — review and confirm before saving</p>
 
       <div className="space-y-4 p-4 rounded-2xl bg-card border border-border">
         <div className="space-y-1.5">

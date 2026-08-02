@@ -110,7 +110,7 @@ Respond in JSON with this structure:
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <p className="text-sm font-semibold flex items-center gap-1.5"><Sparkles className="h-4 w-4 text-primary" /> AI Health Analysis</p>
-            <button onClick={generateInsights} className="text-xs text-muted-foreground flex items-center gap-1 hover:text-foreground transition-colors min-h-0 h-auto py-1">
+            <button onClick={generateInsights} className="text-[13px] text-muted-foreground flex items-center gap-1 hover:text-foreground transition-colors min-h-0 h-auto py-1">
               <RefreshCw className="h-3 w-3" /> Refresh
             </button>
           </div>

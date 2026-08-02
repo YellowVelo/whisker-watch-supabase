@@ -29,7 +29,7 @@ export default function ConditionsCard({ petName, species, selected, onChange, o
   return (
     <div className="flex flex-col gap-6">
       <div className="space-y-1.5">
-        <p className="text-xs font-semibold uppercase tracking-widest text-primary/70">Known Conditions</p>
+        <p className="text-[13px] font-semibold uppercase tracking-widest text-primary/70">Known Conditions</p>
         <h2 className="text-2xl font-semibold text-foreground leading-snug">
           Which conditions has {petName} been diagnosed with?
         </h2>
@@ -51,7 +51,7 @@ export default function ConditionsCard({ petName, species, selected, onChange, o
       <div className="flex flex-col gap-4">
         {Object.entries(filteredCategories).map(([category, conditions]) => (
           <div key={category} className="space-y-2">
-            <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">{category}</p>
+            <p className="text-[13px] font-semibold uppercase tracking-widest text-muted-foreground">{category}</p>
             <div className="flex flex-wrap gap-2">
               {conditions.map((c) => {
                 const active = selected.includes(c);

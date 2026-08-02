@@ -66,7 +66,7 @@ export default function BaselineSection({ petId, petName, species }) {
       )}
       {fields.map((f) => (
         <div key={f.key} className="space-y-1.5">
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{f.label}</p>
+          <p className="text-[13px] font-semibold text-muted-foreground uppercase tracking-wide">{f.label}</p>
           <div className="flex flex-wrap gap-2">
             {f.options.map((opt) => {
               const active = row[f.key] === opt.value;
@@ -75,7 +75,7 @@ export default function BaselineSection({ petId, petName, species }) {
                   key={opt.value}
                   type="button"
                   onClick={() => update({ [f.key]: opt.value })}
-                  className={`text-xs px-3 py-1.5 rounded-full border transition-colors min-h-[36px] ${
+                  className={`text-[13px] px-3 py-1.5 rounded-full border transition-colors min-h-[36px] ${
                     active ? 'bg-primary text-primary-foreground border-primary' : 'bg-background text-foreground border-border hover:border-primary/50'
                   }`}
                 >

@@ -251,7 +251,7 @@ export default function PetSittingSection({ petId }) {
                   <div className="border-t border-border px-4 py-4 space-y-5">
                     {/* Instructions summary — per pet */}
                     <div className="bg-secondary/50 rounded-lg p-3 space-y-3 text-sm">
-                      <p className="font-semibold text-xs uppercase tracking-wider text-muted-foreground">Sitter Instructions</p>
+                      <p className="font-semibold text-[13px] uppercase tracking-wider text-muted-foreground">Sitter Instructions</p>
                       {sitPets.map(pet => {
                         const meds = medicationsByPet[pet.id] || [];
                         const foods = foodsByPet[pet.id] || [];
@@ -305,7 +305,7 @@ export default function PetSittingSection({ petId }) {
                     {/* Daily Checklist */}
                     {days.length > 0 && (
                       <div>
-                        <p className="font-semibold text-xs uppercase tracking-wider text-muted-foreground mb-3">Daily Checklist</p>
+                        <p className="font-semibold text-[13px] uppercase tracking-wider text-muted-foreground mb-3">Daily Checklist</p>
                         <div className="space-y-3">
                           {days.map(day => {
                             const dateStr = format(day, 'yyyy-MM-dd');
@@ -407,7 +407,7 @@ export default function PetSittingSection({ petId }) {
               {(form.custom_tasks || []).length > 0 && (
                 <div className="flex flex-wrap gap-2">
                   {form.custom_tasks.map((t, i) => (
-                    <span key={i} className="flex items-center gap-1 text-xs bg-secondary px-2.5 py-1 rounded-full">
+                    <span key={i} className="flex items-center gap-1 text-[13px] bg-secondary px-2.5 py-1 rounded-full">
                       {t}
                       <button onClick={() => removeTask(i)} className="text-muted-foreground hover:text-destructive ml-0.5">
                         <X className="h-3 w-3" />

@@ -111,7 +111,7 @@ export default function EditPetSheet({ pet, open, onOpenChange, onSuccess }) {
               {conditions.map(c => {
                 const active = form.conditions.includes(c);
                 return (
-                  <PillToggle key={c} active={active} onClick={() => toggleCondition(c)} className="text-xs px-3 py-1.5">
+                  <PillToggle key={c} active={active} onClick={() => toggleCondition(c)} className="text-[13px] px-3 py-1.5">
                     {c}
                   </PillToggle>
                 );
@@ -124,7 +124,7 @@ export default function EditPetSheet({ pet, open, onOpenChange, onSuccess }) {
             <Label className="text-sm font-medium">Nicknames</Label>
             <div className="flex flex-wrap gap-1.5 mb-2">
               {form.nicknames.map(n => (
-                <span key={n} className="inline-flex items-center gap-1 text-xs bg-accent/20 text-accent-foreground px-2.5 py-1 rounded-full">
+                <span key={n} className="inline-flex items-center gap-1 text-[13px] bg-accent/20 text-accent-foreground px-2.5 py-1 rounded-full">
                   {n}
                   <button type="button" onClick={() => set('nicknames', form.nicknames.filter(x => x !== n))}>
                     <X className="h-3 w-3" />
@@ -147,7 +147,7 @@ export default function EditPetSheet({ pet, open, onOpenChange, onSuccess }) {
             <Label className="text-sm font-medium">Favorite Activities</Label>
             <div className="flex flex-wrap gap-1.5 mb-2">
               {form.favorite_activities.map(a => (
-                <span key={a} className="inline-flex items-center gap-1 text-xs bg-primary/10 text-primary px-2.5 py-1 rounded-full">
+                <span key={a} className="inline-flex items-center gap-1 text-[13px] bg-primary/10 text-primary px-2.5 py-1 rounded-full">
                   {a}
                   <button type="button" onClick={() => set('favorite_activities', form.favorite_activities.filter(x => x !== a))}>
                     <X className="h-3 w-3" />

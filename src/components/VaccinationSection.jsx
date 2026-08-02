@@ -184,7 +184,7 @@ export default function VaccinationSection({ petId, species, initialEditId }) {
                   <div className="flex items-center gap-2 flex-wrap">
                     <p className="font-medium text-sm">{v.vaccine_name}</p>
                     {status && (
-                      <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full" style={{ background: status.background, color: status.color }}>
+                      <span className="inline-flex items-center gap-1 text-[13px] px-2 py-0.5 rounded-full" style={{ background: status.background, color: status.color }}>
                         <Bell className="h-2.5 w-2.5" /> {status.label}
                       </span>
                     )}
@@ -222,7 +222,7 @@ export default function VaccinationSection({ petId, species, initialEditId }) {
               <div className="flex flex-wrap gap-1.5 mt-1">
                 {suggested.map(s => (
                   <button key={s} type="button" onClick={() => set('vaccine_name', s)}
-                    className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${form.vaccine_name === s ? 'bg-primary text-primary-foreground border-primary' : 'bg-background text-muted-foreground border-border hover:border-primary/50'}`}>
+                    className={`text-[13px] px-2.5 py-1 rounded-full border transition-colors ${form.vaccine_name === s ? 'bg-primary text-primary-foreground border-primary' : 'bg-background text-muted-foreground border-border hover:border-primary/50'}`}>
                     {s}
                   </button>
                 ))}

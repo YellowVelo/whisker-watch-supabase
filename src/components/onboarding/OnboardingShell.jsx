@@ -26,7 +26,7 @@ export default function OnboardingShell({ title, stepNumber, totalSteps, onBack,
         </div>
         {stepNumber && totalSteps && (
           <div className="mt-3 space-y-1.5" role="progressbar" aria-valuenow={stepNumber} aria-valuemin={1} aria-valuemax={totalSteps} aria-label={`Step ${stepNumber} of ${totalSteps}`}>
-            <p className="text-xs font-medium text-tier-tertiary text-center">Step {stepNumber} of {totalSteps}</p>
+            <p className="text-[13px] font-medium text-tier-tertiary text-center">Step {stepNumber} of {totalSteps}</p>
             <div className="flex gap-1.5 justify-center">
               {Array.from({ length: totalSteps }, (_, i) => (
                 <span
