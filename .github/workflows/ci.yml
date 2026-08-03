@@ -62,6 +62,15 @@ jobs:
             supabase/functions/delete-pet/index.test.ts \
             supabase/functions/delete-account/index.test.ts
 
+      - name: Run save_daily_check_ins integration tests
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_DEV_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.sb_publishable }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.sb_secret }}
+        run: |
+          deno test --allow-net --allow-env --node-modules-dir=none \
+            supabase/tests/save_daily_check_ins.test.ts
+
       - name: Run resend-webhook integration tests
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_DEV_URL }}
