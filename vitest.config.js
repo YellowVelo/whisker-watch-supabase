@@ -12,11 +12,14 @@ export default defineConfig({
   },
   test: {
     environment: 'node',
-    // supabase/functions/**/*.test.ts are Deno integration tests (Deno.test,
-    // jsr: imports) run separately via `deno test` — vitest's default glob
-    // would otherwise pick them up and fail trying to run them under Node.
+    // supabase/functions/**/*.test.ts and supabase/tests/**/*.test.ts are
+    // Deno integration tests (Deno.test, jsr: imports) run separately via
+    // `deno test` — vitest's default glob would otherwise pick them up and
+    // fail trying to run them under Node (spec 0042 hit this: CI's frontend
+    // job failed on supabase/tests/save_daily_check_ins.test.ts with "Only
+    // URLs with a scheme in: file and data are supported").
     // e2e/**/*.spec.js are Playwright tests, run via `npm run test:e2e` —
     // same reason, vitest's default glob matches *.spec.js anywhere.
-    exclude: ['**/node_modules/**', 'supabase/functions/**', 'e2e/**'],
+    exclude: ['**/node_modules/**', 'supabase/functions/**', 'supabase/tests/**', 'e2e/**'],
   },
 });
