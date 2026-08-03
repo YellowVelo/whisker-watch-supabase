@@ -338,7 +338,15 @@ function buildBaselineObservations(catalog) {
 // direction reads to pick up — and does the upsert/delete/insert in one
 // atomic call (spec 0016), so a failure partway through can no longer
 // leave the check-in row saved without its observations.
-export async function markGreatDay(petId, date = todayStr(), source = 'app') {
+// `expectedUpdatedAt` (spec 0043) — pass the `updated_at` of whatever
+// check-in the caller loaded before starting this edit (or `null` if the
+// caller loaded a blank day) to opt into conflict detection: if a
+// different co-owner's save has landed since, the RPC refuses to
+// overwrite it and this returns `{ conflict: true, existingCheckIn,
+// existingObservations }` instead of saving. Omit entirely (the default)
+// to keep the prior last-write-wins behavior, e.g. for bulk/Catch-Up
+// paths not covered by this spec.
+export async function markGreatDay(petId, date = todayStr(), source = 'app', { expectedUpdatedAt } = {}) {
   const catalog = await loadObservationCatalog();
   const payload = {
     pet_id: petId,
@@ -348,12 +356,15 @@ export async function markGreatDay(petId, date = todayStr(), source = 'app') {
     completed_at: new Date().toISOString(),
     source,
     observations: buildBaselineObservations(catalog),
+    ...(expectedUpdatedAt !== undefined ? { expected_updated_at: expectedUpdatedAt } : {}),
   };
 
   const { data, error } = await supabase.rpc('save_daily_check_ins', { payloads: [payload] });
   if (error) throw error;
 
-  return { checkIn: data[0] };
+  const result = data[0];
+  if (result.conflict) return { conflict: true, existingCheckIn: result.check_in, existingObservations: result.observations };
+  return { checkIn: result.check_in };
 }
 
 // Chunk size for save_daily_check_ins RPC calls (spec 0016) — a deliberate
@@ -399,7 +410,7 @@ export async function markGreatDaysBulk(petId, dates, source = 'catch_up') {
     }));
     const { data, error } = await supabase.rpc('save_daily_check_ins', { payloads });
     if (error) throw error;
-    checkIns.push(...data);
+    checkIns.push(...data.map((result) => result.check_in));
   }
 
   return { checkIns };
@@ -500,7 +511,8 @@ function rowsToObservationPayload(catalog, rows) {
   }).filter(Boolean);
 }
 
-export async function markOffTough(petId, date, status, selections, source = 'app') {
+// `expectedUpdatedAt` — see markGreatDay's comment (spec 0043).
+export async function markOffTough(petId, date, status, selections, source = 'app', { expectedUpdatedAt } = {}) {
   const catalog = await loadObservationCatalog();
   const { rows, symptomCounts } = buildObservationRows(catalog, selections);
   // markOffTough resolves every counted category for the full day (see
@@ -516,12 +528,15 @@ export async function markOffTough(petId, date, status, selections, source = 'ap
     completed_at: new Date().toISOString(),
     source,
     observations: rowsToObservationPayload(catalog, rows),
+    ...(expectedUpdatedAt !== undefined ? { expected_updated_at: expectedUpdatedAt } : {}),
   };
 
   const { data, error } = await supabase.rpc('save_daily_check_ins', { payloads: [payload] });
   if (error) throw error;
 
-  return { checkIn: data[0], symptomCount };
+  const result = data[0];
+  if (result.conflict) return { conflict: true, existingCheckIn: result.check_in, existingObservations: result.observations };
+  return { checkIn: result.check_in, symptomCount };
 }
 
 // BulkApplySheet.jsx's multi-day apply (spec 0016) — every date in one
@@ -551,7 +566,7 @@ export async function markOffToughBulk(petId, dates, status, selections, source 
     }));
     const { data, error } = await supabase.rpc('save_daily_check_ins', { payloads });
     if (error) throw error;
-    checkIns.push(...data);
+    checkIns.push(...data.map((result) => result.check_in));
   }
 
   return { checkIns, symptomCount };

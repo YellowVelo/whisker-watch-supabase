@@ -37,7 +37,7 @@ describe('checkinClient persistence (Vibe & Symptom Count)', () => {
   it('markGreatDay writes status=great, symptom_count=0, and explicit baseline rows for every counted category', async () => {
     const appetiteTypeId = 'type-appetite';
     const rpcMock = vi.fn().mockResolvedValue({
-      data: [{ id: 'ci-1', pet_id: 'pet-1', check_in_date: '2026-01-01', status: 'great', symptom_count: 0 }],
+      data: [{ conflict: false, check_in: { id: 'ci-1', pet_id: 'pet-1', check_in_date: '2026-01-01', status: 'great', symptom_count: 0 } }],
       error: null,
     });
 
@@ -75,8 +75,8 @@ describe('checkinClient persistence (Vibe & Symptom Count)', () => {
   it('markOffTough recalculates the complete day from the current selections, not an incremental patch', async () => {
     const appetiteTypeId = 'type-appetite';
     const rpcMock = vi.fn()
-      .mockResolvedValueOnce({ data: [{ id: 'ci-1', pet_id: 'pet-1', check_in_date: '2026-01-01', status: 'off', symptom_count: 2 }], error: null })
-      .mockResolvedValueOnce({ data: [{ id: 'ci-1', pet_id: 'pet-1', check_in_date: '2026-01-01', status: 'off', symptom_count: 0 }], error: null });
+      .mockResolvedValueOnce({ data: [{ conflict: false, check_in: { id: 'ci-1', pet_id: 'pet-1', check_in_date: '2026-01-01', status: 'off', symptom_count: 2 } }], error: null })
+      .mockResolvedValueOnce({ data: [{ conflict: false, check_in: { id: 'ci-1', pet_id: 'pet-1', check_in_date: '2026-01-01', status: 'off', symptom_count: 0 } }], error: null });
 
     vi.doMock('@/api/entities', () => ({
       entities: {
@@ -117,7 +117,7 @@ describe('checkinClient persistence (Vibe & Symptom Count)', () => {
   it('markOffTough never counts a "Not Observed" answer as a symptom', async () => {
     const waterTypeId = 'type-water';
     const rpcMock = vi.fn().mockResolvedValue({
-      data: [{ id: 'ci-1', pet_id: 'pet-1', check_in_date: '2026-01-01', status: 'tough', symptom_count: 0 }],
+      data: [{ conflict: false, check_in: { id: 'ci-1', pet_id: 'pet-1', check_in_date: '2026-01-01', status: 'tough', symptom_count: 0 } }],
       error: null,
     });
 
@@ -147,6 +147,59 @@ describe('checkinClient persistence (Vibe & Symptom Count)', () => {
 
     const { markOffTough } = await import('./checkinClient');
     await expect(markOffTough('pet-1', '2026-01-01', 'off', [])).rejects.toThrow('boom');
+  });
+
+  // Co-owner conflict detection (spec 0043) — the RPC refuses to overwrite
+  // a day a different co-owner already changed since this caller loaded
+  // it, and reports what's currently saved instead of the usual checkIn.
+  it('markGreatDay reports a conflict instead of saving when a different save has landed since the caller loaded this day', async () => {
+    const rpcMock = vi.fn().mockResolvedValue({
+      data: [{
+        conflict: true,
+        check_in: { id: 'ci-1', pet_id: 'pet-1', check_in_date: '2026-01-01', status: 'off', symptom_count: 1, updated_at: '2026-01-01T12:00:00Z' },
+        observations: [{ value: 'ate_much_less' }],
+      }],
+      error: null,
+    });
+    vi.doMock('@/api/entities', () => ({
+      entities: {
+        ObservationType: { list: vi.fn().mockResolvedValue([]) },
+        ObservationOption: { list: vi.fn().mockResolvedValue([]) },
+      },
+    }));
+    vi.doMock('@/api/supabaseClient', () => ({ supabase: { rpc: rpcMock } }));
+
+    const { markGreatDay } = await import('./checkinClient');
+    const result = await markGreatDay('pet-1', '2026-01-01', 'app', { expectedUpdatedAt: null });
+
+    expect(result).toEqual({
+      conflict: true,
+      existingCheckIn: expect.objectContaining({ status: 'off' }),
+      existingObservations: [{ value: 'ate_much_less' }],
+    });
+    expect(rpcMock).toHaveBeenCalledWith('save_daily_check_ins', {
+      payloads: [expect.objectContaining({ expected_updated_at: null })],
+    });
+  });
+
+  it('markOffTough omits expected_updated_at (no conflict check) when the caller does not opt in', async () => {
+    const rpcMock = vi.fn().mockResolvedValue({
+      data: [{ conflict: false, check_in: { id: 'ci-1', pet_id: 'pet-1', check_in_date: '2026-01-01', status: 'off', symptom_count: 0 } }],
+      error: null,
+    });
+    vi.doMock('@/api/entities', () => ({
+      entities: {
+        ObservationType: { list: vi.fn().mockResolvedValue([]) },
+        ObservationOption: { list: vi.fn().mockResolvedValue([]) },
+      },
+    }));
+    vi.doMock('@/api/supabaseClient', () => ({ supabase: { rpc: rpcMock } }));
+
+    const { markOffTough } = await import('./checkinClient');
+    await markOffTough('pet-1', '2026-01-01', 'off', []);
+
+    const sentPayload = rpcMock.mock.calls[0][1].payloads[0];
+    expect('expected_updated_at' in sentPayload).toBe(false);
   });
 });
 
@@ -259,7 +312,7 @@ describe('markGreatDaysBulk', () => {
     const dates = ['2026-07-01', '2026-07-02', '2026-07-03'];
     const upsertedCheckIns = dates.map((d, i) => ({ id: `ci-${i}`, pet_id: 'pet-1', check_in_date: d, status: 'great', symptom_count: 0 }));
 
-    const rpcMock = vi.fn().mockResolvedValue({ data: upsertedCheckIns, error: null });
+    const rpcMock = vi.fn().mockResolvedValue({ data: upsertedCheckIns.map((checkIn) => ({ conflict: false, check_in: checkIn })), error: null });
     vi.doMock('@/api/supabaseClient', () => ({ supabase: { rpc: rpcMock } }));
     vi.doMock('@/api/entities', () => ({
       entities: {
@@ -286,7 +339,7 @@ describe('markGreatDaysBulk', () => {
   it('splits a gap larger than the chunk size into multiple sequential RPC calls', async () => {
     const dates = Array.from({ length: 45 }, (_, i) => `2026-01-${String(i + 1).padStart(2, '0')}`);
     const rpcMock = vi.fn().mockImplementation((_fn, { payloads }) => Promise.resolve({
-      data: payloads.map((p, i) => ({ id: `ci-${i}`, ...p })),
+      data: payloads.map((p, i) => ({ conflict: false, check_in: { id: `ci-${i}`, ...p } })),
       error: null,
     }));
     vi.doMock('@/api/supabaseClient', () => ({ supabase: { rpc: rpcMock } }));
@@ -351,7 +404,7 @@ describe('markOffToughBulk', () => {
     const appetiteTypeId = 'type-appetite';
     const dates = ['2026-07-01', '2026-07-02'];
     const rpcMock = vi.fn().mockResolvedValue({
-      data: dates.map((d, i) => ({ id: `ci-${i}`, pet_id: 'pet-1', check_in_date: d, status: 'off', symptom_count: 1 })),
+      data: dates.map((d, i) => ({ conflict: false, check_in: { id: `ci-${i}`, pet_id: 'pet-1', check_in_date: d, status: 'off', symptom_count: 1 } })),
       error: null,
     });
     vi.doMock('@/api/supabaseClient', () => ({ supabase: { rpc: rpcMock } }));
@@ -392,7 +445,7 @@ describe('markOffToughBulk', () => {
   it('splits more than 20 dates into multiple sequential chunked RPC calls', async () => {
     const dates = Array.from({ length: 22 }, (_, i) => `2026-03-${String(i + 1).padStart(2, '0')}`);
     const rpcMock = vi.fn().mockImplementation((_fn, { payloads }) => Promise.resolve({
-      data: payloads.map((p, i) => ({ id: `ci-${i}`, ...p })),
+      data: payloads.map((p, i) => ({ conflict: false, check_in: { id: `ci-${i}`, ...p } })),
       error: null,
     }));
     vi.doMock('@/api/supabaseClient', () => ({ supabase: { rpc: rpcMock } }));

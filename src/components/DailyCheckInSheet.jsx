@@ -1,12 +1,39 @@
 import { useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { CATEGORIES, getOptionsForSpecies, getCategory } from '@/lib/checkin/config';
-import { markGreatDay, markSkipped, markOffTough } from '@/lib/checkin/checkinClient';
+import { markGreatDay, markSkipped, markOffTough, loadObservationCatalog, describeObservation } from '@/lib/checkin/checkinClient';
+import { entities } from '@/api/entities';
 import { track } from '@/lib/analytics';
 import { Textarea } from '@/components/ui/textarea';
 import { PALETTE } from '@/lib/toneColors';
 import PillToggle from '@/components/PillToggle';
 import BottomSheet from '@/components/BottomSheet';
+
+const VIBE_LABELS = { great: 'Great Day', off: 'Off Day', tough: 'Tough Day', skipped: 'Skipped' };
+
+// Co-owner conflict detection (spec 0043) — turns the raw conflict payload
+// save_daily_check_ins hands back into what the "someone else already
+// saved this" pop-up needs: which co-owner, and a plain-language summary
+// of what they saved. `describeObservation` already existed for exactly
+// this per-row "what changed" translation but had no real caller before
+// this — it's the same logic buildObservationRows uses to decide what a
+// symptom row means, just read back out.
+async function resolveConflictSummary(pet, existingCheckIn, existingObservations) {
+  const [coOwners, catalog] = await Promise.all([
+    entities.PetCoOwner.filter({ pet_id: pet.id }).catch(() => []),
+    loadObservationCatalog(),
+  ]);
+  const coOwner = coOwners.find((c) => c.co_owner_user_id === existingCheckIn.created_by);
+  const who = coOwner?.co_owner_email || 'Your co-owner';
+
+  const typeIdToCode = {};
+  for (const [code, entry] of Object.entries(catalog)) typeIdToCode[entry.type.id] = code;
+  const symptoms = (existingObservations || [])
+    .map((obs) => describeObservation(obs, typeIdToCode))
+    .filter(Boolean);
+
+  return { who, vibeLabel: VIBE_LABELS[existingCheckIn.status] || existingCheckIn.status, symptoms };
+}
 
 // Medication Exception is deferred out of this round's picker (spec:
 // "not shown in this round's check-in flow ... category is not removed
@@ -47,6 +74,11 @@ export default function DailyCheckInSheet({ pet, date, onClose, onSaved, isCatch
   const [selectedCodes, setSelectedCodes] = useState([]);
   const [answers, setAnswers] = useState({}); // code -> { value, numericValue, notes }
   const [error, setError] = useState(null);
+  // Co-owner conflict detection (spec 0043) — set when the save was
+  // refused because a different co-owner already saved a newer version of
+  // this day; null the rest of the time. Distinct from `error`, which is
+  // for actual failures — a conflict is an expected, handled outcome.
+  const [conflict, setConflict] = useState(null);
 
   // 'off' | 'tough' while the picker/details flow is in progress, so the
   // eventual save knows which Vibe to store.
@@ -70,7 +102,11 @@ export default function DailyCheckInSheet({ pet, date, onClose, onSaved, isCatch
     setError(null);
     try {
       track('daily_check_in_vibe_selected', { pet_id: pet.id, check_in_date: date, vibe: 'great' });
-      await markGreatDay(pet.id, date, isCatchUp ? 'catch_up' : 'app');
+      const result = await markGreatDay(pet.id, date, isCatchUp ? 'catch_up' : 'app', { expectedUpdatedAt: existingCheckIn?.updated_at ?? null });
+      if (result.conflict) {
+        await showConflict(result);
+        return;
+      }
       track('vibe_recorded', { pet_id: pet.id, check_in_date: date, status: 'great', symptom_count: 0 });
       onSaved?.();
     } catch (err) {
@@ -78,6 +114,47 @@ export default function DailyCheckInSheet({ pet, date, onClose, onSaved, isCatch
       setError('Unable to save check-in. Please try again.');
       setStage('initial');
     }
+  };
+
+  // Co-owner conflict detection (spec 0043) — a save was refused because
+  // Co-Owner B's save landed since this device loaded the day. Resolves
+  // who/what for the pop-up, then hands control to it instead of closing.
+  const showConflict = async (result) => {
+    const summary = await resolveConflictSummary(pet, result.existingCheckIn, result.existingObservations);
+    setConflict({ ...summary, existingCheckIn: result.existingCheckIn });
+    setStage('initial');
+  };
+
+  const handleKeepMine = async () => {
+    if (!conflict) return;
+    setStage('saving');
+    const retryExpectedUpdatedAt = conflict.existingCheckIn.updated_at;
+    setConflict(null);
+    try {
+      const result = vibeStatus
+        ? await markOffTough(pet.id, date, vibeStatus, buildSelections(), isCatchUp ? 'catch_up' : 'app', { expectedUpdatedAt: retryExpectedUpdatedAt })
+        : await markGreatDay(pet.id, date, isCatchUp ? 'catch_up' : 'app', { expectedUpdatedAt: retryExpectedUpdatedAt });
+      if (result.conflict) {
+        // Another save landed in the few seconds since the pop-up showed —
+        // rare, but handled the same way: show the newer conflict instead
+        // of silently retrying forever.
+        await showConflict(result);
+        return;
+      }
+      onSaved?.();
+    } catch (err) {
+      console.error(err);
+      setError('Unable to save check-in. Please try again.');
+      setStage(vibeStatus ? 'details' : 'initial');
+    }
+  };
+
+  // "Keep Theirs" (spec 0043, decided): discard this device's in-progress
+  // edit outright and let the parent re-load the co-owner's saved entry —
+  // no merge, no further screen.
+  const handleKeepTheirs = () => {
+    setConflict(null);
+    onSaved?.();
   };
 
   const startOffTough = (status) => {
@@ -108,29 +185,36 @@ export default function DailyCheckInSheet({ pet, date, onClose, onSaved, isCatch
     });
   };
 
+  // Counted categories are multi-select — `values` is always passed (even
+  // empty, meaning "confirmed normal"); checkinClient.js resolves baseline
+  // rows for every counted category regardless, so this is just carrying
+  // forward what the owner actually saw/answered. Weight/Other only
+  // produce a selection if the owner actually entered something. Shared
+  // by the normal save and the "Keep Mine" conflict-retry (spec 0043),
+  // which needs the exact same selection set re-sent, not recomputed.
+  const buildSelections = () => selectedCodes
+    .map((code) => {
+      const cat = getCategory(code);
+      const a = answers[code] || {};
+      if (cat.multiSelect) {
+        return { code, values: a.values || [], notes: a.notes || null, photoUrl: a.photoUrl || null };
+      }
+      return { code, value: a.value ?? null, numericValue: a.numericValue ?? null, notes: a.notes || null };
+    })
+    .filter((sel) => sel.values !== undefined || sel.value != null || sel.numericValue != null || sel.notes);
+
   const handleSaveOffTough = async () => {
     if (incompleteCodes.length > 0) return;
     setStage('saving');
     setError(null);
     try {
-      // Counted categories are multi-select — `values` is always passed
-      // (even empty, meaning "confirmed normal"); checkinClient.js
-      // resolves baseline rows for every counted category regardless, so
-      // this is just carrying forward what the owner actually saw/
-      // answered. Weight/Other only produce a selection if the owner
-      // actually entered something.
-      const selections = selectedCodes
-        .map((code) => {
-          const cat = getCategory(code);
-          const a = answers[code] || {};
-          if (cat.multiSelect) {
-            return { code, values: a.values || [], notes: a.notes || null, photoUrl: a.photoUrl || null };
-          }
-          return { code, value: a.value ?? null, numericValue: a.numericValue ?? null, notes: a.notes || null };
-        })
-        .filter((sel) => sel.values !== undefined || sel.value != null || sel.numericValue != null || sel.notes);
-
-      const { symptomCount } = await markOffTough(pet.id, date, vibeStatus, selections, isCatchUp ? 'catch_up' : 'app');
+      const selections = buildSelections();
+      const result = await markOffTough(pet.id, date, vibeStatus, selections, isCatchUp ? 'catch_up' : 'app', { expectedUpdatedAt: existingCheckIn?.updated_at ?? null });
+      if (result.conflict) {
+        await showConflict(result);
+        return;
+      }
+      const { symptomCount } = result;
       track('observation_saved', { pet_id: pet.id, check_in_date: date, categories: selectedCodes });
       track('vibe_recorded', { pet_id: pet.id, check_in_date: date, status: vibeStatus, symptom_count: symptomCount });
       if (isCatchUp) track('catch_up_completed', { pet_id: pet.id, check_in_date: date, status: vibeStatus });
@@ -160,7 +244,7 @@ export default function DailyCheckInSheet({ pet, date, onClose, onSaved, isCatch
       {error && <p className="text-sm text-red-400 mt-2">{error}</p>}
       {!error && stage === 'initial' && existingCheckIn?.status && (
         <p className="text-[13px] text-tier-tertiary mt-2">
-          Already logged as {{ great: 'Great Day', off: 'Off Day', tough: 'Tough Day', skipped: 'Skipped' }[existingCheckIn.status] || existingCheckIn.status} for {dayWord} — saving again will update it.
+          Already logged as {VIBE_LABELS[existingCheckIn.status] || existingCheckIn.status} for {dayWord} — saving again will update it.
         </p>
       )}
     </>
@@ -194,6 +278,44 @@ export default function DailyCheckInSheet({ pet, date, onClose, onSaved, isCatch
       )}
     </>
   ) : null;
+
+  // Co-owner conflict (spec 0043) takes over the sheet entirely — the
+  // owner must resolve it before doing anything else with this check-in.
+  if (conflict) {
+    return (
+      <BottomSheet
+        titleId="check-in-conflict-title"
+        title="Someone already saved this day"
+        onClose={handleClose}
+        footer={(
+          <div className="flex gap-3">
+            <button
+              onClick={handleKeepTheirs}
+              className="flex-1 text-base font-bold rounded-2xl h-14 transition-opacity border-2 bg-card"
+              style={{ borderColor: PALETTE.gray, color: 'var(--text-secondary)' }}
+            >
+              Keep Theirs
+            </button>
+            <button
+              onClick={handleKeepMine}
+              className="flex-1 text-base font-bold rounded-2xl h-14 transition-opacity border-2"
+              style={{ background: 'hsl(var(--background))', borderColor: PALETTE.sky, color: '#fff' }}
+            >
+              Keep Mine
+            </button>
+          </div>
+        )}
+      >
+        <p className="text-sm text-white pb-2">
+          {conflict.who} already saved {dayWord} as {conflict.vibeLabel}
+          {conflict.symptoms.length > 0 ? ` (${conflict.symptoms.join(', ')})` : ''}.
+        </p>
+        <p className="text-[13px] text-tier-tertiary pb-2">
+          Choose whether to keep what you were entering, or keep {conflict.who === 'Your co-owner' ? 'their' : `${conflict.who}'s`} saved answer instead.
+        </p>
+      </BottomSheet>
+    );
+  }
 
   return (
     <BottomSheet titleId="daily-check-in-title" title={title} subtitle={subtitle} onClose={handleClose} footer={footer} focusKey={stage}>
