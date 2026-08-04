@@ -34,7 +34,7 @@ Keep database schema clean, relational, and RLS‑secured
 
 Languages & Frameworks
 
-TypeScript for all backend code (Supabase Edge Functions — this is consistently followed). **The frontend does not follow this standard**: there is no `tsconfig.json`, and `src/` is almost entirely `.js`/`.jsx` (one stray `.ts` utility file exists, `src/utils/index.ts`). Confirmed 2026-07-18 — if frontend TypeScript adoption is still a real goal, it hasn't started; if it's been deliberately dropped, this standard should say so instead of asserting a rule the whole frontend violates.
+TypeScript for all backend code (Supabase Edge Functions — this is consistently followed). **The frontend uses a lighter-weight form of this standard**: there is no `tsconfig.json` and `src/` is still `.js`/`.jsx` (one stray `.ts` utility file exists, `src/utils/index.ts`), but `jsconfig.json` enables TypeScript's `checkJs` mode — type-checking driven by JSDoc annotations rather than full `.ts` conversion — and `npm run typecheck` runs as a required CI check on every merge to `main` as of 2026-08-04 (spec `0044`, 308 pre-existing errors fixed to reach zero). Full `.ts`/`.tsx` conversion has not been adopted; if that's still a real goal, it hasn't started — but "no type-checking at all" is no longer accurate.
 
 React with functional components and hooks
 

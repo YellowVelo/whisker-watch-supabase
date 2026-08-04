@@ -1,6 +1,6 @@
 # 0044_Typecheck_Cleanup_And_CI_Gate_Specification_v1
 
-**Status:** Approved
+**Status:** Implemented and verified 2026-08-04 — pushed to main (commits bafc0fb, 9a41c70), CI green.
 **Date:** 2026-08-03
 **Related files:** `src/components/ui/*.jsx`, `src/lib/AuthContext.jsx`, ~78 app files flagged by `npm run typecheck`, `jsconfig.json`, `.github/workflows/ci.yml`
 
