@@ -1,8 +1,8 @@
 # 0042_CheckIn_Observation_Cleanup_Regression_Test_Specification_v1
 
-**Status:** Draft
+**Status:** Implemented and verified 2026-08-03
 **Date:** 2026-08-02
-**Related files:** `supabase/migrations/0034_save_daily_check_ins.sql`, `src/lib/checkin/checkinClient.js`, `src/lib/checkin/checkinClient.persistence.test.js`, `.github/workflows/ci.yml`
+**Related files:** `supabase/migrations/0034_save_daily_check_ins.sql`, `src/lib/checkin/checkinClient.js`, `src/lib/checkin/checkinClient.persistence.test.js`, `.github/workflows/ci.yml`, `supabase/tests/save_daily_check_ins.test.ts`
 
 ## Before You Approve This
 
@@ -58,5 +58,4 @@ Not applicable — no UI change.
 
 ## Open Questions
 
-1. **[Engineering]** Best home for this test: a Deno test matching the existing Edge Function integration-test pattern, or a Vitest test using a real (unmocked) Supabase connection instead of the app's usual mocked style? Whichever fits better for testing a database function directly rather than an Edge Function endpoint.
-2. **[Engineering]** Should this run inside the existing `edge-functions` CI job, or a new, separate job (e.g. for database-function tests specifically)?
+None remaining — both resolved during implementation (2026-08-03). The test lives in a new `supabase/tests/` directory (a Deno test, matching the existing Edge Function integration-test pattern, since it needed a real Supabase connection rather than the app's usual mocked Vitest style) — a new top-level location rather than `supabase/functions/`'s per-function tests, since this exercises a database function, not an Edge Function. It runs inside the existing `edge-functions` CI job alongside the others, rather than a separate job. One real gotcha hit along the way: Vitest's default glob initially picked up this file too and failed trying to run Deno-only imports under Node — fixed by adding `supabase/tests/**` to `vitest.config.js`'s exclude list, alongside the existing `supabase/functions/**` exclusion.

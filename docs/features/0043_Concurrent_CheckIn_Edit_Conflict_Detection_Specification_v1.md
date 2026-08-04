@@ -1,8 +1,8 @@
 # 0043_Concurrent_CheckIn_Edit_Conflict_Detection_Specification_v1
 
-**Status:** Draft
+**Status:** Implemented and verified 2026-08-03 — deployed to dev, staging, and production
 **Date:** 2026-08-02
-**Related files:** `supabase/migrations/0014_daily_checkins_wellness.sql`, `supabase/migrations/0034_save_daily_check_ins.sql`, `src/lib/checkin/checkinClient.js`, `src/components/DailyCheckInSheet.jsx`, `src/components/DailyCheckInModal.jsx`, `docs/features/0026_Edit_Todays_CheckIn_Specification_v1.md`, `supabase/migrations/0004_co_owner_accounts.sql`
+**Related files:** `supabase/migrations/0014_daily_checkins_wellness.sql`, `supabase/migrations/0034_save_daily_check_ins.sql`, `supabase/migrations/0046_save_daily_check_ins_conflict_detection.sql`, `src/lib/checkin/checkinClient.js`, `src/components/DailyCheckInSheet.jsx`, `src/components/DailyCheckInModal.jsx`, `docs/features/0026_Edit_Todays_CheckIn_Specification_v1.md`, `supabase/migrations/0004_co_owner_accounts.sql`
 
 ## Before You Approve This
 
@@ -64,4 +64,4 @@ No mockup provided. Agreed direction: a simple pop-up (reusing the existing `Bot
 
 ## Open Questions
 
-None remaining on product decisions. One engineering setup item to confirm during implementation: dedicated co-owner test accounts on `wysker-watch-dev` (separate from the production co-owner accounts you already have) for the Playwright test described above.
+None remaining on product decisions. The implementation itself was verified without the Playwright suite: 5 scripted scenarios run directly against real `wysker-watch-dev` data (via a throwaway scratch user, not a dedicated co-owner fixture), plus a live two-tab browser reproduction of an actual co-owner race, confirmed the conflict pop-up and both resolution paths work end to end. Still genuinely open: no *automated* Playwright regression test exists for this flow yet, which needs dedicated co-owner test accounts on `wysker-watch-dev` (separate from the production co-owner accounts already in use) — not built as part of this pass.
