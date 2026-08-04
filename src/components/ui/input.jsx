@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils"
 // forwards arbitrary props, so TypeScript's inference (via checkJs) from
 // the destructured signature alone is too narrow for real call sites
 // across the app — same reasoning as Button/Dialog below.
-const Input = /** @type {any} */ (React.forwardRef(({ className, type, ...props }, ref) => {
+const Input = /** @type {any} */ (React.forwardRef((/** @type {any} */ { className, type, ...props }, ref) => {
   return (
     (<input
       type={type}

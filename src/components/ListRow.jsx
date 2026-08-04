@@ -9,6 +9,14 @@ import { ChevronRight } from 'lucide-react';
 // card). Pass `standalone={false}` for a bare row meant to sit inside an
 // already-bordered `divide-y` group, matching MenuListRow's usage in
 // Settings.
+/**
+ * @param {{
+ *   icon: any, iconBg?: any, iconColor?: any, iconClassName?: any,
+ *   title: any, subtitle?: any, value?: any, valueColor?: any,
+ *   to?: any, onClick?: any, error?: any, destructive?: boolean,
+ *   standalone?: boolean, children?: any,
+ * }} props
+ */
 export default function ListRow({
   icon: Icon, iconBg, iconColor, iconClassName, title, subtitle, value, valueColor,
   to, onClick, error, destructive = false, standalone = true, children,

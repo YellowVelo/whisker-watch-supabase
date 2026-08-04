@@ -253,7 +253,7 @@ export default function MedicationSection({ petId }) {
   );
 }
 
-function MedButton({ med, given, onGive, onEdit, onDelete, past }) {
+function MedButton({ med, given, onGive, onEdit, onDelete, past = false }) {
   const typeBadge = MED_TYPE_BADGE[med.med_type];
   const TypeBadgeIcon = typeBadge?.icon;
   return (

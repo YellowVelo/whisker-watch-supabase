@@ -11,13 +11,13 @@ import { PALETTE } from '@/lib/toneColors';
 // pre-backgrounded track (e.g. a time-range switcher) — it skips the
 // standalone inactive background/border so the two don't double up,
 // showing only a color change between active/inactive.
-export default function PillToggle({ active, onClick, children, icon: Icon, className = '', disabled = false, type = 'button', variant = 'standalone', ...props }) {
+export default function PillToggle({ active, onClick, children, icon: Icon = undefined, className = '', disabled = false, type = 'button', variant = 'standalone', ...props }) {
   const inactiveStyle = variant === 'segmented'
     ? { color: 'var(--text-tertiary)' }
     : { background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.12)', color: 'var(--text-secondary)' };
   return (
     <button
-      type={type}
+      type={/** @type {"button" | "submit" | "reset"} */ (type)}
       onClick={onClick}
       disabled={disabled}
       aria-pressed={active}

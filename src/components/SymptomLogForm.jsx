@@ -12,7 +12,7 @@ const today = () => new Date().toISOString().split('T')[0];
 
 export default function SymptomLogForm({ petId, onOptimisticUpdate, onSuccess }) {
   const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({
+  const [form, setForm] = useState(/** @type {Record<string, any>} */ ({
     pet_id: petId,
     date: today(),
     appetite: '',
@@ -26,7 +26,7 @@ export default function SymptomLogForm({ petId, onOptimisticUpdate, onSuccess })
     pain_signs: false,
     medication_given: false,
     notes: '',
-  });
+  }));
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 

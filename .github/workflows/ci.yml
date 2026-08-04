@@ -24,10 +24,10 @@ jobs:
 
       - run: npm ci
       - run: npm run lint
-      # typecheck is intentionally not run here yet — as of 2026-07-21 it
-      # has 274 pre-existing errors across 51 files, unrelated to this
-      # workflow. Re-add once that's cleaned up as its own tracked effort;
-      # see docs/launch-punch-list.md.
+      # Re-enabled 2026-08-04 (spec 0044): the 308 pre-existing errors that
+      # blocked this since 2026-07-21 are fixed. See
+      # docs/features/0044_Typecheck_Cleanup_And_CI_Gate_Specification_v1.md.
+      - run: npm run typecheck
       - run: npm run test
       - run: npm run build
 

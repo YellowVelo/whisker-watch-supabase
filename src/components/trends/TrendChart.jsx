@@ -134,7 +134,7 @@ function VomitingNauseaVariant({ series, range }) {
   );
 }
 
-export default function TrendChart({ variant, series, range, yDomain = null, color = PALETTE.sky, highlightExtremes = false, height }) {
+export default function TrendChart({ variant, series, range, yDomain = null, color = PALETTE.sky, highlightExtremes = false, height = undefined }) {
   if (!series || series.length === 0) return null;
   if (variant === 'observation') return <ObservationVariant series={series} range={range} height={height} />;
   if (variant === 'vomitingNausea') return <VomitingNauseaVariant series={series} range={range} />;

@@ -39,7 +39,7 @@ const buttonVariants = cva(
 // checkJs inference from the bare destructured signature is too narrow
 // for the range of real call sites across the app (onClick, disabled,
 // children, etc. all vary by usage).
-const Button = /** @type {any} */ (React.forwardRef(({ className, variant, size, asChild = false, ...props }, ref) => {
+const Button = /** @type {any} */ (React.forwardRef((/** @type {any} */ { className, variant, size, asChild = false, ...props }, ref) => {
   const Comp = asChild ? Slot : "button"
   return (
     (<Comp

@@ -5,7 +5,7 @@ import { Link } from 'react-router-dom';
 // across page headers, plus AppHeader's own action buttons (no separate
 // "header action" style is allowed per Amendment #11). Renders a <Link>
 // when `to` is provided, otherwise a plain <button>.
-export default function IconButton({ icon: Icon, to, onClick, 'aria-label': ariaLabel, className = '', iconClassName = 'text-foreground', children, ...props }) {
+export default function IconButton({ icon: Icon, to = undefined, onClick = undefined, 'aria-label': ariaLabel, className = '', iconClassName = 'text-foreground', children = undefined, ...props }) {
   const classes = `relative h-11 w-11 rounded-full flex items-center justify-center flex-shrink-0 active:opacity-70 transition-opacity bg-card border border-border ${className}`;
 
   const content = (

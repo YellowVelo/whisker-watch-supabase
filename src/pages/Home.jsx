@@ -36,7 +36,7 @@ function buildWeightState(summary) {
   const { sparkline } = summary;
   const prevDate = new Date(sparkline[sparkline.length - 2].date);
   const currDate = new Date(sparkline[sparkline.length - 1].date);
-  const consecutive = (currDate - prevDate) === 86400000;
+  const consecutive = (currDate.getTime() - prevDate.getTime()) === 86400000;
   return { direction, comparisonLabel: consecutive ? 'versus yesterday' : 'versus previous entry' };
 }
 

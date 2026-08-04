@@ -10,7 +10,7 @@ import IconButton from '@/components/IconButton';
 // motion.div carries a transform even at rest, which would otherwise make
 // "fixed inset-0" size itself to the page's scroll height instead of the
 // real viewport.
-export default function OnboardingShell({ title, stepNumber, totalSteps, onBack, onClose, closeLabel = 'Close', footer, children }) {
+export default function OnboardingShell({ title, stepNumber, totalSteps, onBack = undefined, onClose, closeLabel = 'Close', footer = undefined, children }) {
   return createPortal((
     <div
       className="fixed inset-0 z-[60] flex flex-col bg-background"

@@ -445,12 +445,13 @@ function DayIcon({ checkIn, isException }) {
   return <VibeIcon status="great" size={20} />;
 }
 
-function CalendarStep({ grid, missedDates, checkInsByDate, exceptionDates, onToggle, onClearAll, onPrevMonth, onNextMonth, canGoEarlier, canGoLater }) {
+function CalendarStep({ grid, missedDates, checkInsByDate, exceptionDates, onToggle, onClearAll, monthLabel, onPrevMonth, onNextMonth, canGoEarlier, canGoLater }) {
   const missedSet = useMemo(() => new Set(missedDates), [missedDates]);
   const anyExceptions = exceptionDates.size > 0;
 
   return (
     <div>
+      <p className="text-[15px] font-semibold text-white text-center mb-2">{monthLabel}</p>
       <div className="flex items-center justify-between mb-3">
         <button onClick={onPrevMonth} disabled={!canGoEarlier} aria-label="Previous month" className="h-8 w-8 rounded-full flex items-center justify-center disabled:opacity-30">
           <ChevronLeft className="h-4 w-4 text-tier-secondary" />

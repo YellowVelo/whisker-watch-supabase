@@ -8,7 +8,7 @@ import IconButton from '../components/IconButton';
 import PageTransition from '../components/PageTransition';
 import { PALETTE } from '@/lib/toneColors';
 
-function Chip({ icon: Icon, label, danger }) {
+function Chip({ icon: Icon, label, danger = false }) {
   return (
     <span
       className="inline-flex items-center gap-1 text-[13px] rounded-full px-2 py-0.5"

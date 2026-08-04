@@ -83,7 +83,7 @@ function addDaysToDateStr(dateStr, days) {
 // yesterday, so the loop below never runs), and an old pet that's simply
 // never been checked in only ever gets asked about the last 6 months, not
 // its entire history (spec: "never looks back further than 6 months").
-export async function getMissedDaysForPet(petId, { timezone, userCreatedAt, petCreatedAt } = {}) {
+export async function getMissedDaysForPet(petId, /** @type {any} */ { timezone, userCreatedAt, petCreatedAt } = {}) {
   const yesterday = yesterdayStr(timezone);
   const floors = [dateStrInTimezone(timezone, -CATCH_UP_MAX_LOOKBACK_DAYS)];
   if (userCreatedAt) floors.push(dateStrForInstant(new Date(userCreatedAt), timezone));
@@ -346,7 +346,7 @@ function buildBaselineObservations(catalog) {
 // existingObservations }` instead of saving. Omit entirely (the default)
 // to keep the prior last-write-wins behavior, e.g. for bulk/Catch-Up
 // paths not covered by this spec.
-export async function markGreatDay(petId, date = todayStr(), source = 'app', { expectedUpdatedAt } = {}) {
+export async function markGreatDay(petId, date = todayStr(), source = 'app', /** @type {any} */ { expectedUpdatedAt } = {}) {
   const catalog = await loadObservationCatalog();
   const payload = {
     pet_id: petId,
@@ -512,7 +512,7 @@ function rowsToObservationPayload(catalog, rows) {
 }
 
 // `expectedUpdatedAt` — see markGreatDay's comment (spec 0043).
-export async function markOffTough(petId, date, status, selections, source = 'app', { expectedUpdatedAt } = {}) {
+export async function markOffTough(petId, date, status, selections, source = 'app', /** @type {any} */ { expectedUpdatedAt } = {}) {
   const catalog = await loadObservationCatalog();
   const { rows, symptomCounts } = buildObservationRows(catalog, selections);
   // markOffTough resolves every counted category for the full day (see

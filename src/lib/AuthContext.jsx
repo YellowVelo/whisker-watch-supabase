@@ -4,7 +4,7 @@ import { entities } from '@/api/entities';
 import { detectTimezone, shouldAutoPopulateTimezone } from '@/lib/timezone';
 import { track } from '@/lib/analytics';
 
-const AuthContext = createContext();
+const AuthContext = createContext(undefined);
 
 /**
  * Supabase-backed replacement for the old Base44 AuthContext.

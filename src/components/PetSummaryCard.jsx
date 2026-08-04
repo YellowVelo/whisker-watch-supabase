@@ -26,7 +26,7 @@ const HOME_CHIP_SLOTS = [
   { code: 'nausea', label: 'Nausea' },
 ];
 
-function PetPhoto({ pet, size, memorial }) {
+function PetPhoto({ pet, size, memorial = false }) {
   return (
     <div
       className="relative rounded-full overflow-hidden flex items-center justify-center flex-shrink-0"
@@ -49,7 +49,7 @@ function PetPhoto({ pet, size, memorial }) {
 
 export default function PetSummaryCard({
   pet, medicationCount = 0, checkIn, attributeDirections, attributesUnavailable = false,
-  weight, chipsLoading = false, highlighted = false, cardRef,
+  weight, chipsLoading = false, highlighted = false, cardRef = undefined,
 }) {
   const navigate = useNavigate();
 

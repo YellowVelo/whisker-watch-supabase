@@ -4,12 +4,14 @@ import { Circle } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 
-const RadioGroup = React.forwardRef(({ className, ...props }, ref) => {
+// Cast to `any`: thin passthrough wrappers around Radix primitives — same
+// checkJs-inference reasoning as Button/Input (see button.jsx).
+const RadioGroup = /** @type {any} */ (React.forwardRef((/** @type {any} */ { className, ...props }, ref) => {
   return (<RadioGroupPrimitive.Root className={cn("grid gap-2", className)} {...props} ref={ref} />);
-})
+}))
 RadioGroup.displayName = RadioGroupPrimitive.Root.displayName
 
-const RadioGroupItem = React.forwardRef(({ className, ...props }, ref) => {
+const RadioGroupItem = /** @type {any} */ (React.forwardRef((/** @type {any} */ { className, ...props }, ref) => {
   return (
     (<RadioGroupPrimitive.Item
       ref={ref}
@@ -23,7 +25,7 @@ const RadioGroupItem = React.forwardRef(({ className, ...props }, ref) => {
       </RadioGroupPrimitive.Indicator>
     </RadioGroupPrimitive.Item>)
   );
-})
+}))
 RadioGroupItem.displayName = RadioGroupPrimitive.Item.displayName
 
 export { RadioGroup, RadioGroupItem }

@@ -8,9 +8,11 @@ const labelVariants = cva(
   "text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
 )
 
-const Label = React.forwardRef(({ className, ...props }, ref) => (
+// Cast to `any`: thin passthrough wrapper around Radix's Label primitive —
+// same checkJs-inference reasoning as Button/Input (see button.jsx).
+const Label = /** @type {any} */ (React.forwardRef((/** @type {any} */ { className, ...props }, ref) => (
   <LabelPrimitive.Root ref={ref} className={cn(labelVariants(), className)} {...props} />
-))
+)))
 Label.displayName = LabelPrimitive.Root.displayName
 
 export { Label }

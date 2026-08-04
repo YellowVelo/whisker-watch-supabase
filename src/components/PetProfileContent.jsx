@@ -93,7 +93,7 @@ function ExpandToggle({ expanded, onToggleExpanded }) {
   );
 }
 
-function ActionPill({ icon: Icon, label, onClick, danger, disabled }) {
+function ActionPill({ icon: Icon, label, onClick, danger = false, disabled = false }) {
   return (
     <button
       type="button"
@@ -117,7 +117,7 @@ function ActionPill({ icon: Icon, label, onClick, danger, disabled }) {
 // standalone `/pet/:petId` route (PetProfile.jsx) and the expandable Pets-
 // tab card (ExpandablePetProfileCard) render the exact same data-loading
 // and business logic instead of keeping two copies in sync.
-export default function PetProfileContent({ petId, onReload, expanded = true, onToggleExpanded, context }) {
+export default function PetProfileContent({ petId, onReload = undefined, expanded = true, onToggleExpanded, context }) {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useAuth();
@@ -142,7 +142,7 @@ export default function PetProfileContent({ petId, onReload, expanded = true, on
   const [todayObservationValues, setTodayObservationValues] = useState({});
   const [petCoOwners, setPetCoOwners] = useState([]);
   const [currentUserId, setCurrentUserId] = useState(null);
-  const [errors, setErrors] = useState({});
+  const [errors, setErrors] = useState(/** @type {Record<string, boolean>} */ ({}));
   const [fullDetailsLoading, setFullDetailsLoading] = useState(false);
   const [fullDetailsLoaded, setFullDetailsLoaded] = useState(false);
 

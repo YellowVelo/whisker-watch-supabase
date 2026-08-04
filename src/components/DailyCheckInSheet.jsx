@@ -366,7 +366,7 @@ export default function DailyCheckInSheet({ pet, date, onClose, onSaved, isCatch
   );
 }
 
-function BigChoiceButton({ label, onClick, subtle }) {
+function BigChoiceButton({ label, onClick, subtle = false }) {
   return (
     <button
       type="button"

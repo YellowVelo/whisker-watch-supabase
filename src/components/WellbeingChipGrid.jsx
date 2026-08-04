@@ -10,7 +10,7 @@ const WELLBEING_CHIP_LABELS = { energy: 'Energy', mobility: 'Mobility', breathin
 // read-only Pets I Sit row (SitterPetRow, spec 0037 — non-interactive,
 // since the row itself is already a single tap target to Trends and a
 // clickable chip inside it would be invalid nested-interactive markup).
-export default function WellbeingChipGrid({ directions, unavailable, checkedInToday, interactive = false, onChipClick }) {
+export default function WellbeingChipGrid({ directions, unavailable, checkedInToday, interactive = false, onChipClick = undefined }) {
   if (unavailable) {
     return <p className="text-base text-tier-tertiary text-center py-4">Unable to load wellbeing.</p>;
   }

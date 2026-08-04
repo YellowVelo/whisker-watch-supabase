@@ -56,7 +56,7 @@ export default function PetTrends() {
   const activeSection = searchParams.get('section') || 'overview';
   const activeGroup = GROUPS[searchParams.get('group')] ? searchParams.get('group') : 'health';
   const metric = searchParams.get('metric');
-  const cardRefs = useRef({});
+  const cardRefs = useRef(/** @type {Record<string, any>} */ ({}));
   const [highlightedMetric, setHighlightedMetric] = useState(null);
   const { user } = useAuth();
   // Health Score Revision V2 — "today"/cutoff dates for every card on this

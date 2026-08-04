@@ -21,7 +21,7 @@ const EMPTY_FORM = {
 };
 
 // petId is optional — if provided, filters sits to those that include this pet
-export default function PetSittingSection({ petId }) {
+export default function PetSittingSection({ petId = undefined }) {
   const [sits, setSits] = useState([]);
   const [allPets, setAllPets] = useState([]);
   const [medicationsByPet, setMedicationsByPet] = useState({});

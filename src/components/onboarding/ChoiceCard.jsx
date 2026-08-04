@@ -1,7 +1,7 @@
 // Single-question, single-select card used throughout Pet Onboarding.
 // One question, large tappable options, one primary action per screen —
 // per the Calm-inspired card wizard requirement.
-export default function ChoiceCard({ eyebrow, title, question, options, value, onSelect, disabled }) {
+export default function ChoiceCard({ eyebrow, title, question = undefined, options, value, onSelect, disabled }) {
   return (
     <div className="flex flex-col gap-6">
       <div className="space-y-1.5">

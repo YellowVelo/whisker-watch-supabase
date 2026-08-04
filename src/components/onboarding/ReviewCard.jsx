@@ -10,7 +10,7 @@ function labelFor(options, value) {
   return options.find((o) => o.value === value)?.label || null;
 }
 
-function Section({ title, onEdit, children }) {
+function Section({ title, onEdit = undefined, children }) {
   return (
     <div className="rounded-2xl bg-card border border-border p-4 space-y-2">
       <div className="flex items-center justify-between">

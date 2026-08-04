@@ -16,7 +16,7 @@ const FOCUSABLE = 'button, [href], input, select, textarea, [tabindex]:not([tabi
 // meaningful "new screen within the sheet" for the caller (e.g. a wizard
 // stage), matching the original per-sheet behavior exactly rather than
 // re-trapping on every render.
-export default function BottomSheet({ titleId = 'bottom-sheet-title', title, subtitle, onClose, children, footer, focusKey }) {
+export default function BottomSheet({ titleId = 'bottom-sheet-title', title, subtitle = undefined, onClose, children, footer = undefined, focusKey = undefined }) {
   const dialogRef = useRef(null);
 
   useEffect(() => {

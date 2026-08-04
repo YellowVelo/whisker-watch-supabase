@@ -14,7 +14,9 @@ const DialogPortal = DialogPrimitive.Portal
 
 const DialogClose = DialogPrimitive.Close
 
-const DialogOverlay = React.forwardRef(({ className, ...props }, ref) => (
+// Cast to `any`: thin passthrough wrappers around Radix primitives — same
+// checkJs-inference reasoning as Button/Input (see button.jsx).
+const DialogOverlay = /** @type {any} */ (React.forwardRef((/** @type {any} */ { className, ...props }, ref) => (
   <DialogPrimitive.Overlay
     ref={ref}
     className={cn(
@@ -22,10 +24,10 @@ const DialogOverlay = React.forwardRef(({ className, ...props }, ref) => (
       className
     )}
     {...props} />
-))
+)))
 DialogOverlay.displayName = DialogPrimitive.Overlay.displayName
 
-const DialogContent = React.forwardRef(({ className, children, ...props }, ref) => (
+const DialogContent = /** @type {any} */ (React.forwardRef((/** @type {any} */ { className, children, ...props }, ref) => (
   <DialogPortal>
     <DialogOverlay />
     <DialogPrimitive.Content
@@ -43,7 +45,7 @@ const DialogContent = React.forwardRef(({ className, children, ...props }, ref) 
       </DialogPrimitive.Close>
     </DialogPrimitive.Content>
   </DialogPortal>
-))
+)))
 DialogContent.displayName = DialogPrimitive.Content.displayName
 
 // Cast to `any` on these four: thin passthrough wrappers (plain <div>s,
@@ -70,7 +72,7 @@ const DialogFooter = /** @type {any} */ (({
 ))
 DialogFooter.displayName = "DialogFooter"
 
-const DialogTitle = /** @type {any} */ (React.forwardRef(({ className, ...props }, ref) => (
+const DialogTitle = /** @type {any} */ (React.forwardRef((/** @type {any} */ { className, ...props }, ref) => (
   <DialogPrimitive.Title
     ref={ref}
     className={cn("text-lg font-semibold leading-none tracking-tight", className)}
@@ -78,7 +80,7 @@ const DialogTitle = /** @type {any} */ (React.forwardRef(({ className, ...props 
 )))
 DialogTitle.displayName = DialogPrimitive.Title.displayName
 
-const DialogDescription = /** @type {any} */ (React.forwardRef(({ className, ...props }, ref) => (
+const DialogDescription = /** @type {any} */ (React.forwardRef((/** @type {any} */ { className, ...props }, ref) => (
   <DialogPrimitive.Description
     ref={ref}
     className={cn("text-sm text-muted-foreground", className)}
