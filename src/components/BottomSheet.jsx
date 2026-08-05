@@ -1,9 +1,8 @@
-import { useEffect, useRef } from 'react';
+import { useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import IconButton from './IconButton';
-
-const FOCUSABLE = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+import useFocusTrap from '@/hooks/useFocusTrap';
 
 // Design System Amendment #8 (2026-07-30) — the canonical bottom-sheet
 // shell, replacing three independently hand-built copies (DailyCheckInSheet,
@@ -18,36 +17,7 @@ const FOCUSABLE = 'button, [href], input, select, textarea, [tabindex]:not([tabi
 // re-trapping on every render.
 export default function BottomSheet({ titleId = 'bottom-sheet-title', title, subtitle = undefined, onClose, children, footer = undefined, focusKey = undefined }) {
   const dialogRef = useRef(null);
-
-  useEffect(() => {
-    const node = dialogRef.current;
-    const focusables = () => Array.from(node?.querySelectorAll(FOCUSABLE) || []).filter((el) => !el.disabled);
-    focusables()[0]?.focus();
-
-    const onKeyDown = (e) => {
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        onClose();
-        return;
-      }
-      if (e.key !== 'Tab') return;
-      const items = focusables();
-      if (items.length === 0) return;
-      const first = items[0];
-      const last = items[items.length - 1];
-      if (e.shiftKey && document.activeElement === first) {
-        e.preventDefault();
-        last.focus();
-      } else if (!e.shiftKey && document.activeElement === last) {
-        e.preventDefault();
-        first.focus();
-      }
-    };
-
-    document.addEventListener('keydown', onKeyDown);
-    return () => document.removeEventListener('keydown', onKeyDown);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [focusKey]);
+  useFocusTrap(dialogRef, onClose, focusKey);
 
   // Portaled to document.body (launch-punch-list P4) — rendered inline,
   // this sheet's `fixed inset-0` isn't actually pinned to the real
@@ -58,8 +28,10 @@ export default function BottomSheet({ titleId = 'bottom-sheet-title', title, sub
   // visible viewport, it was anchoring to the page's full (often 3000px+)
   // scrollable height — invisible when the sheet opens near scrollY≈0,
   // but the footer (e.g. "Continue") renders off-screen once the caller
-  // has scrolled the page down first. Same fix already proven in this
-  // codebase by CatchUpFlow.jsx's identical portal.
+  // has scrolled the page down first. The same portal-to-body technique is
+  // also used by CatchUpFlow.jsx/OnboardingShell.jsx's full-screen overlays
+  // (spec 0045 gave them this component's dialog role + focus trap too, via
+  // the shared useFocusTrap hook — they're no longer just visually similar).
   return createPortal((
     <div className="fixed inset-0 z-50 flex flex-col justify-end" onClick={onClose}>
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { X, ChevronLeft, ChevronRight, CircleDashed, Minus, Check, Loader2, ClipboardList } from 'lucide-react';
 import { PALETTE } from '@/lib/toneColors';
@@ -9,6 +9,7 @@ import DailyCheckInSheet from '@/components/DailyCheckInSheet';
 import BulkApplySheet from './BulkApplySheet';
 import { getCheckInsForDateRange, markGreatDaysBulk } from '@/lib/checkin/checkinClient';
 import { track } from '@/lib/analytics';
+import useFocusTrap from '@/hooks/useFocusTrap';
 
 // Spec 0015 (Multi-Day Catch-Up Check-In). Calendar/exceptions UI (PR 2)
 // plus the save path (PR 3): bulk-apply across selected exception days,
@@ -62,6 +63,7 @@ export default function CatchUpFlow({ pets, missedDaysByPet, onClose, onPetProgr
   const [bulkApplyDates, setBulkApplyDates] = useState(null); // array of dates currently open in BulkApplySheet, or null
   const [finishing, setFinishing] = useState(false);
   const [finishError, setFinishError] = useState(null);
+  const dialogRef = useRef(null);
 
   // Snapshotted once per selected pet, deliberately NOT re-derived from the
   // live missedDaysByPet prop on every render. Home refetches that prop
@@ -141,6 +143,12 @@ export default function CatchUpFlow({ pets, missedDaysByPet, onClose, onPetProgr
     track('multi_day_catch_up_dismissed', selectedPet ? { pet_id: selectedPet.id, step } : { step });
     onClose();
   };
+
+  // Spec 0045: re-traps and re-focuses on every `step` change so switching
+  // between Catch-Up's internal screens (calendar, exceptions, etc.)
+  // refocuses the new screen's first element, matching BottomSheet's own
+  // per-stage `focusKey` behavior.
+  useFocusTrap(dialogRef, handleClose, step);
 
   const toggleBulkSelect = (date) => {
     setBulkSelectedDates((prev) => {
@@ -240,7 +248,14 @@ export default function CatchUpFlow({ pets, missedDaysByPet, onClose, onPetProgr
     // so a top-anchored header/bottom-anchored footer at plain z-50 gets
     // silently covered by both. z-[60] clears the tab bar; the padding
     // clears the account banner instead of hiding behind it.
-    <div className="fixed inset-0 z-[60] flex flex-col bg-background" style={{ paddingTop: 'calc(var(--account-banner-height, 0px) + env(safe-area-inset-top))', paddingBottom: 'env(safe-area-inset-bottom)' }}>
+    <div
+      ref={dialogRef}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Catch Up Check-In"
+      className="fixed inset-0 z-[60] flex flex-col bg-background"
+      style={{ paddingTop: 'calc(var(--account-banner-height, 0px) + env(safe-area-inset-top))', paddingBottom: 'env(safe-area-inset-bottom)' }}
+    >
       <header className="px-5 pt-5 pb-3 flex items-center justify-between flex-shrink-0 border-b border-border">
         <div className="flex items-center gap-2 min-w-0">
           {step === 'exceptions' && (

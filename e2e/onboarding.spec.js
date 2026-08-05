@@ -83,3 +83,25 @@ test('a healthy pet with no meds/vaccinations can complete onboarding, edit from
   await page.getByRole('button', { name: 'Go to Home' }).click();
   await expect(page).toHaveURL('/');
 });
+
+// Spec 0045: OnboardingShell.jsx was modeled directly on CatchUpFlow.jsx's
+// overlay pattern and inherited its missing role="dialog"/focus-trap gap.
+// Checked here on the "new pet" entry screen specifically because it's the
+// one OnboardingShell render that exists before any pet or onboarding row
+// is created (PetOnboarding.jsx renders it directly for petId === 'new'),
+// so pressing Escape and navigating away needs no cleanup afterward.
+test('the onboarding shell is a focus-trapped modal dialog', async ({ page }) => {
+  await page.goto('/pet/new/onboarding');
+
+  const dialog = page.getByRole('dialog', { name: 'Pet Information' });
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toHaveAttribute('aria-modal', 'true');
+
+  // Focus lands on the shell's own first focusable element (Cancel) on
+  // open, matching CatchUpFlow's identical behavior.
+  await expect(page.getByRole('button', { name: 'Cancel' })).toBeFocused();
+
+  // Escape closes it, same as clicking Cancel (onClose navigates to /pets).
+  await page.keyboard.press('Escape');
+  await expect(page).toHaveURL('/pets');
+});
