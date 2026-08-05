@@ -1,6 +1,6 @@
 # 0045_FullScreen_Overlay_Dialog_Role_Specification_v1
 
-**Status:** Draft
+**Status:** Shipped (2026-08-04)
 **Date:** 2026-08-04
 **Related files:** `src/components/catchup/CatchUpFlow.jsx`, `src/components/onboarding/OnboardingShell.jsx`, `src/components/BottomSheet.jsx`, `src/hooks/useFocusTrap.js` (new), `e2e/fixtures.js`, `e2e/ask-wysker-guardrails.spec.js`, `e2e/bottom-nav-menu-tab.spec.js`, `e2e/daily-checkin.spec.js`, `e2e/pet-sitter.spec.js`, `e2e/pwa-install-prompt.spec.js`, `e2e/onboarding.spec.js`, `docs/launch-punch-list.md`
 
@@ -68,4 +68,9 @@ No screenshots or mockups were provided for this fix — it's a code-only access
 
 ## Open Questions
 
-- Should the new focus-trap Playwright coverage live in a small new `e2e/catch-up-flow.spec.js`, or be added inline to one of the 5 specs that already open Catch-Up as a setup step? Left as an implementation-time call per the Test Plan above — either satisfies the acceptance criteria, and the decision is best made once the exact fixture behavior is confirmed against `wysker-watch-dev`'s live seeded data.
+- ~~Should the new focus-trap Playwright coverage live in a small new `e2e/catch-up-flow.spec.js`, or be added inline to one of the 5 specs that already open Catch-Up as a setup step?~~ **Resolved:** a new dedicated `e2e/catch-up-flow.spec.js` was added. It seeds a throwaway pet directly via Supabase with a backdated `created_at` (RLS's `pets_insert_own` policy only checks `created_by`, not `created_at`, so a client insert can set it) rather than touching any of `test1@`'s real historical check-in data, guaranteeing the 2+-missed-day auto-launch fires without risking un-restorable seed data. It's cleaned up via the same `delete-pet` edge function call `onboarding.spec.js` already uses. Two matching assertions (dialog role, focus-on-open, Escape-to-close) were also added to `e2e/onboarding.spec.js`, using the pre-pet-creation `/pet/new/onboarding` screen so no cleanup is needed there either. All new/updated specs pass, along with the 5 previously-blocked specs (`ask-wysker-guardrails`, `bottom-nav-menu-tab`, `daily-checkin`, `pet-sitter`, `pwa-install-prompt`).
+
+## Verification Notes
+
+- Confirmed live in-browser (both `CatchUpFlow` and `OnboardingShell`): `role="dialog"`/`aria-modal="true"` present, focus lands on the first focusable element on open, and Escape closes the overlay.
+- A full Playwright suite run surfaced pre-existing flakiness in `login.spec.js` and `pet-edit-conditions.spec.js` (a shared `createPetAndExpand` helper's `"Step 2 of 6"` assertion timing out). Reproduced identically on unmodified `main` with this spec's changes stashed out — confirmed unrelated to this fix, not a regression it introduced. Left alone as out of scope here.
