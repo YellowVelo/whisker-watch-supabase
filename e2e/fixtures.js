@@ -1,7 +1,7 @@
 // Deliberately thin — the one shared thing every "already logged in"
 // test needs (the saved test1@ session from global-setup.js). Anything
 // specific to one flow belongs in that flow's own spec file, not here.
-import { test as base } from '@playwright/test';
+import { test as base, expect } from '@playwright/test';
 import { AUTH_FILE } from './global-setup.js';
 
 export const test = base.extend({
@@ -11,6 +11,21 @@ export const test = base.extend({
 });
 
 export { expect } from '@playwright/test';
+
+// Spec 0046: the pet-creation -> wizard transition (and every step
+// transition after it) writes to the real wysker-watch-dev backend before
+// the next step's heading renders — "Step 2 of 6" specifically follows
+// Pet.create -> navigate -> Pet.get -> getOrCreatePetOnboarding (see
+// src/pages/PetOnboarding.jsx), 3-4 sequential real round-trips, not one.
+// Playwright's 5s default expect timeout assumes something closer to a
+// single round-trip and intermittently timed out here in full-suite runs
+// even though the page loaded correctly, just a little slower than usual.
+// Centralized here (rather than each spec file setting its own timeout)
+// so add-pet.spec.js, onboarding.spec.js, and pet-edit-conditions.spec.js
+// all get the same fix instead of three separate copies to keep in sync.
+export async function waitForOnboardingStep(page, stepText) {
+  await expect(page.getByText(stepText)).toBeVisible({ timeout: 15000 });
+}
 
 // Home auto-launches a check-in or multi-day Catch-Up sheet the moment
 // it loads if test1@'s real pets have anything pending for today — a

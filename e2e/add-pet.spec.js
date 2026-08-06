@@ -9,7 +9,7 @@
 // Information is Step 1 of the full-screen onboarding wizard. "Skip for
 // now" now lives in the wizard's header (available from Step 2 onward),
 // not on a one-time success screen.
-import { test, expect } from './fixtures.js';
+import { test, expect, waitForOnboardingStep } from './fixtures.js';
 import { createClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
 
@@ -55,7 +55,7 @@ test('a logged-in owner can add a pet, skip onboarding, and see it appear in the
 
   // Landing on Step 2 (Health Conditions) confirms the pet — and its
   // pet_onboarding row — were actually created.
-  await expect(page.getByText('Step 2 of 6')).toBeVisible();
+  await waitForOnboardingStep(page, 'Step 2 of 6');
 
   await page.getByRole('button', { name: 'Skip for now' }).click();
 

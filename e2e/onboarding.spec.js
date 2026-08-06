@@ -7,7 +7,7 @@
 // jumped to a step outside the pet's normal conditional path — fixed by
 // falling back to Review when the current step isn't in getVisibleSteps),
 // and Finish landing on the Completion screen and then Home.
-import { test, expect } from './fixtures.js';
+import { test, expect, waitForOnboardingStep } from './fixtures.js';
 import { createClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
 
@@ -42,7 +42,7 @@ test('a healthy pet with no meds/vaccinations can complete onboarding, edit from
 
   // Step 2: Health Conditions — "generally healthy" skips the Conditions
   // card entirely and goes straight into the baseline questions.
-  await expect(page.getByText('Step 2 of 6')).toBeVisible();
+  await waitForOnboardingStep(page, 'Step 2 of 6');
   await page.getByRole('radio', { name: `${PET_NAME} is generally healthy` }).click();
 
   // Medications yes/no -> "No" skips Medication Entry
@@ -57,11 +57,11 @@ test('a healthy pet with no meds/vaccinations can complete onboarding, edit from
   }
 
   // Step 4: Vaccinations — skip
-  await expect(page.getByText('Step 4 of 6')).toBeVisible();
+  await waitForOnboardingStep(page, 'Step 4 of 6');
   await page.getByRole('button', { name: 'Continue' }).click();
 
   // Step 5: Review
-  await expect(page.getByText('Step 5 of 6')).toBeVisible();
+  await waitForOnboardingStep(page, 'Step 5 of 6');
   await expect(page.getByText('No known health conditions selected.')).toBeVisible();
   await expect(page.getByText('No medications have been added yet.')).toBeVisible();
   await expect(page.getByText('No vaccinations have been added yet.')).toBeVisible();
@@ -74,7 +74,7 @@ test('a healthy pet with no meds/vaccinations can complete onboarding, edit from
   await page.getByRole('button', { name: 'Edit' }).first().click();
   await expect(page.getByRole('heading', { name: `Which conditions has ${PET_NAME} been diagnosed with?` })).toBeVisible();
   await page.getByRole('button', { name: 'Back' }).click();
-  await expect(page.getByText('Step 5 of 6')).toBeVisible();
+  await waitForOnboardingStep(page, 'Step 5 of 6');
   await expect(page.getByRole('heading', { name: 'Review your information' })).toBeVisible();
 
   // Finish -> Completion screen -> Home

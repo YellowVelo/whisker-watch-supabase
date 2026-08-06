@@ -1,7 +1,7 @@
 // Spec 0036: Edit Pet and Conditions split off the old shared EditPetSheet
 // into two routed pages. Covers the spec's Test Plan directly — each test
 // below maps to one Acceptance Criterion.
-import { test, expect } from './fixtures.js';
+import { test, expect, waitForOnboardingStep } from './fixtures.js';
 import { createClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
 
@@ -42,7 +42,7 @@ async function createPetAndExpand(page, { species, name }) {
   await page.locator('#altered-Yes').click();
   await page.getByRole('button', { name: "I don't know" }).first().click();
   await page.getByRole('button', { name: 'Continue' }).click();
-  await expect(page.getByText('Step 2 of 6')).toBeVisible();
+  await waitForOnboardingStep(page, 'Step 2 of 6');
   await page.getByRole('button', { name: 'Skip for now' }).click();
 
   await expect(page.getByRole('heading', { name })).toBeVisible();
