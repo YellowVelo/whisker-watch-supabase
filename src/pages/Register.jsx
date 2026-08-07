@@ -3,9 +3,13 @@ import { supabase } from '@/api/supabaseClient';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Link } from 'react-router-dom';
 import { Loader2, Heart, MailCheck } from 'lucide-react';
 import AuthLayout from '@/components/AuthLayout';
+import { TOS_LAST_UPDATED } from '@/lib/termsOfServiceContent';
+import { PRIVACY_POLICY_LAST_UPDATED } from '@/lib/privacyPolicyContent';
+import { setPendingOAuthConsent } from '@/lib/pendingOAuthConsent';
 
 // Calls the sign-up Edge Function (supabase/functions/sign-up/index.ts)
 // instead of supabase.auth.signUp() directly, so the confirmation email
@@ -22,6 +26,8 @@ export default function Register() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [sent, setSent] = useState(false);
+  const [agreedToTerms, setAgreedToTerms] = useState(false);
+  const [marketingOptIn, setMarketingOptIn] = useState(false);
 
   const handleRegister = async (e) => {
     e.preventDefault();
@@ -34,6 +40,8 @@ export default function Register() {
         email,
         password,
         first_name: firstName.trim() || undefined,
+        accepted_terms: agreedToTerms,
+        marketing_opt_in: marketingOptIn,
       },
     });
     if (error) {
@@ -51,6 +59,15 @@ export default function Register() {
   };
 
   const handleGoogleLogin = async () => {
+    // The Google OAuth flow does its own full-page redirect, so this
+    // page's React state (agreedToTerms/marketingOptIn) doesn't survive
+    // it — persist the answer first so AuthContext.jsx can pick it up
+    // and record it once the redirect completes and a session exists.
+    setPendingOAuthConsent({
+      termsVersion: TOS_LAST_UPDATED,
+      privacyVersion: PRIVACY_POLICY_LAST_UPDATED,
+      marketingOptIn,
+    });
     await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: { redirectTo: window.location.origin },
@@ -78,8 +95,33 @@ export default function Register() {
           <div className="space-y-1.5"><Label htmlFor="register-email">Email</Label><Input id="register-email" type="email" value={email} onChange={e => setEmail(e.target.value)} required /></div>
           <div className="space-y-1.5"><Label htmlFor="register-password">Password</Label><Input id="register-password" type="password" value={password} onChange={e => setPassword(e.target.value)} required /></div>
           <div className="space-y-1.5"><Label htmlFor="register-confirm-password">Confirm Password</Label><Input id="register-confirm-password" type="password" value={confirm} onChange={e => setConfirm(e.target.value)} required /></div>
-          <Button type="submit" className="w-full" disabled={loading}>{loading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Sign Up'}</Button>
-          <Button type="button" variant="outline" className="w-full" onClick={handleGoogleLogin}>Continue with Google</Button>
+          <label htmlFor="register-agree-terms" className="flex items-start gap-3 min-h-11 py-1 cursor-pointer">
+            <Checkbox
+              id="register-agree-terms"
+              checked={agreedToTerms}
+              onCheckedChange={(checked) => setAgreedToTerms(checked === true)}
+              className="mt-0.5"
+            />
+            <span className="text-sm text-muted-foreground">
+              I agree to the{' '}
+              <Link to="/terms" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Terms of Service</Link>
+              {' '}and{' '}
+              <Link to="/privacy" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Privacy Policy</Link>.
+            </span>
+          </label>
+          <label htmlFor="register-marketing-optin" className="flex items-start gap-3 min-h-11 py-1 cursor-pointer">
+            <Checkbox
+              id="register-marketing-optin"
+              checked={marketingOptIn}
+              onCheckedChange={(checked) => setMarketingOptIn(checked === true)}
+              className="mt-0.5"
+            />
+            <span className="text-sm text-muted-foreground">
+              Send me tips, product updates, and other marketing communications.
+            </span>
+          </label>
+          <Button type="submit" className="w-full" disabled={loading || !agreedToTerms}>{loading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Sign Up'}</Button>
+          <Button type="button" variant="outline" className="w-full" onClick={handleGoogleLogin} disabled={!agreedToTerms}>Continue with Google</Button>
         </form>
       )}
     </AuthLayout>

@@ -23,8 +23,13 @@
 // see the spec's "no CAPTCHA at launch" decision.
 //
 // Request body:
-//   { action: 'signup', email, password, first_name? }
+//   { action: 'signup', email, password, first_name?, accepted_terms, marketing_opt_in? }
 //   { action: 'resend', email }
+//
+// accepted_terms must be exactly `true` for a 'signup' request — this is
+// the server-side half of the signup consent gate (spec 0047); the client
+// disables its own submit button on this, but this function enforces it
+// independently so a direct API call can't skip it.
 //
 // Response is deliberately the SAME generic shape regardless of whether
 // the account is brand new, already confirmed, already has a stuck
@@ -49,6 +54,17 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const MAX_FIRST_NAME_LENGTH = 100; // mirrors Register.jsx's existing maxLength
 const MIN_PASSWORD_LENGTH = 8;
 const MAX_PASSWORD_LENGTH = 128;
+
+// The "Last updated" strings a signup is recorded as having agreed to
+// (spec 0047). Deliberately this function's own copy, not something the
+// client sends — a modified client shouldn't be able to claim it agreed
+// to a different version than what's actually live. Must be kept in sync
+// by hand with TOS_LAST_UPDATED (src/lib/termsOfServiceContent.js) and
+// PRIVACY_POLICY_LAST_UPDATED (src/lib/privacyPolicyContent.js) — this
+// Edge Function runs on Deno and can't share an import with the Vite
+// frontend bundle.
+const TOS_VERSION = 'July 10, 2026';
+const PRIVACY_VERSION = 'June 30, 2026';
 
 // Rate limits (see check_and_record_rate_limits, migration 0039). Shared
 // across both 'signup' and 'resend' actions for the same key — a
@@ -186,7 +202,14 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: 'Invalid request body' }, 400, cors);
     }
 
-    const { action, email, password, first_name: firstNameRaw } = body as Record<string, unknown>;
+    const {
+      action,
+      email,
+      password,
+      first_name: firstNameRaw,
+      accepted_terms: acceptedTerms,
+      marketing_opt_in: marketingOptInRaw,
+    } = body as Record<string, unknown>;
 
     if (action !== 'signup' && action !== 'resend') {
       return jsonResponse({ error: "action must be 'signup' or 'resend'" }, 400, cors);
@@ -218,7 +241,18 @@ Deno.serve(async (req) => {
           cors,
         );
       }
+      // Server-side enforcement of the signup consent gate (spec 0047) —
+      // the Register.jsx checkbox/disabled-button is the normal path, but
+      // a direct API call must not be able to skip it.
+      if (acceptedTerms !== true) {
+        return jsonResponse(
+          { error: 'You must agree to the Terms of Service and Privacy Policy to create an account' },
+          400,
+          cors,
+        );
+      }
     }
+    const marketingOptIn = marketingOptInRaw === true;
 
     // Rate limiting — checked before any real work (existence lookups,
     // account creation, or a send), so a rejected attempt never leaks
@@ -273,7 +307,13 @@ Deno.serve(async (req) => {
         email: cleanEmail,
         password: password as string,
         email_confirm: false,
-        user_metadata: firstName ? { first_name: firstName } : undefined,
+        user_metadata: {
+          ...(firstName ? { first_name: firstName } : {}),
+          terms_accepted_at: new Date().toISOString(),
+          terms_version: TOS_VERSION,
+          privacy_version: PRIVACY_VERSION,
+          marketing_opt_in: marketingOptIn,
+        },
       });
 
       if (createError) {

@@ -3,6 +3,7 @@ import { supabase } from '@/api/supabaseClient';
 import { entities } from '@/api/entities';
 import { detectTimezone, shouldAutoPopulateTimezone } from '@/lib/timezone';
 import { track } from '@/lib/analytics';
+import { takePendingOAuthConsent } from '@/lib/pendingOAuthConsent';
 
 const AuthContext = createContext(undefined);
 
@@ -103,6 +104,38 @@ export const AuthProvider = ({ children }) => {
       .select('*')
       .eq('id', authUser.id)
       .single();
+
+    // First-time Google signup consent (spec 0047): the email/password
+    // path records terms_accepted_at/version/marketing_opt_in server-side
+    // at createUser() time, but Google OAuth can't inject that same
+    // user_metadata, so handle_new_user() leaves these null for an
+    // OAuth-created profile. If this account has never recorded consent
+    // AND the Google button stashed a pending answer before redirecting
+    // (see pendingOAuthConsent.js), write it now. A *returning* Google
+    // user already has terms_accepted_at set, so this never overwrites
+    // an existing record — matches the email/password path's "recorded
+    // once, at signup" behavior.
+    if (profile && !profile.terms_accepted_at) {
+      const pending = takePendingOAuthConsent();
+      if (pending) {
+        const { data: updated, error: updateError } = await supabase
+          .from('profiles')
+          .update({
+            terms_accepted_at: new Date().toISOString(),
+            terms_version: pending.termsVersion,
+            privacy_version: pending.privacyVersion,
+            marketing_opt_in: pending.marketingOptIn,
+          })
+          .eq('id', authUser.id)
+          .select()
+          .single();
+        if (!updateError) {
+          profile = updated;
+        } else {
+          console.error('Failed to record OAuth signup consent:', updateError);
+        }
+      }
+    }
 
     // First authenticated load with no stored timezone: capture the
     // device/browser timezone (no location permission involved) and

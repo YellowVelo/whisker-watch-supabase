@@ -4,7 +4,10 @@ import { Check } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 
-const Checkbox = React.forwardRef(({ className, ...props }, ref) => (
+// Cast to `any`: thin passthrough wrapper, same reasoning as Input/Button
+// — checkJs's inference from the destructured signature alone is too
+// narrow for real call sites (e.g. id/checked/onCheckedChange).
+const Checkbox = /** @type {any} */ (React.forwardRef((/** @type {any} */ { className, ...props }, ref) => (
   <CheckboxPrimitive.Root
     ref={ref}
     className={cn(
@@ -16,7 +19,7 @@ const Checkbox = React.forwardRef(({ className, ...props }, ref) => (
       <Check className="h-4 w-4" />
     </CheckboxPrimitive.Indicator>
   </CheckboxPrimitive.Root>
-))
+)))
 Checkbox.displayName = CheckboxPrimitive.Root.displayName
 
 export { Checkbox }

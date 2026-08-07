@@ -3,11 +3,15 @@ import { supabase } from '@/api/supabaseClient';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Loader2, Heart, CheckCircle2 } from 'lucide-react';
 import AuthLayout from '@/components/AuthLayout';
 import { resetSandboxAccount } from '@/lib/accountClient';
 import { SEED_SCENARIOS } from '@/lib/seedTestData';
+import { TOS_LAST_UPDATED } from '@/lib/termsOfServiceContent';
+import { PRIVACY_POLICY_LAST_UPDATED } from '@/lib/privacyPolicyContent';
+import { setPendingOAuthConsent } from '@/lib/pendingOAuthConsent';
 
 const RESEND_COOLDOWN_SECONDS = 60;
 const DEMO_SHOWCASE_SCENARIO = SEED_SCENARIOS.find((s) => s.key === 'demo_showcase');
@@ -33,6 +37,7 @@ export default function Login() {
   const [showResend, setShowResend] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
   const [resendError, setResendError] = useState('');
+  const [agreedToTerms, setAgreedToTerms] = useState(false);
   const cooldownTimerRef = useRef(null);
 
   useEffect(() => () => clearInterval(cooldownTimerRef.current), []);
@@ -124,6 +129,18 @@ export default function Login() {
   };
 
   const handleGoogleLogin = async () => {
+    // Google sign-in can create a brand-new account for a first-time
+    // Google user (same as Register.jsx's button) — persist the agreement
+    // answer before the redirect so AuthContext.jsx can record it if this
+    // turns out to be a first-time signup, not just a returning sign-in.
+    // No marketing checkbox here (Login isn't the signup form) — a
+    // first-time Google signup from this page is simply recorded as
+    // marketingOptIn: false, same as leaving it unchecked on Register.
+    setPendingOAuthConsent({
+      termsVersion: TOS_LAST_UPDATED,
+      privacyVersion: PRIVACY_POLICY_LAST_UPDATED,
+      marketingOptIn: false,
+    });
     await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: { redirectTo: window.location.origin },
@@ -184,7 +201,21 @@ export default function Login() {
             <Loader2 className="h-4 w-4 animate-spin" />
           ) : 'Sign In'}
         </Button>
-        <Button type="button" variant="outline" className="w-full" onClick={handleGoogleLogin}>
+        <label htmlFor="login-agree-terms" className="flex items-start gap-3 min-h-11 py-1 cursor-pointer">
+          <Checkbox
+            id="login-agree-terms"
+            checked={agreedToTerms}
+            onCheckedChange={(checked) => setAgreedToTerms(checked === true)}
+            className="mt-0.5"
+          />
+          <span className="text-sm text-muted-foreground">
+            I agree to the{' '}
+            <Link to="/terms" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Terms of Service</Link>
+            {' '}and{' '}
+            <Link to="/privacy" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Privacy Policy</Link>.
+          </span>
+        </label>
+        <Button type="button" variant="outline" className="w-full" onClick={handleGoogleLogin} disabled={!agreedToTerms}>
           Continue with Google
         </Button>
       </form>

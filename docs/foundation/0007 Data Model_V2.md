@@ -23,7 +23,7 @@ Wysker Watch uses a relational, owner-scoped schema built on Supabase/Postgres w
 
 | Table | Introduced | Owner-scoped via |
 |---|---|---|
-| profiles | 0001 (+0010, 0011, 0015, 0017) | `id = auth.uid()` |
+| profiles | 0001 (+0010, 0011, 0015, 0017, 0047) | `id = auth.uid()` |
 | notifications | 0005 | `user_id = auth.uid()` |
 | pets | 0001 (+0008, +0031 sitter read) | `is_pet_owner()`, or an assigned sitter via `is_pet_sitter()` |
 | pet_foods | 0001 | `is_pet_owner()` |
@@ -62,6 +62,10 @@ Extends `auth.users`.
 - `last_name` text, max 100 chars — added 0017, same pattern as `first_name`
 - `timezone` text, nullable — added 0017; populated client-side on first authenticated load via `Intl.DateTimeFormat` detection (`src/lib/timezone.js`), not backfilled for existing rows. Enforced to be a valid IANA identifier by a `BEFORE INSERT/UPDATE` trigger checking against Postgres's own `pg_timezone_names` catalog (a CHECK constraint can't do this, since checks can't query other relations) — this matters because RLS alone only restricts *who* can write a profiles row, not *what* value they write, so without the trigger a direct REST API call could store an arbitrary string.
 - `timezone_is_manual` boolean, default `false` — added 0017; once a timezone is set (auto-detected or manually chosen), the app never silently overwrites it again. This is enforced in application code (`shouldAutoPopulateTimezone()` in `timezone.js`), not the database, same as the read side of `first_name`.
+- `terms_accepted_at` timestamptz, nullable — added 0047; when Terms of Service/Privacy Policy agreement was recorded at signup. Null for any account created before this shipped — existing users are never retroactively asked to agree to anything.
+- `terms_version` text, nullable — added 0047; the Terms of Service "Last updated" string in effect at the moment of signup.
+- `privacy_version` text, nullable — added 0047; same idea for the Privacy Policy, stored as a separate column since the two documents version independently.
+- `marketing_opt_in` boolean, default `false` — added 0047; answer to a separate, always-optional marketing-communications checkbox at signup. Currently unused — no marketing-email sending capability exists anywhere in the app yet; this only captures the answer for whenever that's built.
 - `created_at`, `updated_at` timestamptz
 
 `role` and `account_type` can only be changed by a service-role process (trigger-enforced, migration 0011) — a regular authenticated user cannot self-promote to admin or test/demo.
