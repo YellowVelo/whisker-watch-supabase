@@ -6,7 +6,7 @@ This file is read automatically at the start of every Claude Code session in thi
 Read `/docs/foundation/Product Context.md` first, every session, before doing anything else.
 
 ## Current data model — read before touching scoring/check-in logic
-`/docs/features/0012_DailyCheckIn_Vibe_Trends_Specification_v5.md` is the canonical source for all Vibe/scoring/check-in logic. The app has retired three prior scoring systems (Wellness Score V1, Health Score V2, and an equal-weight multi-select version) — if any other file, doc, or piece of code appears to reference a 0–100 score, a 0–10 Health Score, or Stable/Declining/Monitor labels, treat it as outdated and check this spec first.
+`/docs/features/0012_DailyCheckIn_Vibe_Trends_Specification_v5.md` is the canonical source for all Vibe/scoring/check-in logic. This model is stable and settled — the prior iterations (Wellness Score V1, Health Score V2, an equal-weight multi-select version) are retired history, not an ongoing concern. If any other file, doc, or piece of code appears to reference a 0–100 score, a 0–10 Health Score, or Stable/Declining/Monitor labels, treat it as outdated and check this spec first.
 
 Current model in one line: `daily_check_ins.status` is `great` / `off` / `tough` / `skipped` (Vibe, subjective, owner-reported) plus an unweighted symptom count (objective, direction-only). The two signals never inform each other.
 
@@ -33,7 +33,7 @@ Current model in one line: `daily_check_ins.status` is `great` / `off` / `tough`
 
 ## Working conventions
 - This is a READ-ONLY exploration by default. Do not edit, create, or delete files unless the task explicitly asks for changes, or Plan Mode has been used and the plan approved first.
-- When asked to review or audit, always compare docs against actual code/git history — do not rely on doc content alone, since docs have historically lagged fast-moving code changes here (4 scoring-model iterations shipped in 8 days).
+- When asked to review or audit, always compare docs against actual code/git history — do not rely on doc content alone, since docs have occasionally lagged shipped code here.
 - Foundation and confirmed-current feature docs are trustworthy. Everything in `/review-features` is not, until checked.
 - Use the `spec-writer` skill for new features/changes/fixes before implementing; use `doc-updater` after a change lands to keep docs in sync. Both are project skills under `.claude/skills/`.
 - Run the `design-system-check` skill after writing or editing any page/component `.jsx` file — don't wait to be asked. It audits the changed files against `/docs/foundation/0005 Design System.md` (emoji-as-icon, serif fonts, raw colors, sub-13px text, sub-44px touch targets, hand-rolled duplicates of `BottomSheet`/`PillToggle`/`IconButton`/`ListRow`/`ConfirmDeleteDialog`, etc.) and reports findings before the turn ends. This doc has drifted from shipped code before (spec 0028 found 6+ violations in one pass) — catch it per-change, not in a big retroactive sweep.
