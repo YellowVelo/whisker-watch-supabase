@@ -11,6 +11,19 @@ tier, don't renumber existing ones.
 
 ---
 
+## Alpha Launch Blockers (as of 2026-08-07 readiness review)
+
+Automated checks (lint/typecheck/unit/build) and the full manual test pass
+(e2e, Edge Function integration tests, in-browser smoke test) are done and
+green. Two items remain before starting Alpha:
+
+- [ ] **`ask-vet-assistant` rate limiting** — see P2 item below. Live cost/abuse
+  exposure the moment real alpha traffic starts; higher priority of the two.
+- [ ] **Deploy parity check across dev/staging/prod** — see P5 item below.
+  Quick (a few CLI commands), not yet run. Do this even if rate limiting slips.
+
+---
+
 ## P0 — Data safety & process (fix regardless of launch timing)
 
 These aren't store requirements, but shipping to real users without them is
