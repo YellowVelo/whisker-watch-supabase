@@ -44,7 +44,7 @@ PITR (point-in-time, second-level granularity) was evaluated and deliberately **
 
 ## Known Limitations
 
-- **Storage bucket file contents are not backed up.** This system backs up database rows only — `storage.objects` *metadata* would be included in a `public`/`auth` dump only if we also dumped `storage` (we don't, since that schema isn't ours to restore into on another project). The actual pet photo/document files living in the `uploads` R2-backed bucket have no independent backup. Flagging as a gap, not solving it here.
+- **Storage bucket file contents — resolved.** A nightly job (`storage-backup.yml`, runs 08:15 UTC, 15 minutes after the database backup) syncs the `uploads` bucket into a dedicated `whisker-watch-storage-backups` R2 bucket, additive-only (a file deleted from the app is *not* deleted from its backup — this protects against accidental deletes, not just a lost bucket). Production only; dev/staging hold only test/demo data. No automated restore drill yet, unlike the database backup — verified manually instead. See [0049_Storage_Bucket_Backup_Specification_v1.md](0049_Storage_Bucket_Backup_Specification_v1.md) for the full design.
 - **`observation_types`/`observation_options` need ID-stable handling.** These are seeded by migrations 0014/0026 using `gen_random_uuid()` with no fixed IDs, so replaying migrations generates different IDs each time. Real `observations` rows reference the *original* production IDs. The backup includes these tables specifically so their stable IDs travel with the data; a restore must clear the migrations' freshly-seeded rows before restoring the backup's rows (the restore-test script does this — replicate the same order for a real recovery).
 - **The three excluded migrations mean a from-scratch rebuild cannot replay the exact historical data-recovery steps.** If those migrations' one-off INSERTs are ever needed again, they'd need manual review against whatever's actually in the backup at restore time.
 - **Automated recurring restore drills — resolved.** See [0048_Automated_Quarterly_Restore_Drill_Specification_v1.md](0048_Automated_Quarterly_Restore_Drill_Specification_v1.md) for the full design (quarterly schedule, dedicated scratch project, same-target guard, row-count sanity check).
@@ -58,7 +58,7 @@ If the production Supabase project/account is genuinely lost:
 3. Run `db-restore-test.yml` against it — this rebuilds schema from migrations and restores the newest backup's data.
 4. Manually review whether the three skipped migrations' historical data needs re-applying by hand, cross-checked against what actually landed from the backup.
 5. Repoint the app's `VITE_SUPABASE_URL`/anon key (in the Cloudflare Pages build config) at the new project.
-6. Storage bucket files (pet photos, documents) are **not** covered by this process — see Known Limitations.
+6. Storage bucket files (pet photos, documents) — restorable separately from the `whisker-watch-storage-backups` R2 bucket; see [0049_Storage_Bucket_Backup_Specification_v1.md](0049_Storage_Bucket_Backup_Specification_v1.md). Not yet folded into a single one-command recovery process — a real incident currently means restoring the database via steps 1-5 above, then separately copying files back out of the storage-backup bucket.
 
 ## Acceptance Criteria
 
