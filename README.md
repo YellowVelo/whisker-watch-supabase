@@ -56,6 +56,18 @@ ANTHROPIC_API_KEY=your-key-here
 
 The function requires an authenticated Supabase session — it checks the request's Authorization header and will reject anonymous calls.
 
+## Deployment / Hosting
+
+Hosted on **Cloudflare Workers** (static assets + SPA routing), configured via `wrangler.jsonc`. Build with `npm run build` (Vite → `dist/`); Wrangler uploads `dist/` as the Worker's static asset bundle. The SPA fallback (`not_found_handling: single-page-application`) is load-bearing — without it, deep links to client-side routes (e.g. a shared pet profile URL) would 404 instead of resolving.
+
+**The shipped pipeline is not `npm run deploy`.** That command exists locally but is a separate, disconnected path. Production actually ships via:
+
+1. Push to the tracked branch.
+2. Cloudflare's own git-integration build picks it up automatically.
+3. **A human manually promotes that build to production** in the Cloudflare dashboard (Workers & Pages → `whisker-watch-supabase` → Production → Deployments tab) — pushing/merging alone does **not** deploy.
+
+This manual promotion step is a deliberate safety gate, not a misconfiguration — confirmed by an intentional empty-diff test commit (2026-07-12) that verified pushes don't auto-deploy. Don't "fix" it by wiring up auto-deploy without an explicit decision to do so. See [docs/features/requirements-deploy-gate.md](docs/features/requirements-deploy-gate.md) and [docs/features/requirements-cloudflare-deploy.md](docs/features/requirements-cloudflare-deploy.md) for full details, including who currently has access to perform the promotion.
+
 ## Status / what's not done yet
 
 See the fuller project summary doc for complete context, but in short:

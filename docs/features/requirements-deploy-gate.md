@@ -7,7 +7,11 @@
 
 There is a gate between "code merged/pushed" and "code live in production," configured entirely in the Cloudflare dashboard (not `wrangler.jsonc`, not a GitHub Action, not any file in this repo). Today, if Lynn is unavailable, nobody else — including a future Claude Code session — can discover this gate exists, what it does, or how to change it. This doc exists to close that single point of failure: not to move the gate into the repo, but to write down its existence, purpose, and location so it survives Lynn being unreachable.
 
-**Confirmed mechanism (2026-08-09):** pushing to the tracked branch triggers Cloudflare's own git-integration build; the gate itself is the manual promotion step Lynn then performs in the Cloudflare dashboard to ship that build to production. `npm run deploy` (`wrangler deploy`) exists locally but is a separate command, not part of this pipeline. The exact dashboard setting name/location and who else has access to change it are still unrecorded — see open items below.
+**Confirmed mechanism (2026-08-09):** pushing to the tracked branch triggers Cloudflare's own git-integration build; the gate itself is the manual promotion step Lynn then performs in the Cloudflare dashboard to ship that build to production. `npm run deploy` (`wrangler deploy`) exists locally but is a separate command, not part of this pipeline.
+
+**Exact dashboard location (confirmed 2026-08-09):** Cloudflare dashboard → **Workers & Pages → `whisker-watch-supabase` → Production → Deployments** tab. Dashboard URL pattern: `https://dash.cloudflare.com/<account-id>/workers/services/view/whisker-watch-supabase/production/deployments` (account ID omitted here deliberately — it's not needed to find the page, just log into the Cloudflare account and navigate via the left nav). Each git-integration build lands here as a deployment; the manual step is selecting the desired build and promoting/deploying it to Production from this list.
+
+**Access (confirmed 2026-08-09):** Lynn only. No other account members currently have access to this Cloudflare account/project.
 
 ## Functional Requirements
 
@@ -31,8 +35,8 @@ None.
 
 ## Acceptance Criteria
 
-- [x] A short section (README or new `docs/deploy-gate.md`) states plainly: pushes do not auto-deploy; a manual step in the Cloudflare dashboard promotes a build to production. — confirmed mechanism recorded above (2026-08-09); still needs porting into README per the original ask.
-- [ ] The exact dashboard location/setting name is recorded (get this from Lynn directly — it cannot be discovered by reading this repo).
+- [x] A short section (README or new `docs/deploy-gate.md`) states plainly: pushes do not auto-deploy; a manual step in the Cloudflare dashboard promotes a build to production. — ported into README's new "Deployment / Hosting" section (2026-08-09).
+- [x] The exact dashboard location/setting name is recorded — Workers & Pages → `whisker-watch-supabase` → Production → Deployments tab (see above, confirmed 2026-08-09).
 - [x] The doc states this is intentional, referencing the 07-12 verification commit as evidence it was deliberately checked, not accidentally left this way.
 - [x] Cross-referenced from [requirements-cloudflare-deploy.md](requirements-cloudflare-deploy.md) so a reader following the deploy docs hits this note naturally.
 

@@ -29,9 +29,9 @@ None — no database involvement.
 
 ## Acceptance Criteria
 
-- [ ] README has a new "Deployment / Hosting" section covering: hosting provider (Cloudflare Workers), what `wrangler.jsonc` controls, the build command, and the deploy command.
-- [ ] The section explains SPA fallback in one sentence so a reader understands why it's there (deep links / client-side routes wouldn't resolve without it).
-- [ ] The section links to or mentions the manual-deploy gate doc so a reader doesn't assume `wrangler deploy` alone ships to production.
+- [x] README has a new "Deployment / Hosting" section covering: hosting provider (Cloudflare Workers), what `wrangler.jsonc` controls, the build command, and the deploy command. (2026-08-09)
+- [x] The section explains SPA fallback in one sentence so a reader understands why it's there (deep links / client-side routes wouldn't resolve without it). (2026-08-09)
+- [x] The section links to or mentions the manual-deploy gate doc so a reader doesn't assume `wrangler deploy` alone ships to production. (2026-08-09)
 - [ ] No behavior change — this is documentation only; `wrangler.jsonc` itself is not modified.
 
 ## Edge Cases
