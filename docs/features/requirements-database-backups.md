@@ -24,7 +24,7 @@ PITR (point-in-time, second-level granularity) was evaluated and deliberately **
 
 **Why data-only, not full schema:** schema/DDL is already versioned in [supabase/migrations/](../../supabase/migrations/) and pre-provisioned identically on every Supabase project. A full-schema dump/restore against hosted Supabase fails outright — `auth`/`storage`/`realtime`/extension schemas are owned by Supabase-managed roles the connecting `postgres` role can't `DROP`/`CREATE`. Only data needs to travel in the backup; schema comes from replaying migrations.
 
-**Restore drill** (`db-restore-test.yml`, manual only — Actions → Run workflow, optional `backup_key` input to pick a specific backup, defaults to newest):
+**Restore drill** (`db-restore-test.yml`, runs automatically every quarter — 09:00 UTC on the 15th of Jan/Apr/Jul/Oct — against the dedicated `wysker-watch-restore-scratch` project, and can also be run anytime via Actions → Run workflow with an optional `backup_key` input to pick a specific backup, defaults to newest):
 1. Downloads and decrypts the chosen backup.
 2. Resets the target's `public` schema and clears leftover `storage.objects` policies (idempotency, so the same scratch project can be reused for repeated drills).
 3. Replays every migration in `supabase/migrations/` **except** `0003_real_data_import.sql`, `0007_restore_real_data_new_account.sql`, and `0027_migrate_symptom_logs_to_checkins.sql` — these are one-off historical data recoveries hardcoded to specific real production UUIDs, not schema, and would either conflict with or depend on data that only exists in production.
@@ -39,14 +39,15 @@ PITR (point-in-time, second-level granularity) was evaluated and deliberately **
 | `SUPABASE_DB_URL` | Production DB session-pooler connection string (direct connection doesn't work from GitHub's IPv4-only runners without the paid IPv4 add-on) |
 | `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME` | Cloudflare R2 access, scoped to just the backups bucket |
 | `BACKUP_ENCRYPTION_PASSPHRASE` | Symmetric encryption key. **If lost, all existing backups become permanently unreadable** — it's saved in the team password manager, not recoverable any other way |
-| `RESTORE_TEST_DB_URL` | Session-pooler string for whatever scratch project a restore drill targets — update this before each drill if using a fresh scratch project |
+| `RESTORE_TEST_DB_URL` | Session-pooler string for the dedicated `wysker-watch-restore-scratch` project (ref `fiyaleaxhntubthqmaam`) — permanent, never point this at dev/staging/prod |
+| `RESTORE_TEST_ALLOW_TARGET` | Must match a substring of `RESTORE_TEST_DB_URL` (the scratch project's ref) — the drill refuses to run if this doesn't match, so a misconfigured target fails loudly instead of silently wiping the wrong database |
 
 ## Known Limitations
 
 - **Storage bucket file contents are not backed up.** This system backs up database rows only — `storage.objects` *metadata* would be included in a `public`/`auth` dump only if we also dumped `storage` (we don't, since that schema isn't ours to restore into on another project). The actual pet photo/document files living in the `uploads` R2-backed bucket have no independent backup. Flagging as a gap, not solving it here.
 - **`observation_types`/`observation_options` need ID-stable handling.** These are seeded by migrations 0014/0026 using `gen_random_uuid()` with no fixed IDs, so replaying migrations generates different IDs each time. Real `observations` rows reference the *original* production IDs. The backup includes these tables specifically so their stable IDs travel with the data; a restore must clear the migrations' freshly-seeded rows before restoring the backup's rows (the restore-test script does this — replicate the same order for a real recovery).
 - **The three excluded migrations mean a from-scratch rebuild cannot replay the exact historical data-recovery steps.** If those migrations' one-off INSERTs are ever needed again, they'd need manual review against whatever's actually in the backup at restore time.
-- **No automated recurring restore drills yet.** `db-restore-test.yml` is manual-trigger only. Recommend running it against a fresh scratch project periodically (quarterly is reasonable pre-launch) to catch schema drift between migrations and the restore assumptions above before a real incident, not during one.
+- **Automated recurring restore drills — resolved.** See [0048_Automated_Quarterly_Restore_Drill_Specification_v1.md](0048_Automated_Quarterly_Restore_Drill_Specification_v1.md) for the full design (quarterly schedule, dedicated scratch project, same-target guard, row-count sanity check).
 
 ## Real Disaster Recovery Runbook
 
@@ -66,3 +67,4 @@ If the production Supabase project/account is genuinely lost:
 - [x] Backup verified to actually upload (confirmed non-zero file size in R2).
 - [x] Restore verified end-to-end against a scratch project — schema rebuilt from migrations, real data confirmed present in Table Editor afterward.
 - [x] Documented restore runbook for a real incident.
+- [x] Restore drill runs automatically on a quarterly schedule against a dedicated, disposable scratch project, with a row-count check confirming real data came back and a same-target guard preventing an unattended run from hitting the wrong database.

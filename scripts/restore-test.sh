@@ -2,10 +2,30 @@
 # Downloads an encrypted backup from R2, decrypts it, and restores it into
 # a scratch database for verification. Never point this at production.
 #
-# Required env vars: RESTORE_TEST_DB_URL, BACKUP_ENCRYPTION_PASSPHRASE,
-# AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, R2_ACCOUNT_ID, R2_BUCKET_NAME
+# Required env vars: RESTORE_TEST_DB_URL, RESTORE_TEST_ALLOW_TARGET,
+# BACKUP_ENCRYPTION_PASSPHRASE, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY,
+# R2_ACCOUNT_ID, R2_BUCKET_NAME
 # Optional env var: BACKUP_KEY (specific R2 object key; defaults to newest)
 set -euo pipefail
+
+# Same-target guard: this script runs DROP SCHEMA public CASCADE and wipes
+# auth.users on whatever RESTORE_TEST_DB_URL points at. That's safe and
+# intentional against the dedicated wysker-watch-restore-scratch project,
+# but this workflow also runs unattended on a quarterly schedule now (see
+# spec 0048) with nobody watching to catch a misconfigured target before it
+# runs. RESTORE_TEST_ALLOW_TARGET must be the scratch project's ref and
+# must appear in the connection string, or this refuses to touch anything.
+if [ -z "${RESTORE_TEST_ALLOW_TARGET:-}" ]; then
+  echo "RESTORE_TEST_ALLOW_TARGET is not set — refusing to run a destructive restore against an unverified target." >&2
+  exit 1
+fi
+case "$RESTORE_TEST_DB_URL" in
+  *"$RESTORE_TEST_ALLOW_TARGET"*) ;;
+  *)
+    echo "RESTORE_TEST_DB_URL does not reference the expected scratch project ($RESTORE_TEST_ALLOW_TARGET) — refusing to run. This guard exists so a misconfigured target fails loudly instead of silently wiping the wrong database." >&2
+    exit 1
+    ;;
+esac
 
 ENDPOINT="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
 
@@ -122,5 +142,18 @@ psql "$RESTORE_TEST_DB_URL" -v ON_ERROR_STOP=1 -q -c "
   END;
   \$\$ LANGUAGE plpgsql SECURITY DEFINER;
 "
+
+echo "== Verifying restored data (row-count sanity check) =="
+# Non-empty check, not a fixed-count match: catches a restore that
+# completed without error but silently restored nothing. Doesn't compare
+# against a prior run's counts, so normal data growth never trips it.
+for TABLE in profiles pets daily_check_ins; do
+  COUNT=$(psql "$RESTORE_TEST_DB_URL" -v ON_ERROR_STOP=1 -tA -c "SELECT count(*) FROM public.$TABLE;")
+  echo "public.$TABLE: $COUNT rows"
+  if [ "$COUNT" -eq 0 ]; then
+    echo "public.$TABLE is empty after restore — treating this as a failed drill." >&2
+    exit 1
+  fi
+done
 
 echo "== Restore test complete =="

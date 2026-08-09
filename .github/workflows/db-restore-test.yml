@@ -6,6 +6,11 @@ on:
       backup_key:
         description: 'R2 object key to restore (e.g. backups/whisker-watch-20260720-232231.dump.gpg). Leave blank for the newest backup.'
         required: false
+  schedule:
+    # 09:00 UTC on the 15th of Jan/Apr/Jul/Oct — quarterly restore drill
+    # against the dedicated wysker-watch-restore-scratch project (see
+    # docs/features/0048_Automated_Quarterly_Restore_Drill_Specification_v1.md).
+    - cron: '0 9 15 1,4,7,10 *'
 
 jobs:
   restore-test:
@@ -29,6 +34,7 @@ jobs:
         env:
           BACKUP_KEY: ${{ inputs.backup_key }}
           RESTORE_TEST_DB_URL: ${{ secrets.RESTORE_TEST_DB_URL }}
+          RESTORE_TEST_ALLOW_TARGET: ${{ secrets.RESTORE_TEST_ALLOW_TARGET }}
           BACKUP_ENCRYPTION_PASSPHRASE: ${{ secrets.BACKUP_ENCRYPTION_PASSPHRASE }}
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
