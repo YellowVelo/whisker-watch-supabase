@@ -16,7 +16,7 @@ Backend: Supabase (Postgres, Auth, Storage, Edge Functions)
 
 AI: Claude via Supabase Edge Functions
 
-Deployment: Cloudflare Workers (`wrangler.jsonc`), with a manual-deploy gate in the Cloudflare dashboard not represented in-repo config — **not** Netlify/Vercel (§11 previously said otherwise)
+Deployment: Cloudflare Workers (`wrangler.jsonc`). Pushing to the tracked branch triggers Cloudflare's git-integration build; a manual promotion step in the Cloudflare dashboard (performed by Lynn) then ships that build to production — push alone does not deploy. `npm run deploy`/`wrangler deploy` exists locally but is not part of this pipeline. **not** Netlify/Vercel (§11 previously said otherwise)
 
 Mobile: **not yet built.** A Capacitor wrapper for iOS/Android is planned (see §7) but entirely unstarted, and it's the single largest blocker standing between this app and either app store — there are no `ios`/`android` folders and no `capacitor.config` anywhere in the repo. Treat every claim in this document about Capacitor/native behavior as target architecture, not current state.
 
@@ -246,7 +246,7 @@ Frontend
 
 Use Vite build
 
-Deploy to **Cloudflare Workers** (`wrangler.jsonc`) — not Netlify/Vercel, which this document previously said. A manual-deploy gate exists in the Cloudflare dashboard, not represented in-repo config.
+Deploy to **Cloudflare Workers** (`wrangler.jsonc`) — not Netlify/Vercel, which this document previously said. Pushing to the tracked branch triggers Cloudflare's git-integration build; Lynn then manually promotes that build to production in the Cloudflare dashboard — push alone does not deploy. `npm run deploy`/`wrangler deploy` exists locally but is not part of this pipeline.
 
 Mobile
 

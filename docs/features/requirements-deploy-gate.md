@@ -7,6 +7,8 @@
 
 There is a gate between "code merged/pushed" and "code live in production," configured entirely in the Cloudflare dashboard (not `wrangler.jsonc`, not a GitHub Action, not any file in this repo). Today, if Lynn is unavailable, nobody else — including a future Claude Code session — can discover this gate exists, what it does, or how to change it. This doc exists to close that single point of failure: not to move the gate into the repo, but to write down its existence, purpose, and location so it survives Lynn being unreachable.
 
+**Confirmed mechanism (2026-08-09):** pushing to the tracked branch triggers Cloudflare's own git-integration build; the gate itself is the manual promotion step Lynn then performs in the Cloudflare dashboard to ship that build to production. `npm run deploy` (`wrangler deploy`) exists locally but is a separate command, not part of this pipeline. The exact dashboard setting name/location and who else has access to change it are still unrecorded — see open items below.
+
 ## Functional Requirements
 
 - Record, in README or a dedicated ops note, that pushing to the tracked branch does **not** automatically deploy to production — an explicit action in the Cloudflare dashboard is required.
@@ -29,10 +31,10 @@ None.
 
 ## Acceptance Criteria
 
-- [ ] A short section (README or new `docs/deploy-gate.md`) states plainly: pushes do not auto-deploy; a manual step in the Cloudflare dashboard promotes a build to production.
+- [x] A short section (README or new `docs/deploy-gate.md`) states plainly: pushes do not auto-deploy; a manual step in the Cloudflare dashboard promotes a build to production. — confirmed mechanism recorded above (2026-08-09); still needs porting into README per the original ask.
 - [ ] The exact dashboard location/setting name is recorded (get this from Lynn directly — it cannot be discovered by reading this repo).
-- [ ] The doc states this is intentional, referencing the 07-12 verification commit as evidence it was deliberately checked, not accidentally left this way.
-- [ ] Cross-referenced from [requirements-cloudflare-deploy.md](requirements-cloudflare-deploy.md) so a reader following the deploy docs hits this note naturally.
+- [x] The doc states this is intentional, referencing the 07-12 verification commit as evidence it was deliberately checked, not accidentally left this way.
+- [x] Cross-referenced from [requirements-cloudflare-deploy.md](requirements-cloudflare-deploy.md) so a reader following the deploy docs hits this note naturally.
 
 ## Edge Cases
 
