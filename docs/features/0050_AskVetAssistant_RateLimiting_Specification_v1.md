@@ -1,6 +1,6 @@
 # 0050_AskVetAssistant_RateLimiting_Specification_v1
 
-**Status:** Draft
+**Status:** Implemented and verified 2026-08-09 — deployed to dev, staging, and production
 **Date:** 2026-08-09
 **Related files:** `supabase/functions/ask-vet-assistant/index.ts`, `supabase/migrations/0039_signup_rate_limits.sql`, `src/api/aiClient.js`, `src/components/PetAIChat.jsx`, `src/components/GeneralAskWyskerChat.jsx`, `src/components/PetAIInsights.jsx`, `src/components/VaccinationSection.jsx`, `src/components/BloodworkSection.jsx`, `src/components/ui/use-toast.jsx`, `docs/launch-punch-list.md`, `docs/features/0041_AskWysker_AI_Guardrails_And_Screen_Context_Specification_v1.md`
 
