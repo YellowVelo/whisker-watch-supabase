@@ -2,8 +2,9 @@ import { useState, useRef, useEffect } from 'react';
 import { invokeAI } from '@/api/aiClient';
 import { Send, Stethoscope } from 'lucide-react';
 import { formatBaselineForAI } from '@/lib/baselineContext';
-import { detectEmergencyKeywords, AI_DISCLAIMER_SENTENCE, URGENT_FLAG_INSTRUCTION } from '@/lib/aiGuardrails';
+import { detectEmergencyKeywords, AI_DISCLAIMER_SENTENCE, URGENT_FLAG_INSTRUCTION, aiErrorText } from '@/lib/aiGuardrails';
 import AIEmergencyNotice from './AIEmergencyNotice';
+import AIErrorNotice from './AIErrorNotice';
 
 const SYSTEM_CONTEXT = (pet, medications, baseline, screen) => {
   const conditions = pet.conditions?.join(', ') || 'None noted';
@@ -47,27 +48,35 @@ export default function PetAIChat({ pet, medications, baseline, screen }) {
     // Build conversation history for context
     const history = [...messages, userMsg].map(m => `${m.role === 'user' ? 'Owner' : 'Vet Assistant'}: ${m.content}`).join('\n\n');
 
-    const result = await invokeAI({
-      prompt: `${SYSTEM_CONTEXT(pet, medications, baseline, screen)}\n\nConversation so far:\n${history}\n\nOwner's latest question: ${text}\n\nVet Assistant:`,
-      response_json_schema: {
-        type: 'object',
-        properties: {
-          reply: { type: 'string' },
-          urgent: { type: 'boolean' },
+    try {
+      const result = await invokeAI({
+        prompt: `${SYSTEM_CONTEXT(pet, medications, baseline, screen)}\n\nConversation so far:\n${history}\n\nOwner's latest question: ${text}\n\nVet Assistant:`,
+        response_json_schema: {
+          type: 'object',
+          properties: {
+            reply: { type: 'string' },
+            urgent: { type: 'boolean' },
+          },
         },
-      },
-    });
+      });
 
-    // Backstop: the AI flagged this as urgent even though the keyword list
-    // didn't catch it. Its own answer is discarded entirely — the owner
-    // only ever sees the same hard-stop redirect, never an AI-generated
-    // answer to a real emergency question.
-    if (result?.urgent) {
-      setMessages(prev => [...prev, { role: 'assistant', emergency: true }]);
-    } else {
-      setMessages(prev => [...prev, { role: 'assistant', content: result?.reply || '' }]);
+      // Backstop: the AI flagged this as urgent even though the keyword list
+      // didn't catch it. Its own answer is discarded entirely — the owner
+      // only ever sees the same hard-stop redirect, never an AI-generated
+      // answer to a real emergency question.
+      if (result?.urgent) {
+        setMessages(prev => [...prev, { role: 'assistant', emergency: true }]);
+      } else {
+        setMessages(prev => [...prev, { role: 'assistant', content: result?.reply || '' }]);
+      }
+    } catch (err) {
+      // Covers both the new rate limit (spec 0050) and any other AI
+      // failure — without this, the loading state below never resolved
+      // and the chat just hung forever with no explanation.
+      setMessages(prev => [...prev, { role: 'assistant', error: aiErrorText(err) }]);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const handleKey = (e) => {
@@ -80,6 +89,8 @@ export default function PetAIChat({ pet, medications, baseline, screen }) {
         {messages.map((msg, i) => (
           msg.emergency ? (
             <AIEmergencyNotice key={i} petName={pet.name} />
+          ) : msg.error ? (
+            <AIErrorNotice key={i} message={msg.error} />
           ) : (
             <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
               {msg.role === 'assistant' && (

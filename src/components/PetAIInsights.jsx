@@ -4,12 +4,14 @@ import { Sparkles, RefreshCw, AlertTriangle, CircleCheck, Lightbulb } from 'luci
 import { Button } from '@/components/ui/button';
 import { PALETTE } from '@/lib/toneColors';
 import { formatBaselineForAI } from '@/lib/baselineContext';
-import { AI_DISCLAIMER_SENTENCE, URGENT_FLAG_INSTRUCTION } from '@/lib/aiGuardrails';
+import { AI_DISCLAIMER_SENTENCE, URGENT_FLAG_INSTRUCTION, aiErrorText } from '@/lib/aiGuardrails';
 import AIEmergencyNotice from './AIEmergencyNotice';
+import AIErrorNotice from './AIErrorNotice';
 
 export default function PetAIInsights({ pet, logs, medications, bloodwork, baseline, screen }) {
   const [insights, setInsights] = useState(null);
   const [urgent, setUrgent] = useState(false);
+  const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
   const [generated, setGenerated] = useState(false);
 
@@ -44,9 +46,11 @@ ${logSummary || 'No recent logs.'}
     setLoading(true);
     setGenerated(true);
     setUrgent(false);
+    setError(null);
     const context = buildContext();
-    const result = await invokeAI({
-      prompt: `You are a compassionate, experienced veterinarian with 20+ years of clinical practice reviewing a pet's health record. Analyze the following medical data and provide 3-5 specific, actionable observations or concerns. Focus on trends, anomalies, or patterns in the data. Be concise and practical. ${AI_DISCLAIMER_SENTENCE} ${URGENT_FLAG_INSTRUCTION}
+    try {
+      const result = await invokeAI({
+        prompt: `You are a compassionate, experienced veterinarian with 20+ years of clinical practice reviewing a pet's health record. Analyze the following medical data and provide 3-5 specific, actionable observations or concerns. Focus on trends, anomalies, or patterns in the data. Be concise and practical. ${AI_DISCLAIMER_SENTENCE} ${URGENT_FLAG_INSTRUCTION}
 
 ${context}
 
@@ -59,38 +63,45 @@ Respond in JSON with this structure:
   "disclaimer": "brief disclaimer",
   "urgent": false
 }`,
-      response_json_schema: {
-        type: "object",
-        properties: {
-          summary: { type: "string" },
-          insights: {
-            type: "array",
-            items: {
-              type: "object",
-              properties: {
-                type: { type: "string" },
-                title: { type: "string" },
-                detail: { type: "string" }
+        response_json_schema: {
+          type: "object",
+          properties: {
+            summary: { type: "string" },
+            insights: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  type: { type: "string" },
+                  title: { type: "string" },
+                  detail: { type: "string" }
+                }
               }
-            }
-          },
-          disclaimer: { type: "string" },
-          urgent: { type: "boolean" }
+            },
+            disclaimer: { type: "string" },
+            urgent: { type: "boolean" }
+          }
         }
-      }
-    });
+      });
 
-    // Backstop: discard the generated analysis entirely and show only the
-    // hard-stop redirect if the AI flagged this as urgent — same principle
-    // as PetAIChat, no AI-generated content shown for a real emergency.
-    if (result?.urgent) {
-      setUrgent(true);
+      // Backstop: discard the generated analysis entirely and show only the
+      // hard-stop redirect if the AI flagged this as urgent — same principle
+      // as PetAIChat, no AI-generated content shown for a real emergency.
+      if (result?.urgent) {
+        setUrgent(true);
+        setInsights(null);
+      } else {
+        setInsights(result);
+      }
+    } catch (err) {
+      // Covers both the new rate limit (spec 0050) and any other AI
+      // failure — without this, loading below never resolved and the
+      // button just spun forever with no explanation.
+      setError(aiErrorText(err));
       setInsights(null);
+    } finally {
       setLoading(false);
-      return;
     }
-    setInsights(result);
-    setLoading(false);
   };
 
   const iconFor = (type) => {
@@ -124,6 +135,17 @@ Respond in JSON with this structure:
       )}
 
       {urgent && !loading && <AIEmergencyNotice petName={pet.name} />}
+
+      {error && !loading && (
+        <div className="space-y-3">
+          <AIErrorNotice message={error} />
+          <div className="text-center">
+            <Button onClick={generateInsights} variant="outline" className="gap-2">
+              <RefreshCw className="h-4 w-4" /> Try Again
+            </Button>
+          </div>
+        </div>
+      )}
 
       {insights && !loading && (
         <div className="space-y-3">

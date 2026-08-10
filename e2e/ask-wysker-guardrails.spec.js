@@ -114,3 +114,43 @@ test('an ordinary, non-urgent question shows the normal AI reply with no emergen
   await expect(page.getByText('Ordinary, calm answer text.')).toBeVisible();
   await expect(page.getByRole('alert')).toHaveCount(0);
 });
+
+// Spec 0050 — ask-vet-assistant rate limiting. Both tests below simulate
+// the Edge Function's own failure responses via page.route() rather than
+// actually firing 20+ real requests: doing that for real in a Playwright
+// test would be slow, flaky (shared quota with anything else the test
+// account recently did), and would spend real Anthropic API cost 20 times
+// over just to exercise the 21st. A synthetic response proves the same
+// client-side handling without any of that.
+test('hitting the rate limit shows a clear message instead of hanging', async ({ page }) => {
+  await page.route(ASK_VET_ASSISTANT, async (route) => {
+    await route.fulfill({
+      status: 429,
+      json: { error: "You've reached the limit for AI requests. Please wait a few minutes and try again." },
+    });
+  });
+
+  await openAskWyskerFromWeightScreen(page);
+  await page.getByRole('button', { name: 'Ask a Question' }).click();
+  await page.locator('textarea').fill('one more question');
+  await page.locator('textarea').press('Enter');
+
+  await expect(page.getByRole('alert')).toContainText(/reached the limit/i);
+  // Loading state cleared, not stuck spinning forever: the bouncing-dots
+  // "thinking" indicator (shown only while loading) is gone.
+  await expect(page.locator('.animate-bounce')).toHaveCount(0);
+});
+
+test('a non-rate-limit AI failure shows a clear error instead of hanging', async ({ page }) => {
+  await page.route(ASK_VET_ASSISTANT, async (route) => {
+    await route.fulfill({ status: 500, json: { error: 'AI request failed' } });
+  });
+
+  await openAskWyskerFromWeightScreen(page);
+  await page.getByRole('button', { name: 'Ask a Question' }).click();
+  await page.locator('textarea').fill('any question');
+  await page.locator('textarea').press('Enter');
+
+  await expect(page.getByRole('alert')).toContainText(/something went wrong/i);
+  await expect(page.locator('.animate-bounce')).toHaveCount(0);
+});

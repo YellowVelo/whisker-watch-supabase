@@ -24,12 +24,29 @@
 // This function requires the caller to be an authenticated Supabase
 // user (checked via the Authorization header) so it can't be used as
 // an open, unauthenticated LLM proxy by anyone who finds the URL.
+//
+// Rate limiting (spec 0050): each authenticated user is capped at
+// RATE_LIMIT calls per RATE_WINDOW_SECONDS, checked via the same
+// check_and_record_rate_limit RPC (migration 0039) the sign-up Edge
+// Function already uses for its own limits — reused here rather than
+// building a second mechanism. This requires a service-role client
+// (the RPC is service_role-only by design), used only for the rate
+// check; the existing anon-key client below still does the actual
+// caller-identity check.
 
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 
 const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY');
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
 const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY');
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+
+// See this file's header comment and docs/features/0050_AskVetAssistant_RateLimiting_Specification_v1.md.
+// Sized to comfortably cover a real chat session, an insights generation,
+// and scanning a few pets' documents back-to-back, while still stopping a
+// runaway script quickly. Easy to adjust here without touching logic.
+const RATE_LIMIT = 20;
+const RATE_WINDOW_SECONDS = 10 * 60;
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -59,6 +76,34 @@ Deno.serve(async (req) => {
         status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
+    }
+
+    // Rate limit check — before any real work, so a rejected request never
+    // reaches Anthropic's API and never costs anything. Keyed per-user
+    // (not per-IP): every caller here already has a real Supabase session,
+    // unlike sign-up's unauthenticated surface, so per-user keying alone is
+    // the right control.
+    const adminClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+    const { data: rateAllowed, error: rateError } = await adminClient.rpc('check_and_record_rate_limit', {
+      p_key: `ask-vet-assistant:user:${userData.user.id}`,
+      p_limit: RATE_LIMIT,
+      p_window_seconds: RATE_WINDOW_SECONDS,
+    });
+    if (rateError) {
+      // Fail closed, same posture sign-up/index.ts takes for its own
+      // rate-limit RPC failure — don't proceed to a paid API call if the
+      // rate limiter itself is unavailable.
+      console.error('rate limit check failed:', rateError.message);
+      return new Response(JSON.stringify({ error: 'Unable to process this request right now' }), {
+        status: 503,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+    if (rateAllowed === false) {
+      return new Response(
+        JSON.stringify({ error: "You've reached the limit for AI requests. Please wait a few minutes and try again." }),
+        { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      );
     }
 
     const { prompt, response_json_schema, file_url } = await req.json();

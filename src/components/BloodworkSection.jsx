@@ -10,6 +10,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Plus, FlaskConical, ChevronDown, ChevronUp, Pencil, Trash2, Upload, Loader2 } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { format, parseISO } from 'date-fns';
+import { useToast } from '@/components/ui/use-toast';
+import { aiErrorText } from '@/lib/aiGuardrails';
 
 // Design System Amendment #10 (2026-07-30) — 16 lab values need more
 // colors than the original 5 --chart-* tokens, so the token set itself
@@ -42,6 +44,7 @@ const URINE_FIELDS = [
 const EMPTY_FORM = { date: '', lab_name: '', vet_name: '', notes: '', urine_specific_gravity: '', urine_protein: '' };
 
 export default function BloodworkSection({ petId }) {
+  const { toast } = useToast();
   const [records, setRecords] = useState([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -106,6 +109,11 @@ export default function BloodworkSection({ petId }) {
         setForm(f);
         setDialogOpen(true);
       }
+    } catch (err) {
+      // Covers both the new rate limit (spec 0050) and any other scan
+      // failure — without this, the button just returned to normal with
+      // no explanation of why nothing got imported.
+      toast({ variant: 'destructive', description: aiErrorText(err) });
     } finally {
       setImporting(false);
       e.target.value = '';

@@ -126,3 +126,20 @@ export function emergencyRedirectText(petName) {
 }
 
 export const AI_DISCLAIMER_BANNER_TEXT = "Ask Wysker gives general information only, not veterinary advice. In an emergency, contact your vet or the nearest emergency animal hospital immediately.";
+
+// Shown when an invokeAI() call fails (spec 0050) — distinguishes the rate
+// limit (err.status === 429, from ask-vet-assistant's own
+// check_and_record_rate_limit call) from any other failure (network,
+// server), since the two need different, honest copy: one is "you're going
+// too fast," the other is "something broke." For a 429, the Edge Function's
+// own error message (aiClient.js's invokeAI() surfaces it as err.message)
+// is used directly rather than a second, separately-maintained copy of the
+// same sentence — any other failure gets a generic fallback instead, since
+// err.message for those (network errors, "AI request failed", etc.) isn't
+// meant for an owner to read directly.
+export function aiErrorText(err) {
+  if (err?.status === 429) {
+    return err.message;
+  }
+  return 'Something went wrong. Please try again.';
+}

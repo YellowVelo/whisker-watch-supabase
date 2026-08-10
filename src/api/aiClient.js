@@ -42,7 +42,7 @@ export async function invokeAI({ prompt, response_json_schema, file_urls }) {
 
   if (!resp.ok) {
     const errBody = await resp.json().catch(() => ({}));
-    throw new Error(errBody.error || 'AI request failed');
+    throw Object.assign(new Error(errBody.error || 'AI request failed'), { status: resp.status });
   }
 
   const data = await resp.json();

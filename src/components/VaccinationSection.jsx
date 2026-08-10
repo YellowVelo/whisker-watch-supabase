@@ -11,6 +11,8 @@ import { Plus, Syringe, Pencil, Trash2, Bell, Upload, Loader2 } from 'lucide-rea
 import { format, parseISO, differenceInDays } from 'date-fns';
 import { getVaccines } from '@/lib/speciesConfig';
 import { PALETTE } from '@/lib/toneColors';
+import { useToast } from '@/components/ui/use-toast';
+import { aiErrorText } from '@/lib/aiGuardrails';
 
 const EMPTY_FORM = { vaccine_name: '', date_given: '', next_due_date: '', administered_by: '', lot_number: '', notes: '' };
 
@@ -27,6 +29,7 @@ function getReminderStatus(next_due_date) {
 }
 
 export default function VaccinationSection({ petId, species, initialEditId }) {
+  const { toast } = useToast();
   const [vaccines, setVaccines] = useState([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -134,6 +137,11 @@ export default function VaccinationSection({ petId, species, initialEditId }) {
       }));
 
       load();
+    } catch (err) {
+      // Covers both the new rate limit (spec 0050) and any other scan
+      // failure — without this, the button just returned to normal with
+      // no explanation of why nothing got added.
+      toast({ variant: 'destructive', description: aiErrorText(err) });
     } finally {
       setScanning(false);
       e.target.value = '';
