@@ -57,6 +57,7 @@
 
 import { sendEmail } from '../_shared/email/sendEmail.ts';
 import { EmailServiceError } from '../_shared/email/types.ts';
+import { reportError } from '../_shared/errorReporting.ts';
 
 // Decodes (without re-verifying — see header comment) the `role` claim
 // out of a Supabase-issued JWT. Returns null for anything that isn't a
@@ -159,6 +160,7 @@ Deno.serve(async (req) => {
       return json({ error: { code: err.code, message: err.message } }, ERROR_STATUS[err.code] ?? 500);
     }
     console.error('send-email unexpected error:', err);
+    reportError(err, { function: 'send-email' });
     return json({ error: { code: 'unknown_error', message: 'Something went wrong sending this email' } }, 500);
   }
 });

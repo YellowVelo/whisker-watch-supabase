@@ -39,6 +39,7 @@
 // Production and owner accounts are unaffected by this guard.
 
 import { createClient } from 'jsr:@supabase/supabase-js@2';
+import { reportError } from '../_shared/errorReporting.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!;
@@ -229,6 +230,7 @@ Deno.serve(async (req) => {
 
   } catch (err) {
     console.error('delete-account unexpected error:', err);
+    reportError(err, { function: 'delete-account' });
     return json({ error: (err as Error).message ?? 'Unknown error' }, 500);
   }
 });

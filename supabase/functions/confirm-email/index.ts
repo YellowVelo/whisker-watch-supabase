@@ -25,6 +25,7 @@
 
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import { scopedCorsHeaders } from '../_shared/cors.ts';
+import { reportError } from '../_shared/errorReporting.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!;
@@ -85,6 +86,7 @@ Deno.serve(async (req) => {
     });
   } catch (err) {
     console.error('confirm-email Edge Function error:', err);
+    reportError(err, { function: 'confirm-email' });
     return new Response(JSON.stringify({ error: (err as Error).message || 'Unknown error' }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

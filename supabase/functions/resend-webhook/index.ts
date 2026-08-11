@@ -28,6 +28,7 @@
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import { normalizeEmail } from '../_shared/email/utils.ts';
 import { computeSignature, constantTimeEqual, webhookSecretToBytes } from '../_shared/webhookSignature.ts';
+import { reportError } from '../_shared/errorReporting.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -168,6 +169,7 @@ Deno.serve(async (req) => {
     // Resend's real retry mechanism gets a fair chance to retry it (the
     // atomic function guarantees nothing was partially applied).
     console.error('process_resend_webhook_event failed:', error.message);
+    reportError(error, { function: 'resend-webhook' });
     return json({ error: 'Failed to process webhook event' }, 500);
   }
 

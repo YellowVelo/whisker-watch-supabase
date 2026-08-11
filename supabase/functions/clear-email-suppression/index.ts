@@ -33,6 +33,7 @@
 
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import { normalizeEmail } from '../_shared/email/utils.ts';
+import { reportError } from '../_shared/errorReporting.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -108,6 +109,7 @@ Deno.serve(async (req) => {
 
   if (error) {
     console.error('clear-email-suppression update failed:', error.message);
+    reportError(error, { function: 'clear-email-suppression' });
     return json({ error: 'Failed to clear suppression' }, 500);
   }
 

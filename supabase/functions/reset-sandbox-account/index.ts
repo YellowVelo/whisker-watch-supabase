@@ -18,6 +18,7 @@
 // Request body: none — always acts on the caller's own account.
 
 import { createClient } from 'jsr:@supabase/supabase-js@2';
+import { reportError } from '../_shared/errorReporting.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!;
@@ -164,6 +165,7 @@ Deno.serve(async (req) => {
 
   } catch (err) {
     console.error('reset-sandbox-account unexpected error:', err);
+    reportError(err, { function: 'reset-sandbox-account' });
     return json({ error: (err as Error).message ?? 'Unknown error' }, 500);
   }
 });

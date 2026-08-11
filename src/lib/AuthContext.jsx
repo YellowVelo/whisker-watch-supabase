@@ -4,6 +4,7 @@ import { entities } from '@/api/entities';
 import { detectTimezone, shouldAutoPopulateTimezone } from '@/lib/timezone';
 import { track } from '@/lib/analytics';
 import { takePendingOAuthConsent } from '@/lib/pendingOAuthConsent';
+import { setSentryAccountType, clearSentryAccountType } from '@/lib/errorMonitoring';
 
 const AuthContext = createContext(undefined);
 
@@ -60,6 +61,7 @@ export const AuthProvider = ({ children }) => {
       } else {
         setUser(null);
         setIsAuthenticated(false);
+        clearSentryAccountType();
       }
     });
 
@@ -169,6 +171,9 @@ export const AuthProvider = ({ children }) => {
       ...profile,
     });
     setIsAuthenticated(true);
+    // account_type gates whether this user's errors reach Sentry (spec
+    // 0052) — same "not a real user" default analytics.js uses.
+    setSentryAccountType(profile?.account_type ?? 'production');
     if (!appOpenedTrackedRef.current) {
       appOpenedTrackedRef.current = true;
       track('app_opened', {});
@@ -213,6 +218,7 @@ export const AuthProvider = ({ children }) => {
     await supabase.auth.signOut();
     setUser(null);
     setIsAuthenticated(false);
+    clearSentryAccountType();
     window.location.href = '/login';
   };
 

@@ -56,6 +56,28 @@ ANTHROPIC_API_KEY=your-key-here
 
 The function requires an authenticated Supabase session — it checks the request's Authorization header and will reject anonymous calls.
 
+## Error monitoring
+
+Client crashes and unhandled Edge Function errors are reported to Sentry (spec 0052) — one Sentry project shared across all environments, distinguished by an `environment` tag rather than separate projects.
+
+Client-side (`src/lib/errorMonitoring.js`, initialized in `src/main.jsx`):
+
+```
+VITE_SENTRY_DSN=your-sentry-dsn
+VITE_SENTRY_ENVIRONMENT=development   # staging/production set in the Cloudflare Pages build env for those builds
+```
+
+Edge Functions (`supabase/functions/_shared/errorReporting.ts`, called from each function's top-level `catch`) — set as a Supabase Edge Function secret **per project** (`wysker-watch-dev`, `wysker-watch-staging`, `Whisker-Watch` prod — same DSN, different environment value; never set on the disposable `wysker-watch-restore-scratch` project):
+
+```
+SENTRY_DSN=your-sentry-dsn
+SENTRY_ENVIRONMENT=development   # or staging / production, matching the project
+```
+
+Both are optional — if `VITE_SENTRY_DSN`/`SENTRY_DSN` is unset, monitoring is a silent no-op and nothing about the app's behavior changes. Errors from test/demo/sandbox accounts (`account_type != 'production'`) are excluded from Sentry, the same distinction `src/lib/analytics.js` already makes.
+
+**Not included in this pass:** sourcemap upload (production stack traces show minified code locations until a follow-up spec adds this) and real-time alerting (Sentry dashboard only for now).
+
 ## Deployment / Hosting
 
 Hosted on **Cloudflare Workers** (static assets + SPA routing), configured via `wrangler.jsonc`. Build with `npm run build` (Vite → `dist/`); Wrangler uploads `dist/` as the Worker's static asset bundle. The SPA fallback (`not_found_handling: single-page-application`) is load-bearing — without it, deep links to client-side routes (e.g. a shared pet profile URL) would 404 instead of resolving.

@@ -53,6 +53,7 @@ import { sendEmail } from '../_shared/email/sendEmail.ts';
 import { EmailServiceError } from '../_shared/email/types.ts';
 import { getValidatedAppUrl } from '../_shared/appUrl.ts';
 import { isAlreadyRegisteredError } from '../_shared/authErrors.ts';
+import { reportError } from '../_shared/errorReporting.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!;
@@ -293,6 +294,7 @@ Deno.serve(async (req) => {
     }
   } catch (err) {
     console.error('Edge Function error:', err);
+    reportError(err, { function: 'invite-co-owner' });
     return new Response(JSON.stringify({ error: err.message || 'Unknown error' }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

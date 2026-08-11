@@ -35,6 +35,7 @@
 // caller-identity check.
 
 import { createClient } from 'jsr:@supabase/supabase-js@2';
+import { reportError } from '../_shared/errorReporting.ts';
 
 const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY');
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
@@ -198,6 +199,7 @@ Deno.serve(async (req) => {
     });
   } catch (err) {
     console.error('Edge Function error:', err);
+    reportError(err, { function: 'ask-vet-assistant' });
     return new Response(JSON.stringify({ error: err.message || 'Unknown error' }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

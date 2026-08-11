@@ -1,6 +1,8 @@
 import { Toaster } from "@/components/ui/toaster"
 import { useEffect } from 'react';
 import { AnimatePresence } from 'framer-motion';
+import { Sentry } from '@/lib/errorMonitoring';
+import CrashFallback from '@/components/CrashFallback';
 import { QueryClientProvider } from '@tanstack/react-query'
 import { queryClientInstance } from '@/lib/query-client'
 import { BrowserRouter as Router, Route, Routes, useLocation, useParams, Navigate } from 'react-router-dom';
@@ -143,16 +145,18 @@ function App() {
   }, []);
 
   return (
-    <AuthProvider>
-      <QueryClientProvider client={queryClientInstance}>
-        <InstallPromptProvider>
-          <Router>
-            <AuthenticatedApp />
-          </Router>
-          <Toaster />
-        </InstallPromptProvider>
-      </QueryClientProvider>
-    </AuthProvider>
+    <Sentry.ErrorBoundary fallback={<CrashFallback />}>
+      <AuthProvider>
+        <QueryClientProvider client={queryClientInstance}>
+          <InstallPromptProvider>
+            <Router>
+              <AuthenticatedApp />
+            </Router>
+            <Toaster />
+          </InstallPromptProvider>
+        </QueryClientProvider>
+      </AuthProvider>
+    </Sentry.ErrorBoundary>
   )
 }
 
