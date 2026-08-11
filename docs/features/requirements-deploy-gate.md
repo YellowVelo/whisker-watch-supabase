@@ -40,6 +40,23 @@ None.
 - [x] The doc states this is intentional, referencing the 07-12 verification commit as evidence it was deliberately checked, not accidentally left this way.
 - [x] Cross-referenced from [requirements-cloudflare-deploy.md](requirements-cloudflare-deploy.md) so a reader following the deploy docs hits this note naturally.
 
+## Staging is different — no manual gate
+
+Unlike production, the `wysker-watch-staging` Cloudflare project (a
+separate project from `whisker-watch-supabase`, tracking the `staging`
+git branch) auto-promotes to live (`staging.wyskerwatch.com`) the moment
+a build completes — confirmed 2026-08-11. There is no manual promotion
+step for staging, and none is planned; this is intentional, matching how
+staging is meant to be used (fast iteration, not a second production
+gate).
+
+**staging is not kept in sync with main automatically.** As of
+2026-08-11 it had drifted ~150 commits behind main, unintentionally, with
+no process catching it. The current convention: Lynn decides when to
+sync staging (fast-forward `staging` to match `main`), same deliberate,
+on-request basis as a production promotion — just without a dashboard
+click, since a `git push origin main:staging` is the entire action.
+
 ## Edge Cases
 
 - Lynn loses Cloudflare dashboard access (lockout, account issue) — this doc alone doesn't solve that, but at minimum a future maintainer knows the gate exists and where to start recovering access, rather than being surprised deploys "don't work."

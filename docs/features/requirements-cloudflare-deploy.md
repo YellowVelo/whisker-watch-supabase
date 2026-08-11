@@ -13,6 +13,7 @@ Whisker Watch is hosted on Cloudflare Workers (static assets + SPA routing), not
 - Document the build → deploy pipeline: `npm run build` (Vite) produces `dist/`, which Wrangler uploads as the Worker's static asset bundle.
 - **Confirmed with Lynn (2026-08-09):** the actual shipped pipeline is push to the tracked branch → Cloudflare's git-integration build → Lynn manually promotes that build to production in the Cloudflare dashboard (see [requirements-deploy-gate.md](requirements-deploy-gate.md) — these two docs cross-reference each other, since one is meaningless without the other). `npm run deploy` (`wrangler deploy`) exists in `package.json` as a local command but is **not** part of this promotion pipeline — running it locally does not go through the dashboard gate.
 - List required Cloudflare-side secrets/bindings, if any beyond what's already covered by Supabase env vars (confirm during implementation — `wrangler.jsonc` currently declares none).
+- **Confirmed 2026-08-11:** a second, separate Cloudflare project (`wysker-watch-staging`) exists for the `staging` environment, tracking the `staging` git branch rather than `main`. It is not covered by `wrangler.jsonc` (that file configures the production Worker only) and has its own auto-promote behavior — see [requirements-deploy-gate.md](requirements-deploy-gate.md)'s "Staging is different" section.
 
 ## Empty States / Load Errors
 
