@@ -45,12 +45,19 @@ export function renderLinkFallback(url: string): string {
   return `<p style="margin: 0 0 16px 0; font-size: 13px; line-height: 1.6; color: ${COLORS.secondaryText}; word-break: break-all;">${safeUrl}</p>`;
 }
 
+const DEFAULT_FOOTER_TEXT = "You're receiving this email because of activity on your Wysker Watch account. If this wasn't you, you can safely ignore it.";
+
 interface RenderLayoutParams {
   previewText: string;
   bodyHtml: string;
+  // Defaults to DEFAULT_FOOTER_TEXT — override for any template not tied
+  // to a real account (e.g. beta-signup-confirmation, spec 0053), where
+  // "your Wysker Watch account" would be factually wrong since no account
+  // exists yet for that flow.
+  footerText?: string;
 }
 
-export function renderLayout({ previewText, bodyHtml }: RenderLayoutParams): string {
+export function renderLayout({ previewText, bodyHtml, footerText = DEFAULT_FOOTER_TEXT }: RenderLayoutParams): string {
   return `<!doctype html>
 <html lang="en">
   <head>
@@ -83,7 +90,7 @@ export function renderLayout({ previewText, bodyHtml }: RenderLayoutParams): str
                 </div>
                 <div style="margin-top: 32px; padding-top: 24px; border-top: 1px solid rgba(169, 174, 181, 0.2);">
                   <p style="margin: 0; font-size: 13px; line-height: 1.6; color: ${COLORS.secondaryText}; font-family: 'Inter', -apple-system, Helvetica, Arial, sans-serif;">
-                    You're receiving this email because of activity on your Wysker Watch account. If this wasn't you, you can safely ignore it.
+                    ${escapeAttribute(footerText)}
                   </p>
                 </div>
               </td>

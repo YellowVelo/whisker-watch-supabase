@@ -52,7 +52,7 @@ export function renderTemplate(templateName: string, variables: Record<string, s
   const subject = replaceVariables(template.subject, textVars);
   const previewText = replaceVariables(template.previewText, textVars);
   const bodyHtml = template.html(htmlVars);
-  const html = renderLayout({ previewText, bodyHtml });
+  const html = renderLayout({ previewText, bodyHtml, footerText: template.footerText });
   const text = template.text(textVars);
 
   return { subject, previewText, html, text };

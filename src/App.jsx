@@ -47,6 +47,9 @@ import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
 import AcceptInvite from './pages/AcceptInvite';
 import VerifyEmail from './pages/VerifyEmail';
+import BetaSignup from './pages/BetaSignup';
+import AdminRoute from '@/components/AdminRoute';
+import AdminBetaSignups from './pages/admin/BetaSignups';
 
 // PetProfileTabs.jsx (the old hero-header pet profile screen) is retired
 // (spec 0028) — old /pet/:petId/profile links land on Pets instead, with
@@ -88,9 +91,15 @@ const AuthenticatedApp = () => {
           <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/accept-invite" element={<AcceptInvite />} />
           <Route path="/verify-email" element={<VerifyEmail />} />
+          {/* Public beta-signup landing page (spec 0053) — no account, no login. */}
+          <Route path="/beta" element={<BetaSignup />} />
           {/* Authenticated, but outside the App Shell by design (spec 0023) — no persistent header/bottom nav */}
           <Route element={<ProtectedRoute unauthenticatedElement={<Navigate to="/login" replace />} shell={false} />}>
             <Route path="/pet/:petId/onboarding" element={<PetOnboarding />} />
+          </Route>
+          {/* Admin-only (spec 0053) — role='admin' required, outside the App Shell */}
+          <Route element={<AdminRoute />}>
+            <Route path="/admin/beta-signups" element={<AdminBetaSignups />} />
           </Route>
           <Route element={<ProtectedRoute unauthenticatedElement={<Navigate to="/login" replace />} />}>
             <Route path="/" element={<Home />} />

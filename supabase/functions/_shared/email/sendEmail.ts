@@ -148,6 +148,7 @@ export async function sendEmail(params: SendEmailParams): Promise<SendEmailResul
     template: templateName,
     variables,
     replyTo,
+    from,
     relatedEntityType,
     relatedEntityId,
     idempotencyKey,
@@ -302,7 +303,7 @@ export async function sendEmail(params: SendEmailParams): Promise<SendEmailResul
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        from: FROM_ADDRESS,
+        from: from || FROM_ADDRESS,
         to: recipientEmail,
         subject: rendered.subject,
         html: rendered.html,

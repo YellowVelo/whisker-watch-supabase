@@ -24,5 +24,9 @@ export const entities = {
   PetBaseline: createEntityClient('pet_baselines'),
   WellnessScore: createEntityClient('wellness_scores'),
   Notification: createEntityClient('notifications'),
+  // Admin-only reads/updates (spec 0053) — inserts happen via the public
+  // beta-signup Edge Function, never through this client, so .create()'s
+  // created_by-stamping behavior is never exercised for this entity.
+  BetaSignup: createEntityClient('beta_signups'),
 };
 

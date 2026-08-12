@@ -17,6 +17,7 @@ import sitterInvitationReminder from './sitter-invitation-reminder.ts';
 import welcome from './welcome.ts';
 import verifyEmail from './verify-email.ts';
 import passwordReset from './password-reset.ts';
+import betaSignupConfirmation from './beta-signup-confirmation.ts';
 
 export const templates: Map<string, EmailTemplate> = new Map([
   [coOwnerInvitation.name, coOwnerInvitation],
@@ -26,4 +27,5 @@ export const templates: Map<string, EmailTemplate> = new Map([
   [welcome.name, welcome],
   [verifyEmail.name, verifyEmail],
   [passwordReset.name, passwordReset],
+  [betaSignupConfirmation.name, betaSignupConfirmation],
 ]);

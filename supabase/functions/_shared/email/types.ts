@@ -39,6 +39,9 @@ export interface EmailTemplate {
   // isSafeEmailUrl (https + allowlisted host, see utils.ts) and
   // inserted into href attributes instead of HTML-escaped body text.
   urlVariables?: string[];
+  // Overrides layout.ts's default "activity on your Wysker Watch account"
+  // footer line — only needed for templates not tied to a real account.
+  footerText?: string;
   // Returns the *inner* body markup for the shared layout — not a full
   // HTML document. Receives already-escaped text variables and raw
   // (validated) URL variables.
@@ -54,6 +57,13 @@ export interface SendEmailParams {
   // Defaults to support@wyskerwatch.com if omitted (see sendEmail.ts's
   // DEFAULT_REPLY_TO) — only pass this to override that default.
   replyTo?: string;
+  // Defaults to "Wysker Watch <no-reply@wyskerwatch.com>" (see
+  // sendEmail.ts's FROM_ADDRESS) — only pass this to override that
+  // default. Added for beta-signup-confirmation (spec 0053), whose copy
+  // explicitly invites a reply ("just reply to this email"); a no-reply@
+  // From address would visually contradict that even though replyTo
+  // already routes replies correctly.
+  from?: string;
   // Optional linkage for email_logs (e.g. 'pet_co_owners' / invite id).
   relatedEntityType?: string;
   relatedEntityId?: string;
