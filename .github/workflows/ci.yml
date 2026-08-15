@@ -91,3 +91,59 @@ jobs:
         run: |
           deno test --allow-net --allow-env --node-modules-dir=none \
             supabase/functions/resend-webhook/index.test.ts
+
+  e2e:
+    runs-on: ubuntu-latest
+    # 20, not the originally-planned 10. A real local run (2026-08-15, all
+    # 44 tests, single worker) measured 7.1 minutes; investigated before
+    # accepting that number — no hard-coded sleeps/waits found anywhere in
+    # e2e/, and the 44 tests' own durations sum to ~6.5 min of that 7.1,
+    # so it's real work, not waste. It's serialized (not padding, either)
+    # because playwright.config.js's workers:1 is load-bearing: every test
+    # shares one live wysker-watch-dev account's data, and running them
+    # concurrently would mean tests corrupting each other's state. 20
+    # minutes is genuine headroom over that measured 7.1 for npm ci +
+    # Playwright browser install + a CI runner typically being slower than
+    # a local machine — not a guess. Actually cutting the ~7 min baseline
+    # down would mean parallelizing via multiple test accounts, a real
+    # infra change tracked as a possible future follow-up, not done here.
+    timeout-minutes: 20
+    # Spec 0055: runs the local Playwright suite (spec 0024) against
+    # wysker-watch-dev, same account/project as the edge-functions job
+    # above. continue-on-error below is deliberate, not a mistake — the
+    # job still runs and reports its real pass/fail on every PR, but
+    # doesn't block merging during a 3-week trial period (through
+    # 2026-09-03) because login.spec.js has one unresolved, unreproduced
+    # flake (see docs/features/0046_E2E_Onboarding_Step_Transition_Flakiness_Specification_v1.md's
+    # Open Questions). Flip continue-on-error to false, and add this job
+    # to required status checks in branch protection, once that trial
+    # period has passed with no false-positive failures.
+    continue-on-error: true
+    env:
+      # Separate secret names from the edge-functions job's SUPABASE_DEV_URL
+      # / sb_publishable above, even though they point at the same
+      # wysker-watch-dev project — different test runner, different
+      # credential-format expectations; keeping them separate means
+      # rotating one job's secrets never silently breaks the other.
+      VITE_SUPABASE_URL: ${{ secrets.PLAYWRIGHT_DEV_SUPABASE_URL }}
+      VITE_SUPABASE_ANON_KEY: ${{ secrets.PLAYWRIGHT_DEV_SUPABASE_ANON_KEY }}
+      # Cloudflare's own publicly documented "always passes" Turnstile
+      # test site key (also in .env.example) — not a secret, safe to
+      # commit, needed so beta-signup.spec.js's form can auto-complete
+      # the widget the same way local dev does.
+      VITE_TURNSTILE_SITE_KEY: 1x00000000000000000000AA
+      PLAYWRIGHT_TEST1_EMAIL: ${{ secrets.PLAYWRIGHT_TEST1_EMAIL }}
+      PLAYWRIGHT_TEST1_PASSWORD: ${{ secrets.PLAYWRIGHT_TEST1_PASSWORD }}
+      PLAYWRIGHT_TEST3_ADMIN_EMAIL: ${{ secrets.PLAYWRIGHT_TEST3_ADMIN_EMAIL }}
+      PLAYWRIGHT_TEST3_ADMIN_PASSWORD: ${{ secrets.PLAYWRIGHT_TEST3_ADMIN_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium webkit
+      - run: npx playwright test
