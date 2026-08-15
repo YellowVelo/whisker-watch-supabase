@@ -93,6 +93,8 @@ How it works, in plain terms:
 
 **Decided: not part of this first PR.** The suite ships as local/manual-only tooling (`npm run test:e2e`) for now, run by hand until the tests have proven themselves reliable. No changes to `.github/workflows/ci.yml` and no new CI secrets in this pass. Wiring it into CI as a required check (alongside the existing `frontend` and `edge-functions` jobs) is a deliberate, separate follow-up once there's confidence the tests aren't flaky — tracked as a Non-Goal below, not forgotten.
 
+**Update (2026-08-15):** This deferred follow-up has since shipped — see `docs/features/0055_E2E_CI_Integration_Specification_v1.md`. The suite now runs in CI on every PR/push to `main`, currently non-blocking during a 3-week trial period.
+
 ### Constraints from CLAUDE.md / locked decisions
 
 - No conflict with the Vibe/symptom-count data model — the Daily Check-In test only needs to select a Vibe and confirm it saved, it doesn't need to know about or assert on any retired scoring concept.

@@ -218,7 +218,7 @@ Test database migrations
 
 Browser/E2E Tests
 
-As of 2026-07-31, a Playwright suite (`e2e/*.spec.js`, run via `npm run test:e2e`) covers Login, Add Pet, Daily Check-In, Vet Report generation, and Pet Sitter navigation against real `wysker-watch-dev` data, using a saved session (`e2e/global-setup.js`) rather than re-logging-in per test. Local/manual-only for now — not wired into CI (see `0024_Playwright_E2E_Testing_Specification_v1.md`). "Test daily check‑in flow" under Manual QA below is now partially automated by this suite.
+As of 2026-07-31, a Playwright suite (`e2e/*.spec.js`, run via `npm run test:e2e`) covers Login, Add Pet, Daily Check-In, Vet Report generation, and Pet Sitter navigation against real `wysker-watch-dev` data, using a saved session (`e2e/global-setup.js`) rather than re-logging-in per test. As of 2026-08-15, also runs in CI on every PR/push to main via a dedicated `e2e` job (see `0055_E2E_CI_Integration_Specification_v1.md`) — currently non-blocking (`continue-on-error`) during a 3-week trial period through 2026-09-03, not yet a required merge gate like the `frontend`/`edge-functions` jobs. "Test daily check‑in flow" under Manual QA below is now partially automated by this suite.
 
 Manual QA
 
