@@ -74,25 +74,18 @@ export default function EarlyAdopters() {
     <PageTransition>
       <div className="min-h-screen bg-background pb-24">
         <main className="max-w-2xl mx-auto px-4 py-10 space-y-12">
-          {/* Hero — leads with the problem, not a pitch */}
+          {/* Hero — leads with the problem, not a pitch. Sarcastic/compassionate
+              brand voice per Lynn's brand guidelines (2026-08-15): we don't
+              scare, we're compassionate, our social voice is sarcastic — this
+              copy mocks the owner's own anxious habits, never the pet's actual
+              health or medical uncertainty itself. */}
           <section className="text-center space-y-4">
             <h1 className="text-[28px] sm:text-[32px] font-bold leading-tight text-foreground">
-              "Has he been better or worse lately?" And you're just... guessing.
+              Another pet tracking app? Nah.
             </h1>
             <p className="text-[16px] sm:text-[18px] text-muted-foreground">
-              If your cat or dog has an ongoing health thing, you're probably tracking it in your head, a notes app,
-              or a spreadsheet that goes stale in a week. Wysker Watch is a simple daily check-in built to fix that —
-              and it's almost ready.
-            </p>
-          </section>
-
-          {/* Problem */}
-          <section className="space-y-3">
-            <h2 className="text-[22px] font-semibold text-foreground">Sound familiar?</h2>
-            <p className="text-[16px] text-muted-foreground leading-relaxed">
-              The 2am symptom-Googling. The vet visit where you're trying to remember if the limp started Tuesday or
-              last week. The gut feeling that something's "off" with no way to prove it, or disprove it. None of
-              that is a memory problem — it's a tracking problem.
+              We Google symptoms at 2 a.m., classify "breathing a little funny" as a full medical diagnosis, and
+              photograph poop like it's evidence in an ongoing federal case.
             </p>
           </section>
 
