@@ -48,6 +48,7 @@ import ResetPassword from './pages/ResetPassword';
 import AcceptInvite from './pages/AcceptInvite';
 import VerifyEmail from './pages/VerifyEmail';
 import BetaSignup from './pages/BetaSignup';
+import EarlyAdopters from './pages/EarlyAdopters';
 import AdminRoute from '@/components/AdminRoute';
 import AdminBetaSignups from './pages/admin/BetaSignups';
 
@@ -93,6 +94,9 @@ const AuthenticatedApp = () => {
           <Route path="/verify-email" element={<VerifyEmail />} />
           {/* Public beta-signup landing page (spec 0053) — no account, no login. */}
           <Route path="/beta" element={<BetaSignup />} />
+          {/* Public Early Adopters welcome page (spec 0056) — no account, no login.
+              Pre-PWA-launch list, distinct from /beta's tester screener. */}
+          <Route path="/early-adopters" element={<EarlyAdopters />} />
           {/* Authenticated, but outside the App Shell by design (spec 0023) — no persistent header/bottom nav */}
           <Route element={<ProtectedRoute unauthenticatedElement={<Navigate to="/login" replace />} shell={false} />}>
             <Route path="/pet/:petId/onboarding" element={<PetOnboarding />} />
