@@ -48,3 +48,6 @@ supabase/.temp
 /test-results
 /playwright-report
 /blob-report
+
+# Social media drafts (Cowork-only, high churn — kept out of git on purpose)
+/social

@@ -38,6 +38,10 @@ Current model in one line: `daily_check_ins.status` is `great` / `off` / `tough`
 ## Launch planning
 `docs/planning/Wysker_Watch_Launch_Plan.xlsx` is the master Alpha/Beta launch task planner (replaces the old `docs/launch-punch-list.md` and other punch-list docs, which have been removed — treat any reference to those filenames elsewhere as stale). Lynn edits this file herself outside of Code to check off tasks and add comments; do not treat her saves as something to flag or confirm. When she references a task by number, open the file and locate it there rather than searching for a markdown punch list.
 
+**Check-off workflow:** Lynn gives the task number ("Task 14 is done") and Claude opens the xlsx and updates that row's status; she dictates any comment and Claude drops it in. Claude does not flag or ask her to confirm when she's saved the file herself — that's her own edit, not ours.
+
+**Shorthand:** Lynn refers to Cowork as "CW" and Claude Code as "CC" when talking about which surface did what. Both read/write the same `CLAUDE.md` and `/docs` — treat this as one shared source of truth split across two front doors, not two separate contexts.
+
 ## Working conventions
 - This is a READ-ONLY exploration by default. Do not edit, create, or delete files unless the task explicitly asks for changes, or Plan Mode has been used and the plan approved first.
 - When asked to review or audit, always compare docs against actual code/git history — do not rely on doc content alone, since docs have occasionally lagged shipped code here.
