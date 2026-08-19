@@ -1,6 +1,6 @@
 # 0053_Beta_Signup_Landing_Page_and_Screener_Specification_v1
 
-**Status:** Draft
+**Status:** Shipped — verified current against code 2026-08-18. All functional requirements, including Task 17 (confirmation email), are implemented: `src/pages/BetaSignup.jsx`, `src/pages/admin/BetaSignups.jsx`, `supabase/functions/beta-signup/index.ts`, and the `beta-signup-confirmation` email template.
 **Date:** 2026-08-11
 **Related files:**
 - `src/App.jsx` (routing)
