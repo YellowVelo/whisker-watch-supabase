@@ -1,6 +1,6 @@
 # 0037_Sitter_Wellbeing_Chips_Specification_v1
 
-**Status:** Partially implemented — verified against code 2026-08-18. The feature itself is shipped (`src/pages/Pets.jsx`'s `SitterPetRow` renders the wellbeing badges; RLS migration `0045_daily_check_ins_observations_select_sitter.sql` is live). Automated Playwright coverage from this spec's Test Plan is **not started** (Launch Plan Task #18) — `e2e/pet-sitter.spec.js` only tests navigation to `/pet-sitter`, with no second-identity or wellbeing-chip assertions yet. Note: this spec's plan to use `test3@wyskerwatch.com` as the new sitter fixture account is now stale — `test3@` was claimed by spec 0053 (migration `0049_test3_admin_fixture_account.sql`) for admin-route tests instead. Task #18 will need a different account (e.g. `test4@`).
+**Status:** Fully implemented and verified — 2026-08-20. The feature itself shipped earlier (`src/pages/Pets.jsx`'s `SitterPetRow` renders the wellbeing badges; RLS migration `0045_daily_check_ins_observations_select_sitter.sql` is live). Automated Playwright coverage from this spec's Test Plan is now also done — see `0057_Sitter_Wellbeing_Chips_E2E_Coverage_Specification_v1.md` (Launch Plan Task #18), which added `test4@wyskerwatch.com` as the sitter fixture account (not `test3@`, which spec 0053 claimed first for admin-route tests) and four passing tests in `e2e/pet-sitter.spec.js`.
 **Date:** 2026-08-02
 **Related files:**
 - `src/pages/Pets.jsx` (`SitterPetRow`, lines 205-223)
