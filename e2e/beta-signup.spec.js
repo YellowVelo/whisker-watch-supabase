@@ -1,7 +1,12 @@
 // E2E coverage for the public /beta landing page + screener and its
-// admin review page (spec 0053). See
-// docs/features/0053_Beta_Signup_Landing_Page_and_Screener_Specification_v1.md's
+// admin review page (spec 0053 v2). See
+// docs/features/0053_Beta_Signup_Landing_Page_and_Screener_Specification_v2.md's
 // Test Plan for how each Acceptance Criterion maps to a test below.
+//
+// v2 flow: /beta shows only the pitch + a single "Get Early Access"
+// button. Clicking it reveals, in place (same URL, no navigation), one
+// form with the email field and all 4 screener questions together — no
+// separate email-only step like v1 had.
 //
 // Real-submission tests (AC3, AC6) create real rows in wysker-watch-dev's
 // beta_signups table via the public Edge Function — there is no
@@ -23,50 +28,63 @@ function scratchEmail(label) {
   return `e2e-scratch-${Date.now()}-${label}@wyskerwatch.com`;
 }
 
+async function fillForm(page, { email, conditionStatus = 'Yes, diagnosed condition', trackingMethod = 'Notes app / memory', frustration = 'Hard to tell if the new medication is actually helping.', betaComfort = 'Yes' }) {
+  await page.getByLabel('Email').fill(email);
+  await page.getByRole('button', { name: conditionStatus }).click();
+  await page.getByRole('button', { name: trackingMethod }).click();
+  await page.getByLabel(/most frustrating part/i).fill(frustration);
+  await page.getByRole('button', { name: betaComfort, exact: true }).click();
+}
+
 test.describe('public /beta page', () => {
   // The public page needs no session at all — test as a logged-out
   // visitor, matching how someone clicking a Reddit/BetaList link
   // actually arrives, not the suite's default logged-in test1@ session.
   test.use({ storageState: { cookies: [], origins: [] } });
 
-  test('AC1: shows the pitch copy on mobile with no internal mechanics mentioned', async ({ page }) => {
+  test('AC1: shows the new hero copy on mobile, no retired sections, no internal mechanics', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto('/beta');
 
-    await expect(page.getByRole('heading', { name: /actually doing better/i })).toBeVisible();
-    await expect(page.getByRole('heading', { name: 'The Problem' })).toBeVisible();
-    await expect(page.getByRole('heading', { name: 'The Solution' })).toBeVisible();
-    await expect(page.getByRole('heading', { name: "Who it's for" })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /another pet health tracker/i })).toBeVisible();
+    await expect(page.getByText('So we built Wysker Watch.')).toBeVisible();
 
-    // "Great day / Off day / Tough one" IS the approved public copy
-    // (plain-English description of a daily check-in) — what must stay
-    // hidden is the internal model/architecture NAMING, not that
-    // descriptive language. See the spec's copy doc and CLAUDE.md's
-    // note that "Vibe" and "symptom count" are the internal terms.
+    // Retired v1 sections must actually be gone, not just unmentioned.
+    await expect(page.getByRole('heading', { name: 'The Problem' })).not.toBeVisible();
+    await expect(page.getByRole('heading', { name: 'The Solution' })).not.toBeVisible();
+    await expect(page.getByRole('heading', { name: "Who it's for" })).not.toBeVisible();
+
+    // No email field or questions visible before the button is clicked.
+    await expect(page.getByLabel('Email')).not.toBeVisible();
+
     const bodyText = await page.locator('body').innerText();
-    for (const forbidden of ['Vibe', 'symptom count', 'daily_check_ins', 'wellness score']) {
+    for (const forbidden of ['Vibe', 'symptom count', 'daily_check_ins', 'wellness score', 'Great day', 'Off day', 'Tough']) {
       expect(bodyText).not.toContain(forbidden);
     }
   });
 
-  test('AC2: submitting the email reveals the screener in place, no navigation', async ({ page }) => {
+  test('AC2: clicking Get Early Access reveals the combined form in place, no navigation', async ({ page }) => {
     await page.goto('/beta');
 
-    await page.getByLabel('Email').fill(scratchEmail('step2'));
-    await page.getByRole('button', { name: 'Submit' }).click();
+    await page.getByRole('button', { name: 'Get Early Access' }).click();
 
-    await expect(page.getByRole('heading', { name: 'A couple quick questions' })).toBeVisible();
+    await expect(page.getByLabel('Email')).toBeVisible();
+    await expect(page.getByText(/ongoing health condition/i)).toBeVisible();
+    await expect(page.getByText(/track your pet's health day to day/i)).toBeVisible();
+    await expect(page.getByLabel(/most frustrating part/i)).toBeVisible();
+    await expect(page.getByText(/comfortable using a very early/i)).toBeVisible();
     await expect(page).toHaveURL(/\/beta$/);
   });
 
-  test('AC4: an invalid email is rejected inline and the screener never appears', async ({ page }) => {
+  test('AC4: an invalid email is rejected inline and nothing is stored', async ({ page }) => {
     await page.goto('/beta');
+    await page.getByRole('button', { name: 'Get Early Access' }).click();
 
-    await page.getByLabel('Email').fill('not-an-email');
+    await fillForm(page, { email: 'not-an-email' });
     await page.getByRole('button', { name: 'Submit' }).click();
 
     await expect(page.getByText('Please enter a valid email address.')).toBeVisible();
-    await expect(page.getByRole('heading', { name: 'A couple quick questions' })).not.toBeVisible();
+    await expect(page.getByRole('heading', { name: "You're on the list" })).not.toBeVisible();
   });
 
   test('AC9: a CAPTCHA rejection from the server shows a clear error and no success message', async ({ page }) => {
@@ -75,13 +93,8 @@ test.describe('public /beta page', () => {
     });
 
     await page.goto('/beta');
-    await page.getByLabel('Email').fill(scratchEmail('captcha-fail'));
-    await page.getByRole('button', { name: 'Submit' }).click();
-
-    await page.getByRole('button', { name: 'Yes, diagnosed condition' }).click();
-    await page.getByRole('button', { name: 'Notes app / memory' }).click();
-    await page.getByLabel(/most frustrating part/i).fill('Not sure if things are improving.');
-    await page.getByRole('button', { name: 'Yes', exact: true }).click();
+    await page.getByRole('button', { name: 'Get Early Access' }).click();
+    await fillForm(page, { email: scratchEmail('captcha-fail') });
 
     await page.getByRole('button', { name: 'Submit' }).click();
 
@@ -91,13 +104,8 @@ test.describe('public /beta page', () => {
 
   test('AC3: a full submission stores the signup and shows the thank-you message', async ({ page }) => {
     await page.goto('/beta');
-    await page.getByLabel('Email').fill(scratchEmail('happy-path'));
-    await page.getByRole('button', { name: 'Submit' }).click();
-
-    await page.getByRole('button', { name: 'Yes, diagnosed condition' }).click();
-    await page.getByRole('button', { name: 'Notes app / memory' }).click();
-    await page.getByLabel(/most frustrating part/i).fill('Hard to tell if the new medication is actually helping.');
-    await page.getByRole('button', { name: 'Yes', exact: true }).click();
+    await page.getByRole('button', { name: 'Get Early Access' }).click();
+    await fillForm(page, { email: scratchEmail('happy-path') });
 
     // Turnstile's "always passes" TEST site key (see VITE_TURNSTILE_SITE_KEY
     // in .env / .env.example) auto-completes with no visible challenge, so
