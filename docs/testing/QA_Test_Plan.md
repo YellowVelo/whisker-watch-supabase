@@ -218,15 +218,15 @@ A one-page checklist run against every `Critical`/`High` page before the Accessi
 
 | Case | Priority | Coverage |
 |---|---|---|
-| `/admin/beta-signups` lists all signups with correct badges | Medium | `[Manual]` |
-| Mark Reviewed toggles per row | Medium | `[Manual]` |
-| **A non-admin account is actually blocked from `/admin/beta-signups`** | High | `[Manual]` — no test today confirms `AdminRoute` actually rejects a non-admin; this is the only admin-gated route in the app (per CLAUDE.md) and its access control has never been independently verified end-to-end. |
+| `/admin/beta-signups` lists all signups with correct badges | Medium | `[Playwright: beta-signup.spec.js]` |
+| Mark Reviewed toggles per row, persists on reload | Medium | `[Playwright: beta-signup.spec.js]` |
+| **A non-admin account is actually blocked from `/admin/beta-signups`** | High | `[Playwright: beta-signup.spec.js]` — `AdminRoute` rejection of a non-admin (and of a logged-out visitor) is covered end-to-end; this is the only admin-gated route in the app (per CLAUDE.md). |
 
 ### 5.11 Public Marketing Pages — Critical (first-touch, no auth)
 
 | Case | Priority | Coverage |
 |---|---|---|
-| `/beta`: email → screener transition, no page nav, submit disabled until all 4 answered + CAPTCHA present | Critical | `[Playwright: beta-signup.spec.js]` |
+| `/beta`: Get Early Access reveals the combined email + 4-question form in place, no page nav, submit disabled until all fields answered + CAPTCHA present | Critical | `[Playwright: beta-signup.spec.js]` |
 | `/beta`: invalid email rejected inline | High | `[Playwright: beta-signup.spec.js]` |
 | `/early-adopters`: submit disabled until consent + CAPTCHA, invalid email rejected inline | Critical | `[Playwright: early-adopters.spec.js]` |
 | Both public forms: hero copy avoids internal-mechanics language (brand-voice check) | Medium | `[Playwright: beta-signup.spec.js, early-adopters.spec.js]` |
