@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { WifiOff } from 'lucide-react';
 import { PALETTE } from '@/lib/toneColors';
+import { Z } from '@/lib/zIndex';
 
 // Simple online/offline indicator for V1. No queueing or sync — just
 // makes it clear to the user why data isn't loading/saving right now.
@@ -24,7 +25,7 @@ export default function OfflineBanner() {
     <div
       role="status"
       aria-live="polite"
-      className="sticky top-0 z-[70] flex items-center justify-center gap-2 px-4 py-1.5 text-sm font-medium text-white"
+      className={`sticky top-0 ${Z.banner} flex items-center justify-center gap-2 px-4 py-1.5 text-sm font-medium text-white`}
       style={{ background: PALETTE.gray, paddingTop: 'calc(env(safe-area-inset-top) + 0.375rem)' }}
     >
       <WifiOff className="h-3.5 w-3.5 shrink-0" />

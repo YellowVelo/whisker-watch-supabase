@@ -10,6 +10,7 @@ import BulkApplySheet from './BulkApplySheet';
 import { getCheckInsForDateRange, markGreatDaysBulk } from '@/lib/checkin/checkinClient';
 import { track } from '@/lib/analytics';
 import useFocusTrap from '@/hooks/useFocusTrap';
+import { Z } from '@/lib/zIndex';
 
 // Spec 0015 (Multi-Day Catch-Up Check-In). Calendar/exceptions UI (PR 2)
 // plus the save path (PR 3): bulk-apply across selected exception days,
@@ -237,23 +238,23 @@ export default function CatchUpFlow({ pets, missedDaysByPet, onClose, onPetProgr
   // were positioned thousands of pixels away). Portaling to body escapes
   // that transformed ancestor entirely, so "fixed" means the viewport
   // again, matching what every other full-screen overlay in this app
-  // assumes. DailyCheckInSheet/DailyCheckInModal have the same latent bug
-  // but happen to mostly render at scrollY≈0, which masks it — worth a
-  // follow-up, not fixed here since it's pre-existing and out of scope.
+  // assumes. (DailyCheckInSheet/DailyCheckInModal were checked — both
+  // render through BottomSheet, which is portaled the same way, so they
+  // don't have this bug. Spec 0059 found and fixed one real remaining
+  // instance: PetSymptoms.jsx's "Log Symptoms" overlay.)
   return createPortal((
-    // z-[60] (not z-50) and the --account-banner-height offset match the
-    // precedent set by CareMenu.jsx — the only other full-screen overlay
-    // in the app: z-50 sits *below* both AccountTypeBanner (z-[70], always
-    // on top by design) and BottomTabBar (z-50, same layer, paints after),
-    // so a top-anchored header/bottom-anchored footer at plain z-50 gets
-    // silently covered by both. z-[60] clears the tab bar; the padding
-    // clears the account banner instead of hiding behind it.
+    // Z.overlay (spec 0059's shared layering scale, src/lib/zIndex.js) sits
+    // above chrome (AppHeader/BottomTabBar) so this isn't silently covered
+    // by either; the --account-banner-height padding below still clears
+    // AccountTypeBanner, which now outranks this layer on purpose (banner
+    // stays visible above a bare full-screen flow) but is itself outranked
+    // by any popup opened from inside this flow — see Z.popup below.
     <div
       ref={dialogRef}
       role="dialog"
       aria-modal="true"
       aria-label="Catch Up Check-In"
-      className="fixed inset-0 z-[60] flex flex-col bg-background"
+      className={`fixed inset-0 ${Z.overlay} flex flex-col bg-background`}
       style={{ paddingTop: 'calc(var(--account-banner-height, 0px) + env(safe-area-inset-top))', paddingBottom: 'env(safe-area-inset-bottom)' }}
     >
       <header className="px-5 pt-5 pb-3 flex items-center justify-between flex-shrink-0 border-b border-border">
@@ -499,6 +500,7 @@ function CalendarStep({ grid, missedDates, checkInsByDate, exceptionDates, onTog
             <button
               key={dateStr}
               onClick={() => onToggle(dateStr)}
+              aria-label={formatDayLabel(dateStr)}
               className="flex flex-col items-center gap-1 py-1 rounded-lg active:opacity-70"
             >
               <span className="text-[13px] text-tier-secondary">{dayOfMonth}</span>

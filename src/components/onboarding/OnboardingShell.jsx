@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { X, ChevronLeft } from 'lucide-react';
 import IconButton from '@/components/IconButton';
 import useFocusTrap from '@/hooks/useFocusTrap';
+import { Z } from '@/lib/zIndex';
 
 // Spec 0029: full-screen onboarding shell, modeled directly on
 // CatchUpFlow.jsx's overlay pattern (the closest existing precedent for a
@@ -27,7 +28,7 @@ export default function OnboardingShell({ title, stepNumber, totalSteps, onBack 
       role="dialog"
       aria-modal="true"
       aria-label={title}
-      className="fixed inset-0 z-[60] flex flex-col bg-background"
+      className={`fixed inset-0 ${Z.overlay} flex flex-col bg-background`}
       style={{ paddingTop: 'calc(var(--account-banner-height, 0px) + env(safe-area-inset-top))', paddingBottom: 'env(safe-area-inset-bottom)' }}
     >
       <header className="px-5 pt-5 pb-3 flex-shrink-0 border-b border-border">

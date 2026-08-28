@@ -3,6 +3,7 @@ import { FlaskConical, Sparkles } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import { isTestAccount, isDemoAccount } from '@/lib/accountType';
 import { PALETTE } from '@/lib/toneColors';
+import { Z } from '@/lib/zIndex';
 
 // Persistent, non-dismissable banner so a user is never confused
 // about which environment they're in. Deliberately styled far from
@@ -17,7 +18,8 @@ import { PALETTE } from '@/lib/toneColors';
 // Publishes its rendered height as --account-banner-height so other
 // sticky/fixed top-0 elements (page headers, full-screen sheets) can
 // offset by that amount instead of being covered by this banner, which
-// always renders above them (z-[70]).
+// renders above page chrome and full-screen flows (Z.banner, spec 0059) —
+// but below any open popup/sheet (Z.popup), so it never blocks one.
 export default function AccountTypeBanner() {
   const { user, isAuthenticated } = useAuth();
   const ref = useRef(null);
@@ -78,7 +80,7 @@ const Banner = forwardRef(function Banner({ icon: Icon, background, title, messa
   return (
     <div
       ref={ref}
-      className="sticky top-0 z-[70] flex items-center justify-center gap-2 px-4 py-1.5 text-sm font-medium"
+      className={`sticky top-0 ${Z.banner} flex items-center justify-center gap-2 px-4 py-1.5 text-sm font-medium`}
       style={{ background, color: 'hsl(var(--background))', paddingTop: 'calc(env(safe-area-inset-top) + 0.375rem)' }}
     >
       <Icon className="h-3.5 w-3.5 shrink-0" />

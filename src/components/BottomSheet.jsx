@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import IconButton from './IconButton';
 import useFocusTrap from '@/hooks/useFocusTrap';
+import { Z } from '@/lib/zIndex';
 
 // Design System Amendment #8 (2026-07-30) — the canonical bottom-sheet
 // shell, replacing three independently hand-built copies (DailyCheckInSheet,
@@ -33,7 +34,7 @@ export default function BottomSheet({ titleId = 'bottom-sheet-title', title, sub
   // (spec 0045 gave them this component's dialog role + focus trap too, via
   // the shared useFocusTrap hook — they're no longer just visually similar).
   return createPortal((
-    <div className="fixed inset-0 z-50 flex flex-col justify-end" onClick={onClose}>
+    <div className={`fixed inset-0 ${Z.popup} flex flex-col justify-end`} onClick={onClose}>
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
       <div
         ref={dialogRef}

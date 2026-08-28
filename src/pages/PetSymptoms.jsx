@@ -1,5 +1,6 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { createPortal } from 'react-dom';
 import { entities } from '@/api/entities';
 import { ArrowLeft, Plus, X, UtensilsCrossed, Zap, Heart, Activity, Droplets, Droplet, Scale, AlertTriangle, Pill, AlertCircle, ClipboardList } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
@@ -7,6 +8,8 @@ import SymptomLogForm from '../components/SymptomLogForm';
 import IconButton from '../components/IconButton';
 import PageTransition from '../components/PageTransition';
 import { PALETTE } from '@/lib/toneColors';
+import { Z } from '@/lib/zIndex';
+import useFocusTrap from '@/hooks/useFocusTrap';
 
 function Chip({ icon: Icon, label, danger = false }) {
   return (
@@ -29,6 +32,8 @@ export default function PetSymptoms() {
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [logOpen, setLogOpen] = useState(false);
+  const dialogRef = useRef(null);
+  useFocusTrap(dialogRef, () => setLogOpen(false), logOpen);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -133,9 +138,22 @@ export default function PetSymptoms() {
         )}
       </div>
 
-      {/* Log overlay */}
-      {logOpen && (
-        <div className="fixed inset-0 z-50 bg-background overflow-y-auto">
+      {/* Log overlay — portaled to document.body (spec 0059), not rendered
+          inline inside this page's own <PageTransition>: Framer Motion gives
+          that wrapper a CSS transform even at rest, which breaks this
+          panel's `fixed inset-0` viewport-anchoring once the page has been
+          scrolled (same mechanism already fixed for BottomSheet/CatchUpFlow/
+          OnboardingShell). Also carries the same role="dialog"/focus-trap
+          treatment those three already have, via the shared useFocusTrap
+          hook. */}
+      {logOpen && createPortal((
+        <div
+          ref={dialogRef}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Log Symptoms"
+          className={`fixed inset-0 ${Z.overlay} bg-background overflow-y-auto`}
+        >
           <div
             className="sticky z-10 bg-background border-b border-white/8 px-4 py-3 flex items-center justify-between"
             style={{ top: 'var(--account-banner-height, 0px)', paddingTop: 'calc(env(safe-area-inset-top) + 12px)' }}
@@ -151,7 +169,7 @@ export default function PetSymptoms() {
             />
           </div>
         </div>
-      )}
+      ), document.body)}
     </PageTransition>
   );
 }

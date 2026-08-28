@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Share, X } from 'lucide-react';
 import { PALETTE } from '@/lib/toneColors';
+import { Z } from '@/lib/zIndex';
 
 const DISMISSED_KEY = 'ios-install-banner-dismissed';
 
@@ -38,7 +39,7 @@ export default function IosInstallBanner() {
 
   return (
     <div
-      className="fixed inset-x-0 z-[70] flex items-center gap-3 px-4 py-3 text-sm text-white"
+      className={`fixed inset-x-0 ${Z.banner} flex items-center gap-3 px-4 py-3 text-sm text-white`}
       style={{
         backgroundColor: 'hsl(var(--background))',
         // Sits just above BottomTabBar (h-16 + its own safe-area padding)

@@ -1,4 +1,5 @@
 import { RefreshCw } from 'lucide-react';
+import { Z } from '@/lib/zIndex';
 
 export default function PullToRefreshIndicator({ pullDistance, isRefreshing, threshold = 70 }) {
   const visible = pullDistance > 10 || isRefreshing;
@@ -9,7 +10,7 @@ export default function PullToRefreshIndicator({ pullDistance, isRefreshing, thr
 
   return (
     <div
-      className="fixed top-0 left-0 right-0 z-50 flex justify-center pointer-events-none"
+      className={`fixed top-0 left-0 right-0 ${Z.chrome} flex justify-center pointer-events-none`}
       style={{ paddingTop: `calc(env(safe-area-inset-top) + ${isRefreshing ? 16 : Math.min(pullDistance * 0.4, 24)}px)` }}
     >
       <div className={`flex items-center gap-2 px-4 py-2 rounded-full bg-card border border-border shadow-md text-[13px] font-medium transition-all ${ready || isRefreshing ? 'text-primary' : 'text-muted-foreground'}`}>

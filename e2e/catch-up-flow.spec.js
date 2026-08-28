@@ -47,6 +47,90 @@ test.afterEach(async () => {
   catchUpPetId = undefined;
 });
 
+// Spec 0059: CatchUpFlow (Z.overlay) previously rendered above BottomSheet-
+// based popups (Z.popup) because the two competed on unrelated hardcoded
+// z-index numbers — Exceptions' "Apply to N days" bulk-apply sheet and the
+// per-day arrow's detail sheet both opened but were invisible/unclickable,
+// painted behind CatchUpFlow's own opaque panel. These two tests are the
+// direct regression coverage: popups opened from inside Catch Up must be
+// visible and usable, not just present in the DOM.
+async function openCatchUpToExceptions(page, { missedDayCount = 5 } = {}) {
+  const { supabase, userId } = await signInSupabase();
+  const daysAgo = new Date(Date.now() - missedDayCount * 24 * 60 * 60 * 1000).toISOString();
+  const { data: pet, error } = await supabase
+    .from('pets')
+    .insert({ created_by: userId, name: PET_NAME, created_at: daysAgo })
+    .select('id')
+    .single();
+  if (error) throw error;
+  catchUpPetId = pet.id;
+
+  await page.goto('/');
+  await page.waitForLoadState('networkidle').catch(() => {});
+
+  await expect(page.getByRole('dialog', { name: 'Catch Up Check-In' })).toBeVisible({ timeout: 10000 });
+  await page.getByRole('button', { name: 'Get Started' }).click();
+
+  // CalendarStep: flag the missed days as exceptions by tapping each one.
+  // Each missed day's button is aria-labeled by its day (e.g. "Aug 24" —
+  // spec 0059 added this label specifically so this suite could target
+  // individual days) and nothing else on this screen matches that
+  // "Mon D"/"Month D" shape, so reading the labels back from the rendered
+  // page (rather than computing dates client-side) sidesteps any timezone
+  // mismatch between this test and the server's own "yesterday" — the app
+  // decides what's missed, not this test.
+  await expect(page.getByText('missed', { exact: false })).toBeVisible();
+  const dayButtons = page.getByRole('button', { name: /^[A-Za-z]{3} \d{1,2}$/ });
+  await expect(dayButtons).toHaveCount(missedDayCount);
+  const dayLabels = await dayButtons.evaluateAll((els) => els.map((el) => el.getAttribute('aria-label')));
+  for (const label of dayLabels) {
+    await page.getByRole('button', { name: label, exact: true }).click();
+  }
+
+  await page.getByRole('button', { name: /need details/ }).click();
+  await expect(page.getByRole('heading', { name: /Exceptions/ })).toBeVisible();
+
+  return dayLabels;
+}
+
+test('bulk-apply sheet opens visible and usable from Exceptions ("Apply to N days")', async ({ page }) => {
+  const dayLabels = await openCatchUpToExceptions(page, { missedDayCount: 3 });
+
+  await page.getByRole('button', { name: `Select ${dayLabels[0]}` }).click();
+  await page.getByRole('button', { name: `Select ${dayLabels[1]}` }).click();
+
+  const applyButton = page.getByRole('button', { name: 'Apply to 2 days' });
+  await expect(applyButton).toBeVisible();
+  await applyButton.click();
+
+  const bulkSheet = page.getByRole('dialog', { name: 'Apply to 2 days' });
+  await expect(bulkSheet).toBeVisible({ timeout: 5000 });
+  await expect(bulkSheet.getByRole('button', { name: 'Off Day' })).toBeVisible();
+
+  // Prove it's actually clickable, not just present behind an opaque
+  // parent — this is exactly what silently failed before spec 0059.
+  await bulkSheet.getByRole('button', { name: 'Off Day' }).click();
+  await expect(page.getByRole('dialog', { name: 'What changed?' })).toBeVisible();
+
+  // Scoped to the sheet itself — CatchUpFlow's own header also has a
+  // "Close" button underneath, ambiguous if not scoped.
+  await page.getByRole('dialog', { name: 'What changed?' }).getByRole('button', { name: 'Close' }).click();
+});
+
+test('per-day detail sheet opens visible and usable from Exceptions\' arrow button', async ({ page }) => {
+  const dayLabels = await openCatchUpToExceptions(page, { missedDayCount: 2 });
+
+  await page.getByRole('button', { name: `Open details for ${dayLabels[0]}` }).click();
+
+  const detailSheet = page.getByRole('dialog', { name: /How was .+ day/ });
+  await expect(detailSheet).toBeVisible({ timeout: 5000 });
+  await expect(detailSheet.getByRole('button', { name: 'Great Day' })).toBeVisible();
+
+  // Scoped to the sheet itself — CatchUpFlow's own header also has a
+  // "Close" button underneath, ambiguous if not scoped.
+  await detailSheet.getByRole('button', { name: 'Close' }).click();
+});
+
 test('the auto-launched Catch-Up overlay is a focus-trapped modal dialog', async ({ page }) => {
   const { supabase, userId } = await signInSupabase();
 

@@ -4,6 +4,7 @@ import * as React from "react"
 import { Drawer as DrawerPrimitive } from "vaul"
 
 import { cn } from "@/lib/utils"
+import { Z } from "@/lib/zIndex"
 
 const Drawer = ({
   shouldScaleBackground = true,
@@ -24,7 +25,7 @@ const DrawerClose = DrawerPrimitive.Close
 const DrawerOverlay = /** @type {any} */ (React.forwardRef((/** @type {any} */ { className, ...props }, ref) => (
   <DrawerPrimitive.Overlay
     ref={ref}
-    className={cn("fixed inset-0 z-50 bg-black/80", className)}
+    className={cn(`fixed inset-0 ${Z.popup} bg-black/80`, className)}
     {...props} />
 )))
 DrawerOverlay.displayName = DrawerPrimitive.Overlay.displayName
@@ -35,7 +36,7 @@ const DrawerContent = /** @type {any} */ (React.forwardRef((/** @type {any} */ {
     <DrawerPrimitive.Content
       ref={ref}
       className={cn(
-        "fixed inset-x-0 bottom-0 z-50 mt-24 flex h-auto flex-col rounded-t-[10px] border bg-background",
+        `fixed inset-x-0 bottom-0 ${Z.popup} mt-24 flex h-auto flex-col rounded-t-[10px] border bg-background`,
         className
       )}
       {...props}>

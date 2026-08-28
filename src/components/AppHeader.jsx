@@ -3,6 +3,7 @@ import { Heart } from 'lucide-react';
 import NotificationBell from './NotificationBell';
 import AskWyskerAction from './AskWyskerAction';
 import { getUnreadCount } from '@/lib/notifications/notificationClient';
+import { Z } from '@/lib/zIndex';
 
 // Persistent App Shell header (spec 0023 steps 3+5): brand identity, Ask
 // Wysker, and notifications — visible on every screen AppShell wraps.
@@ -17,7 +18,7 @@ export default function AppHeader() {
 
   return (
     <header
-      className="sticky top-0 z-40 backdrop-blur-xl border-b border-border bg-background/90"
+      className={`sticky top-0 ${Z.chrome} backdrop-blur-xl border-b border-border bg-background/90`}
       style={{ paddingTop: 'env(safe-area-inset-top)' }}
     >
       <div className="max-w-2xl mx-auto px-4 h-14 flex items-center justify-between gap-3">

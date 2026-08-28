@@ -1,5 +1,6 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Home, PawPrint, Menu } from 'lucide-react';
+import { Z } from '@/lib/zIndex';
 
 // Menu's own account/settings/support/legal subpages (Account,
 // Notifications, Privacy, Terms, Preferences, Support, About) previously
@@ -30,7 +31,7 @@ export default function BottomTabBar() {
 
   return (
     <div
-      className="fixed bottom-0 left-0 right-0 z-50 backdrop-blur-xl border-t border-border bg-background/90"
+      className={`fixed bottom-0 left-0 right-0 ${Z.chrome} backdrop-blur-xl border-t border-border bg-background/90`}
       style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
       role="navigation"
       aria-label="Primary"

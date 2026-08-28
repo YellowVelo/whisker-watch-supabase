@@ -5,6 +5,7 @@ import PetAIInsights from './PetAIInsights';
 import PetAIChat from './PetAIChat';
 import GeneralAskWyskerChat from './GeneralAskWyskerChat';
 import AIDisclaimerBanner from './AIDisclaimerBanner';
+import { Z } from '@/lib/zIndex';
 
 // Global "Ask Wysker" overlay (spec 0023 step 5) — a non-navigating
 // full-screen sheet, opened from AppHeader. Reuses PetAIInsights/PetAIChat
@@ -58,7 +59,7 @@ export default function AskWyskerSheet({ open, onOpenChange, context }) {
   const close = () => onOpenChange(false);
 
   return (
-    <div className="fixed inset-0 z-[70] bg-background overflow-y-auto">
+    <div className={`fixed inset-0 ${Z.overlay} bg-background overflow-y-auto`}>
       <div
         className="sticky z-10 bg-background border-b border-border px-4 py-3 flex items-center justify-between"
         style={{ top: 0, paddingTop: 'calc(env(safe-area-inset-top) + 12px)' }}
