@@ -5,13 +5,14 @@ import { supabase } from '@/api/supabaseClient';
 import {
   ChevronDown, Share2, Pencil, Trash2, Rainbow,
   Cat, Dog, UtensilsCrossed, Zap, Scale, HeartPulse, ClipboardList,
-  Pill, Utensils, ShieldCheck, TrendingUp, Clock, FileText, FileDown, Droplets, Footprints, LineChart,
+  Pill, Utensils, ShieldCheck, TrendingUp, Clock, FileText, FileDown, Droplets, Footprints, LineChart, History,
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import MemorialDialog from './MemorialDialog';
 import ListRow from './ListRow';
 import ConfirmDeleteDialog from './ConfirmDeleteDialog';
 import DailyCheckInModal from './DailyCheckInModal';
+import CheckInHistoryCalendar from './catchup/CheckInHistoryCalendar';
 import { track } from '@/lib/analytics';
 import {
   getObservationValuesForCheckIns, getCheckIn, getWellbeingDirections,
@@ -147,6 +148,7 @@ export default function PetProfileContent({ petId, onReload = undefined, expande
   const [fullDetailsLoaded, setFullDetailsLoaded] = useState(false);
 
   const [checkInOpen, setCheckInOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [memorialOpen, setMemorialOpen] = useState(false);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [deletePetStep, setDeletePetStep] = useState(0);
@@ -597,6 +599,18 @@ export default function PetProfileContent({ petId, onReload = undefined, expande
               />
             )}
 
+            {/* ── CHECK-IN HISTORY (spec 0060) ── */}
+            {/* Separate from Observations above on purpose — Observations
+                only ever knows about today's check-in (spec 0026). This
+                opens a calendar covering the last 180 days so any past
+                day, saved or blank, can be reviewed or corrected — not
+                just the days Catch-Up happened to still consider missed. */}
+            <ListRow
+              icon={History} iconBg="rgba(169,174,181,0.15)" iconColor={PALETTE.gray}
+              title="Check-In History" subtitle="Review or correct a past day"
+              onClick={() => setHistoryOpen(true)}
+            />
+
             {/* ── TRENDS ── */}
             {/* Previously reachable from Pets only via the collapsed-state
                 Wellbeing chips (see AttributeTrendChip above) — this card
@@ -646,6 +660,14 @@ export default function PetProfileContent({ petId, onReload = undefined, expande
           existingCheckIn={todayCheckIn}
           onClose={() => setCheckInOpen(false)}
           onComplete={() => { setCheckInOpen(false); reloadAll(); }}
+        />
+      )}
+
+      {historyOpen && (
+        <CheckInHistoryCalendar
+          pet={pet}
+          onClose={() => setHistoryOpen(false)}
+          onProgress={reloadAll}
         />
       )}
 

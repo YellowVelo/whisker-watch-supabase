@@ -58,7 +58,14 @@ const PICKER_CATEGORIES = CATEGORIES.filter((c) => c.code !== 'medication_except
 // `isCatchUp` distinguishes a catch-up-for-a-past-date save from a normal
 // today save purely for analytics attribution (catch_up_completed vs the
 // regular events) — it doesn't change any persistence behavior.
-export default function DailyCheckInSheet({ pet, date, onClose, onSaved, isCatchUp = false, existingCheckIn = null, dayLabel = null }) {
+// `confirmBeforeSave` (spec 0060): the Check-In History calendar reopens
+// an already-saved, possibly-long-past day, where a mistaken overwrite is
+// harder to notice and correct than the same-day case spec 0026 covers —
+// so unlike every other caller of this sheet, saving from History pauses
+// on a "Save changes to {day}?" confirmation instead of writing
+// immediately. Today's edit (spec 0026) and Catch-Up (spec 0015) both
+// deliberately keep the no-confirmation behavior they already had.
+export default function DailyCheckInSheet({ pet, date, onClose, onSaved, isCatchUp = false, existingCheckIn = null, dayLabel = null, confirmBeforeSave = false }) {
   // isCatchUp doesn't just change analytics attribution — it drives the
   // "today" vs "yesterday" wording throughout this sheet, since a
   // catch-up save is for a past date and showing "today" language would
@@ -80,6 +87,11 @@ export default function DailyCheckInSheet({ pet, date, onClose, onSaved, isCatch
   // for actual failures — a conflict is an expected, handled outcome.
   const [conflict, setConflict] = useState(null);
 
+  // Set only when confirmBeforeSave is true (spec 0060) — holds the actual
+  // save action until the owner confirms it in the sheet below, instead of
+  // running it immediately the way every other caller of this sheet does.
+  const [pendingSave, setPendingSave] = useState(null); // { run: () => void, vibeLabel: string } | null
+
   // 'off' | 'tough' while the picker/details flow is in progress, so the
   // eventual save knows which Vibe to store.
   const [vibeStatus, setVibeStatus] = useState(null);
@@ -97,7 +109,16 @@ export default function DailyCheckInSheet({ pet, date, onClose, onSaved, isCatch
     return cat.multiSelect ? answers[code]?.values === undefined : !answers[code]?.value;
   });
 
-  const handleGreatDay = async () => {
+  // Gates a save action behind the confirmation sheet when confirmBeforeSave
+  // is set (spec 0060); every other caller runs it immediately, unchanged.
+  const requestSave = (run, vibeLabel) => {
+    if (confirmBeforeSave) { setPendingSave({ run, vibeLabel }); return; }
+    run();
+  };
+
+  const handleGreatDay = () => requestSave(doSaveGreatDay, 'Great Day');
+
+  const doSaveGreatDay = async () => {
     setStage('saving');
     setError(null);
     try {
@@ -163,7 +184,9 @@ export default function DailyCheckInSheet({ pet, date, onClose, onSaved, isCatch
     setStage('categories');
   };
 
-  const handleSkip = async () => {
+  const handleSkip = () => requestSave(doSkip, 'Skipped');
+
+  const doSkip = async () => {
     setStage('saving');
     setError(null);
     try {
@@ -203,8 +226,12 @@ export default function DailyCheckInSheet({ pet, date, onClose, onSaved, isCatch
     })
     .filter((sel) => sel.values !== undefined || sel.value != null || sel.numericValue != null || sel.notes);
 
-  const handleSaveOffTough = async () => {
+  const handleSaveOffTough = () => {
     if (incompleteCodes.length > 0) return;
+    requestSave(doSaveOffTough, VIBE_LABELS[vibeStatus] || vibeStatus);
+  };
+
+  const doSaveOffTough = async () => {
     setStage('saving');
     setError(null);
     try {
@@ -278,6 +305,41 @@ export default function DailyCheckInSheet({ pet, date, onClose, onSaved, isCatch
       )}
     </>
   ) : null;
+
+  // History-calendar confirmation (spec 0060) — pauses the save until the
+  // owner explicitly confirms overwriting a past day, unlike every other
+  // caller of this sheet.
+  if (pendingSave) {
+    return (
+      <BottomSheet
+        titleId="check-in-confirm-title"
+        title={`Save changes to ${dayLabel || dayWord}?`}
+        onClose={handleClose}
+        footer={(
+          <div className="flex gap-3">
+            <button
+              onClick={() => setPendingSave(null)}
+              className="flex-1 text-base font-bold rounded-2xl h-14 transition-opacity border-2 bg-card"
+              style={{ borderColor: PALETTE.gray, color: 'var(--text-secondary)' }}
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => { const { run } = pendingSave; setPendingSave(null); run(); }}
+              className="flex-1 text-base font-bold rounded-2xl h-14 transition-opacity border-2"
+              style={{ background: 'hsl(var(--background))', borderColor: PALETTE.sky, color: '#fff' }}
+            >
+              Save
+            </button>
+          </div>
+        )}
+      >
+        <p className="text-sm text-white pb-2">
+          This will set {dayLabel || dayWord} to {pendingSave.vibeLabel}.
+        </p>
+      </BottomSheet>
+    );
+  }
 
   // Co-owner conflict (spec 0043) takes over the sheet entirely — the
   // owner must resolve it before doing anything else with this check-in.

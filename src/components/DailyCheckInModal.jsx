@@ -15,7 +15,7 @@ import { todayStr } from '@/lib/checkin/checkinClient';
 // which could disagree with a timezone-aware caller right at day
 // boundaries (spec: "Daily date boundaries must use the user's stored
 // timezone, not UTC midnight").
-export default function DailyCheckInModal({ pet, checkInDate, existingCheckIn, onComplete, onClose, isCatchUp: isCatchUpProp }) {
+export default function DailyCheckInModal({ pet, checkInDate, existingCheckIn, onComplete, onClose, isCatchUp: isCatchUpProp, dayLabel = null, confirmBeforeSave = false }) {
   const isCatchUp = isCatchUpProp ?? (checkInDate !== todayStr());
   return (
     <DailyCheckInSheet
@@ -23,6 +23,8 @@ export default function DailyCheckInModal({ pet, checkInDate, existingCheckIn, o
       date={checkInDate}
       isCatchUp={isCatchUp}
       existingCheckIn={existingCheckIn}
+      dayLabel={dayLabel}
+      confirmBeforeSave={confirmBeforeSave}
       onClose={onClose}
       onSaved={onComplete}
     />

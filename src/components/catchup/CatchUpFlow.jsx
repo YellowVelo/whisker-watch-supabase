@@ -8,6 +8,7 @@ import PillToggle from '@/components/PillToggle';
 import DailyCheckInSheet from '@/components/DailyCheckInSheet';
 import BulkApplySheet from './BulkApplySheet';
 import { getCheckInsForDateRange, markGreatDaysBulk } from '@/lib/checkin/checkinClient';
+import { formatDayLabel, formatMonthLabel, buildMonthGrid, parseDateStr } from '@/lib/checkin/calendarDates';
 import { track } from '@/lib/analytics';
 import useFocusTrap from '@/hooks/useFocusTrap';
 import { Z } from '@/lib/zIndex';
@@ -19,38 +20,13 @@ import { Z } from '@/lib/zIndex';
 // Great Day". Every exception-day save, bulk-applied or individual, goes
 // through the exact same DailyCheckInSheet/markOffTough path a normal day
 // already uses.
+//
+// Date-string helpers (parseDateStr/formatDateStr/formatDayLabel/
+// formatMonthLabel/buildMonthGrid) moved to lib/checkin/calendarDates.js
+// (spec 0060) so the Check-In History calendar can share the exact same
+// month-grid math instead of duplicating it.
 const LONG_GAP_THRESHOLD_DAYS = 30;
 const WEEKDAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-
-function parseDateStr(dateStr) {
-  const [y, m, d] = dateStr.split('-').map(Number);
-  return new Date(Date.UTC(y, m - 1, d));
-}
-
-function formatDateStr(date) {
-  return date.toISOString().split('T')[0];
-}
-
-function formatDayLabel(dateStr) {
-  return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' }).format(parseDateStr(dateStr));
-}
-
-function formatMonthLabel(year, monthIndex) {
-  return new Intl.DateTimeFormat('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' }).format(new Date(Date.UTC(year, monthIndex, 1)));
-}
-
-// Full 6-week grid (42 cells) starting on the Sunday on/before the 1st of
-// the given month — a fixed-size grid keeps row count stable across months
-// instead of the layout jumping between 5 and 6 rows.
-function buildMonthGrid(year, monthIndex) {
-  const firstOfMonth = new Date(Date.UTC(year, monthIndex, 1));
-  const startOffset = firstOfMonth.getUTCDay();
-  const gridStart = new Date(Date.UTC(year, monthIndex, 1 - startOffset));
-  return Array.from({ length: 42 }, (_, i) => {
-    const date = new Date(Date.UTC(gridStart.getUTCFullYear(), gridStart.getUTCMonth(), gridStart.getUTCDate() + i));
-    return { dateStr: formatDateStr(date), inMonth: date.getUTCMonth() === monthIndex, dayOfMonth: date.getUTCDate() };
-  });
-}
 
 export default function CatchUpFlow({ pets, missedDaysByPet, onClose, onPetProgress }) {
   const multiPet = pets.length > 1;
@@ -469,13 +445,13 @@ function CalendarStep({ grid, missedDates, checkInsByDate, exceptionDates, onTog
     <div>
       <p className="text-[15px] font-semibold text-white text-center mb-2">{monthLabel}</p>
       <div className="flex items-center justify-between mb-3">
-        <button onClick={onPrevMonth} disabled={!canGoEarlier} aria-label="Previous month" className="h-8 w-8 rounded-full flex items-center justify-center disabled:opacity-30">
+        <button onClick={onPrevMonth} disabled={!canGoEarlier} aria-label="Previous month" className="h-11 w-11 rounded-full flex items-center justify-center disabled:opacity-30">
           <ChevronLeft className="h-4 w-4 text-tier-secondary" />
         </button>
         {anyExceptions && (
           <button onClick={onClearAll} className="text-[13px] font-semibold" style={{ color: PALETTE.sky }}>Clear All</button>
         )}
-        <button onClick={onNextMonth} disabled={!canGoLater} aria-label="Next month" className="h-8 w-8 rounded-full flex items-center justify-center disabled:opacity-30">
+        <button onClick={onNextMonth} disabled={!canGoLater} aria-label="Next month" className="h-11 w-11 rounded-full flex items-center justify-center disabled:opacity-30">
           <ChevronRight className="h-4 w-4 text-tier-secondary" />
         </button>
       </div>
