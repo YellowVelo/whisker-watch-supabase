@@ -14,6 +14,7 @@ import { PALETTE } from '@/lib/toneColors';
 import { useToast } from '@/components/ui/use-toast';
 import { aiErrorText } from '@/lib/aiGuardrails';
 import ScanReviewSheet from '@/components/ScanReviewSheet';
+import { Sentry } from '@/lib/errorMonitoring';
 
 const EMPTY_FORM = { vaccine_name: '', date_given: '', next_due_date: '', administered_by: '', lot_number: '', notes: '' };
 
@@ -184,6 +185,11 @@ export default function VaccinationSection({ petId, species, initialEditId }) {
       // failure — without this, the button just returned to normal with
       // no explanation of why nothing got added.
       toast({ variant: 'destructive', description: aiErrorText(err) });
+      // A scan failure has no other record anywhere (this catch is the
+      // only place it's ever visible) — report it so a real failure isn't
+      // only ever seen as a toast (spec 0061 investigation: this was
+      // previously the case for every AI-call catch block in the app).
+      Sentry.captureException(err, { tags: { feature: 'vaccination_scan' } });
     } finally {
       setScanning(false);
       e.target.value = '';
@@ -225,6 +231,7 @@ export default function VaccinationSection({ petId, species, initialEditId }) {
       load();
     } catch (err) {
       toast({ variant: 'destructive', description: aiErrorText(err) });
+      Sentry.captureException(err, { tags: { feature: 'vaccination_scan' } });
     } finally {
       setReviewSaving(false);
     }

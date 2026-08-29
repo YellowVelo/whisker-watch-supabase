@@ -193,7 +193,10 @@ test('an AI failure shows an error and never opens the review screen', async ({ 
   await page.goto(`/pet/${petId}/vaccinations`);
   await page.setInputFiles('input[type="file"]', SCAN_FIXTURE);
 
-  await expect(page.getByText(/reached the limit for AI requests/i)).toBeVisible();
+  // .first(): the real Radix toast (fixed 2026-08-29 — see spec 0061's
+  // investigation) now also renders an aria-live announcer span with the
+  // same text for screen readers, alongside the visible toast itself.
+  await expect(page.getByText(/reached the limit for AI requests/i).first()).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Review Scanned Vaccinations' })).not.toBeVisible();
 
   const { data } = await supabase.from('vaccinations').select('id').eq('pet_id', petId);

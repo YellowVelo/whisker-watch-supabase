@@ -2,7 +2,12 @@
 import { useState, useEffect } from "react";
 
 const TOAST_LIMIT = 20;
-const TOAST_REMOVE_DELAY = 1000000;
+// Was 1000000ms (~16.6 minutes) — a shadcn/ui template artifact present
+// since this app's first commit. This only delays purging a *closed* toast
+// from the in-memory array (Radix's own ~5s auto-close animation is
+// unaffected either way), but there's no reason to keep a dismissed toast
+// around that long.
+const TOAST_REMOVE_DELAY = 5000;
 
 const actionTypes = {
   ADD_TOAST: "ADD_TOAST",
