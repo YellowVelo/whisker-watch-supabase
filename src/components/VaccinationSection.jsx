@@ -13,6 +13,7 @@ import { getVaccines } from '@/lib/speciesConfig';
 import { PALETTE } from '@/lib/toneColors';
 import { useToast } from '@/components/ui/use-toast';
 import { aiErrorText } from '@/lib/aiGuardrails';
+import ScanReviewSheet from '@/components/ScanReviewSheet';
 
 const EMPTY_FORM = { vaccine_name: '', date_given: '', next_due_date: '', administered_by: '', lot_number: '', notes: '' };
 
@@ -38,6 +39,8 @@ export default function VaccinationSection({ petId, species, initialEditId }) {
   const [saving, setSaving] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [autoOpenedId, setAutoOpenedId] = useState(null);
+  const [reviewGroups, setReviewGroups] = useState([]);
+  const [reviewSaving, setReviewSaving] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -86,14 +89,23 @@ export default function VaccinationSection({ petId, species, initialEditId }) {
     load();
   };
 
+  // Spec 0061: a scan no longer saves immediately. It builds a per-pet
+  // review list (reviewGroups) and opens ScanReviewSheet — the owner edits/
+  // excludes items there and saving only happens once they confirm.
   const handleScan = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
     setScanning(true);
     try {
       const { file_url } = await uploadFile({ file });
+      const allPets = await entities.Pet.list();
+      const multiPet = allPets.length > 1;
+      const petNameInstruction = multiPet
+        ? ` This account has these pets: ${allPets.map(p => p.name).filter(Boolean).join(', ')}. For each vaccination, also include a "pet_name" field naming which of these pets it belongs to, if the document makes that clear (e.g. it's grouped under a pet's name, or this is a multi-pet invoice). If you can't tell which pet a line belongs to, omit "pet_name" rather than guessing.`
+        : '';
+
       const result = await invokeAI({
-        prompt: `You are analyzing a veterinary vaccine record document. Extract ALL vaccinations visible on this document. For each vaccine return: vaccine_name, date_given (YYYY-MM-DD), next_due_date (YYYY-MM-DD), administered_by (vet/clinic name), lot_number, notes. Only include fields clearly visible.`,
+        prompt: `You are analyzing a veterinary document (e.g. an invoice or vaccine record) that may cover one or more pets. Extract ONLY vaccination line items — ignore medications, exam fees, boarding, grooming, supplies, and any other charge or record type, even if they appear on the same document. For each vaccination return: vaccine_name, date_given (YYYY-MM-DD), next_due_date (YYYY-MM-DD), administered_by (vet/clinic name), lot_number, notes. Only include fields clearly visible.${petNameInstruction}`,
         file_urls: [file_url],
         response_json_schema: {
           type: 'object',
@@ -109,6 +121,7 @@ export default function VaccinationSection({ petId, species, initialEditId }) {
                   administered_by: { type: 'string' },
                   lot_number: { type: 'string' },
                   notes: { type: 'string' },
+                  pet_name: { type: 'string' },
                 }
               }
             }
@@ -116,27 +129,56 @@ export default function VaccinationSection({ petId, species, initialEditId }) {
         }
       });
 
-      const scanned = result?.vaccines || [];
-      if (scanned.length === 0) return;
+      const scanned = (result?.vaccines || []).filter(v => v.vaccine_name);
+      if (scanned.length === 0) {
+        toast({ description: 'No vaccinations found on that document.' });
+        return;
+      }
 
-      // Match scanned records against existing by vaccine_name (case-insensitive)
-      await Promise.all(scanned.map(async (scannedVax) => {
-        if (!scannedVax.vaccine_name) return;
-        const clean = {};
-        Object.keys(scannedVax).forEach(k => { if (scannedVax[k] != null && scannedVax[k] !== '') clean[k] = scannedVax[k]; });
+      // Resolve each line to a pet on this account, by matching pet_name
+      // (case-insensitive). Anything unmatched (no pet_name, or a name that
+      // isn't one of this account's pets) defaults to the pet whose page
+      // the scan was started from — never guessed onto a different pet.
+      const resolved = scanned.map((v) => {
+        const match = v.pet_name
+          ? allPets.find(p => p.name?.toLowerCase().trim() === v.pet_name.toLowerCase().trim())
+          : null;
+        return { ...v, resolvedPetId: match?.id || petId };
+      });
 
-        const existing = vaccines.find(v =>
-          v.vaccine_name?.toLowerCase().trim() === scannedVax.vaccine_name?.toLowerCase().trim()
-        );
-
-        if (existing) {
-          await entities.Vaccination.update(existing.id, clean);
-        } else {
-          await entities.Vaccination.create({ pet_id: petId, ...clean });
-        }
+      // Fetch existing vaccinations for any other pet referenced (the
+      // current pet's are already loaded in `vaccines`) so the review
+      // screen can show "will update" vs "new" per item.
+      const otherPetIds = [...new Set(resolved.map(v => v.resolvedPetId).filter(id => id !== petId))];
+      const otherVaccinesByPet = {};
+      await Promise.all(otherPetIds.map(async (id) => {
+        otherVaccinesByPet[id] = await entities.Vaccination.filter({ pet_id: id });
       }));
 
-      load();
+      const groupsById = new Map();
+      resolved.forEach((v, idx) => {
+        const existingList = v.resolvedPetId === petId ? vaccines : (otherVaccinesByPet[v.resolvedPetId] || []);
+        const existing = existingList.find(ev =>
+          ev.vaccine_name?.toLowerCase().trim() === v.vaccine_name.toLowerCase().trim()
+        );
+        if (!groupsById.has(v.resolvedPetId)) {
+          const petMeta = allPets.find(p => p.id === v.resolvedPetId);
+          groupsById.set(v.resolvedPetId, { petId: v.resolvedPetId, petName: petMeta?.name || 'Unknown pet', items: [] });
+        }
+        groupsById.get(v.resolvedPetId).items.push({
+          key: `${v.resolvedPetId}-${idx}`,
+          included: true,
+          matchedExistingId: existing?.id || null,
+          vaccine_name: v.vaccine_name || '',
+          date_given: v.date_given || '',
+          next_due_date: v.next_due_date || '',
+          administered_by: v.administered_by || '',
+          lot_number: v.lot_number || '',
+          notes: v.notes || '',
+        });
+      });
+
+      setReviewGroups(Array.from(groupsById.values()));
     } catch (err) {
       // Covers both the new rate limit (spec 0050) and any other scan
       // failure — without this, the button just returned to normal with
@@ -145,6 +187,46 @@ export default function VaccinationSection({ petId, species, initialEditId }) {
     } finally {
       setScanning(false);
       e.target.value = '';
+    }
+  };
+
+  const toggleReviewItem = (targetPetId, key) => {
+    setReviewGroups(groups => groups.map(g => g.petId !== targetPetId ? g : {
+      ...g,
+      items: g.items.map(it => it.key !== key ? it : { ...it, included: !it.included }),
+    }));
+  };
+
+  const editReviewItem = (targetPetId, key, field, value) => {
+    setReviewGroups(groups => groups.map(g => g.petId !== targetPetId ? g : {
+      ...g,
+      items: g.items.map(it => it.key !== key ? it : { ...it, [field]: value }),
+    }));
+  };
+
+  const handleConfirmReview = async () => {
+    setReviewSaving(true);
+    try {
+      for (const group of reviewGroups) {
+        for (const item of group.items) {
+          if (!item.included) continue;
+          const clean = {};
+          ['vaccine_name', 'date_given', 'next_due_date', 'administered_by', 'lot_number', 'notes'].forEach(k => {
+            if (item[k]) clean[k] = item[k];
+          });
+          if (item.matchedExistingId) {
+            await entities.Vaccination.update(item.matchedExistingId, clean);
+          } else {
+            await entities.Vaccination.create({ pet_id: group.petId, ...clean });
+          }
+        }
+      }
+      setReviewGroups([]);
+      load();
+    } catch (err) {
+      toast({ variant: 'destructive', description: aiErrorText(err) });
+    } finally {
+      setReviewSaving(false);
     }
   };
 
@@ -266,6 +348,17 @@ export default function VaccinationSection({ petId, species, initialEditId }) {
           </div>
         </DialogContent>
       </Dialog>
+
+      {reviewGroups.length > 0 && (
+        <ScanReviewSheet
+          groups={reviewGroups}
+          saving={reviewSaving}
+          onToggle={toggleReviewItem}
+          onEdit={editReviewItem}
+          onConfirm={handleConfirmReview}
+          onClose={() => setReviewGroups([])}
+        />
+      )}
     </div>
   );
 }

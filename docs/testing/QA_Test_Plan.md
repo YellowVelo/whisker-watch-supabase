@@ -168,6 +168,8 @@ A one-page checklist run against every `Critical`/`High` page before the Accessi
 | Trends: `?section=trends&group=&metric=` deep link scrolls to and highlights the right card | Medium | `[Manual]` |
 | Timeline: check-in days and medication/vaccination/symptom events merge correctly, sorted newest-first | High | `[Manual]` |
 | Timeline: empty state and error+Retry state | Medium | `[Manual]` |
+| Scan Record: uploading a document opens a review screen; nothing saves until confirmed | Critical | `[Playwright: vaccination-scan-review.spec.js]` |
+| Scan Record: a multi-pet document groups detected vaccinations under the correct pet, and un-attributable lines default to the pet the scan was launched from | High | `[Playwright: vaccination-scan-review.spec.js]` |
 | Vet Report: Download Report produces a real file, not a stuck spinner | Critical | `[Playwright: vet-report.spec.js]` |
 
 ### 5.6 AI Assistant ("Ask Wysker") — Critical
