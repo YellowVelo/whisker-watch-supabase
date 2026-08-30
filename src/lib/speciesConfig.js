@@ -77,3 +77,47 @@ export const getPetLabel = (species) => species === 'Dog' ? 'Dog' : 'Cat';
 export const CAT_VACCINES = ['Rabies', 'FVRCP (Distemper combo)', 'FeLV', 'Bordetella', 'FIP', 'FIV'];
 export const DOG_VACCINES = ['Rabies', 'DHPP (Distemper combo)', 'Bordetella', 'Leptospirosis', 'Lyme', 'Canine Influenza', 'Rattlesnake'];
 export const getVaccines = (species) => species === 'Dog' ? DOG_VACCINES : CAT_VACCINES;
+
+// Alternate wordings the AI (or an owner) might use for each canonical vaccine
+// on the known list above. Used only to anchor fuzzy matching to vaccines the
+// app already recognizes by name — see FR-002 of spec 0064.
+const VACCINE_ALIASES = {
+  'Rabies': ['rabies'],
+  'FVRCP (Distemper combo)': ['fvrcp', 'distemper'],
+  'DHPP (Distemper combo)': ['dhpp', 'dhlpp', 'da2pp', 'distemper'],
+  'FeLV': ['felv', 'feline leukemia'],
+  'Bordetella': ['bordetella', 'kennel cough'],
+  'FIP': ['fip'],
+  'FIV': ['fiv'],
+  'Leptospirosis': ['leptospirosis', 'lepto'],
+  'Lyme': ['lyme'],
+  'Canine Influenza': ['canine influenza', 'dog flu', 'civ'],
+  'Rattlesnake': ['rattlesnake'],
+};
+
+// Resolves a raw vaccine name string to one of this species' canonical
+// vaccine names, or null if it doesn't clearly match any of them.
+const resolveCanonicalVaccine = (name, species) => {
+  const normalized = name?.toLowerCase().trim();
+  if (!normalized) return null;
+  const canonicalList = getVaccines(species);
+  for (const canonical of canonicalList) {
+    const aliases = VACCINE_ALIASES[canonical] || [];
+    if (aliases.some((alias) => normalized.includes(alias))) {
+      return canonical;
+    }
+  }
+  return null;
+};
+
+// Compares two raw vaccine name strings for "same vaccine" purposes (spec
+// 0064). If both resolve to the same canonical vaccine on this species'
+// known list, they're a match even if worded differently. Otherwise, falls
+// back to an exact (case-insensitive, trimmed) comparison — never guesses at
+// unfamiliar names.
+export const vaccineNamesMatch = (nameA, nameB, species) => {
+  const canonicalA = resolveCanonicalVaccine(nameA, species);
+  const canonicalB = resolveCanonicalVaccine(nameB, species);
+  if (canonicalA && canonicalB) return canonicalA === canonicalB;
+  return (nameA || '').toLowerCase().trim() === (nameB || '').toLowerCase().trim();
+};

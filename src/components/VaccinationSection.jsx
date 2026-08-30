@@ -9,7 +9,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Plus, Syringe, Pencil, Trash2, Bell, Upload, Loader2 } from 'lucide-react';
 import { format, parseISO, differenceInDays } from 'date-fns';
-import { getVaccines } from '@/lib/speciesConfig';
+import { getVaccines, vaccineNamesMatch } from '@/lib/speciesConfig';
 import { PALETTE } from '@/lib/toneColors';
 import { useToast } from '@/components/ui/use-toast';
 import { aiErrorText } from '@/lib/aiGuardrails';
@@ -159,8 +159,9 @@ export default function VaccinationSection({ petId, species, initialEditId }) {
       const groupsById = new Map();
       resolved.forEach((v, idx) => {
         const existingList = v.resolvedPetId === petId ? vaccines : (otherVaccinesByPet[v.resolvedPetId] || []);
+        const petSpecies = allPets.find(p => p.id === v.resolvedPetId)?.species;
         const existing = existingList.find(ev =>
-          ev.vaccine_name?.toLowerCase().trim() === v.vaccine_name.toLowerCase().trim()
+          vaccineNamesMatch(ev.vaccine_name, v.vaccine_name, petSpecies)
         );
         if (!groupsById.has(v.resolvedPetId)) {
           const petMeta = allPets.find(p => p.id === v.resolvedPetId);

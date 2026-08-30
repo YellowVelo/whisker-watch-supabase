@@ -170,6 +170,8 @@ A one-page checklist run against every `Critical`/`High` page before the Accessi
 | Timeline: empty state and error+Retry state | Medium | `[Manual]` |
 | Scan Record: uploading a document opens a review screen; nothing saves until confirmed | Critical | `[Playwright: vaccination-scan-review.spec.js]` |
 | Scan Record: a multi-pet document groups detected vaccinations under the correct pet, and un-attributable lines default to the pet the scan was launched from | High | `[Playwright: vaccination-scan-review.spec.js]` |
+| Scan Record: a differently-worded known vaccine name (e.g. "Canine - Rabies Vaccine") is recognized as an update to the existing "Rabies Vaccine" record, not a duplicate | High | `[Playwright: vaccination-scan-review.spec.js]`, `[Vitest: speciesConfig.test.js]` — spec 0064 |
+| Scan Record: an unrecognized/uncommon vaccine name worded differently from an existing record still shows "New" (fuzzy matching only applies to the app's known vaccine list) | Medium | `[Playwright: vaccination-scan-review.spec.js]`, `[Vitest: speciesConfig.test.js]` — spec 0064 |
 | Vet Report: Download Report produces a real file, not a stuck spinner | Critical | `[Playwright: vet-report.spec.js]` |
 
 ### 5.6 AI Assistant ("Ask Wysker") — Critical
@@ -237,9 +239,12 @@ A one-page checklist run against every `Critical`/`High` page before the Accessi
 
 | Case | Priority | Coverage |
 |---|---|---|
+| A toast (any of the ~6 call sites app-wide — Account, Home, Settings, VetExport, Bloodwork, Vaccinations) actually renders pinned to the viewport, not just fires without visual effect | High | `[Playwright: toast-visibility.spec.js]` — regression coverage for the 2026-08-29 toast-positioning bug (every toast since the app's first commit rendered off-screen; see CLAUDE.md). Deliberately standalone, not tied to any one feature, since the fix is in the one shared `Toaster`/`ToastViewport`. Confirmed by temporarily reverting the fix locally and re-running this test — it fails against the broken version. |
 | Client and Edge Function errors reach Sentry when `VITE_SENTRY_DSN`/`SENTRY_DSN` configured | High | `[Playwright: error-monitoring.spec.js]` |
 | Sandbox/test/demo account errors are tagged and excluded from prod signal | High | `[Playwright: error-monitoring.spec.js]` |
 | App Shell bottom nav / Menu tab navigation works from every page | High | `[Playwright: bottom-nav-menu-tab.spec.js]` |
+| Production's `storage.objects` RLS policies exactly match dev/staging (4 policies: public read, insert/update/delete own-folder-only) | Critical | `[Manual]` — not observable via Playwright (E2E only targets dev, per CLAUDE.md); verify via `supabase db query --linked "select policyname, cmd, qual, with_check from pg_policies where schemaname='storage' and tablename='objects'"` against each environment. Run 2026-08-30, pass — production had zero policies before migration `0052_restore_storage_policies.sql` (all four came back "does not exist, skipping" on create), confirmed drift from what its own migration history claimed. See spec 0063. |
+| A real file upload (e.g. Vaccinations "Scan Record") succeeds on a real production account | Critical | `[Manual]` — requires a real production account/file, outside what automated suites can safely simulate. Run 2026-08-30, pass, Lynn — confirmed after migration `0052` shipped. See spec 0063. |
 
 ### 5.13 Device / Browser Compatibility — High (Beta gate requirement, §2.7)
 

@@ -42,8 +42,8 @@ test.afterEach(async () => {
   }
 });
 
-async function createPet(name) {
-  const { data, error } = await supabase.from('pets').insert({ created_by: userId, name }).select('id').single();
+async function createPet(name, species) {
+  const { data, error } = await supabase.from('pets').insert({ created_by: userId, name, species }).select('id').single();
   if (error) throw error;
   createdPetIds.push(data.id);
   return data.id;
@@ -161,6 +161,63 @@ test('a matching existing record is updated, not duplicated', async ({ page }) =
   const { data } = await supabase.from('vaccinations').select('id, date_given').eq('pet_id', petId);
   expect(data.length).toBe(1);
   expect(data[0].date_given).toBe('2026-08-20');
+});
+
+test('a differently-worded known vaccine name (added prefix) is recognized as the same vaccine', async ({ page }) => {
+  const petName = `E2E Scan Fuzzy Prefix ${Date.now()}`;
+  const petId = await createPet(petName, 'Dog');
+  await supabase.from('vaccinations').insert({ pet_id: petId, vaccine_name: 'Rabies Vaccine', date_given: '2025-01-01', created_by: userId });
+
+  await openScanFrom(page, petId, {
+    vaccines: [{ vaccine_name: 'Canine - Rabies Vaccine', date_given: '2026-08-20' }],
+  });
+
+  await expect(page.getByRole('heading', { name: 'Review Scanned Vaccinations' })).toBeVisible();
+  await expect(page.getByText('Will update')).toBeVisible();
+  await page.getByRole('button', { name: /Save 1 Vaccination/ }).click();
+  await expect(page.getByRole('heading', { name: 'Review Scanned Vaccinations' })).not.toBeVisible();
+
+  const { data } = await supabase.from('vaccinations').select('id, date_given').eq('pet_id', petId);
+  expect(data.length).toBe(1);
+  expect(data[0].date_given).toBe('2026-08-20');
+});
+
+test('a differently-worded known vaccine name (added parenthetical) is recognized as the same vaccine', async ({ page }) => {
+  const petName = `E2E Scan Fuzzy Paren ${Date.now()}`;
+  const petId = await createPet(petName, 'Dog');
+  await supabase.from('vaccinations').insert({ pet_id: petId, vaccine_name: 'Bordetella Vaccine', date_given: '2025-01-01', created_by: userId });
+
+  await openScanFrom(page, petId, {
+    vaccines: [{ vaccine_name: 'Canine - Bordetella Vaccine (Oral)', date_given: '2026-08-20' }],
+  });
+
+  await expect(page.getByRole('heading', { name: 'Review Scanned Vaccinations' })).toBeVisible();
+  await expect(page.getByText('Will update')).toBeVisible();
+  await page.getByRole('button', { name: /Save 1 Vaccination/ }).click();
+  await expect(page.getByRole('heading', { name: 'Review Scanned Vaccinations' })).not.toBeVisible();
+
+  const { data } = await supabase.from('vaccinations').select('id, date_given').eq('pet_id', petId);
+  expect(data.length).toBe(1);
+  expect(data[0].date_given).toBe('2026-08-20');
+});
+
+test('an unrecognized vaccine name worded differently from an existing record is not fuzzy-matched', async ({ page }) => {
+  const petName = `E2E Scan Fuzzy Unknown ${Date.now()}`;
+  const petId = await createPet(petName, 'Dog');
+  await supabase.from('vaccinations').insert({ pet_id: petId, vaccine_name: 'Giardia Vaccine', date_given: '2025-01-01', created_by: userId });
+
+  await openScanFrom(page, petId, {
+    vaccines: [{ vaccine_name: 'Canine - Giardia Vaccine', date_given: '2026-08-20' }],
+  });
+
+  await expect(page.getByRole('heading', { name: 'Review Scanned Vaccinations' })).toBeVisible();
+  await expect(page.getByText('Will update')).not.toBeVisible();
+  await page.getByRole('button', { name: /Save 1 Vaccination/ }).click();
+  await expect(page.getByRole('heading', { name: 'Review Scanned Vaccinations' })).not.toBeVisible();
+
+  const { data } = await supabase.from('vaccinations').select('id, vaccine_name').eq('pet_id', petId).order('vaccine_name');
+  expect(data.length).toBe(2);
+  expect(data.map((v) => v.vaccine_name)).toEqual(['Canine - Giardia Vaccine', 'Giardia Vaccine']);
 });
 
 test('a medication mentioned in the scanned response is never shown or saved', async ({ page }) => {
