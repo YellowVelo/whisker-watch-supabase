@@ -1,6 +1,6 @@
 # 0052_Production_Error_Monitoring_Specification_v1
 
-**Status:** Implemented (2026-08-11) — verified end-to-end: a real client-side error was confirmed reaching the Sentry dashboard. Edge Function delivery uses the same helper and has secrets set on all 3 Supabase projects, but hasn't had its own live-fire test yet. Sourcemaps and alerting remain deferred (see Non-Goals).
+**Status:** Implemented (2026-08-11) — verified end-to-end: a real client-side error was confirmed reaching the Sentry dashboard. Edge Function delivery uses the same helper and has secrets set on all 3 Supabase projects, but hasn't had its own live-fire test yet. Sourcemaps and alerting remain deferred (see Non-Goals). Re-confirmed working 2026-09-01 after a suspected regression was investigated and disproven — see spec 0065.
 **Date:** 2026-08-10
 **Related files:** `src/App.jsx`, `src/main.jsx`, `src/lib/PageNotFound.jsx`, `src/lib/analytics.js`, `src/lib/AuthContext.jsx`, `supabase/functions/_shared/`, `supabase/functions/ask-vet-assistant/index.ts` (and the other 13 Edge Functions), `wrangler.jsonc`, `.env.example`, `.github/workflows/ci.yml`
 
