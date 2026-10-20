@@ -72,9 +72,84 @@ function runGeneratorFunction() {
   }
 }
 
+// Spec 0068. Every test vaccination's name starts with this, so leftovers
+// from an earlier run that never got cleaned up can be found and removed.
+const TEST_VACCINE_PREFIX = 'E2E Test Rabies';
+
+// Vaccinations the current test created. Cleaned up in afterEach rather
+// than a try/finally inside the test: afterEach still runs when a test
+// times out or seeding throws partway, and its errors are reported next
+// to the test's own error instead of replacing it.
+const createdVaccinationIds = new Set();
+
 let supabase;
 let petId;
 let petName;
+
+// Deletes the given test vaccinations and their reminders, failing loudly
+// if Supabase reports an error. Before spec 0068 these errors were
+// ignored, so a failed delete left rows behind with no sign of it.
+async function deleteTestVaccinations(ids) {
+  if (!ids.length) return;
+  const { error: notifError } = await supabase
+    .from('notifications')
+    .delete()
+    .eq('related_type', 'vaccination_due')
+    .in('related_id', ids);
+  if (notifError) throw new Error(`could not delete test notifications: ${notifError.message}`);
+  const { error: vaxError } = await supabase.from('vaccinations').delete().in('id', ids);
+  if (vaxError) throw new Error(`could not delete test vaccinations: ${vaxError.message}`);
+}
+
+// IDs of test1@'s vaccination reminders whose vaccination no longer
+// exists. These come from a test vaccination deleted without its
+// reminders — including other spec files' vaccinations (e.g.
+// vaccination-calendar-export.spec.js), since the reminder job this file
+// runs covers every vaccination in dev, not just this file's.
+async function findOrphanedReminderIds() {
+  const { data: reminders, error } = await supabase
+    .from('notifications')
+    .select('id, related_id')
+    .eq('related_type', 'vaccination_due');
+  if (error) throw new Error(`could not look up vaccination reminders: ${error.message}`);
+  const relatedIds = [...new Set(reminders.map((n) => n.related_id))];
+  if (!relatedIds.length) return [];
+  const { data: existing, error: vaxError } = await supabase.from('vaccinations').select('id').in('id', relatedIds);
+  if (vaxError) throw new Error(`could not look up reminded vaccinations: ${vaxError.message}`);
+  const existingIds = new Set(existing.map((v) => v.id));
+  return reminders.filter((n) => !existingIds.has(n.related_id)).map((n) => n.id);
+}
+
+// Removes every leftover test vaccination (and its reminders) plus any
+// orphaned reminder on test1@, whichever run created them, then checks
+// none are left. The check matters: row-level security turns a delete the
+// user isn't allowed to make into a silent "0 rows deleted", not an error.
+// Leftovers pile up fast: dev's daily reminder cron job (migration 0044)
+// keeps adding reminders for a leaked vaccination every day it's left.
+async function sweepLeftoverTestRows() {
+  const { data: leftovers, error } = await supabase
+    .from('vaccinations')
+    .select('id')
+    .like('vaccine_name', `${TEST_VACCINE_PREFIX}%`);
+  if (error) throw new Error(`could not look up leftover test vaccinations: ${error.message}`);
+  await deleteTestVaccinations(leftovers.map((v) => v.id));
+
+  const orphanIds = await findOrphanedReminderIds();
+  if (orphanIds.length) {
+    const { error: orphanError } = await supabase.from('notifications').delete().in('id', orphanIds);
+    if (orphanError) throw new Error(`could not delete orphaned reminders: ${orphanError.message}`);
+  }
+
+  const { count: vaxLeft, error: countError } = await supabase
+    .from('vaccinations')
+    .select('id', { count: 'exact', head: true })
+    .like('vaccine_name', `${TEST_VACCINE_PREFIX}%`);
+  if (countError) throw new Error(`could not verify test-row cleanup: ${countError.message}`);
+  const orphansLeft = (await findOrphanedReminderIds()).length;
+  if (vaxLeft || orphansLeft) {
+    throw new Error(`test-row cleanup left ${vaxLeft} "${TEST_VACCINE_PREFIX}" vaccination(s) and ${orphansLeft} orphaned reminder(s) on test1@ — remove them by hand on wysker-watch-dev`);
+  }
+}
 
 test.beforeAll(async () => {
   // Fail before seeding anything, so a refusal leaves no stray test rows.
@@ -90,6 +165,20 @@ test.beforeAll(async () => {
   if (petsError || !pets?.length) throw new Error('test1@ has no pets to attach a test vaccination to');
   petId = pets[0].id;
   petName = pets[0].name;
+
+  // Start from a clean slate even if an earlier run crashed mid-test.
+  await sweepLeftoverTestRows();
+});
+
+test.afterEach(async () => {
+  const ids = [...createdVaccinationIds];
+  createdVaccinationIds.clear();
+  await deleteTestVaccinations(ids);
+});
+
+test.afterAll(async () => {
+  // supabase is unset if beforeAll refused (e.g. not linked to dev).
+  if (supabase) await sweepLeftoverTestRows();
 });
 
 // 10 days out lands in the 14_day bucket (8-14 days), per the generator
@@ -103,70 +192,87 @@ async function seedVaccinationDueNotification(vaccineName) {
     .select()
     .single();
   if (error) throw new Error(`could not create test vaccination: ${error.message}`);
+  // Registered before the CLI call, so afterEach still removes the row if
+  // the CLI call throws. Before spec 0068 a CLI failure here leaked it.
+  createdVaccinationIds.add(vax.id);
   runGeneratorFunction();
   return vax.id;
 }
 
-async function cleanupVaccination(vaccinationId) {
-  await supabase.from('notifications').delete().eq('related_type', 'vaccination_due').eq('related_id', vaccinationId);
-  await supabase.from('vaccinations').delete().eq('id', vaccinationId);
+// The reminder card for one test vaccine. Scoping every check to it means
+// another vaccination reminder on test1@'s list can't trip Playwright's
+// "more than one match" (strict mode) error, or get clicked by mistake.
+// `div.rounded-xl` is each reminder's outer card in Notifications.jsx.
+function reminderCard(page, vaccineName) {
+  return page.locator('div.rounded-xl').filter({ hasText: vaccineName });
 }
 
 test('a vaccination-due notification renders with the right stage copy and buttons', async ({ page }) => {
-  const vaccinationId = await seedVaccinationDueNotification('E2E Test Rabies A');
-  try {
-    await page.goto('/notifications');
+  await seedVaccinationDueNotification('E2E Test Rabies A');
+  await page.goto('/notifications');
 
-    await expect(page.getByText('Vaccination Due Soon')).toBeVisible();
-    await expect(page.getByText(`E2E Test Rabies A is due for ${petName} in 14 days.`)).toBeVisible();
-    await expect(page.getByRole('button', { name: 'View Vaccination' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Snooze 7 Days' })).toBeVisible();
-  } finally {
-    await cleanupVaccination(vaccinationId);
-  }
+  const card = reminderCard(page, 'E2E Test Rabies A');
+  await expect(card.getByText('Vaccination Due Soon')).toBeVisible();
+  await expect(card.getByText(`E2E Test Rabies A is due for ${petName} in 14 days.`)).toBeVisible();
+  await expect(card.getByRole('button', { name: 'View Vaccination' })).toBeVisible();
+  await expect(card.getByRole('button', { name: 'Snooze 7 Days' })).toBeVisible();
 });
 
 test('tapping "View Vaccination" opens that vaccine\'s edit form on the Vaccinations page', async ({ page }) => {
   const vaccinationId = await seedVaccinationDueNotification('E2E Test Rabies B');
-  try {
-    await page.goto('/notifications');
-    await page.getByRole('button', { name: 'View Vaccination' }).click();
+  await page.goto('/notifications');
+  await reminderCard(page, 'E2E Test Rabies B').getByRole('button', { name: 'View Vaccination' }).click();
 
-    await expect(page).toHaveURL(new RegExp(`/pet/${petId}/vaccinations\\?edit=${vaccinationId}`));
-    await expect(page.getByRole('heading', { name: 'Edit Vaccination' })).toBeVisible();
-    await expect(page.getByPlaceholder('e.g. Rabies')).toHaveValue('E2E Test Rabies B');
-  } finally {
-    await cleanupVaccination(vaccinationId);
-  }
+  await expect(page).toHaveURL(new RegExp(`/pet/${petId}/vaccinations\\?edit=${vaccinationId}`));
+  await expect(page.getByRole('heading', { name: 'Edit Vaccination' })).toBeVisible();
+  await expect(page.getByPlaceholder('e.g. Rabies')).toHaveValue('E2E Test Rabies B');
 });
 
 test('snoozing a vaccination reminder hides it and records a 7-day snooze', async ({ page }) => {
   const vaccinationId = await seedVaccinationDueNotification('E2E Test Rabies C');
-  try {
-    await page.goto('/notifications');
-    await page.getByRole('button', { name: 'Snooze 7 Days' }).click();
+  await page.goto('/notifications');
+  const card = reminderCard(page, 'E2E Test Rabies C');
+  await card.getByRole('button', { name: 'Snooze 7 Days' }).click();
 
-    await expect(page.getByText('Vaccination Due Soon')).not.toBeVisible();
+  await expect(card).toHaveCount(0);
 
-    const { data } = await supabase
-      .from('notifications')
-      .select('read, snoozed_until')
-      .eq('related_type', 'vaccination_due')
-      .eq('related_id', vaccinationId)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .single();
+  // The page hides the card the instant Snooze is tapped, before the save
+  // reaches the database (Notifications.jsx handleSnooze), so one immediate
+  // read could beat the save — the old occasional `read` flake. Poll.
+  await expect
+    .poll(
+      async () => {
+        const { data, error } = await supabase
+          .from('notifications')
+          .select('read, snoozed_until')
+          .eq('related_type', 'vaccination_due')
+          .eq('related_id', vaccinationId)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .single();
+        if (error) throw new Error(`could not read the snoozed notification: ${error.message}`);
+        return data.read === true && new Date(data.snoozed_until).getTime() > Date.now() + 6 * 24 * 60 * 60 * 1000;
+      },
+      { message: 'notification should be saved as read with a ~7-day snooze', timeout: 10_000 }
+    )
+    .toBe(true);
 
-    expect(data.read).toBe(true);
-    expect(new Date(data.snoozed_until).getTime()).toBeGreaterThan(Date.now() + 6 * 24 * 60 * 60 * 1000);
+  // Re-running the generator right after snoozing must not re-create the
+  // reminder — this is the dedup/snooze-respecting behavior migration
+  // 0044 implements. Checked in the database directly: after a reload the
+  // card is also absent while the list is still loading, which alone
+  // would prove nothing.
+  runGeneratorFunction();
+  const { count, error } = await supabase
+    .from('notifications')
+    .select('id', { count: 'exact', head: true })
+    .eq('related_type', 'vaccination_due')
+    .eq('related_id', vaccinationId);
+  if (error) throw new Error(`could not count notifications: ${error.message}`);
+  expect(count).toBe(1);
 
-    // Re-running the generator right after snoozing must not re-create the
-    // reminder — this is the dedup/snooze-respecting behavior migration
-    // 0044 implements.
-    runGeneratorFunction();
-    await page.reload();
-    await expect(page.getByText('Vaccination Due Soon')).not.toBeVisible();
-  } finally {
-    await cleanupVaccination(vaccinationId);
-  }
+  await page.reload();
+  // Wait for Notifications.jsx's loading placeholders to go away first.
+  await expect(page.locator('main .animate-pulse')).toHaveCount(0);
+  await expect(card).toHaveCount(0);
 });
