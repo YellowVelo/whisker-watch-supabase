@@ -5,7 +5,8 @@
 // compute_daily_analytics_summary cron function, migration 0023) — so a
 // real user session can never produce a vaccination-due notification on
 // its own. To seed one for this test, we shell out to the Supabase CLI
-// (already authenticated locally against wysker-watch-dev) and invoke the
+// (must be linked to wysker-watch-dev — enforced by assertLinkedToDev
+// below) and invoke the
 // exact function the daily cron job calls — the most faithful way to test
 // this without adding a service-role key to .env.playwright, which the
 // rest of this suite deliberately avoids (see fixtures.js).
@@ -25,7 +26,7 @@
 // order-dependent on what earlier ones already did to it.
 import { execFileSync } from 'node:child_process';
 import { createClient } from '@supabase/supabase-js';
-import { writeFileSync, mkdtempSync, rmSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import dotenv from 'dotenv';
@@ -33,12 +34,39 @@ import { test, expect } from './fixtures.js';
 
 dotenv.config({ path: '.env.playwright' });
 
+// Spec 0067. `--linked` runs against whatever project the local CLI was
+// last linked to (supabase/.temp/project-ref), not necessarily dev — and
+// this repo's CLI gets re-linked to staging/prod for manual deploys
+// (0006 Technical Standards §11). Linked to prod, this would fire prod's
+// real daily vaccination-notification job against real users. Refuse
+// unless the link is wysker-watch-dev.
+const DEV_PROJECT_REF = 'rebvizgpchpzjpoohjrd';
+
+function assertLinkedToDev() {
+  const refFile = path.join('supabase', '.temp', 'project-ref');
+  let linkedRef;
+  try {
+    linkedRef = readFileSync(refFile, 'utf8').trim();
+  } catch {
+    throw new Error(`Refusing to run: no ${refFile} found, so the Supabase CLI isn't linked to any project. Run \`npx supabase link --project-ref ${DEV_PROJECT_REF}\` (wysker-watch-dev) first.`);
+  }
+  if (linkedRef !== DEV_PROJECT_REF) {
+    throw new Error(`Refusing to run: the Supabase CLI is linked to project "${linkedRef}", not wysker-watch-dev (${DEV_PROJECT_REF}). This test calls the real vaccination-notification job, which must never run against staging or prod. Run \`npx supabase link --project-ref ${DEV_PROJECT_REF}\` first.`);
+  }
+}
+
 function runGeneratorFunction() {
+  assertLinkedToDev();
   const dir = mkdtempSync(path.join(tmpdir(), 'wysker-e2e-'));
   const file = path.join(dir, 'query.sql');
   writeFileSync(file, 'select public.generate_vaccination_due_notifications();');
   try {
-    execFileSync('npx', ['supabase', 'db', 'query', '--linked', '--file', file], { stdio: 'pipe', shell: true });
+    // --workdir . pins the CLI to the same supabase/.temp assertLinkedToDev
+    // just checked. Without it, the CLI walks up to a parent folder's link
+    // when there's no supabase/config.toml here (e.g. a git worktree nested
+    // inside the main checkout), so it could use a different link than the
+    // one the guard read.
+    execFileSync('npx', ['supabase', 'db', 'query', '--linked', '--workdir', '.', '--file', file], { stdio: 'pipe', shell: true });
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -49,6 +77,8 @@ let petId;
 let petName;
 
 test.beforeAll(async () => {
+  // Fail before seeding anything, so a refusal leaves no stray test rows.
+  assertLinkedToDev();
   supabase = createClient(process.env.VITE_SUPABASE_URL, process.env.VITE_SUPABASE_ANON_KEY);
   const { error } = await supabase.auth.signInWithPassword({
     email: process.env.PLAYWRIGHT_TEST1_EMAIL,
