@@ -1,0 +1,5 @@
+# Gitignored files Claude Code copies into every new worktree, so new
+# sessions have the local env (and every test-account login) without
+# anyone re-entering them.
+.env
+.env.playwright
