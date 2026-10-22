@@ -7,7 +7,8 @@
 // is deliberate — the whole point is to catch auth/RLS/deploy-config
 // problems a pure in-process unit test would miss.
 //
-// Required environment variables (see .env.example and
+// Required environment variables (TEST2_* live in .env.playwright — see
+// .env.playwright.example — and
 // docs/features/requirements-database-backups.md for the sibling
 // pattern of scoping secrets to a specific project):
 //   SUPABASE_URL              - the target project's URL (must be
