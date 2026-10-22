@@ -49,7 +49,7 @@ None of these get a Playwright test — this is backend/infrastructure work with
 - AC7 → manual check in the Sentry dashboard. Not automatable: the e2e suite deliberately has no Sentry credentials (spec 0052).
 - AC8 → backup folder exists with 14 × 3 downloaded functions before any deploy. Restore is only exercised if needed.
 - AC9 → process gate, no test.
-- **Seeding/access constraints:** the Deno suite needs each project's URL, publishable key, secret key, and `test2@` login as environment variables. These are set by Lynn in her own terminal session for that run only — never written to any file, never added to `.env.playwright`. `test1@`/`test2@` confirmed by Lynn (2026-10-19) to exist on all three projects.
+- **Seeding/access constraints:** the Deno suite needs each project's URL, publishable key, secret key, and `test2@` login. **`test2@`'s login comes from `.env.playwright`** (changed 2026-10-22: one local home for every test login). Each project's URL and keys are still set by Lynn in her own terminal session for that run only, and never written to a file, so one file can't silently point the tests at the wrong project. (Assumes `test2@` has the same password on all three projects.) `test1@`/`test2@` confirmed by Lynn (2026-10-19) to exist on all three projects.
 - Matching cases get added to `docs/testing/QA_Test_Plan.md` in the same change that executes this spec.
 
 ## Visual Reference
