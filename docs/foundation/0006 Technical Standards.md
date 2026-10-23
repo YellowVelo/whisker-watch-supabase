@@ -242,6 +242,8 @@ Deploy Edge Functions via CLI
 
 **Convention (not automated, easy to miss):** every migration and Edge Function deploy should be pushed to all three projects — dev, staging, and prod — as part of shipping a change, not left on dev alone. This is manual (`supabase link --project-ref <ref>` then `db push`/`functions deploy`, repeated per project) and has been missed before (2026-07-25/26: two specs shipped to dev only, staging and prod caught up a day later once the gap was noticed).
 
+**Per-function deploy settings live in `supabase/config.toml`** (added 2026-10-19, spec 0066). Today that's only resend-webhook's `verify_jwt = false`. Always pass `--project-ref` explicitly rather than relying on the linked project. Spec 0066 found the CLI linked to prod during routine work.
+
 **Migration history intentionally diverges between projects.** `0003`, `0007`, and `0027` contain one-time inserts of real personal pet data tied to specific production `user_id`s — they were deliberately never run on `wysker-watch-dev`/`wysker-watch-staging` and are reconciled there via `supabase migration repair --status applied` (marks them resolved without executing their SQL) rather than run. If `supabase db push` on dev/staging ever refuses with "Found local migration files to be inserted before the last migration," check whether the blocking file is one of these three (or a similar prod-only data migration) before reaching for `--include-all` — that flag would actually try to run them.
 
 Frontend

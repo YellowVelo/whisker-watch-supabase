@@ -270,7 +270,9 @@ receive, in case that dashboard configuration is ever changed.
   step so it isn't lost the first time this function is redeployed (there is
   no committed `supabase/config.toml` in this repo pinning function-level
   JWT settings — deploy flags are the only mechanism today, so this has to
-  be a documented, repeatable step, not tribal knowledge).
+  be a documented, repeatable step, not tribal knowledge). **Superseded
+  2026-10-19 (spec 0066):** `supabase/config.toml` now records this, so a
+  plain deploy keeps it off. The flag is still safe to pass.
 - **Payload validation, after signature verification:** parse the raw body
   as JSON (invalid JSON → 400). Require `type` (must be one of the three
   handled event names, else 200 no-op) and `data.email_id` (Resend's id for
@@ -460,7 +462,9 @@ only** — see Functional Requirement 3 for why.
    `email_suppressions`, so this is a safe no-op until a real bounce/complaint
    is ever processed).
 4. Deploy `clear-email-suppression`.
-5. Deploy `resend-webhook` with `--no-verify-jwt`, and set a
+5. Deploy `resend-webhook` with `--no-verify-jwt` (since spec 0066,
+   `supabase/config.toml` also records this, so a plain deploy keeps it
+   off; the flag is still safe to pass), and set a
    `RESEND_WEBHOOK_SECRET` value for that project. Dev needs a real (even if
    arbitrary) value here regardless of Resend registration — CI's integration
    tests (see Tests) sign their own test payloads with it and call the

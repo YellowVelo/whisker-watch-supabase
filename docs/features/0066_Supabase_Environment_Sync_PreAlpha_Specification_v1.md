@@ -1,6 +1,6 @@
 # 0066_Supabase_Environment_Sync_PreAlpha_Specification_v1
 
-**Status:** Approved (2026-10-19) — not yet executed
+**Status:** Implemented (2026-10-23) — all 9 acceptance criteria passed on dev, staging and prod; see Results
 **Date:** 2026-10-19
 **Deadline:** before alpha kickoff (2026-11-02)
 **Related files:** `supabase/functions/*/index.ts` (all 14), `supabase/functions/_shared/errorReporting.ts`, `supabase/functions/_shared/testHelpers.ts`, `supabase/functions/delete-account/index.test.ts`, `supabase/functions/resend-webhook/index.ts`, `supabase/migrations/`, `supabase/config.toml` (new), `.github/workflows/ci.yml`, `docs/features/0052_Production_Error_Monitoring_Specification_v1.md`, `docs/testing/QA_Test_Plan.md`, `CLAUDE.md`
@@ -92,6 +92,18 @@ None — no UI.
 - **Orphaned features nearby:** none found.
 - **Punch list / known issues in this area:** `CORS_ALLOWED_ORIGINS` (the list of websites allowed to call the public sign-up/beta/early-adopter functions) is set on dev and staging but not on prod, which falls back to the built-in default (`www.wyskerwatch.com`). Not fixed here; Lynn is confirming the right addresses as a follow-up.
 - **Rollback:** Supabase has no one-click "previous version" for functions, so the step-1 backup is the only undo.
+
+## Results (2026-10-19 → 2026-10-23)
+
+- **AC1:** all 52 migrations recorded on all 3 projects. Live RLS policies (including the 4 `storage.objects` rules), tables, columns, triggers and storage buckets are identical across dev, staging and prod. The only difference is invisible line-ending characters in 6 database function bodies (`save_daily_check_ins`, `claim_pending_sitter_invites`, `is_pet_owner`, `is_pet_sit_sitter`, `is_pet_sitter`, `set_updated_at`), which is harmless: identical apart from whitespace.
+- **AC2:** on dev, `config.toml` alone kept resend-webhook's `verify_jwt=false`, with no manual flag. Staging and prod got both safeguards (config plus `--no-verify-jwt`).
+- **AC3:** all 14 functions updated on each project (dev 2026-10-20 UTC, staging and prod 2026-10-23), and the live code downloaded back from each project matches main.
+- **AC4:** staging fast-forwarded to `c36f7a4` (main after PR #18). No drift in either direction.
+- **AC5:** 4/4 `delete-account` tests passed on dev and on staging. **AC6:** the guard test passed on prod, and `test1@`/`test2@` both still sign in.
+- **AC7:** Sentry events confirmed by Lynn on all 3 projects, tagged `function=invite-co-owner` with the right environment (dev 2026-10-22 11:36 UTC, staging 2026-10-23 11:22 UTC, prod 2026-10-23 11:31 UTC).
+- **AC8:** 42 per-function backups (14 × 3, each with its own `_shared` snapshot) in `C:\dev\wysker-function-backups\2026-10-19`, outside the repo. No restore was needed.
+- **AC9:** prod was deployed only after Lynn's go, once dev and staging had passed.
+- **Deviation:** Windows' script policy blocks PowerShell scripts on this machine, so the test runner is a Git Bash script (`sync-test.sh`, stored with the backups, outside the repo). It reads test logins from `.env.playwright` and fetches project keys from the Supabase CLI at run time.
 
 ## Non-Goals
 
