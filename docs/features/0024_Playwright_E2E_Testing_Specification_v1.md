@@ -62,6 +62,8 @@ Not applicable — this is test infrastructure, not a user-facing UI change. No 
   PLAYWRIGHT_TEST1_PASSWORD=<test1's actual password>
   ```
 
+  **Update 2026-10-22:** this list is out of date. `.env.playwright` now holds every test-account login (test1–4@). See `.env.playwright.example` for the current keys.
+
   All values come from the `wysker-watch-dev` project specifically (Settings → API in the Supabase dashboard for that project — same place `.env.example` points at, just the "Secret key" this time instead of the "Publishable key", since `SUPABASE_SECRET_KEY` needs admin-level access to seed a session without clicking an email link). `SUPABASE_SECRET_KEY` is server-side only — used by the one-time login-session setup script, never sent to the browser, never referenced inside a test itself. A `.env.playwright.example` gets committed alongside it with placeholder values and the same "never point this at prod" warning already used in `.env.example`.
 - **Test account: `test1@wyskerwatch.com`**, per your direction — `test2@` stays reserved for the existing Deno CI tests so the two suites never collide on the same account.
 - **Cleanup:** each test that creates data (Add Pet, Daily Check-In) deletes what it created in an `afterEach`/teardown step, via the same Edge Functions / entity API the app itself uses (`delete-pet`, etc.) — not direct database access — so cleanup is exercised through the same RLS/permission path a real user would hit, and a cleanup failure doesn't leave orphaned test data invisible to future runs.
