@@ -1,0 +1,17 @@
+# Supabase CLI config — deliberately minimal (spec 0066).
+#
+# This file exists only to record per-function deploy settings that would
+# otherwise live in people's memory. It is NOT used for local Docker
+# development (`supabase start`), and it holds no project_id: every deploy
+# still names its target explicitly with --project-ref, never relying on
+# whichever project the CLI happens to be linked to.
+#
+# resend-webhook is called by Resend's servers, which never present a
+# Supabase login, so its JWT check must stay off on every project (see
+# docs/features/0020_Resend_Bounce_Delivery_Webhook_Specification_v1.md).
+# A deploy without this setting silently turns the check back on and
+# breaks bounce/delivery tracking. All other functions keep the default
+# (verify_jwt = true).
+
+[functions.resend-webhook]
+verify_jwt = false
