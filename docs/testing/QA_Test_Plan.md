@@ -187,6 +187,8 @@ A one-page checklist run against every `Critical`/`High` page before the Accessi
 
 ### 5.7 Sitter / Co-Owner — High
 
+**Which accounts to use (spec 0070):** `coowner1@`/`coowner2@` and `petsitter1@`/`petsitter2@wyskerwatch.com` are real inboxes with logins on all three environments (dev logins in `.env.playwright`). All are classified `test`, and so is test1–4@. Emails *sent by* a `test` account are silently dropped (`sendEmail.ts`), so: to check an invite **email** arrives and reads right, send the invite from a non-test account (e.g. Lynn's own login) to one of these inboxes; to check only that the invite **links** on login, any account can send it.
+
 | Case | Priority | Coverage |
 |---|---|---|
 | Pet Sitter page reachable, all sits listed | High | `[Playwright: pet-sitter.spec.js]` |
@@ -202,7 +204,7 @@ A one-page checklist run against every `Critical`/`High` page before the Accessi
 | Profile: edits survive a background auth-token refresh (deliberately does not resync mid-edit) | High | `[Manual]` — a real edge case worth verifying stays true. |
 | Profile: Timezone "return to automatic detection" link appears only after a manual change | Medium | `[Manual]` |
 | Settings: Sign Out requires confirm, failure shows toast not a block | Medium | `[Manual]` |
-| **Delete Account: two-step type-"DELETE"-to-confirm actually deletes** | Critical | `[Manual]` — Given a test account with one solely-owned pet and one co-owned pet, When Delete Account is completed, Then the solely-owned pet is deleted and the co-owned pet's ownership transfers rather than being deleted. This is the single highest-blast-radius flow in the app and has zero automated coverage today. Backend deletion logic (guard, sole-owner delete, ownership transfer, co-owner leave) is covered by the Deno suite `supabase/functions/delete-account/index.test.ts`, run on all 3 projects 2026-10-22/23 (spec 0066). The UI flow itself is still manual. |
+| **Delete Account: two-step type-"DELETE"-to-confirm actually deletes** | Critical | `[Manual]` — Given a **non-test** account (e.g. Lynn's own login on dev — the delete-account function refuses `test`/`demo` accounts by design, so test1–4@, coowner1–2@ and petsitter1–2@ can't run this) with one solely-owned pet and one co-owned pet, When Delete Account is completed, Then the solely-owned pet is deleted and the co-owned pet's ownership transfers rather than being deleted. This is the single highest-blast-radius flow in the app and has zero automated coverage today. Backend deletion logic (guard, sole-owner delete, ownership transfer, co-owner leave) is covered by the Deno suite `supabase/functions/delete-account/index.test.ts`, run on all 3 projects 2026-10-22/23 (spec 0066). The UI flow itself is still manual. |
 | Reset Test/Demo Account tools only appear for internal account types | High | `[Manual]` |
 | Notifications: vaccination-due "View"/"Update" wording matches stage, Snooze 7 Days hides the item | High | `[Playwright: vaccination-due-reminders.spec.js]` |
 | Notifications: empty state | Low | `[Manual]` |
