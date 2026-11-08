@@ -1,6 +1,6 @@
 # 0070_Test_Account_Roster_All_Environments_Specification_v1
 
-**Status:** Approved — 2026-11-08 (Lynn). In progress.
+**Status:** Shipped — 2026-11-08. Migration `0053_test_account_roster.sql` applied to all three projects (`wysker-watch-dev`, `wysker-watch-staging`, `Whisker-Watch`). Verified read-only on all three: test1–4@, coowner1–2@, petsitter1–2@ exist, are email-confirmed and are `test`; demo1@ is `demo`; test3@ is still `admin` on dev; `classify_account_type()` returns `test` for the new addresses (case-insensitive) and `production` for an unlisted one. Dev accounts were created by Claude through the local app (logins in `.env.playwright`); staging accounts by Lynn. **Found while shipping:** (1) staging sign-up had been broken since 2026-07-26 because two staging Edge Function secrets were missing their scheme: `CORS_ALLOWED_ORIGINS` and `APP_URL` were both `staging.wyskerwatch.com`. Fixed to `https://staging.wyskerwatch.com,https://wysker-watch-staging.pages.dev` and `https://staging.wyskerwatch.com`. `APP_URL` also feeds `invite-co-owner`/`invite-sitter`, so staging invites were broken too. Prod's values were correct. (2) test3@ on staging couldn't receive its confirmation email: it was already on the allowlist (0049), so sign-up's own email was suppressed. It was confirmed directly (`auth.users.email_confirmed_at`) instead.
 **Date:** 2026-11-07
 **Related files:**
 - `supabase/migrations/0010_account_type.sql`, `0049_test3_admin_fixture_account.sql`, `0051_test4_sitter_fixture_account.sql` (the test-account list this spec adds to)
