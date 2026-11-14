@@ -149,16 +149,5 @@ jobs:
           cache: npm
 
       - run: npm ci
-      # TEMPORARY (spec 0067): diagnose why test4@ can't sign in on CI.
-      # Prints only lengths and yes/no flags, never a value. Remove before merge.
-      - name: TEMP diagnose test4 secrets
-        run: |
-          node -e '
-            const e = process.env.PLAYWRIGHT_TEST4_SITTER_EMAIL || "";
-            const p = process.env.PLAYWRIGHT_TEST4_SITTER_PASSWORD || "";
-            const flags = (v) => `len=${v.length} trimmedLen=${v.trim().length} lineBreak=${/[\r\n]/.test(v)} edgeSpace=${v !== v.trim()} quote=${/["\x27]/.test(v)} equalsSign=${v.includes("=")}`;
-            console.log("EMAIL    " + flags(e) + " exactMatch=" + (e === "test4@wyskerwatch.com"));
-            console.log("PASSWORD " + flags(p));
-          '
       - run: npx playwright install --with-deps chromium webkit
       - run: npx playwright test
