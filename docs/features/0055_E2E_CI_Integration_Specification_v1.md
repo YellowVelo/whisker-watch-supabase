@@ -1,6 +1,6 @@
 # 0055_E2E_CI_Integration_Specification_v1
 
-**Status:** Implemented (2026-08-15)
+**Status:** Implemented (2026-08-15). Trial outcome: the job never passed during or after the trial (ended 2026-09-03), so it stayed non-blocking and was never added to required checks. Causes were investigated and fixed in spec 0067 (2026-11-14).
 **Date:** 2026-08-13
 **Related files:** `.github/workflows/ci.yml`, `playwright.config.js`, `e2e/global-setup.js`, `e2e/fixtures.js`, `.env.playwright.example`, `docs/features/0024_Playwright_E2E_Testing_Specification_v1.md`, `docs/features/0046_E2E_Onboarding_Step_Transition_Flakiness_Specification_v1.md`, `docs/launch-punch-list.md`
 

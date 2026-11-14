@@ -1,6 +1,6 @@
 # 0067_E2E_CI_Failures_Fix_Specification_v1
 
-**Status:** Approved (2026-10-21) — not yet built
+**Status:** Shipped 2026-11-14 (PR #27). GitHub e2e run on the final commit: **70 passed, 3 skipped (vaccination, by design), 2 failed**, both outside this spec: the Check-In History date bug below and `toast-visibility.spec.js`, an existing intermittent failure that also failed on `main` (run after PR #26). AC1–AC6 met on GitHub, including all 5 Pet Sitter tests once the test4@ email secret was corrected (it held the wrong text, 16 characters; found with a temporary length-only CI diagnostic, since removed). AC8 (0 failures) not met, because of those 2 out-of-scope tests. Deviation: the Turnstile reserve is 71px, not 65px (measured; 65px still left a 4px jump). AC7 not met: the local vaccination tests fail because of 48 leftover `E2E%` vaccinations on test1@'s dev account, a data problem outside this spec. Also found (out of scope, not fixed): the 2 Check-In History "intermittent" failures are date-dependent: they seed a check-in 10/15 days back, and the calendar opens on the current month, so they fail during the first 10–15 days of every month.
 **Date:** 2026-10-21
 **Related files:** `src/components/Turnstile.jsx`, `e2e/beta-signup.spec.js`, `e2e/early-adopters.spec.js`, `e2e/pet-sitter.spec.js`, `e2e/vaccination-due-reminders.spec.js`, `.github/workflows/ci.yml`, `docs/testing/QA_Test_Plan.md`
 

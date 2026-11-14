@@ -36,6 +36,15 @@ async function fillForm(page, { email, conditionStatus = 'Yes, diagnosed conditi
   await page.getByRole('button', { name: betaComfort, exact: true }).click();
 }
 
+// Submit stays disabled until Turnstile's token arrives (spec 0067).
+// Waiting for enabled first means the click happens after the widget has
+// rendered, not in the same instant — the instant the old layout shift hit.
+async function submitWhenReady(page) {
+  const submit = page.getByRole('button', { name: 'Submit' });
+  await expect(submit).toBeEnabled({ timeout: 15000 });
+  await submit.click();
+}
+
 test.describe('public /beta page', () => {
   // The public page needs no session at all — test as a logged-out
   // visitor, matching how someone clicking a Reddit/BetaList link
@@ -81,7 +90,7 @@ test.describe('public /beta page', () => {
     await page.getByRole('button', { name: 'Get Early Access' }).click();
 
     await fillForm(page, { email: 'not-an-email' });
-    await page.getByRole('button', { name: 'Submit' }).click();
+    await submitWhenReady(page);
 
     await expect(page.getByText('Please enter a valid email address.')).toBeVisible();
     await expect(page.getByRole('heading', { name: "You're on the list" })).not.toBeVisible();
@@ -96,7 +105,7 @@ test.describe('public /beta page', () => {
     await page.getByRole('button', { name: 'Get Early Access' }).click();
     await fillForm(page, { email: scratchEmail('captcha-fail') });
 
-    await page.getByRole('button', { name: 'Submit' }).click();
+    await submitWhenReady(page);
 
     await expect(page.getByText('CAPTCHA verification failed. Please try again.')).toBeVisible();
     await expect(page.getByRole('heading', { name: "You're on the list" })).not.toBeVisible();
@@ -110,9 +119,44 @@ test.describe('public /beta page', () => {
     // Turnstile's "always passes" TEST site key (see VITE_TURNSTILE_SITE_KEY
     // in .env / .env.example) auto-completes with no visible challenge, so
     // no extra step is needed here to satisfy it before submitting.
-    await page.getByRole('button', { name: 'Submit' }).click();
+    await submitWhenReady(page);
 
     await expect(page.getByRole('heading', { name: "You're on the list" })).toBeVisible({ timeout: 15000 });
+  });
+
+  test('spec 0067 AC1: Submit does not move when the CAPTCHA finishes', async ({ page }) => {
+    // Hold Cloudflare's script until the "before" reading is taken. The test
+    // site key can otherwise finish while the form is still being filled,
+    // making both readings post-shift and the test pass even without the fix.
+    let releaseScript;
+    const scriptGate = new Promise((resolve) => { releaseScript = resolve; });
+    await page.route('https://challenges.cloudflare.com/turnstile/v0/api.js*', async (route) => {
+      await scriptGate;
+      await route.continue();
+    });
+
+    await page.goto('/beta');
+    await page.getByRole('button', { name: 'Get Early Access' }).click();
+    await fillForm(page, { email: scratchEmail('layout-shift') });
+
+    // Position on the page, not in the viewport: boundingBox() is
+    // viewport-relative, so any scroll between readings (the widget can
+    // nudge focus) would register as movement. Before spec 0067 the
+    // "after" reading was ~69px lower.
+    const submit = page.getByRole('button', { name: 'Submit' });
+    const pageTop = () => submit.evaluate((el) => el.getBoundingClientRect().top + window.scrollY);
+    await expect(submit).toBeDisabled();
+    // The answer pills animate their border away (transition-all) for
+    // ~150ms after a tap, shrinking 2px each. Filling at machine speed
+    // leaves those running, which would read as Submit moving. Let them
+    // finish first so only the CAPTCHA can move anything.
+    await page.waitForFunction(() => document.getAnimations().length === 0);
+    const before = await pageTop();
+    releaseScript();
+    await expect(submit).toBeEnabled({ timeout: 15000 });
+    const after = await pageTop();
+
+    expect(Math.abs(after - before)).toBeLessThanOrEqual(1);
   });
 });
 
