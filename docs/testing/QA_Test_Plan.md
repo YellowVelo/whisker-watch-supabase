@@ -206,7 +206,7 @@ A one-page checklist run against every `Critical`/`High` page before the Accessi
 | Settings: Sign Out requires confirm, failure shows toast not a block | Medium | `[Manual]` |
 | **Delete Account: two-step type-"DELETE"-to-confirm actually deletes** | Critical | `[Manual]` — Given a **non-test** account (e.g. Lynn's own login on dev — the delete-account function refuses `test`/`demo` accounts by design, so test1–4@, coowner1–2@ and petsitter1–2@ can't run this) with one solely-owned pet and one co-owned pet, When Delete Account is completed, Then the solely-owned pet is deleted and the co-owned pet's ownership transfers rather than being deleted. This is the single highest-blast-radius flow in the app and has zero automated coverage today. Backend deletion logic (guard, sole-owner delete, ownership transfer, co-owner leave) is covered by the Deno suite `supabase/functions/delete-account/index.test.ts`, run on all 3 projects 2026-10-22/23 (spec 0066). The UI flow itself is still manual. |
 | Reset Test/Demo Account tools only appear for internal account types | High | `[Manual]` |
-| Notifications: vaccination-due "View"/"Update" wording matches stage, Snooze 7 Days hides the item | High | `[Playwright: vaccination-due-reminders.spec.js]` |
+| Notifications: vaccination-due "View"/"Update" wording matches stage, Snooze 7 Days hides the item | High | `[Playwright: vaccination-due-reminders.spec.js]` — **local only**: skipped on GitHub since spec 0067 (seeding needs `supabase db query --linked`; CI has no linked project). Fails locally while leftover `E2E%` vaccinations sit on test1@'s dev account (48 found 2026-11-14). |
 | Notifications: empty state | Low | `[Manual]` |
 | PWA "Install App" row persists correctly across navigation | Medium | `[Playwright: pwa-install-prompt.spec.js]` |
 | Preferences placeholder renders without crashing | Low | `[Manual]` |
@@ -234,6 +234,7 @@ A one-page checklist run against every `Critical`/`High` page before the Accessi
 |---|---|---|
 | `/beta`: Get Early Access reveals the combined email + 4-question form in place, no page nav, submit disabled until all fields answered + CAPTCHA present | Critical | `[Playwright: beta-signup.spec.js]` |
 | `/beta`: invalid email rejected inline | High | `[Playwright: beta-signup.spec.js]` |
+| `/beta`: Submit button does not move when the CAPTCHA finishes (Turnstile reserves its 71px up front) | High | `[Playwright: beta-signup.spec.js]` (spec 0067) — the test holds Cloudflare's script until the "before" reading and waits for pill animations to finish, so only the CAPTCHA can move anything. Shared component: also covers `/early-adopters`. |
 | `/early-adopters`: submit disabled until consent + CAPTCHA, invalid email rejected inline | Critical | `[Playwright: early-adopters.spec.js]` |
 | Both public forms: hero copy avoids internal-mechanics language (brand-voice check) | Medium | `[Playwright: beta-signup.spec.js, early-adopters.spec.js]` |
 
