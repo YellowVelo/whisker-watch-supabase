@@ -136,6 +136,10 @@ jobs:
       PLAYWRIGHT_TEST1_PASSWORD: ${{ secrets.PLAYWRIGHT_TEST1_PASSWORD }}
       PLAYWRIGHT_TEST3_ADMIN_EMAIL: ${{ secrets.PLAYWRIGHT_TEST3_ADMIN_EMAIL }}
       PLAYWRIGHT_TEST3_ADMIN_PASSWORD: ${{ secrets.PLAYWRIGHT_TEST3_ADMIN_PASSWORD }}
+      # test4@, e2e/pet-sitter.spec.js's sitter identity (spec 0057). Never
+      # passed here until spec 0067, so every Pet Sitter test failed in CI.
+      PLAYWRIGHT_TEST4_SITTER_EMAIL: ${{ secrets.PLAYWRIGHT_TEST4_SITTER_EMAIL }}
+      PLAYWRIGHT_TEST4_SITTER_PASSWORD: ${{ secrets.PLAYWRIGHT_TEST4_SITTER_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
 

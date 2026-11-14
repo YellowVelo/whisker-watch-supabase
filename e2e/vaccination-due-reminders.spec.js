@@ -33,6 +33,11 @@ import { test, expect } from './fixtures.js';
 
 dotenv.config({ path: '.env.playwright' });
 
+// Spec 0067: the CI runner has no linked Supabase project, so the
+// `supabase db query --linked` seeding above can't work there. Skipped
+// (reported as skipped, never as passed) on GitHub; run locally instead.
+test.skip(!!process.env.CI, 'Needs a local run: seeding uses `supabase db query --linked`, and CI has no linked project.');
+
 function runGeneratorFunction() {
   const dir = mkdtempSync(path.join(tmpdir(), 'wysker-e2e-'));
   const file = path.join(dir, 'query.sql');

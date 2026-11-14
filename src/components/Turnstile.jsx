@@ -76,5 +76,12 @@ export default function Turnstile({ onVerify, onError, onExpire }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [siteKey]);
 
-  return <div id={`turnstile-${domId}`} ref={containerRef} className="flex justify-center" />;
+  // min-h reserves the widget's rendered height before it loads (spec
+  // 0067). Without it the container starts at 0px and grows when the token
+  // arrives, shoving the Submit button below it down ~69px at the exact
+  // moment Submit becomes enabled, so a tap (or a Playwright click) aimed
+  // at Submit lands where it used to be. 71px, not Cloudflare's documented
+  // 65px: measured 2026-11-13, the widget's own wrapper adds ~6px, and 65
+  // still left a 4px jump.
+  return <div id={`turnstile-${domId}`} ref={containerRef} className="flex justify-center min-h-[71px]" />;
 }

@@ -31,7 +31,9 @@ test.describe('public /early-adopters page', () => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto('/early-adopters');
 
-    await expect(page.getByRole('heading', { name: 'Sound familiar?' })).toBeVisible();
+    // "Sound familiar?" was removed in the 2026-08-15 brand-voice rewrite;
+    // this is the current approved h1 (spec 0067).
+    await expect(page.getByRole('heading', { name: 'Another pet tracking app? Nah.' })).toBeVisible();
     await expect(page.getByRole('heading', { name: "What we're building" })).toBeVisible();
     await expect(
       page.getByRole('heading', { name: "Want to know the moment it's ready?" }),
