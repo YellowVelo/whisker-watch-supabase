@@ -51,3 +51,6 @@ supabase/.temp
 
 # Social media drafts (Cowork-only, high churn — kept out of git on purpose)
 /social
+
+# Office lock files (created while a document is open in Excel/Word)
+~$*
