@@ -6,7 +6,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { entities } from '@/api/entities';
-import { uploadFile } from '@/api/storageClient';
+import { uploadFile, uploadErrorText } from '@/api/storageClient';
+import { useToast } from '@/components/ui/use-toast';
 import IconButton from '@/components/IconButton';
 import PageTransition from '@/components/PageTransition';
 import PetIdentityFields from '@/components/onboarding/fields/PetIdentityFields';
@@ -25,7 +26,7 @@ function formFromPet(pet) {
   return {
     name: pet.name || '',
     breed: pet.breed || '',
-    photo_url: pet.photo_url || '',
+    photo_path: pet.photo_path || '',
     color_markings: pet.color_markings || '',
     sex: pet.sex || '',
     altered_status: pet.altered_status || '',
@@ -56,6 +57,7 @@ export default function PetEdit() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const { toast } = useToast();
   const [error, setError] = useState(null);
   const [newNickname, setNewNickname] = useState('');
   const [newActivity, setNewActivity] = useState('');
@@ -74,9 +76,15 @@ export default function PetEdit() {
     const file = e.target.files?.[0];
     if (!file) return;
     setUploading(true);
-    const { file_url } = await uploadFile({ file });
-    set('photo_url', file_url);
-    setUploading(false);
+    try {
+      const { path } = await uploadFile({ file, purpose: 'photo' });
+      set('photo_path', path);
+    } catch (err) {
+      toast({ variant: 'destructive', description: uploadErrorText(err) });
+    } finally {
+      setUploading(false);
+      e.target.value = '';
+    }
   };
 
   const addNickname = () => {
@@ -103,7 +111,7 @@ export default function PetEdit() {
     const payload = {
       name: form.name.trim(),
       breed: form.breed.trim() || null,
-      photo_url: form.photo_url || null,
+      photo_path: form.photo_path || null,
       color_markings: form.color_markings.trim() || null,
       sex: form.sex || null,
       altered_status: form.altered_status || null,

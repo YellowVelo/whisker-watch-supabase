@@ -30,6 +30,7 @@
 
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import { reportError } from '../_shared/errorReporting.ts';
+import { deletablePetPhotoPath } from '../_shared/petPhoto.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!;
@@ -47,15 +48,6 @@ function json(body: unknown, status = 200) {
   });
 }
 
-// Pulls the storage object path out of a public URL produced by
-// storageClient.js's uploadFile(), e.g.
-// https://.../storage/v1/object/public/uploads/<userId>/<file> -> "<userId>/<file>"
-function storagePathFromPublicUrl(url: string): string | null {
-  const marker = '/object/public/uploads/';
-  const idx = url.indexOf(marker);
-  if (idx === -1) return null;
-  return url.slice(idx + marker.length);
-}
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
@@ -101,7 +93,7 @@ Deno.serve(async (req) => {
 
     const { data: pet, error: petError } = await admin
       .from('pets')
-      .select('id, name, created_by, photo_url')
+      .select('*')
       .eq('id', petId)
       .maybeSingle();
 
@@ -249,15 +241,13 @@ Deno.serve(async (req) => {
       }
     }
 
-    if (pet.photo_url) {
-      const path = storagePathFromPublicUrl(pet.photo_url);
-      if (path) {
-        const { error: removeError } = await admin.storage.from('uploads').remove([path]);
-        if (removeError) {
-          // Non-fatal — log and continue; an orphaned storage object is
-          // preferable to blocking the delete entirely.
-          console.warn('Storage removal error (continuing):', removeError.message);
-        }
+    const path = deletablePetPhotoPath(pet);
+    if (path) {
+      const { error: removeError } = await admin.storage.from('uploads').remove([path]);
+      if (removeError) {
+        // Non-fatal — log and continue; an orphaned storage object is
+        // preferable to blocking the delete entirely.
+        console.warn('Storage removal error (continuing):', removeError.message);
       }
     }
 

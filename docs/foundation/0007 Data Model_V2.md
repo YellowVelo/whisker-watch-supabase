@@ -19,7 +19,7 @@ Wysker Watch uses a relational, owner-scoped schema built on Supabase/Postgres w
 
 2. Entity Overview
 
-26 tables in the `public` schema, introduced across migrations 0001–0048 (the original 21 span 0001–0017; `email_logs`, `resend_webhook_events`, `email_suppressions`, `rate_limit_hits`, and `beta_signups` were added later, see below):
+27 tables listed below, introduced across migrations 0001–0054 (the original 21 span 0001–0017; `email_logs`, `resend_webhook_events`, `email_suppressions`, `rate_limit_hits`, `beta_signups` and `pet_documents` were added later). Not yet documented here: `early_adopters` (0050, spec 0056):
 
 | Table | Introduced | Owner-scoped via |
 |---|---|---|
@@ -41,6 +41,7 @@ Wysker Watch uses a relational, owner-scoped schema built on Supabase/Postgres w
 | observation_types | 0014 | read-only reference data, any authenticated user |
 | observation_options | 0014 | read-only reference data, any authenticated user |
 | observations | 0014 (+0045 sitter read) | `is_pet_owner()`, or an assigned sitter via `is_pet_sitter()` |
+| pet_documents | 0054 (spec 0071) | `is_pet_owner()` only — sitters never see scanned documents. One row per (scanned file, pet): `pet_id`, `storage_path`, `kind` (`vaccination`/`bloodwork`/`medication`), `uploaded_by` (set null if that account is deleted). Insert also requires the file to be in the caller's own storage folder. It's what the private `uploads` bucket's read rule checks for documents. |
 | pet_baselines | 0014 | `is_pet_owner()` |
 | wellness_scores | 0014 | `is_pet_owner()` — **dead: schema only, nothing writes or reads it since migration 0026 (see §3.19)** |
 | analytics_events | 0009 | `user_id = auth.uid()` |
@@ -78,7 +79,8 @@ Central entity for all health data.
 - `created_by` uuid, references `auth.users(id)` — the original creator; permission checks use `is_pet_owner()`, not this column directly, once a pet has co-owners
 - `species` text, default `'Cat'`, check in (`Cat`, `Dog`)
 - `name` text, max 100 chars
-- `photo_url`, `breed` text
+- `photo_path` text — the photo's location in the private `uploads` bucket (e.g. `{userId}/…`, or `shared/…` for stock demo photos), shown through a short-lived signed link. Replaced the public `photo_url` (spec 0071: added 0054, `photo_url` dropped 0055)
+- `breed` text
 - `birth_date` date (not future), `birth_date_precision` text, default `'UNKNOWN'`, check in (`EXACT`, `MONTH_YEAR`, `YEAR`, `UNKNOWN`)
 - `conditions`, `nicknames`, `favorite_activities` text[], default `{}`
 - `medications` text — free-text field, distinct from the `medications` table (legacy, still present)
@@ -138,7 +140,7 @@ Migration `0046_save_daily_check_ins_conflict_detection.sql` (spec 0043) extende
 Reference data (not owner-scoped; readable by any authenticated user, writable only by migration/service role). 14 seeded types as of migration 0026: appetite, water_intake, bathroom, stool, vomiting, **nausea** (added 0026), energy, mobility, breathing, itching, behavior, medication_exception, weight, other. Each type has `category`, `species_applicability` (`cat`/`dog`/`both`), `answer_type` (`enum`/`number`/`text`/`boolean`), `baseline_supported`, `score_supported`, `sort_order`. Each enum type has seeded `observation_options` rows with a `severity_score` column — **this column is vestigial as of migration 0026**: it's still populated on insert and still present in the schema, but nothing in `src/lib/checkin/scoring.js` reads it anymore (the Vibe/Symptom-Count model is unweighted — every logged symptom counts equally, there is no deduction). `src/lib/checkin/config.js` is the client-side mirror of the current (unweighted) attribute model used to render the Daily Check-In UI; it does not mirror `severity_score`.
 
 3.17 observations
-The actual owner-reported observations — primary truth for the Daily Check-In system. `id`, `created_by`, `pet_id`, `daily_check_in_id` (nullable FK), `observation_type_id`, `value`, `numeric_value`, `severity_score` (vestigial, see §3.15), `notes`, `photo_url`, `observed_at`, timestamps.
+The actual owner-reported observations — primary truth for the Daily Check-In system. `id`, `created_by`, `pet_id`, `daily_check_in_id` (nullable FK), `observation_type_id`, `value`, `numeric_value`, `severity_score` (vestigial, see §3.15), `notes`, `observed_at`, timestamps. (`photo_url` was dropped in migration 0054, spec 0071: no screen ever set or showed it.)
 
 3.18 pet_baselines
 Generalized per-metric baseline, one active row per `(pet_id, observation_type_id)` (enforced by a partial unique index where `effective_to is null`), with history preserved via `effective_from`/`effective_to` rather than overwrite. `id`, `created_by`, `pet_id`, `observation_type_id`, `baseline_value`, `baseline_numeric_value`, `baseline_notes`, `confidence_level` (`low`/`medium`/`high`), `source` (`onboarding`/`manual_edit`/`system_suggested`), `effective_from`, `effective_to`, timestamps.

@@ -1,21 +1,33 @@
 // Supabase Edge Function: ask-vet-assistant
 //
-// Server-side proxy to the Anthropic API, replacing Base44's
-// base44.integrations.Core.InvokeLLM. The ANTHROPIC_API_KEY is read
+// Server-side proxy to the Anthropic API. The ANTHROPIC_API_KEY is read
 // from Supabase secrets (set via the dashboard or `supabase secrets
 // set`) — it never reaches the browser.
 //
-// Request body shape (mirrors how InvokeLLM was called in the app):
+// Request body shape:
 //   {
 //     prompt: string,                  // required
 //     response_json_schema?: object,    // optional — if provided, asks
 //                                        // Claude to respond with JSON
 //                                        // matching this shape
-//     file_url?: string                 // optional — a public file URL
+//     file_path?: string                // optional — a file in this
+//                                        // project's "uploads" bucket
 //                                        // (image or PDF — vaccine/
-//                                        // bloodwork scan) to include
-//                                        // as vision/document input
+//                                        // bloodwork/medication scan)
+//                                        // to include as vision/document
+//                                        // input
 //   }
+//
+// Files (spec 0071): the function never fetches a caller-supplied URL.
+// It only reads a file_path that is either in the caller's own folder
+// (a scan they just uploaded) or linked in pet_documents to a pet they
+// own, and downloads it with the service role. Size and type are checked
+// before anything is sent to Anthropic.
+//
+// TEMPORARY (spec 0071 Phase 1 only — delete in Phase 2): a `file_url`
+// is still accepted if it is this project's own public uploads link,
+// because the currently-live frontend sends that until its new build is
+// promoted. It is converted to a path and goes through the same checks.
 //
 // Response shape:
 //   - if response_json_schema was provided: the parsed JSON object
@@ -35,6 +47,7 @@
 // caller-identity check.
 
 import { createClient } from 'jsr:@supabase/supabase-js@2';
+import { encodeBase64 } from 'jsr:@std/encoding@1/base64';
 import { reportError } from '../_shared/errorReporting.ts';
 
 const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY');
@@ -53,6 +66,36 @@ const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
+
+// Spec 0071 file limits. Must match storage.buckets (migration 0054) and
+// src/api/storageClient.js. Images have the lower AI-side limit.
+const MAX_FILE_BYTES = 10 * 1024 * 1024;
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+const IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
+const PDF_TYPE = 'application/pdf';
+
+function jsonResponse(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  });
+}
+
+// Returns the storage path the caller asked for, or null if they sent an
+// unusable reference. Never returns anything outside the uploads bucket.
+function requestedPath(body: { file_path?: unknown; file_url?: unknown }): string | null {
+  let path: string | null = null;
+  if (typeof body.file_path === 'string') {
+    path = body.file_path;
+  } else if (typeof body.file_url === 'string') {
+    // TEMPORARY compatibility, Phase 1 only (see header).
+    const prefix = `${SUPABASE_URL}/storage/v1/object/public/uploads/`;
+    if (!body.file_url.startsWith(prefix)) return null;
+    path = decodeURIComponent(body.file_url.slice(prefix.length));
+  }
+  if (!path || path.startsWith('/') || path.split('/').some((seg) => seg === '..' || seg === '')) return null;
+  return path;
+}
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -107,42 +150,62 @@ Deno.serve(async (req) => {
       );
     }
 
-    const { prompt, response_json_schema, file_url } = await req.json();
+    const body = await req.json();
+    const { prompt, response_json_schema } = body;
     if (!prompt) {
-      return new Response(JSON.stringify({ error: 'prompt is required' }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+      return jsonResponse({ error: 'prompt is required' }, 400);
     }
 
-    // Build the message content. If a file_url was provided, fetch it
-    // and include it as a vision (image) or document (PDF) input,
-    // depending on its content type — used for vaccine/bloodwork
-    // document scanning. Otherwise it's a plain text request.
+    // Build the message content. If a file was provided, read it from our
+    // own storage (never a caller-supplied URL) and include it as a vision
+    // (image) or document (PDF) input — used for vaccine/bloodwork/
+    // medication scanning. Otherwise it's a plain text request.
     const contentBlocks = [];
-    if (file_url) {
-      const imgResp = await fetch(file_url);
-      if (!imgResp.ok) {
-        return new Response(JSON.stringify({ error: 'Could not fetch file_url' }), {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
+    if (body.file_path !== undefined || body.file_url !== undefined) {
+      const path = requestedPath(body);
+      if (!path) {
+        return jsonResponse({ error: 'Invalid file reference', code: 'invalid_file' }, 400);
       }
-      const contentType = imgResp.headers.get('content-type') || 'image/jpeg';
-      const buffer = await imgResp.arrayBuffer();
-      const base64 = btoa(new Uint8Array(buffer).reduce((acc, byte) => acc + String.fromCharCode(byte), ''));
 
-      if (contentType === 'application/pdf') {
-        contentBlocks.push({
-          type: 'document',
-          source: { type: 'base64', media_type: 'application/pdf', data: base64 },
-        });
-      } else {
-        contentBlocks.push({
-          type: 'image',
-          source: { type: 'base64', media_type: contentType, data: base64 },
-        });
+      // Allowed: the caller's own folder (a scan they just uploaded), or a
+      // document linked to a pet they own. The pet_documents lookup runs
+      // as the caller, so its RLS (owners/co-owners only) does the check.
+      const ownFolder = path.split('/')[0] === userData.user.id;
+      let allowed = ownFolder;
+      if (!allowed) {
+        const { data: linked } = await supabaseClient
+          .from('pet_documents')
+          .select('id')
+          .eq('storage_path', path)
+          .limit(1);
+        allowed = (linked?.length ?? 0) > 0;
       }
+      if (!allowed) {
+        return jsonResponse({ error: 'You do not have access to that file', code: 'forbidden_file' }, 403);
+      }
+
+      const { data: blob, error: downloadError } = await adminClient.storage.from('uploads').download(path);
+      if (downloadError || !blob) {
+        return jsonResponse({ error: 'Could not read that file', code: 'file_not_found' }, 404);
+      }
+      const contentType = blob.type;
+      const isPdf = contentType === PDF_TYPE;
+      if (!isPdf && !IMAGE_TYPES.has(contentType)) {
+        return jsonResponse({ error: 'Unsupported file type', code: 'unsupported_type' }, 415);
+      }
+      if (blob.size > MAX_FILE_BYTES || (!isPdf && blob.size > MAX_IMAGE_BYTES)) {
+        return jsonResponse(
+          { error: 'File is too large', code: isPdf ? 'file_too_large' : 'image_too_large' },
+          413,
+        );
+      }
+
+      const base64 = encodeBase64(new Uint8Array(await blob.arrayBuffer()));
+      contentBlocks.push(
+        isPdf
+          ? { type: 'document', source: { type: 'base64', media_type: PDF_TYPE, data: base64 } }
+          : { type: 'image', source: { type: 'base64', media_type: contentType, data: base64 } },
+      );
     }
 
     let finalPrompt = prompt;

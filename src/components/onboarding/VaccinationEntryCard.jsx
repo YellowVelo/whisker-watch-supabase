@@ -4,7 +4,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { entities } from '@/api/entities';
-import { uploadFile } from '@/api/storageClient';
+import { uploadFile, UploadRejectedError } from '@/api/storageClient';
+import { usePendingScan, scanErrorText } from '@/lib/scannedDocuments';
 import { invokeAI } from '@/api/aiClient';
 import { getVaccines } from '@/lib/speciesConfig';
 
@@ -27,6 +28,8 @@ export default function VaccinationEntryCard({ petId, petName, species, onContin
   const [saving, setSaving] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [error, setError] = useState(null);
+  // Spec 0071: the scan file is kept only if the entry it filled in is saved.
+  const pendingScan = usePendingScan('vaccination');
 
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
   const canSave = form.vaccine_name.trim().length > 0;
@@ -39,10 +42,11 @@ export default function VaccinationEntryCard({ petId, petName, species, onContin
     setScanning(true);
     setError(null);
     try {
-      const { file_url } = await uploadFile({ file });
+      const { path } = await uploadFile({ file, purpose: 'scan' });
+      pendingScan.hold(path);
       const result = await invokeAI({
         prompt: 'You are analyzing a photo of a single vaccination record or certificate. Extract only the fields clearly visible: vaccine_name, date_given (YYYY-MM-DD), next_due_date (YYYY-MM-DD), administered_by (vet/clinic name), lot_number.',
-        file_urls: [file_url],
+        file_path: path,
         response_json_schema: {
           type: 'object',
           properties: {
@@ -64,7 +68,10 @@ export default function VaccinationEntryCard({ petId, petName, species, onContin
       }));
     } catch (err) {
       console.error('Failed to scan vaccination record:', err);
-      setError("Couldn't read that record — you can still enter it manually below.");
+      pendingScan.discard();
+      setError(err instanceof UploadRejectedError || err?.status === 413
+        ? scanErrorText(err)
+        : "Couldn't read that record — you can still enter it manually below.");
     } finally {
       setScanning(false);
       e.target.value = '';
@@ -85,6 +92,7 @@ export default function VaccinationEntryCard({ petId, petName, species, onContin
         lot_number: form.lot_number.trim() || null,
         notes: form.notes.trim() || null,
       });
+      await pendingScan.keep([petId]);
       return created;
     } catch (err) {
       console.error('Failed to save vaccination:', err);

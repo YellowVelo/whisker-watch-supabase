@@ -19,6 +19,7 @@
 
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import { reportError } from '../_shared/errorReporting.ts';
+import { deletablePetPhotoPath } from '../_shared/petPhoto.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!;
@@ -36,12 +37,6 @@ function json(body: unknown, status = 200) {
   });
 }
 
-function storagePathFromPublicUrl(url: string): string | null {
-  const marker = '/object/public/uploads/';
-  const idx = url.indexOf(marker);
-  if (idx === -1) return null;
-  return url.slice(idx + marker.length);
-}
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
@@ -76,7 +71,7 @@ Deno.serve(async (req) => {
     // ── Delete all pets this user solely or co-owns as primary ──────────
     const { data: ownedPets, error: petsError } = await admin
       .from('pets')
-      .select('id, photo_url')
+      .select('*')
       .eq('created_by', userId);
 
     if (petsError) {
@@ -85,12 +80,10 @@ Deno.serve(async (req) => {
     }
 
     for (const pet of ownedPets ?? []) {
-      if (pet.photo_url) {
-        const path = storagePathFromPublicUrl(pet.photo_url);
-        if (path) {
-          const { error: removeError } = await admin.storage.from('uploads').remove([path]);
-          if (removeError) console.warn('Storage removal error (continuing):', removeError.message);
-        }
+      const path = deletablePetPhotoPath(pet);
+      if (path) {
+        const { error: removeError } = await admin.storage.from('uploads').remove([path]);
+        if (removeError) console.warn('Storage removal error (continuing):', removeError.message);
       }
     }
 

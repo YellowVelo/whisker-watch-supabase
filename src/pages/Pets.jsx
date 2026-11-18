@@ -11,6 +11,7 @@ import WellbeingChipGrid from '../components/WellbeingChipGrid';
 import PageTransition from '../components/PageTransition';
 import usePullToRefresh from '../hooks/usePullToRefresh';
 import PullToRefreshIndicator from '../components/PullToRefreshIndicator';
+import PetPhoto from '@/components/PetPhoto';
 
 const todayStr = (timezone) => dateStrInTimezone(timezone, 0);
 
@@ -247,13 +248,13 @@ function SitterPetRow({ pet }) {
     >
       <div className="flex items-center gap-3">
         <div className="h-11 w-11 rounded-full overflow-hidden flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(255,255,255,0.06)' }}>
-          {pet.photo_url ? (
-            <img src={pet.photo_url} alt="" className="w-full h-full object-cover" />
-          ) : pet.species === 'Dog' ? (
-            <Dog className="h-5 w-5 text-tier-tertiary" />
-          ) : (
-            <Cat className="h-5 w-5 text-tier-tertiary" />
-          )}
+          <PetPhoto
+            photoPath={pet.photo_path}
+            className="w-full h-full object-cover"
+            fallback={pet.species === 'Dog'
+              ? <Dog className="h-5 w-5 text-tier-tertiary" />
+              : <Cat className="h-5 w-5 text-tier-tertiary" />}
+          />
         </div>
         <p className="text-base font-semibold text-white truncate">{pet.name}</p>
       </div>

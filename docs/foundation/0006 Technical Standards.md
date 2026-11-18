@@ -116,15 +116,17 @@ Never leak stack traces to the client
 
 Bucket Structure
 
-uploads/{userId}/...
+uploads/{userId}/... (plus shared/ for the stock demo photos)
 
-Public read, restricted write
+Private bucket, restricted write (spec 0071). Files are shown only through short-lived signed links (src/api/storageClient.js getSignedUrls/getSignedUrl, 1 hour). Store the file's path (e.g. pets.photo_path, pet_documents.storage_path), never a link. Who may open a file is defined by the storage read rule uploads_read_permitted (migration 0054): your own folder; shared/; a pet's photo for its owners, co-owners and sitters; a scanned document for its owners and co-owners only. Edge Functions read files with the service role, never by fetching a caller-supplied URL.
 
 File Types
 
-Images: JPG/PNG
+Images: JPEG/PNG/WebP/GIF — up to 10 MB; up to 5 MB when sent to the AI for scanning (the AI's own image limit)
 
-Documents: PDF
+Documents: PDF — up to 10 MB
+
+Enforced twice: by the bucket itself (file_size_limit, allowed_mime_types) and by checkUploadFile() in storageClient.js, which shows the approved message before anything uploads.
 
 Naming
 

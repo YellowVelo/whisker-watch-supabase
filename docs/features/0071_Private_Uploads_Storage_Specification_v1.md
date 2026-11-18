@@ -1,6 +1,6 @@
 # 0071_Private_Uploads_Storage_Specification_v1
 
-**Status:** Approved by Lynn, 2026-11-15. Not yet built.
+**Status:** In progress. Built 2026-11-15 on branch `build-0071-private-uploads`; Phase 1 (`0054`) and Phase 2 (`0055`) are live on `wysker-watch-dev` only. Staging and prod are pending (see Build Notes).
 **Date:** 2026-11-15
 **Punch list:** PA-01 (Pre-Alpha Audit tab, P0). Source: spec 0068 P0-1, plus 0069's note that `observations.photo_url` accepts any outside link.
 **Related files:**
@@ -36,6 +36,24 @@
 12. **A temporary compatibility shortcut, removed in Phase 2.** The backend (database + Edge Functions) and the website (the app's screens, deployed through Cloudflare) go live separately. On prod there's a gap between the backend going out and you promoting the new Cloudflare build. During that gap, people are still using the currently live version of the screens, which sends the AI public links. During that window only, the AI function accepts a public link if it points at the caller's own folder in this project's bucket. Phase 2 deletes this. It's written down here so it doesn't become permanent.
 13. **Self-review found no duplicate feature.** There's no existing signed-link helper or document list in the code. It did find six screens that each hand-build the same "pet photo or placeholder" circle. This spec replaces them with one shared component, since every one of them has to change anyway.
 14. **Existing pet photos are converted automatically.** For each pet, the migration (a change to the database's structure) works out the file location from the saved public link. The only real pets are Lynn's own on prod (Auggie, Harper, Tribble). Everything else is test or demo data, and Maple/Cooper are stock photos. So the real check is that **Auggie's, Harper's and Tribble's photos still show on prod after Phase 2**. That's added to AC10, along with a read-only check before Phase 1 that their links convert cleanly.
+
+## Build Notes (2026-11-15)
+
+Where the build differs from the plan below, and why:
+
+1. **Phase 2 has a safety check.** `supabase db push` applies every pending migration at once, so `0055` would otherwise go out together with `0054` and lock the bucket before the new frontend is live. `0055` refuses to run until the environment is marked ready by hand. The snippet is in the migration's header and records `spec_0071_frontend_live` in `private.deploy_markers`. Proved on dev: the first push stopped at 0055 with nothing changed.
+2. **Phase 2 drops `pets.photo_url` straight away.** The Edge Functions' compatibility shortcut (`file_url` accepted in `ask-vet-assistant`) and the `photo_url` fallback (`_shared/petPhoto.ts`) stay until **all three** environments are on Phase 2, because Edge Function code is shared across environments. They're written to work whether or not the column exists (`select('*')`). Removing them is a small follow-up PR after prod's Phase 2.
+3. **Access rules are tested with Deno, not Playwright.** AC3–AC5 and AC8 are in `supabase/tests/private_uploads.test.ts`, which builds a throwaway owner/co-owner/sitter/stranger household per test. The Playwright suite only has single fixture logins. It runs in CI's required `edge-functions` job.
+4. **`PetPhoto.jsx` replaces the photo-or-placeholder *inside* each screen's circle.** Each screen keeps its own sized container, so layouts are unchanged.
+5. **`delete-pet` and `reset-sandbox-account` never delete `shared/` files.** Before this, a demo-account reset on prod could have deleted the shared stock demo photos every demo pet points at.
+6. **Pet photo uploads no longer clear the old `photo_url`.** Phase 2 drops the column, so nothing writes to it.
+
+### Rollout status
+| Environment | 0054 (Phase 1) | Frontend on 0071 build | Marker set | 0055 (Phase 2) | Demo photos in `shared/` |
+|---|---|---|---|---|---|
+| dev | Done 2026-11-15 | Done (local) | Done | Done 2026-11-15 | Done |
+| staging | — | — | — | — | — |
+| prod | — | — | — | — | already there |
 
 ## Functional Requirements
 
