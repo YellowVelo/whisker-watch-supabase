@@ -1,6 +1,6 @@
 # 0071_Private_Uploads_Storage_Specification_v1
 
-**Status:** In progress. Built 2026-11-15 on branch `build-0071-private-uploads`; Phase 1 (`0054`) and Phase 2 (`0055`) are live on `wysker-watch-dev` only. Staging and prod are pending (see Build Notes).
+**Status:** In progress. Built 2026-11-15 on branch `build-0071-private-uploads`; Merged as PR #30. Phase 1 (`0054`) and Phase 2 (`0055`) are live on dev and staging; prod is pending (see Build Notes).
 **Date:** 2026-11-15
 **Punch list:** PA-01 (Pre-Alpha Audit tab, P0). Source: spec 0068 P0-1, plus 0069's note that `observations.photo_url` accepts any outside link.
 **Related files:**
@@ -52,7 +52,7 @@ Where the build differs from the plan below, and why:
 | Environment | 0054 (Phase 1) | Frontend on 0071 build | Marker set | 0055 (Phase 2) | Demo photos in `shared/` |
 |---|---|---|---|---|---|
 | dev | Done 2026-11-15 | Done (local) | Done | Done 2026-11-15 | Done |
-| staging | — | — | — | — | — |
+| staging | Done 2026-11-17 (0 pets, nothing to convert) | Done 2026-11-17 (`main` → `staging`, bundle confirmed on wysker-watch-staging.pages.dev) | Done | Done 2026-11-17; `private_uploads.test.ts` 5/5 against staging | Done |
 | prod | — | — | — | — | already there |
 
 ## Functional Requirements
