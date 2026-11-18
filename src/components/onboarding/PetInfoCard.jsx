@@ -3,7 +3,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { uploadFile } from '@/api/storageClient';
+import { uploadFile, uploadErrorText } from '@/api/storageClient';
+import { useToast } from '@/components/ui/use-toast';
 import { entities } from '@/api/entities';
 import { track } from '@/lib/analytics';
 import { computeLifeStage } from '@/lib/lifeStage';
@@ -13,7 +14,7 @@ import PetIdentityFields from './fields/PetIdentityFields';
 import { resolveDate, isDateInfoValid } from './fields/DateInfoFields';
 
 const emptyForm = {
-  name: '', breed: '', photo_url: '', color_markings: '',
+  name: '', breed: '', photo_path: '', color_markings: '',
   sex: '', altered_status: '',
   birthPrecision: '', birthDate: '', birthMonthYear: '', birthYear: '',
   gotchaPrecision: '', gotchaDate: '', gotchaMonthYear: '', gotchaYear: '',
@@ -36,6 +37,7 @@ export default function PetInfoCard({ onCreated }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
   const [uploading, setUploading] = useState(false);
+  const { toast } = useToast();
   const [species, setSpecies] = useState(null);
   const [form, setForm] = useState(emptyForm);
   const wasStarted = useRef(false);
@@ -50,10 +52,16 @@ export default function PetInfoCard({ onCreated }) {
     const file = e.target.files?.[0];
     if (!file) return;
     setUploading(true);
-    const { file_url } = await uploadFile({ file });
-    set('photo_url', file_url);
-    setUploading(false);
-    track('photo_added', { species });
+    try {
+      const { path } = await uploadFile({ file, purpose: 'photo' });
+      set('photo_path', path);
+      track('photo_added', { species });
+    } catch (err) {
+      toast({ variant: 'destructive', description: uploadErrorText(err) });
+    } finally {
+      setUploading(false);
+      e.target.value = '';
+    }
   };
 
   const chooseSpecies = (s) => {
@@ -96,7 +104,7 @@ export default function PetInfoCard({ onCreated }) {
       species,
       name: form.name.trim(),
       breed: form.breed.trim() || null,
-      photo_url: form.photo_url || null,
+      photo_path: form.photo_path || null,
       color_markings: form.color_markings.trim() || null,
       sex: form.sex,
       altered_status: form.altered_status,
@@ -141,7 +149,7 @@ export default function PetInfoCard({ onCreated }) {
       pet_id: created.id,
       species,
       birth_date_precision: form.birthPrecision,
-      has_photo: !!form.photo_url,
+      has_photo: !!form.photo_path,
       has_gotcha_day: !!form.gotchaPrecision,
       has_microchip: !!form.microchip_number,
       akc_registered: payload.akc_registered,

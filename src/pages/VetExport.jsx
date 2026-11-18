@@ -6,6 +6,7 @@ import { useToast } from '@/components/ui/use-toast';
 import { ArrowLeft, FileDown, PawPrint } from 'lucide-react';
 import { downloadVetReport } from '@/lib/checkin/vetReportClient';
 import IconButton from '@/components/IconButton';
+import PetPhoto from '@/components/PetPhoto';
 
 // Vet Export Feature Spec v2 §4.2 — this page does not fetch report data
 // itself. It only fetches minimal pet identity for display; the actual
@@ -56,13 +57,16 @@ export default function VetExport() {
 
       <div className="max-w-lg mx-auto px-6 py-10">
         <div className="flex items-center gap-3 mb-6">
-          {pet.photo_url ? (
-            <img src={pet.photo_url} alt={pet.name} className="w-14 h-14 rounded-full object-cover" />
-          ) : (
-            <div className="w-14 h-14 rounded-full bg-secondary flex items-center justify-center">
-              <PawPrint className="h-6 w-6 text-muted-foreground" />
-            </div>
-          )}
+          <PetPhoto
+            photoPath={pet.photo_path}
+            alt={pet.name}
+            className="w-14 h-14 rounded-full object-cover"
+            fallback={(
+              <div className="w-14 h-14 rounded-full bg-secondary flex items-center justify-center">
+                <PawPrint className="h-6 w-6 text-muted-foreground" />
+              </div>
+            )}
+          />
           <div>
             <h1 className="text-2xl font-bold">{pet.name}</h1>
             {pet.breed && <p className="text-sm text-muted-foreground">{pet.breed}</p>}

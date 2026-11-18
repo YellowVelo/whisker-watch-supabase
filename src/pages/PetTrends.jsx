@@ -16,6 +16,7 @@ import { track } from '@/lib/analytics';
 import { PALETTE } from '@/lib/toneColors';
 import { useAuth } from '@/lib/AuthContext';
 import { detectTimezone } from '@/lib/timezone';
+import PetPhoto from '@/components/PetPhoto';
 
 // Trends sub-tab: every Health/Wellbeing attribute gets its own chart here
 // (unlike Overview, which only covers Appetite/Water/Energy/Weight/Insight
@@ -167,7 +168,7 @@ export default function PetTrends() {
           <IconButton icon={ArrowLeft} onClick={() => navigate(-1)} aria-label="Back" />
           <div className="flex items-center gap-3 flex-1 min-w-0 px-3">
             <div className="h-11 w-11 rounded-full overflow-hidden flex-shrink-0" style={{ background: 'rgba(255,255,255,0.06)' }}>
-              {pet.photo_url && <img src={pet.photo_url} alt={pet.name} className={`w-full h-full object-cover ${pet.is_memorial ? 'grayscale' : ''}`} />}
+              <PetPhoto photoPath={pet.photo_path} alt={pet.name} className={`w-full h-full object-cover ${pet.is_memorial ? 'grayscale' : ''}`} />
             </div>
             <div className="min-w-0">
               <p className="text-[20px] font-bold text-white truncate flex items-center gap-1.5">

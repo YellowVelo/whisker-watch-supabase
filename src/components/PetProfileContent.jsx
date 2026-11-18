@@ -28,6 +28,7 @@ import { PALETTE, RING_COLOR } from '@/lib/toneColors';
 import { useAuth } from '@/lib/AuthContext';
 import { detectTimezone, dateStrInTimezone } from '@/lib/timezone';
 import WellbeingChipGrid from '@/components/WellbeingChipGrid';
+import PetPhoto from '@/components/PetPhoto';
 
 const todayStr = (timezone) => dateStrInTimezone(timezone, 0);
 
@@ -413,13 +414,14 @@ export default function PetProfileContent({ petId, onReload = undefined, expande
       {/* ── IDENTITY ── */}
       <div className="flex flex-col items-center px-1 pt-2 pb-1 text-center">
         <div className="h-24 w-24 rounded-full overflow-hidden flex items-center justify-center" style={{ background: 'rgba(255,255,255,0.06)', border: '2px solid rgba(255,255,255,0.1)' }}>
-          {pet.photo_url ? (
-            <img src={pet.photo_url} alt={pet.name} className={`w-full h-full object-cover ${isMemorial ? 'grayscale' : ''}`} />
-          ) : pet.species === 'Dog' ? (
-            <Dog className="h-10 w-10 text-tier-tertiary" />
-          ) : (
-            <Cat className="h-10 w-10 text-tier-tertiary" />
-          )}
+          <PetPhoto
+            photoPath={pet.photo_path}
+            alt={pet.name}
+            className={`w-full h-full object-cover ${isMemorial ? 'grayscale' : ''}`}
+            fallback={pet.species === 'Dog'
+              ? <Dog className="h-10 w-10 text-tier-tertiary" />
+              : <Cat className="h-10 w-10 text-tier-tertiary" />}
+          />
         </div>
         <h2 className="text-[28px] font-bold text-white mt-3 leading-tight">{pet.name}</h2>
         <p className="text-[14px] text-tier-tertiary mt-0.5">

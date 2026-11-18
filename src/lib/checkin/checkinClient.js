@@ -323,7 +323,6 @@ function buildBaselineObservations(catalog) {
       value: baselineValueFor(getCategory(code)),
       numeric_value: null,
       notes: null,
-      photo_url: null,
     };
   }).filter(Boolean);
 }
@@ -427,7 +426,7 @@ export async function markSkipped(petId, date = todayStr(), source = 'app') {
 }
 
 // "Off Day" / "Tough Day" — selections:
-//   multi-select counted categories (6 Health + 5 Wellbeing): { code, values: [...], notes, photoUrl }
+//   multi-select counted categories (6 Health + 5 Wellbeing): { code, values: [...], notes }
 //   Weight/Other (not counted, optional, unaffected by this spec): { code, value|numericValue, notes }
 // Every completed counted category is always resolved for all 11 below (an
 // omitted or empty one just means "no symptoms today" — a real, explicit
@@ -457,7 +456,7 @@ export async function markSkipped(petId, date = todayStr(), source = 'app') {
 // symptomCounts per category as it goes.
 function buildObservationRows(catalog, selections) {
   const selectionsByCode = Object.fromEntries(selections.map((sel) => [sel.code, sel]));
-  const rows = []; // { code, value, notes, photoUrl }
+  const rows = []; // { code, value, notes }
   const symptomCounts = {}; // code -> count of non-baseline, non-"Not Observed" symptoms today
 
   for (const code of MULTI_SELECT_CODES) {
@@ -467,7 +466,7 @@ function buildObservationRows(catalog, selections) {
     const chosenValues = (sel?.values || []).filter((v) => v && !BASELINE_VALUES.has(v));
 
     if (chosenValues.length === 0) {
-      rows.push({ code, value: baselineValueFor(category), notes: sel?.notes || null, photoUrl: sel?.photoUrl || null });
+      rows.push({ code, value: baselineValueFor(category), notes: sel?.notes || null });
     } else {
       chosenValues.forEach((value, i) => {
         // Note/photo describe the category as a whole, not one specific
@@ -476,7 +475,6 @@ function buildObservationRows(catalog, selections) {
         rows.push({
           code, value,
           notes: i === 0 ? (sel?.notes || null) : null,
-          photoUrl: i === 0 ? (sel?.photoUrl || null) : null,
         });
         if (isCountableSymptom(value)) symptomCounts[code] = (symptomCounts[code] || 0) + 1;
       });
@@ -489,7 +487,7 @@ function buildObservationRows(catalog, selections) {
   for (const sel of selections) {
     if (MULTI_SELECT_CODES.includes(sel.code)) continue;
     if (sel.value == null && sel.numericValue == null && !sel.notes) continue;
-    rows.push({ code: sel.code, value: sel.value ?? null, numericValue: sel.numericValue ?? null, notes: sel.notes || null, photoUrl: sel.photoUrl || null });
+    rows.push({ code: sel.code, value: sel.value ?? null, numericValue: sel.numericValue ?? null, notes: sel.notes || null });
   }
 
   return { rows, symptomCounts };
@@ -506,7 +504,6 @@ function rowsToObservationPayload(catalog, rows) {
       value: row.value ?? null,
       numeric_value: row.numericValue ?? null,
       notes: row.notes || null,
-      photo_url: row.photoUrl || null,
     };
   }).filter(Boolean);
 }

@@ -7,6 +7,7 @@ import { getPetLabel } from '@/lib/speciesConfig';
 import { getBreeds } from '@/lib/breedConfig';
 import { PALETTE } from '@/lib/toneColors';
 import DateInfoFields, { isDateInfoValid } from './DateInfoFields';
+import PetPhoto from '@/components/PetPhoto';
 
 // The pet-identity form fields shared by onboarding's PetInfoCard (creating
 // a pet, species chosen just beforehand) and the Edit Pet page (editing an
@@ -28,17 +29,20 @@ export default function PetIdentityFields({ species, form, set, uploading, onPho
     <>
       <div className="flex flex-col items-center gap-2">
         <div className="relative h-24 w-24 rounded-full bg-primary/10 flex items-center justify-center overflow-hidden border-2 border-dashed border-primary/30">
-          {form.photo_url ? (
-            <img src={form.photo_url} alt={label} className="h-full w-full object-cover" />
-          ) : uploading ? (
+          {uploading ? (
             <Loader2 className="h-7 w-7 text-primary animate-spin" />
           ) : (
-            <Camera className="h-8 w-8 text-primary" strokeWidth={1.5} />
+            <PetPhoto
+              photoPath={form.photo_path}
+              alt={label}
+              className="h-full w-full object-cover"
+              fallback={<Camera className="h-8 w-8 text-primary" strokeWidth={1.5} />}
+            />
           )}
         </div>
         <label className="cursor-pointer flex items-center gap-1.5 text-sm text-primary hover:text-primary/80 transition-colors min-h-[44px]">
           <Camera className="h-4 w-4" />
-          {form.photo_url ? 'Change photo' : 'Add photo'}
+          {form.photo_path ? 'Change photo' : 'Add photo'}
           <input type="file" accept="image/*" className="hidden" onChange={onPhotoChange} disabled={uploading} />
         </label>
       </div>

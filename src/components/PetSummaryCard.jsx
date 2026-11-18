@@ -5,6 +5,7 @@ import VibeIcon, { vibeAccessibleLabel } from '@/components/VibeIcon';
 import { getPetLabel } from '@/lib/speciesConfig';
 import { computeDetailedAge } from '@/lib/lifeStage';
 import { PALETTE } from '@/lib/toneColors';
+import PetPhoto from '@/components/PetPhoto';
 
 // Home's primary per-pet card (Daily Check-In, Vibe & Trends spec v5). One
 // card per pet — full identity + medication count, plus (for active pets)
@@ -26,23 +27,19 @@ const HOME_CHIP_SLOTS = [
   { code: 'nausea', label: 'Nausea' },
 ];
 
-function PetPhoto({ pet, size, memorial = false }) {
+function PetAvatar({ pet, size, memorial = false }) {
   return (
     <div
       className="relative rounded-full overflow-hidden flex items-center justify-center flex-shrink-0"
       style={{ width: size, height: size, background: 'rgba(255,255,255,0.06)' }}
     >
-      {pet.photo_url ? (
-        <img
-          src={pet.photo_url}
-          alt=""
-          className={`w-full h-full object-cover ${memorial ? 'grayscale' : ''}`}
-        />
-      ) : pet.species === 'Dog' ? (
-        <Dog className="h-1/2 w-1/2 text-tier-tertiary" />
-      ) : (
-        <Cat className="h-1/2 w-1/2 text-tier-tertiary" />
-      )}
+      <PetPhoto
+        photoPath={pet.photo_path}
+        className={`w-full h-full object-cover ${memorial ? 'grayscale' : ''}`}
+        fallback={pet.species === 'Dog'
+          ? <Dog className="h-1/2 w-1/2 text-tier-tertiary" />
+          : <Cat className="h-1/2 w-1/2 text-tier-tertiary" />}
+      />
     </div>
   );
 }
@@ -98,7 +95,7 @@ export default function PetSummaryCard({
         className="block rounded-2xl px-4 py-4 active:opacity-80 transition-opacity bg-card border border-border cursor-pointer"
       >
         <div className="flex items-center gap-3.5">
-          <PetPhoto pet={pet} size={64} memorial />
+          <PetAvatar pet={pet} size={64} memorial />
           <div className="flex-1 min-w-0">
             {identity}
             {(birthYear || memorialYear) && (
@@ -139,7 +136,7 @@ export default function PetSummaryCard({
       }}
     >
       <div className="flex items-start gap-3.5">
-        <PetPhoto pet={pet} size={72} />
+        <PetAvatar pet={pet} size={72} />
 
         <div className="flex-1 min-w-0">
           {identity}

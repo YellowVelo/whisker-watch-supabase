@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { uploadFile } from '@/api/storageClient';
+import { uploadFile, UploadRejectedError } from '@/api/storageClient';
+import { usePendingScan, scanErrorText } from '@/lib/scannedDocuments';
 import { entities } from '@/api/entities';
 import { invokeAI } from '@/api/aiClient';
 import { Button } from '@/components/ui/button';
@@ -32,6 +33,9 @@ function getReminderStatus(next_due_date) {
 
 export default function VaccinationSection({ petId, species, initialEditId }) {
   const { toast } = useToast();
+  // Spec 0071: the scanned file is kept (linked to every pet that gets a
+  // saved line) only when the owner confirms the review; otherwise deleted.
+  const pendingScan = usePendingScan('vaccination');
   const [vaccines, setVaccines] = useState([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -98,7 +102,8 @@ export default function VaccinationSection({ petId, species, initialEditId }) {
     if (!file) return;
     setScanning(true);
     try {
-      const { file_url } = await uploadFile({ file });
+      const { path } = await uploadFile({ file, purpose: 'scan' });
+      pendingScan.hold(path);
       const allPets = await entities.Pet.list();
       const multiPet = allPets.length > 1;
       const petNameInstruction = multiPet
@@ -107,7 +112,7 @@ export default function VaccinationSection({ petId, species, initialEditId }) {
 
       const result = await invokeAI({
         prompt: `You are analyzing a veterinary document (e.g. an invoice or vaccine record) that may cover one or more pets. Extract ONLY vaccination line items — ignore medications, exam fees, boarding, grooming, supplies, and any other charge or record type, even if they appear on the same document. For each vaccination return: vaccine_name, date_given (YYYY-MM-DD), next_due_date (YYYY-MM-DD), administered_by (vet/clinic name), lot_number, notes. Only include fields clearly visible.${petNameInstruction}`,
-        file_urls: [file_url],
+        file_path: path,
         response_json_schema: {
           type: 'object',
           properties: {
@@ -132,6 +137,7 @@ export default function VaccinationSection({ petId, species, initialEditId }) {
 
       const scanned = (result?.vaccines || []).filter(v => v.vaccine_name);
       if (scanned.length === 0) {
+        pendingScan.discard();
         toast({ description: 'No vaccinations found on that document.' });
         return;
       }
@@ -185,12 +191,17 @@ export default function VaccinationSection({ petId, species, initialEditId }) {
       // Covers both the new rate limit (spec 0050) and any other scan
       // failure — without this, the button just returned to normal with
       // no explanation of why nothing got added.
-      toast({ variant: 'destructive', description: aiErrorText(err) });
+      pendingScan.discard();
+      toast({ variant: 'destructive', description: scanErrorText(err) });
       // A scan failure has no other record anywhere (this catch is the
       // only place it's ever visible) — report it so a real failure isn't
       // only ever seen as a toast (spec 0061 investigation: this was
       // previously the case for every AI-call catch block in the app).
-      Sentry.captureException(err, { tags: { feature: 'vaccination_scan' } });
+      // A file refused before upload (too large / wrong type) is the
+      // owner's choice of file, not a failure, so it isn't reported.
+      if (!(err instanceof UploadRejectedError)) {
+        Sentry.captureException(err, { tags: { feature: 'vaccination_scan' } });
+      }
     } finally {
       setScanning(false);
       e.target.value = '';
@@ -228,6 +239,9 @@ export default function VaccinationSection({ petId, species, initialEditId }) {
           }
         }
       }
+      await pendingScan.keep(
+        reviewGroups.filter(g => g.items.some(it => it.included)).map(g => g.petId),
+      );
       setReviewGroups([]);
       load();
     } catch (err) {
@@ -364,7 +378,7 @@ export default function VaccinationSection({ petId, species, initialEditId }) {
           onToggle={toggleReviewItem}
           onEdit={editReviewItem}
           onConfirm={handleConfirmReview}
-          onClose={() => setReviewGroups([])}
+          onClose={() => { pendingScan.discard(); setReviewGroups([]); }}
         />
       )}
     </div>

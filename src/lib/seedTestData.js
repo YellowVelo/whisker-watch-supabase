@@ -210,8 +210,11 @@ async function seedMultiPetHousehold() {
 // storage folder (`shared/`), so reset-sandbox-account's per-user
 // storage sweep never deletes them — every reseed points back at the
 // same files.
-const DEMO_CAT_PHOTO_URL = 'https://upvtbwienebfxznnagsg.supabase.co/storage/v1/object/public/uploads/shared/maple.jpg';
-const DEMO_DOG_PHOTO_URL = 'https://upvtbwienebfxznnagsg.supabase.co/storage/v1/object/public/uploads/shared/cooper.jpg';
+// Stock demo photos (not real animals), copied into each environment's own
+// uploads bucket under shared/, which every signed-in user may view
+// (spec 0071, migration 0054).
+const DEMO_CAT_PHOTO_PATH = 'shared/maple.jpg';
+const DEMO_DOG_PHOTO_PATH = 'shared/cooper.jpg';
 
 async function seedDemoShowcase() {
   // Independent of each other, so both pets are created in parallel.
@@ -221,14 +224,14 @@ async function seedDemoShowcase() {
       birth_date: daysAgo(365 * 9), birth_date_precision: 'YEAR',
       sex: 'Female', altered_status: 'Yes',
       conditions: ['CKD'],
-      photo_url: DEMO_CAT_PHOTO_URL,
+      photo_path: DEMO_CAT_PHOTO_PATH,
       notes: `Seeded demo pet — senior cat, declining wellness trend (${HISTORY_DAYS} days).`,
     }),
     entities.Pet.create({
       species: 'Dog', name: 'Cooper', breed: 'Golden Retriever',
       birth_date: daysAgo(365 * 3), birth_date_precision: 'EXACT',
       sex: 'Male', altered_status: 'Yes',
-      photo_url: DEMO_DOG_PHOTO_URL,
+      photo_path: DEMO_DOG_PHOTO_PATH,
       notes: `Seeded demo pet — healthy adult dog, stable wellness trend (${HISTORY_DAYS} days).`,
     }),
   ]);

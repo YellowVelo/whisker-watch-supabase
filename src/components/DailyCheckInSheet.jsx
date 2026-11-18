@@ -220,7 +220,7 @@ export default function DailyCheckInSheet({ pet, date, onClose, onSaved, isCatch
       const cat = getCategory(code);
       const a = answers[code] || {};
       if (cat.multiSelect) {
-        return { code, values: a.values || [], notes: a.notes || null, photoUrl: a.photoUrl || null };
+        return { code, values: a.values || [], notes: a.notes || null };
       }
       return { code, value: a.value ?? null, numericValue: a.numericValue ?? null, notes: a.notes || null };
     })

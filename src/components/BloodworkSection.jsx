@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { uploadFile } from '@/api/storageClient';
+import { usePendingScan, scanErrorText } from '@/lib/scannedDocuments';
 import { entities } from '@/api/entities';
 import { invokeAI } from '@/api/aiClient';
 import { Button } from '@/components/ui/button';
@@ -11,7 +12,6 @@ import { Plus, FlaskConical, ChevronDown, ChevronUp, Pencil, Trash2, Upload, Loa
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { format, parseISO } from 'date-fns';
 import { useToast } from '@/components/ui/use-toast';
-import { aiErrorText } from '@/lib/aiGuardrails';
 
 // Design System Amendment #10 (2026-07-30) — 16 lab values need more
 // colors than the original 5 --chart-* tokens, so the token set itself
@@ -45,6 +45,9 @@ const EMPTY_FORM = { date: '', lab_name: '', vet_name: '', notes: '', urine_spec
 
 export default function BloodworkSection({ petId }) {
   const { toast } = useToast();
+  // Spec 0071: an imported report is kept (linked to this pet) only if the
+  // prefilled form is saved; closing the form deletes it.
+  const pendingScan = usePendingScan('bloodwork');
   const [records, setRecords] = useState([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -77,16 +80,16 @@ export default function BloodworkSection({ petId }) {
     if (!file) return;
     setImporting(true);
     try {
-      const { file_url } = await uploadFile({ file });
+      const { path } = await uploadFile({ file, purpose: 'scan' });
+      pendingScan.hold(path);
 
-      // The Edge Function detects whether file_url points to an image
-      // or a PDF (via content-type) and builds the right Claude input
-      // block either way, so the same call works for both — no need
-      // for a separate code path like Base44's ExtractDataFromUploadedFile.
+      // The Edge Function reads the file from storage, detects whether it's
+      // an image or a PDF, and builds the right Claude input block either
+      // way, so the same call works for both.
       const fieldList = FIELDS.map(f => `${f.key} (${f.label}, ${f.unit})`).join(', ');
       const result = await invokeAI({
         prompt: `You are analyzing a veterinary bloodwork report (image or PDF). Extract all available values from this lab report. Return only a JSON object with these possible fields: date (YYYY-MM-DD), lab_name, vet_name, urine_specific_gravity, urine_protein (one of: Negative, Trace, 1+, 2+, 3+, 4+), notes, and numeric fields: ${fieldList}. Only include fields that are clearly visible in the document. Omit fields not present.`,
-        file_urls: [file_url],
+        file_path: path,
         response_json_schema: {
           type: 'object',
           properties: Object.fromEntries([
@@ -108,12 +111,15 @@ export default function BloodworkSection({ petId }) {
         setEditing(null);
         setForm(f);
         setDialogOpen(true);
+      } else {
+        pendingScan.discard();
       }
     } catch (err) {
+      pendingScan.discard();
       // Covers both the new rate limit (spec 0050) and any other scan
       // failure — without this, the button just returned to normal with
       // no explanation of why nothing got imported.
-      toast({ variant: 'destructive', description: aiErrorText(err) });
+      toast({ variant: 'destructive', description: scanErrorText(err) });
     } finally {
       setImporting(false);
       e.target.value = '';
@@ -142,6 +148,7 @@ export default function BloodworkSection({ petId }) {
     } else {
       await entities.Bloodwork.create(data);
     }
+    if (!editing) await pendingScan.keep([petId]);
     setSaving(false);
     setDialogOpen(false);
     load();
@@ -179,7 +186,7 @@ export default function BloodworkSection({ petId }) {
                 Upload File
               </span>
             </Button>
-            <input type="file" accept="image/*,.pdf,.csv" className="hidden" onChange={handleImport} disabled={importing} />
+            <input type="file" accept="image/*,.pdf" className="hidden" onChange={handleImport} disabled={importing} />
           </label>
           <Button size="sm" onClick={openAdd}><Plus className="h-4 w-4 mr-1" /> Add</Button>
         </div>
@@ -261,7 +268,7 @@ export default function BloodworkSection({ petId }) {
         </div>
       )}
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      <Dialog open={dialogOpen} onOpenChange={(open) => { if (!open) pendingScan.discard(); setDialogOpen(open); }}>
         <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-2xl">{editing ? 'Edit' : 'Add'} Bloodwork</DialogTitle>

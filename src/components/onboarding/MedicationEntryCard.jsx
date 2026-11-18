@@ -6,7 +6,8 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import SmartSelect from '@/components/SmartSelect';
 import { entities } from '@/api/entities';
-import { uploadFile } from '@/api/storageClient';
+import { uploadFile, UploadRejectedError } from '@/api/storageClient';
+import { usePendingScan, scanErrorText } from '@/lib/scannedDocuments';
 import { invokeAI } from '@/api/aiClient';
 import { FREQUENCY_OPTIONS } from '@/lib/onboardingConfig';
 
@@ -28,6 +29,8 @@ export default function MedicationEntryCard({ petId, petName, onContinue, onSkip
   const [saving, setSaving] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [error, setError] = useState(null);
+  // Spec 0071: the scan file is kept only if the entry it filled in is saved.
+  const pendingScan = usePendingScan('medication');
 
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
   const canSave = form.name.trim().length > 0;
@@ -39,10 +42,11 @@ export default function MedicationEntryCard({ petId, petName, onContinue, onSkip
     setScanning(true);
     setError(null);
     try {
-      const { file_url } = await uploadFile({ file });
+      const { path } = await uploadFile({ file, purpose: 'scan' });
+      pendingScan.hold(path);
       const result = await invokeAI({
         prompt: 'You are analyzing a photo of a medication label. Extract only the fields clearly visible: name (the medication name), dosage (strength + amount per dose, e.g. "5mg"), frequency (how often it is given, matched to one of: Once daily, Twice daily, Every other day, Weekly, Monthly, As needed, Other).',
-        file_urls: [file_url],
+        file_path: path,
         response_json_schema: {
           type: 'object',
           properties: {
@@ -60,7 +64,10 @@ export default function MedicationEntryCard({ petId, petName, onContinue, onSkip
       }));
     } catch (err) {
       console.error('Failed to scan medication label:', err);
-      setError("Couldn't read that label — you can still enter it manually below.");
+      pendingScan.discard();
+      setError(err instanceof UploadRejectedError || err?.status === 413
+        ? scanErrorText(err)
+        : "Couldn't read that label — you can still enter it manually below.");
     } finally {
       setScanning(false);
       e.target.value = '';
@@ -78,6 +85,7 @@ export default function MedicationEntryCard({ petId, petName, onContinue, onSkip
         dosage: form.dosage.trim() || null,
         frequency: form.frequency || null, // '' would violate medications_frequency_check
       });
+      await pendingScan.keep([petId]);
       return created;
     } catch (err) {
       console.error('Failed to save medication:', err);

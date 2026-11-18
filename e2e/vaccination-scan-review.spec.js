@@ -275,3 +275,51 @@ test('closing the review screen without confirming saves nothing', async ({ page
   const { data } = await supabase.from('vaccinations').select('id').eq('pet_id', petId);
   expect(data?.length ?? 0).toBe(0);
 });
+
+// Spec 0071: the scanned file is kept, linked to the pet, only when the
+// owner confirms; closing the review deletes it from storage. The upload's
+// storage path is read off the upload request itself.
+async function scanAndCapturePath(page, petId, mockResponse) {
+  const uploadReq = page.waitForRequest((req) => req.method() === 'POST' && /\/storage\/v1\/object\/uploads\//.test(req.url()));
+  await openScanFrom(page, petId, mockResponse);
+  const url = new URL((await uploadReq).url());
+  return decodeURIComponent(url.pathname.split('/storage/v1/object/uploads/')[1]);
+}
+
+async function fileExists(storagePath) {
+  const [folder, name] = storagePath.split('/');
+  const { data } = await supabase.storage.from('uploads').list(folder, { search: name });
+  return (data ?? []).some((f) => f.name === name);
+}
+
+test('confirming a scan keeps the file, linked to the pet as a vaccination document', async ({ page }) => {
+  const petId = await createPet(`E2E Scan Keep ${Date.now()}`);
+  const storagePath = await scanAndCapturePath(page, petId, {
+    vaccines: [{ vaccine_name: 'Rabies', date_given: '2026-08-01' }],
+  });
+
+  await page.getByRole('button', { name: /Save 1 Vaccination/ }).click();
+  await expect(page.getByRole('heading', { name: 'Review Scanned Vaccinations' })).not.toBeVisible();
+
+  await expect.poll(async () => {
+    const { data } = await supabase.from('pet_documents').select('storage_path, kind').eq('pet_id', petId);
+    return data ?? [];
+  }).toEqual([{ storage_path: storagePath, kind: 'vaccination' }]);
+  expect(await fileExists(storagePath)).toBe(true);
+
+  await supabase.storage.from('uploads').remove([storagePath]);
+});
+
+test('closing a scan without confirming deletes the uploaded file', async ({ page }) => {
+  const petId = await createPet(`E2E Scan Discard ${Date.now()}`);
+  const storagePath = await scanAndCapturePath(page, petId, {
+    vaccines: [{ vaccine_name: 'Rabies', date_given: '2026-08-01' }],
+  });
+
+  await expect(page.getByRole('heading', { name: 'Review Scanned Vaccinations' })).toBeVisible();
+  await page.getByRole('button', { name: 'Close' }).click();
+
+  await expect.poll(() => fileExists(storagePath)).toBe(false);
+  const { data } = await supabase.from('pet_documents').select('id').eq('pet_id', petId);
+  expect(data?.length ?? 0).toBe(0);
+});

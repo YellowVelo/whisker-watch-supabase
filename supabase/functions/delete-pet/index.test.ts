@@ -136,3 +136,48 @@ Deno.test('delete-pet: non-primary co-owner leaving removes only their access', 
     await deleteScratchUser(coOwner.userId);
   }
 });
+
+Deno.test('delete-pet: removes the pet photo file and its document links (spec 0071)', async () => {
+  const owner = await createScratchUser('photo-owner');
+  const admin = adminClient();
+  // A valid 1x1 PNG.
+  const png = Uint8Array.from(
+    atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII='),
+    (c) => c.charCodeAt(0),
+  );
+  try {
+    const photoPath = `${owner.userId}/photo.png`;
+    const docPath = `${owner.userId}/scan.png`;
+    for (const path of [photoPath, docPath]) {
+      const { error } = await owner.client.storage.from('uploads').upload(path, png, { contentType: 'image/png' });
+      if (error) throw new Error(`upload failed: ${error.message}`);
+    }
+    const { data: pet, error: petError } = await owner.client
+      .from('pets')
+      .insert({ name: 'Scratch Photo Pet', created_by: owner.userId, photo_path: photoPath })
+      .select('id')
+      .single();
+    if (petError || !pet) throw new Error(`pet insert failed: ${petError?.message}`);
+    const { error: linkError } = await owner.client
+      .from('pet_documents')
+      .insert({ pet_id: pet.id, storage_path: docPath, kind: 'bloodwork' });
+    if (linkError) throw new Error(`document link failed: ${linkError.message}`);
+
+    const { status, json } = await callFunction('delete-pet', owner.accessToken, { pet_id: pet.id });
+    assertEquals(status, 200);
+    assertEquals(json.mode, 'deleted');
+
+    const { data: files } = await admin.storage.from('uploads').list(owner.userId);
+    const names = (files ?? []).map((f: { name: string }) => f.name);
+    assertEquals(names.includes('photo.png'), false, 'the pet photo file is removed with the pet');
+
+    const { data: links } = await admin.from('pet_documents').select('id').eq('pet_id', pet.id);
+    assertEquals(links?.length ?? 0, 0, 'document links are removed with the pet');
+    // The scanned file itself stays for now: deleting document files with
+    // the pet is punch list PA-14, not spec 0071.
+  } finally {
+    const { data: files } = await admin.storage.from('uploads').list(owner.userId);
+    if (files?.length) await admin.storage.from('uploads').remove(files.map((f: { name: string }) => `${owner.userId}/${f.name}`));
+    await deleteScratchUser(owner.userId);
+  }
+});
