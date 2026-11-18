@@ -1,6 +1,6 @@
 # 0071_Private_Uploads_Storage_Specification_v1
 
-**Status:** In progress. Built 2026-11-15 on branch `build-0071-private-uploads`; Merged as PR #30. Phase 1 (`0054`) and Phase 2 (`0055`) are live on dev and staging; prod is pending (see Build Notes).
+**Status:** Shipped 2026-11-17. Merged as PR #30 (+ #31). Phase 1 (`0054`) and Phase 2 (`0055`) are live on all three projects (dev, staging, prod). The uploads bucket is private everywhere. Follow-up: a small cleanup PR to remove the temporary `file_url` shortcut and the `photo_url` fallback (punch list PA-52).
 **Date:** 2026-11-15
 **Punch list:** PA-01 (Pre-Alpha Audit tab, P0). Source: spec 0068 P0-1, plus 0069's note that `observations.photo_url` accepts any outside link.
 **Related files:**
@@ -49,11 +49,15 @@ Where the build differs from the plan below, and why:
 6. **Pet photo uploads no longer clear the old `photo_url`.** Phase 2 drops the column, so nothing writes to it.
 
 ### Rollout status
+
+Rollout lessons (2026-11-17):
+- **Supabase's CDN keeps serving recently fetched public files for up to an hour** (`Cache-Control: public, max-age=3600`) after the bucket goes private. Storage itself refuses them immediately. Verify old links with a cache-busting query string (e.g. `?nocache=…`), not a plain re-fetch.
+- **Cloudflare version IDs are not git commit IDs, and builds from non-`main` branches appear in the same list and can be promoted to prod.** On prod, the PR branch build (`cdc6034e`) went live before Phase 1, so for a short time the new screens likely showed placeholder icons instead of photos (no `photo_path` yet). Nothing was lost. Promote only builds from `main`, and only at the step the rollout calls for.
 | Environment | 0054 (Phase 1) | Frontend on 0071 build | Marker set | 0055 (Phase 2) | Demo photos in `shared/` |
 |---|---|---|---|---|---|
 | dev | Done 2026-11-15 | Done (local) | Done | Done 2026-11-15 | Done |
 | staging | Done 2026-11-17 (0 pets, nothing to convert) | Done 2026-11-17 (`main` → `staging`, bundle confirmed on wysker-watch-staging.pages.dev) | Done | Done 2026-11-17; `private_uploads.test.ts` 5/5 against staging | Done |
-| prod | — | — | — | — | already there |
+| prod | Done 2026-11-17 (all 5 photo links converted: Auggie, Harper, Tribble + stock Maple, Cooper) | Done 2026-11-17 (Lynn promoted Cloudflare version `c62bec9b` = `main` at #31; photos confirmed showing) | Done | Done 2026-11-17. Bucket `public = false`, no public-read rule. A cache-bypassing request to an old public link returns 400. Lynn confirmed Auggie/Harper/Tribble still show (AC10). | already there |
 
 ## Functional Requirements
 
