@@ -120,6 +120,8 @@ uploads/{userId}/... (plus shared/ for the stock demo photos)
 
 Private bucket, restricted write (spec 0071). Files are shown only through short-lived signed links (src/api/storageClient.js getSignedUrls/getSignedUrl, 1 hour). Store the file's path (e.g. pets.photo_path, pet_documents.storage_path), never a link. Who may open a file is defined by the storage read rule uploads_read_permitted (migration 0054): your own folder; shared/; a pet's photo for its owners, co-owners and sitters; a scanned document for its owners and co-owners only. Edge Functions read files with the service role, never by fetching a caller-supplied URL.
 
+Making a file private or deleting it does not remove copies the CDN already holds. They can keep loading for over an hour (seen on prod, spec 0071). If something must disappear immediately, the cache needs clearing too.
+
 File Types
 
 Images: JPEG/PNG/WebP/GIF — up to 10 MB; up to 5 MB when sent to the AI for scanning (the AI's own image limit)
@@ -130,7 +132,7 @@ Enforced twice: by the bucket itself (file_size_limit, allowed_mime_types) and b
 
 Naming
 
-Use UUIDs for filenames
+Files are named `{userId}/{timestamp}-{random}.{ext}` by `uploadFile()`. Never build a path by hand.
 
 Avoid user‑provided names
 

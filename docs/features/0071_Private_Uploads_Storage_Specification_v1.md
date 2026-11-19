@@ -1,6 +1,6 @@
 # 0071_Private_Uploads_Storage_Specification_v1
 
-**Status:** Shipped 2026-11-17. Merged as PR #30 (+ #31). Phase 1 (`0054`) and Phase 2 (`0055`) are live on all three projects (dev, staging, prod). The uploads bucket is private everywhere. Follow-up: a small cleanup PR to remove the temporary `file_url` shortcut and the `photo_url` fallback (punch list PA-52).
+**Status:** Shipped 2026-11-17. Merged as PR #30 (+ #31, #32). Phase 1 (`0054`) and Phase 2 (`0055`) are live on all three projects (dev, staging, prod). The uploads bucket is private everywhere. Follow-up: a small cleanup PR to remove the temporary `file_url` shortcut and the `photo_url` fallback (punch list PA-52).
 **Date:** 2026-11-15
 **Punch list:** PA-01 (Pre-Alpha Audit tab, P0). Source: spec 0068 P0-1, plus 0069's note that `observations.photo_url` accepts any outside link.
 **Related files:**
@@ -51,7 +51,7 @@ Where the build differs from the plan below, and why:
 ### Rollout status
 
 Rollout lessons (2026-11-17):
-- **Supabase's CDN keeps serving recently fetched public files for up to an hour** (`Cache-Control: public, max-age=3600`) after the bucket goes private. Storage itself refuses them immediately. Verify old links with a cache-busting query string (e.g. `?nocache=…`), not a plain re-fetch.
+- **Supabase's CDN can keep serving recently fetched public files for over an hour after the bucket goes private.** On prod, old links still loaded at 72 minutes and were refused when checked on 2026-11-18. Storage itself refuses them immediately. To check whether the lock worked, add a cache-busting query string to the link (e.g. `?nocache=…`). To be sure no copy is still out there, check the plain link too, after the cache has expired.
 - **Cloudflare version IDs are not git commit IDs, and builds from non-`main` branches appear in the same list and can be promoted to prod.** On prod, the PR branch build (`cdc6034e`) went live before Phase 1, so for a short time the new screens likely showed placeholder icons instead of photos (no `photo_path` yet). Nothing was lost. Promote only builds from `main`, and only at the step the rollout calls for.
 | Environment | 0054 (Phase 1) | Frontend on 0071 build | Marker set | 0055 (Phase 2) | Demo photos in `shared/` |
 |---|---|---|---|---|---|
