@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Loader2, X, Plus, UserPlus } from 'lucide-react';
+import { ArrowLeft, Loader2, X, Plus, UserPlus, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -13,6 +13,7 @@ import PageTransition from '@/components/PageTransition';
 import PetIdentityFields from '@/components/onboarding/fields/PetIdentityFields';
 import { resolveDate, decomposeDateParts } from '@/components/onboarding/fields/DateInfoFields';
 import InviteCoOwnerDialog from '@/components/InviteCoOwnerDialog';
+import { useAuth } from '@/lib/AuthContext';
 
 // Spec 0036: the pet-identity half of the old EditPetSheet split out onto
 // its own routed page (Conditions moved to PetConditions.jsx instead).
@@ -62,6 +63,7 @@ export default function PetEdit() {
   const [newNickname, setNewNickname] = useState('');
   const [newActivity, setNewActivity] = useState('');
   const [coOwnerOpen, setCoOwnerOpen] = useState(false);
+  const { user } = useAuth();
 
   useEffect(() => {
     entities.Pet.get(petId)
@@ -98,6 +100,8 @@ export default function PetEdit() {
     if (a && !form.favorite_activities.includes(a)) set('favorite_activities', [...form.favorite_activities, a]);
     setNewActivity('');
   };
+
+  const isPrimaryOwner = !!pet && !!user && pet.created_by === user.id;
 
   const handleSave = async () => {
     if (!form.name.trim()) return;
@@ -215,8 +219,11 @@ export default function PetEdit() {
                 <Textarea id="pet-notes" value={form.notes} onChange={e => set('notes', e.target.value)} rows={3} placeholder="Personality, quirks, care notes…" />
               </div>
 
+              {/* Only the primary owner manages co-owners (spec 0072); co-owners get a read-only list. */}
               <Button type="button" variant="outline" className="w-full" onClick={() => setCoOwnerOpen(true)}>
-                <UserPlus className="h-4 w-4 mr-2" /> Invite Co-Owner
+                {isPrimaryOwner
+                  ? <><UserPlus className="h-4 w-4 mr-2" /> Invite Co-Owner</>
+                  : <><Users className="h-4 w-4 mr-2" /> View Co-Owners</>}
               </Button>
 
               {error && <p className="text-sm text-destructive" role="alert">{error}</p>}
@@ -230,7 +237,7 @@ export default function PetEdit() {
       </div>
 
       {pet?.id && (
-        <InviteCoOwnerDialog petId={pet.id} petName={pet.name} open={coOwnerOpen} onOpenChange={setCoOwnerOpen} />
+        <InviteCoOwnerDialog petId={pet.id} petName={pet.name} open={coOwnerOpen} onOpenChange={setCoOwnerOpen} readOnly={!isPrimaryOwner} />
       )}
     </PageTransition>
   );
