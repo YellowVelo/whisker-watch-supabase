@@ -204,7 +204,7 @@ A one-page checklist run against every `Critical`/`High` page before the Accessi
 | Co-owner lockdown: `is_primary_pet_owner()` is not callable by signed-out visitors | High | `[Deno: supabase/tests/co_owner_access.test.ts]` |
 | Edit Pet as a co-owner: the button reads **View Co-Owners**, the list is read-only ("Only the primary owner can add or remove co-owners."), with no email field or remove buttons | High | `[Playwright: co-owner.spec.js]` — local only: signs in as coowner1@, which CI has no secret for. |
 | Invite Co-Owner: an invite the database refuses shows "We couldn't add that co-owner. Please try again." and the button works again | High | `[Playwright: co-owner.spec.js]` |
-| Each environment's `pet_co_owners` policies match migration 0056: `pet_co_owners_insert_primary_owner`, `pet_co_owners_select_any_owner`, `pet_co_owners_delete_primary_owner`, and none of 0004's three | Critical | `[Manual]` — E2E and Deno only target dev. Run `select policyname from pg_policies where schemaname='public' and tablename='pet_co_owners'` on each project after pushing 0056. |
+| Each environment's `pet_co_owners` policies match migration 0056: `pet_co_owners_insert_primary_owner`, `pet_co_owners_select_any_owner`, `pet_co_owners_delete_primary_owner`, and none of 0004's three | Critical | `[Manual]` — E2E and Deno only target dev. Run `select policyname from pg_policies where schemaname='public' and tablename='pet_co_owners'` on each project after pushing 0056. Run 2026-11-20, pass on dev, staging and prod (spec 0072 Build Note 6). |
 
 ### 5.8 Account / Settings — Critical (destructive flows)
 
