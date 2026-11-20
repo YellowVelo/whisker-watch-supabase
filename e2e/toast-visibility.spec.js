@@ -18,7 +18,13 @@ test('a toast is pinned to the viewport (position: fixed ancestor), not just pre
 
   const firstNameInput = page.locator('#first-name');
   const original = await firstNameInput.inputValue();
-  const testValue = `${original || 'Test'} ${Date.now()}`;
+  // A fresh, short value every run, never built on top of `original`: the
+  // old `${original} ${Date.now()}` grew test1@'s name by one timestamp per
+  // run whose restore below didn't finish, until it hit the 100-character
+  // limit (migration 0015 / NAME_MAX_LENGTH). Past that, the input clipped
+  // the edit back to the same value, Save stayed disabled, and every run
+  // timed out (found during spec 0072, 2026-11-19).
+  const testValue = `E2E Toast ${Date.now()}`;
 
   try {
     await firstNameInput.fill(testValue);

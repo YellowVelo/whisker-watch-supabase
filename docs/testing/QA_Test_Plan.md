@@ -134,7 +134,7 @@ A one-page checklist run against every `Critical`/`High` page before the Accessi
 | Retired `/pet/:petId` and `/pet/:petId/profile` routes still resolve (redirect to `/pets?highlight=`) | Medium | `[Manual]` — regression case for old bookmarks/links. |
 | Invite Co-Owner: blocked entirely on demo accounts | High | `[Manual]` |
 | Invite Co-Owner: self-invite and duplicate-invite both rejected with correct copy | High | `[Manual]` |
-| Invite Co-Owner: remove has **no** confirm dialog (delete fires immediately) | High | `[Manual]` — confirm this asymmetry with sitter-remove (5.9) is intentional, not a bug. |
+| Invite Co-Owner: remove asks "Remove {email} as a co-owner?"; Cancel keeps them, Remove takes them off the list (spec 0072) | High | `[Playwright: co-owner.spec.js]` |
 | Memorial Dialog: marking a pet as memorial moves it to the Rainbow Bridge section | Medium | `[Manual]` |
 | Vaccination Calendar Export produces a real downloadable `.ics` file | Critical | `[Playwright: vaccination-calendar-export.spec.js]` |
 | Vaccination due-reminder deep link opens the correct vaccination pre-loaded for edit | High | `[Playwright: vaccination-due-reminders.spec.js]` |
@@ -196,7 +196,15 @@ A one-page checklist run against every `Critical`/`High` page before the Accessi
 | Pet Sitter page reachable, all sits listed | High | `[Playwright: pet-sitter.spec.js]` |
 | Wellbeing badges: 5 groups, correct direction labels, "no check-in yet" state, single-tap-only navigation | High | `[Playwright: pet-sitter.spec.js]` |
 | Invite Sitter: blocked on demo accounts, self-invite/duplicate rejected | High | `[Manual]` |
-| Invite Sitter: remove **does** show an "Are you sure?" confirm dialog | High | `[Manual]` — confirm asymmetry with co-owner-remove (5.3) is intentional. |
+| Invite Sitter: remove **does** show an "Are you sure?" confirm dialog | High | `[Manual]` |
+| **Co-owner lockdown (spec 0072):** a stranger can't add themselves as co-owner of someone else's pet, by attaching their account directly, by naming the real owner as inviter, or by an email-only entry they then claim | Critical | `[Deno: supabase/tests/co_owner_access.test.ts]` |
+| Co-owner lockdown: a co-owner can't add another co-owner; even the primary owner can't add one with an account already attached; an email-only invite from the primary owner still works once claimed | Critical | `[Deno: supabase/tests/co_owner_access.test.ts]` |
+| Co-owner lockdown: every owner of a pet sees its full co-owner list; a stranger sees none | High | `[Deno: supabase/tests/co_owner_access.test.ts]` |
+| Co-owner lockdown: only the primary owner can remove a co-owner; a removed co-owner loses access and can't add themselves back | Critical | `[Deno: supabase/tests/co_owner_access.test.ts]` |
+| Co-owner lockdown: `is_primary_pet_owner()` is not callable by signed-out visitors | High | `[Deno: supabase/tests/co_owner_access.test.ts]` |
+| Edit Pet as a co-owner: the button reads **View Co-Owners**, the list is read-only ("Only the primary owner can add or remove co-owners."), with no email field or remove buttons | High | `[Playwright: co-owner.spec.js]` — local only: signs in as coowner1@, which CI has no secret for. |
+| Invite Co-Owner: an invite the database refuses shows "We couldn't add that co-owner. Please try again." and the button works again | High | `[Playwright: co-owner.spec.js]` |
+| Each environment's `pet_co_owners` policies match migration 0056: `pet_co_owners_insert_primary_owner`, `pet_co_owners_select_any_owner`, `pet_co_owners_delete_primary_owner`, and none of 0004's three | Critical | `[Manual]` — E2E and Deno only target dev. Run `select policyname from pg_policies where schemaname='public' and tablename='pet_co_owners'` on each project after pushing 0056. |
 
 ### 5.8 Account / Settings — Critical (destructive flows)
 
@@ -259,7 +267,7 @@ A one-page checklist run against every `Critical`/`High` page before the Accessi
 | `ask-vet-assistant` refuses outside links, `..` paths, and files the caller can't open (another user's, or a document for a sitter), without calling the AI | Critical | `[Deno: supabase/tests/private_uploads.test.ts]` |
 | A photo added in Edit Pet saves as a private file and shows through a signed link; a photo over 10 MB or a non-photo file shows the approved message and uploads nothing | High | `[Playwright: private-storage.spec.js]` |
 | The pet photo shows on every screen that has one: Pets, pet profile, Trends, Home summary card, Vet Report export, onboarding/Edit Pet identity field | High | `[Manual]` — all six use the shared `PetPhoto` component; the Playwright test covers the component on the profile. Check each screen once per environment after Phase 2, including a memorial pet (grayscale). |
-| Co-owner sees the pet photo (coowner1@ on a test1@ pet) | High | `[Manual]` — no co-owner fixture in the e2e suite; the rule itself is covered by the Deno test above. |
+| Co-owner sees the pet photo (coowner1@ on a test1@ pet) | High | `[Manual]` — `e2e/co-owner.spec.js` (spec 0072) now seeds a co-owner household with coowner1@, but doesn't check photos; the rule itself is covered by the Deno test above. |
 | Scan Record: confirming keeps the scanned file, linked to the pet as a `vaccination` document; closing without confirming deletes the file | High | `[Playwright: vaccination-scan-review.spec.js]` — local only (that file is skipped in CI, spec 0067). |
 | Bloodwork import and onboarding vaccine/medication scans: Save keeps and links the file (`bloodwork`/`vaccination`/`medication`), closing or failing deletes it; bloodwork's button no longer offers CSV | High | `[Manual]` — same shared `usePendingScan` helper as Scan Record. Check with `select kind, storage_path from pet_documents where pet_id = '…'` after each. |
 | A scan photo over 5 MB shows "That photo is too large to scan. Try a smaller photo or a PDF." | Medium | `[Vitest: src/api/__tests__/storageClient.test.js]` + `[Manual]` once in the browser. |

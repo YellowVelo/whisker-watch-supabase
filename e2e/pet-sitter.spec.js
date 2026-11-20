@@ -120,14 +120,28 @@ test.beforeAll(async () => {
   // duplicate its observation-catalog logic here since a Great Day with
   // no observations at all already yields a symptom count of 0 both days.
   //
-  // Dates MUST be computed the same way src/lib/timezone.js's
-  // dateStrInTimezone does (Intl-formatted in the browser's detected
-  // timezone), not plain UTC — test4@ has no profile.timezone set (never
-  // onboarded), so SitterPetRow falls back to detectTimezone() (the
-  // browser's local zone), which can land on a different calendar date
-  // than UTC depending on time of day. Playwright's browser runs on this
-  // same host, so resolving the timezone here matches what it detects.
-  const localTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  // Dates MUST be computed in the same timezone SitterPetRow uses
+  // (src/components/WellbeingChipGrid.jsx): the signed-in sitter's saved
+  // profile.timezone, falling back to the browser's detected zone. test4@
+  // has had America/New_York saved on dev since 2026-08-20, so using the
+  // browser's zone alone (UTC in CI) seeded the wrong calendar day every
+  // evening between 00:00 UTC and midnight Eastern, and the badges never
+  // appeared (found during spec 0072, 2026-11-20; punch list PA-57). Read
+  // the zone as test4@ itself, since profiles are readable only by their
+  // own owner. Playwright's browser runs on this same host, so the
+  // fallback matches what the page detects.
+  const sitterClient = newClient();
+  const { data: sitterAuth, error: sitterSignInError } = await sitterClient.auth.signInWithPassword({
+    email: process.env.PLAYWRIGHT_TEST4_SITTER_EMAIL,
+    password: process.env.PLAYWRIGHT_TEST4_SITTER_PASSWORD,
+  });
+  if (sitterSignInError) throw sitterSignInError;
+  const { data: sitterProfile } = await sitterClient
+    .from('profiles')
+    .select('timezone')
+    .eq('id', sitterAuth.user.id)
+    .maybeSingle();
+  const localTz = sitterProfile?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
   const dateStrInTz = (instant) =>
     new Intl.DateTimeFormat('en-CA', { timeZone: localTz, year: 'numeric', month: '2-digit', day: '2-digit' }).format(instant);
   const todayStr = dateStrInTz(new Date());
