@@ -125,7 +125,7 @@ None. Both resolved by Lynn on 2026-11-21: the decisions and policy wording are 
 
 1. **Verified locally, not yet on dev.** This cloud session has no Supabase login, so nothing has been pushed to any project. Instead, every migration (0001–0058, minus prod-only data import 0027) was loaded into a throwaway local Postgres 16 with small stand-ins for Supabase's `auth`/`storage` schemas, and 7 scenarios were run against 0058 (3-person transfer with records, files, sits and a retry; split sit ending; sitter deleting; co-owner leaving; delete-pet transfer with single and mixed sits; browser roles refused; foreign-key rules). All passed, and a deliberately wrong expectation was confirmed to fail. The Deno integration tests type-check but still need a run against dev (they call the deployed functions).
 2. **Bug caught during the build:** the first draft's "remove sits left with no pets" step would have deleted every empty sit in the database, not just this person's. Fixed before any test run. It now only touches sits that included a pet being deleted.
-3. **New notification wording (needs Lynn's approval before prod):**
+3. **New notification wording (approved by Lynn, 2026-11-21):**
    - Transfer, account deleted: *"{Name} deleted their account. You are now the primary owner of {Pet}."* (was "…the sole owner of {Pet}." Wrong when other co-owners remain.)
    - Transfer, pet removed: *"{Name} removed {Pet} from their account. You are now the primary owner."* (was "…You are now the sole owner.")
    - Sit handed over: *"You now manage the pet sit for {Pets} ({Dec 1 – Dec 5}), which {Name} set up."*
