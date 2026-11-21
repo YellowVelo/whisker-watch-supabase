@@ -1,6 +1,6 @@
 # 0075_Account_Deletion_Data_Safety_Specification_v1
 
-**Status:** Draft, awaiting Lynn's review
+**Status:** Approved (Lynn, 2026-11-21: 1A sits pass to the new owner, 2A keep email logs + say so, 3A 30-day backup window, policy wording approved, OQ2 yes). Building.
 **Date:** 2026-11-21
 **Lane:** Backend (migration + Edge Functions + backup script)
 **Punch list:** PA-06, PA-07 (both P0), PA-14 (P1). Pre-Alpha Audit tab, `docs/planning/Wysker_Watch_Launch_Plan.xlsx`. Source findings: spec 0068 P0-5, P0-6, P1-5 and two of its P2s ("delete-account can partly finish", "misleading header comment").
@@ -8,10 +8,7 @@
 
 ## Lynn — what I need from you
 
-**Now (blocks the build):**
-1. **Approve or change three decisions:** pet sits pass to the new owner; email delivery logs and the do-not-email list are kept; deleted files' backup copies are removed after 30 days. (Before You Approve, items 1–3.)
-2. **Approve or edit the Privacy Policy wording** in Functional Requirement 8.
-3. **Answer Open Question 2:** yes or no, when you remove one shared pet, do your sits for it pass to the new owner too?
+Decisions all answered 2026-11-21 (see Status).
 
 **Later (after I've built it, I'll remind you):**
 4. **Cloudflare dashboard:** R2 → `whisker-watch-storage-backups` → Settings → Object lifecycle rules → Add rule. Prefix `deleted/`, delete after 30 days. About 2 minutes.
@@ -21,12 +18,12 @@ I do everything else: the code, tests, read-only checks, and pushing to all 3 Su
 
 ## Before You Approve This
 
-You declined the question pop-up, so I went with my recommended answer on each decision. **Items 1–3 are those decisions. Change any of them and I'll redo the affected part.**
+Items 1–3 were confirmed by Lynn on 2026-11-21.
 
 1. **Decision: pet sits pass to the new owner.** When a primary owner deletes their account and the pet passes to a co-owner, any pet sit (and its sitter invites) the leaving owner set up for that pet now passes to the new owner too. Today they're silently deleted. One exception: if a sit covers several pets that end up with *different* new owners, that sit can't have one owner, so it ends, and each new owner is notified.
 2. **Decision: email history is kept, and the policy says so.** Delivery logs and the do-not-email list (bounces and unsubscribes) keep the address, so we never email an address that bounced or asked us to stop. The person's beta-signup and early-adopter rows **are** deleted.
 3. **Decision: deleted files' backup copies are removed after 30 days**, matching the database backups. You'd add one rule in the Cloudflare dashboard (exact steps in the Technical Spec).
-4. **New Privacy Policy wording needs your approval before it ships.** Proposed text is under Functional Requirement 8. It replaces "permanently delete your account and all associated data", which isn't true today and won't be fully true after this fix either, because co-owners keep shared history (by design) and backups take up to 30 days to age out.
+4. **New Privacy Policy wording, approved by Lynn 2026-11-21.** Text is under Functional Requirement 8. It replaces "permanently delete your account and all associated data", which isn't true today and won't be fully true after this fix either, because co-owners keep shared history (by design) and backups take up to 30 days to age out.
 5. **I found a bug the audit missed.** Even after the audit's fix, the other co-owners' access would *still* be deleted. Each co-owner record also stores who sent the invite, and that link is set to "delete with the account". So when the primary owner leaves, every invite they sent is deleted with them. This spec fixes that too.
 6. **Records a departed person entered will show no name.** Records keep the entry but lose the "entered by" link. The only place the app shows who entered something is the "someone else already saved today" pop-up, which already falls back to "Your co-owner". Nothing else in the app reads it.
 7. **The transferred pet's photo and documents stay where they are, rather than being moved.** The audit said "move". I recommend leaving the files in the old folder and simply *not deleting them*. Since spec 0071, who can open a file depends on which pet it belongs to, not whose folder it's in, so the new owner can already open them. Moving them would mean copying files and rewriting links, which adds new ways to fail with no benefit to you.
@@ -40,11 +37,12 @@ You declined the question pop-up, so I went with my recommended answer on each d
 1. **Shared history survives.** When someone deletes their account, every record they entered on a pet that someone else still owns (check-ins, observations, vaccinations, medications, bloodwork, food logs, foods, baselines, onboarding answers, sitter checklist entries) stays on that pet. Only the "entered by" link is cleared.
 2. **Every co-owner keeps access.** When a primary owner deletes their account and their pet passes to the longest-standing co-owner, every *other* co-owner keeps their access too.
 3. **The transferred pet keeps its photo and documents.** Files belonging to a pet that survives the deletion are never deleted, and every remaining owner can still open them.
-4. **Pet sits pass on with the pet.** Sits and sitter invites the leaving person set up for pets that survive pass to the surviving owner (see Before You Approve, item 1).
+4. **Pet sits pass on with the pet.** Sits and sitter invites the leaving person set up for pets that survive pass to the surviving owner (see Before You Approve, item 1). The same applies when a primary owner removes one shared pet (delete-pet's transfer path), not only on account deletion (Lynn, OQ2, 2026-11-21).
 5. **Everything else is fully deleted.** Pets only the leaving person owned, with all their records, photos and documents, are deleted. So is every other file in the person's folder, however many files there are (today only the first 100 are deleted). So are their sitter invites (if they were a sitter), notifications, analytics events, beta-signup and early-adopter rows, and their login.
 6. **Deletion either finishes or can be safely retried.** All the database changes (ownership transfers, hand-overs) happen together or not at all. If a later step (deleting files or the login) fails, the person sees an error and can try again. A retry picks up where it stopped, without transferring anything twice.
 7. **Deleting a pet also deletes its scanned documents** (today only the photo is deleted), except a document also linked to another pet that still exists.
-8. **The Privacy Policy matches what actually happens.** Proposed wording, **for your approval** (replaces the last sentence of "Data retention and deletion"):
+8. **The Privacy Policy matches what actually happens.** Wording (replaces the last sentence of "Data retention and deletion"):
+   Approved wording:
    > You can also delete your account at any time using the Delete Account option in Settings. This permanently deletes your profile and any pets only you own, along with their records, photos and documents. If you share a pet with a co-owner, that pet and its history, including entries you made, stay with them, without your name attached. Copies held in our backups are deleted automatically within 30 days. We keep a record of the emails we've sent to your address, and whether any bounced or were unsubscribed, so we never email an address that asked us to stop.
 
    "Last updated" moves to the build date, as the policy promises for material changes.
@@ -62,7 +60,7 @@ You declined the question pop-up, so I went with my recommended answer on each d
 - **AC8.** **Given** sitter S has an invite on a sit, **when** S deletes their account, **then** S's invite row is gone (not just unlinked), and re-registering with the same email doesn't bring the access back.
 - **AC9.** **Given** the database transfer step fails partway (simulated), **when** delete-account returns, **then** nothing was transferred. **Given** the file-delete step fails, **when** the person retries, **then** deletion completes and no pet is transferred twice.
 - **AC10.** **Given** a sole owner deletes a pet with a photo and two scanned documents, one of which is also linked to another of their pets, **when** delete-pet finishes, **then** the photo and the unshared document are gone, and the shared document still opens on the other pet.
-- **AC11.** **Given** a primary owner removes a shared pet from their account (delete-pet's transfer path), **then** it behaves exactly as today: every co-owner except the promoted one keeps access, and the promoted one becomes primary. It now uses the same transfer code as delete-account.
+- **AC11.** **Given** a primary owner removes a shared pet from their account (delete-pet's transfer path), **then** it behaves exactly as today: every co-owner except the promoted one keeps access, and the promoted one becomes primary. It now uses the same transfer code as delete-account, so the leaving owner's sits and sitter invites for that pet pass to the promoted owner too (if the sit also covers pets the leaving owner keeps, the sit stays with them for those pets, this pet is taken out of it, and the new owner is notified, so one pet's removal never ends a sit for the others).
 - **AC12.** **Given** a signed-in or logged-out browser, **when** it calls the new deletion database function directly, **then** it is refused.
 - **AC13.** **Given** a file removed from production storage, **when** the nightly backup runs, **then** its backup copy moves to the holding area, and Cloudflare removes it 30 days later. **Given** Supabase reports less than half the files the backup holds, **then** the script stops without moving anything and the workflow fails visibly.
 - **AC14.** **Given** the Privacy Policy page, **then** it shows the approved wording and the new "Last updated" date.
@@ -121,5 +119,4 @@ None. No UI changes apart from the Privacy Policy text.
 
 ## Open Questions
 
-1. Are you OK with the three decisions in Before You Approve items 1–3, and with the policy wording in FR8?
-2. When a primary owner *removes one pet* (not their whole account) and it passes to a co-owner, should their sits for that pet also pass to the new owner, the same as on account deletion? Recommended: yes, since it's the same shared code, so it costs nothing extra. Today the sit stays with someone who no longer owns the pet.
+None. Both resolved by Lynn on 2026-11-21: the decisions and policy wording are approved, and OQ2 is yes (sits follow a removed shared pet too).
