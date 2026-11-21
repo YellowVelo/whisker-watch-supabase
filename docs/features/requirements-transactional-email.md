@@ -5,7 +5,9 @@
 
 ## Purpose
 
-Every outbound transactional email (co-owner invitations + reminders, welcome, verify-email, password-reset) goes through one shared service (`sendEmail.ts`) backed by Resend, rather than each Edge Function building its own HTML or calling Resend directly. This exists so template rendering, delivery logging, and — critically — CTA-link safety checks live in exactly one place. The system has already needed two security fixes since shipping (an auth bypass risk and an open-redirect risk), which is exactly the kind of subsystem where undocumented assumptions cause the *next* fix to regress the first one. This doc is the guardrail against that.
+Every outbound transactional email (co-owner invitations + reminders, welcome, verify-email) goes through one shared service (`sendEmail.ts`) backed by Resend, rather than each Edge Function building its own HTML or calling Resend directly. This exists so template rendering, delivery logging, and — critically — CTA-link safety checks live in exactly one place. The system has already needed two security fixes since shipping (an auth bypass risk and an open-redirect risk), which is exactly the kind of subsystem where undocumented assumptions cause the *next* fix to regress the first one. This doc is the guardrail against that.
+
+**Updated 2026-11-21 (spec 0074):** password-reset emails are the exception: Supabase Auth sends them itself via custom SMTP (see `0006 Technical Standards.md` §11), so this service's logging, suppression and link checks don't apply to them.
 
 ## Functional Requirements
 
