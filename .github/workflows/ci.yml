@@ -62,7 +62,7 @@ jobs:
             supabase/functions/delete-pet/index.test.ts \
             supabase/functions/delete-account/index.test.ts
 
-      - name: Run save_daily_check_ins + private uploads (spec 0071) + co-owner access (spec 0072) + sitter access (spec 0073) integration tests
+      - name: Run save_daily_check_ins + private uploads (spec 0071) + co-owner access (spec 0072) + sitter access (spec 0073) + reset-link redirect (spec 0074) integration tests
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_DEV_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.sb_publishable }}
@@ -72,7 +72,8 @@ jobs:
             supabase/tests/save_daily_check_ins.test.ts \
             supabase/tests/private_uploads.test.ts \
             supabase/tests/co_owner_access.test.ts \
-            supabase/tests/sitter_access.test.ts
+            supabase/tests/sitter_access.test.ts \
+            supabase/tests/password_reset_redirect.test.ts
 
       - name: Run resend-webhook integration tests
         env:

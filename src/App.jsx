@@ -5,7 +5,7 @@ import { Sentry } from '@/lib/errorMonitoring';
 import CrashFallback from '@/components/CrashFallback';
 import { QueryClientProvider } from '@tanstack/react-query'
 import { queryClientInstance } from '@/lib/query-client'
-import { BrowserRouter as Router, Route, Routes, useLocation, useParams, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Route, Routes, useLocation, useParams, Navigate, Outlet } from 'react-router-dom';
 import PageNotFound from './lib/PageNotFound';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
@@ -105,6 +105,16 @@ const AuthenticatedApp = () => {
           <Route element={<AdminRoute />}>
             <Route path="/admin/beta-signups" element={<AdminBetaSignups />} />
           </Route>
+          {/* Legal pages (spec 0074, PA-08): open to everyone, since the
+              signup screens ask people to agree to them. Signed in, they
+              keep the App Shell (header + bottom nav); signed out, the
+              <Outlet /> fallback shows just the page. */}
+          <Route element={<ProtectedRoute unauthenticatedElement={<Outlet />} />}>
+            <Route path="/privacy" element={<Privacy />} />
+            <Route path="/privacy/:sectionId" element={<PrivacyPolicySection />} />
+            <Route path="/terms" element={<Terms />} />
+            <Route path="/terms/:sectionId" element={<TermsOfServiceSection />} />
+          </Route>
           <Route element={<ProtectedRoute unauthenticatedElement={<Navigate to="/login" replace />} />}>
             <Route path="/" element={<Home />} />
             <Route path="/pet-sitter" element={<PetSitter />} />
@@ -134,10 +144,6 @@ const AuthenticatedApp = () => {
             <Route path="/settings/pet-sitter" element={<Navigate to="/pet-sitter" replace />} />
             <Route path="/settings/ai" element={<AskWyskerRedirect to="/" />} />
             <Route path="/account" element={<Account />} />
-            <Route path="/privacy" element={<Privacy />} />
-            <Route path="/privacy/:sectionId" element={<PrivacyPolicySection />} />
-            <Route path="/terms" element={<Terms />} />
-            <Route path="/terms/:sectionId" element={<TermsOfServiceSection />} />
             <Route path="/preferences" element={<Preferences />} />
             <Route path="/support" element={<Support />} />
           </Route>

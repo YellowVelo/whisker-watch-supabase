@@ -174,6 +174,8 @@ Privacy, Terms of Service (real screens — no longer placeholders)
 
 `src/pages/Privacy.jsx` (route `/privacy`, with per-section detail at `/privacy/:sectionId` via `PrivacyPolicySection.jsx`, content from `privacyPolicyContent.js`) and `src/pages/Terms.jsx` (route `/terms`, same list-then-detail pattern, `termsOfServiceContent.js`) are both real, fully built screens, not stubs — built 2026-07-10. The previous revision of this document listed Privacy as a "coming soon" placeholder; that stopped being true once these were built.
 
+**Updated 2026-11-21 (spec 0074):** `/privacy`, `/terms` and their `/:sectionId` pages are open to signed-out visitors, because the signup screens ask people to agree to them. They sit in their own route group in `App.jsx` (`ProtectedRoute` with an `<Outlet />` fallback): signed in, they keep the App Shell and Menu stays active; signed out, they show just the page. Their Back button uses `useBackWithFallback`: with no in-app history (e.g. opened in a new tab from signup), it goes to `/login` (signed out), `/settings` (signed in) or the document's list (section pages).
+
 Preferences, Support (still placeholders)
 
 `src/pages/Preferences.jsx` (`/preferences`) and `src/pages/Support.jsx` (`/support`) remain explicit stubs — each renders a static "coming soon" screen with a back button, so Menu's row list doesn't dead-end (the same precedent Timeline used before it became real).

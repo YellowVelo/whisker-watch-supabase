@@ -175,6 +175,8 @@ password-reset
 
 **Only `co-owner-invitation` and `co-owner-invitation-reminder` are actually triggered anywhere in the current codebase** (both from `supabase/functions/invite-co-owner/index.ts`). `welcome`, `verify-email`, and `password-reset` exist as fully-built template files but have **zero callers** anywhere in `supabase/functions/` — no signup flow, no password-reset flow, and no scheduled job currently sends them. If real account-welcome/verify/reset emails are going out today, they're coming from Supabase Auth's own built-in email system, not this one. Wiring these three templates up to real triggers is unbuilt work, not a currently-shipped feature.
 
+**Updated 2026-11-21 (spec 0074):** password-reset emails are sent by Supabase Auth through custom SMTP (Resend) on all three projects. The Reset Password template in each dashboard is a rendered copy of `password-reset.ts`. The template still has no caller inside `supabase/functions/`. `welcome` and `verify-email` are unchanged by this.
+
 Template: Co-owner Invitation
 
 Template name:
