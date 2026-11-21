@@ -20,6 +20,7 @@
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import { reportError } from '../_shared/errorReporting.ts';
 import { deletablePetPhotoPath } from '../_shared/petPhoto.ts';
+import { listFolderPaths, removePaths } from '../_shared/storageFiles.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!;
@@ -127,31 +128,13 @@ Deno.serve(async (req) => {
     }
 
     // ── Clean up any remaining Storage objects under this user's folder ─
-    // .list() only returns a page at a time (100 by default). Since we
-    // delete each page immediately, the offset is always 0 — deleting
-    // page 1 shifts what was page 2 down into page 1's position, so an
-    // incrementing offset would skip files rather than paginate them.
-    // Loop until a page comes back empty (or short of the limit).
-    const STORAGE_PAGE_SIZE = 100;
-    while (true) {
-      const { data: storageList, error: listError } = await admin.storage
-        .from('uploads')
-        .list(userId, { limit: STORAGE_PAGE_SIZE });
-
-      if (listError) {
-        console.warn('Storage list error (continuing):', listError.message);
-        break;
-      }
-      if (!storageList || storageList.length === 0) break;
-
-      const paths = storageList.map(f => `${userId}/${f.name}`);
-      const { error: removeError } = await admin.storage.from('uploads').remove(paths);
-      if (removeError) {
-        console.warn('Storage cleanup error (continuing):', removeError.message);
-        break; // avoid looping forever if removal keeps failing on the same page
-      }
-
-      if (storageList.length < STORAGE_PAGE_SIZE) break;
+    // Every page, not just the first 100 (shared helpers, spec 0075).
+    try {
+      const paths = await listFolderPaths(admin, userId);
+      const removeError = await removePaths(admin, paths);
+      if (removeError) console.warn('Storage cleanup error (continuing):', removeError);
+    } catch (err) {
+      console.warn('Storage list error (continuing):', (err as Error).message);
     }
 
     return json({ success: true });

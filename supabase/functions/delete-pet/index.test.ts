@@ -137,7 +137,7 @@ Deno.test('delete-pet: non-primary co-owner leaving removes only their access', 
   }
 });
 
-Deno.test('delete-pet: removes the pet photo file and its document links (spec 0071)', async () => {
+Deno.test('delete-pet: removes the photo and unshared scans; keeps a scan another pet uses (spec 0071/0075)', async () => {
   const owner = await createScratchUser('photo-owner');
   const admin = adminClient();
   // A valid 1x1 PNG.
@@ -147,8 +147,9 @@ Deno.test('delete-pet: removes the pet photo file and its document links (spec 0
   );
   try {
     const photoPath = `${owner.userId}/photo.png`;
-    const docPath = `${owner.userId}/scan.png`;
-    for (const path of [photoPath, docPath]) {
+    const ownDocPath = `${owner.userId}/scan.png`;
+    const sharedDocPath = `${owner.userId}/shared-scan.png`;
+    for (const path of [photoPath, ownDocPath, sharedDocPath]) {
       const { error } = await owner.client.storage.from('uploads').upload(path, png, { contentType: 'image/png' });
       if (error) throw new Error(`upload failed: ${error.message}`);
     }
@@ -158,9 +159,12 @@ Deno.test('delete-pet: removes the pet photo file and its document links (spec 0
       .select('id')
       .single();
     if (petError || !pet) throw new Error(`pet insert failed: ${petError?.message}`);
-    const { error: linkError } = await owner.client
-      .from('pet_documents')
-      .insert({ pet_id: pet.id, storage_path: docPath, kind: 'bloodwork' });
+    const otherPetId = await createPet(owner, 'Scratch Other Pet');
+    const { error: linkError } = await owner.client.from('pet_documents').insert([
+      { pet_id: pet.id, storage_path: ownDocPath, kind: 'bloodwork' },
+      { pet_id: pet.id, storage_path: sharedDocPath, kind: 'vaccination' },
+      { pet_id: otherPetId, storage_path: sharedDocPath, kind: 'vaccination' },
+    ]);
     if (linkError) throw new Error(`document link failed: ${linkError.message}`);
 
     const { status, json } = await callFunction('delete-pet', owner.accessToken, { pet_id: pet.id });
@@ -170,14 +174,61 @@ Deno.test('delete-pet: removes the pet photo file and its document links (spec 0
     const { data: files } = await admin.storage.from('uploads').list(owner.userId);
     const names = (files ?? []).map((f: { name: string }) => f.name);
     assertEquals(names.includes('photo.png'), false, 'the pet photo file is removed with the pet');
+    assertEquals(names.includes('scan.png'), false, 'a scan only this pet used is removed with it');
+    assertEquals(names.includes('shared-scan.png'), true, 'a scan the other pet still uses is kept');
 
     const { data: links } = await admin.from('pet_documents').select('id').eq('pet_id', pet.id);
     assertEquals(links?.length ?? 0, 0, 'document links are removed with the pet');
-    // The scanned file itself stays for now: deleting document files with
-    // the pet is punch list PA-14, not spec 0071.
+    const { data: otherLinks } = await admin.from('pet_documents').select('id').eq('pet_id', otherPetId);
+    assertEquals(otherLinks?.length ?? 0, 1, "the other pet's link to the shared scan stays");
   } finally {
     const { data: files } = await admin.storage.from('uploads').list(owner.userId);
     if (files?.length) await admin.storage.from('uploads').remove(files.map((f: { name: string }) => `${owner.userId}/${f.name}`));
     await deleteScratchUser(owner.userId);
+  }
+});
+
+Deno.test('delete-pet: transfer keeps every other co-owner and passes the pet sit on (spec 0075)', async () => {
+  const owner = await createScratchUser('transfer3-owner');
+  const first = await createScratchUser('transfer3-first');
+  const second = await createScratchUser('transfer3-second');
+  const admin = adminClient();
+  try {
+    const petId = await createPet(owner, 'Scratch Transfer3 Pet');
+    const keptPetId = await createPet(owner, 'Scratch Kept Pet');
+    await linkCoOwner(owner, first, petId);
+    await linkCoOwner(owner, second, petId);
+
+    const { data: soloSit, error: sitError } = await admin.from('pet_sits')
+      .insert({ created_by: owner.userId, pet_ids: [petId], start_date: '2030-01-01', end_date: '2030-01-05' })
+      .select('id').single();
+    if (sitError || !soloSit) throw new Error(`sit insert failed: ${sitError?.message}`);
+    const { data: mixedSit, error: mixedError } = await admin.from('pet_sits')
+      .insert({ created_by: owner.userId, pet_ids: [petId, keptPetId], start_date: '2030-02-01', end_date: '2030-02-05' })
+      .select('id').single();
+    if (mixedError || !mixedSit) throw new Error(`sit insert failed: ${mixedError?.message}`);
+
+    const { status, json } = await callFunction('delete-pet', owner.accessToken, { pet_id: petId });
+    assertEquals(status, 200);
+    assertEquals(json.mode, 'transferred');
+
+    const { data: petAfter } = await admin.from('pets').select('created_by').eq('id', petId).single();
+    assertEquals(petAfter?.created_by, first.userId, 'the oldest co-owner becomes primary');
+
+    const { data: secondRow } = await admin.from('pet_co_owners').select('owner_id')
+      .eq('pet_id', petId).eq('co_owner_user_id', second.userId).maybeSingle();
+    assertEquals(secondRow?.owner_id, first.userId, 'the other co-owner keeps access, under the new owner');
+    const { data: secondSees } = await second.client.from('pets').select('id').eq('id', petId);
+    assertEquals(secondSees?.length, 1, 'the other co-owner can still open the pet');
+
+    const { data: soloAfter } = await admin.from('pet_sits').select('created_by').eq('id', soloSit.id).single();
+    assertEquals(soloAfter?.created_by, first.userId, "a sit for only this pet passes to the new owner");
+    const { data: mixedAfter } = await admin.from('pet_sits').select('created_by, pet_ids').eq('id', mixedSit.id).single();
+    assertEquals(mixedAfter?.created_by, owner.userId, 'a sit that also covers a kept pet stays put');
+    assertEquals(mixedAfter?.pet_ids, [keptPetId], '...with only the kept pet left in it');
+  } finally {
+    await deleteScratchUser(owner.userId);
+    await deleteScratchUser(first.userId);
+    await deleteScratchUser(second.userId);
   }
 });

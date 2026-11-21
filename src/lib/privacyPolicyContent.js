@@ -5,7 +5,7 @@
 
 import { getLegalSection } from './legalContent';
 
-export const PRIVACY_POLICY_LAST_UPDATED = 'November 20, 2026';
+export const PRIVACY_POLICY_LAST_UPDATED = 'November 21, 2026';
 
 export const PRIVACY_POLICY_SECTIONS = [
   {
@@ -78,7 +78,7 @@ export const PRIVACY_POLICY_SECTIONS = [
     subtitle: 'How long we keep your data and how you can delete it.',
     icon: 'Trash2',
     body: [
-      { type: 'paragraph', text: 'Your data is retained for as long as your account remains active. You can delete individual records (pets, logs, medications, etc.) at any time within the App. You can also permanently delete your account and all associated data at any time using the Delete Account option in Settings.' },
+      { type: 'paragraph', text: 'Your data is retained for as long as your account remains active. You can delete individual records (pets, logs, medications, etc.) at any time within the App. You can also delete your account at any time using the Delete Account option in Settings. This permanently deletes your profile and any pets only you own, along with their records, photos and documents. If you share a pet with a co-owner, that pet and its history, including entries you made, stay with them, without your name attached. Copies held in our backups are deleted automatically within 30 days. We keep a record of the emails we\'ve sent to your address, and whether any bounced or were unsubscribed, so we never email an address that asked us to stop.' },
     ],
   },
   {
