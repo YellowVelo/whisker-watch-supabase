@@ -96,7 +96,8 @@ A one-page checklist run against every `Critical`/`High` page before the Accessi
 |---|---|---|
 | Sign in with valid email/password lands on a recognizably logged-in page | Critical | `[Playwright: login.spec.js]` |
 | Protected route redirects to `/login` when signed out | Critical | `[Playwright: login.spec.js]` |
-| Sign in with Google (OAuth) completes and lands logged in | Critical | `[Manual]` — Given a registered Google account, When "Continue with Google" is clicked and consent granted, Then the user lands on Home signed in. (OAuth automation is explicitly out of scope for Playwright per spec 0024 — stays manual.) |
+| Sign in with Google (OAuth) completes and lands logged in | Critical | **Hidden until Google sign-in is set up (spec 0076, PA-20).** Turn back on with `GOOGLE_SIGN_IN_ENABLED` in `src/lib/authProviders.js`, then run this as `[Manual]`: Given a registered Google account, When "Continue with Google" is clicked and consent granted, Then the user lands on Home signed in. (OAuth automation is out of scope for Playwright per spec 0024.) |
+| Login and Register show no "Continue with Google" button, Login has no Terms checkbox, and Register's Terms checkbox still gates Sign Up (spec 0076) | High | `[Playwright: login.spec.js]` |
 | Wrong password shows a generic, non-enumerating error | High | `[Manual]` |
 | Unconfirmed-email login shows inline "Resend confirmation email" with a 60s cooldown | Medium | `[Manual]` |
 | Demo account login triggers a full sandbox reset before landing on Home | High | `[Manual]` — Given a demo-type account, When login succeeds, Then a "Setting up your demo…" state appears and resolves to a freshly-seeded scenario. |
@@ -134,6 +135,7 @@ A one-page checklist run against every `Critical`/`High` page before the Accessi
 | Edit Pet: Save is disabled with a blank name | High | `[Manual]` |
 | Edit Pet: no Conditions picker present (split confirmed by spec 0036) | High | `[Playwright: pet-edit-conditions.spec.js]` |
 | Edit Pet: add/remove a Nickname via Enter key and via + button | Medium | `[Manual]` |
+| Edit Pet: each nickname/favorite-activity chip's remove "x" is at least 44×44px and removes the chip (spec 0076, PA-55) | Medium | `[Playwright: pet-edit-conditions.spec.js]` |
 | Pet Conditions page: category search + save persists | High | `[Playwright: pet-edit-conditions.spec.js]` |
 | Retired `/pet/:petId` and `/pet/:petId/profile` routes still resolve (redirect to `/pets?highlight=`) | Medium | `[Manual]` — regression case for old bookmarks/links. |
 | Invite Co-Owner: blocked entirely on demo accounts | High | `[Manual]` |
@@ -199,6 +201,8 @@ A one-page checklist run against every `Critical`/`High` page before the Accessi
 |---|---|---|
 | Pet Sitter page reachable, all sits listed | High | `[Playwright: pet-sitter.spec.js]` |
 | Wellbeing badges: 5 groups, correct direction labels, "no check-in yet" state, single-tap-only navigation | High | `[Playwright: pet-sitter.spec.js]` |
+| A sitter who opens Edit Pet or Vet Report for a pet they only sit for sees "Only this pet's owners can do this." and no form or download (spec 0076, PA-28) | High | `[Playwright: pet-sitter.spec.js]` |
+| Scan Record only offers the AI, and only matches lines to, pets the owner owns or co-owns, never a pet they only sit for; an owner who is also listed as a sitter on their own pet keeps full access to it (spec 0076, PA-28) | High | `[Vitest: src/lib/petsClient.test.js]` + `[Manual]` scan of a multi-pet invoice from an account that also sits for a friend's pet |
 | Invite Sitter: blocked on demo accounts, self-invite/duplicate rejected | High | `[Manual]` |
 | Invite Sitter: remove **does** show an "Are you sure?" confirm dialog | High | `[Playwright: invite-sitter.spec.js]` (spec 0073) |
 | Invite Sitter: the invited-sitters list shows as soon as the dialog opens, and each remove button is at least 44px (spec 0073, PA-53/54) | High | `[Playwright: invite-sitter.spec.js]` |
@@ -229,6 +233,8 @@ A one-page checklist run against every `Critical`/`High` page before the Accessi
 | Reset Test/Demo Account tools only appear for internal account types | High | `[Manual]` |
 | Notifications: vaccination-due "View"/"Update" wording matches stage, Snooze 7 Days hides the item | High | `[Playwright: vaccination-due-reminders.spec.js]` — **local only**: skipped on GitHub since spec 0067 (seeding needs `supabase db query --linked`; CI has no linked project). Fails locally while leftover `E2E%` vaccinations sit on test1@'s dev account (48 found 2026-11-14). |
 | Notifications: empty state | Low | `[Manual]` |
+| Notifications: dismiss one deletes it; Mark all read marks notices read and hides vaccine reminders; Clear all (after confirming) deletes notices and marks reminders read, and the daily job doesn't bring a cleared reminder back; Cancel changes nothing (spec 0076, PA-58) | High | `[Playwright: notifications-clear.spec.js]` — **local only**, same CLI seeding as `vaccination-due-reminders.spec.js`. Plus `[Vitest: notificationClient.test.js]` for which rows are deleted vs marked read, and the failure case. |
+| Notifications: a failed dismiss/clear puts the notification back and shows "Couldn't update your notifications. Please try again." | Medium | `[Vitest: notificationClient.test.js]` (the error reaches the page) + `[Manual]` (go offline, tap Clear all) |
 | PWA "Install App" row persists correctly across navigation | Medium | `[Playwright: pwa-install-prompt.spec.js]` |
 | Preferences placeholder renders without crashing | Low | `[Manual]` |
 

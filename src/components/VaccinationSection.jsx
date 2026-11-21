@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { uploadFile, UploadRejectedError } from '@/api/storageClient';
 import { usePendingScan, scanErrorText } from '@/lib/scannedDocuments';
 import { entities } from '@/api/entities';
+import { listOwnedPets } from '@/lib/petsClient';
 import { invokeAI } from '@/api/aiClient';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -104,7 +105,17 @@ export default function VaccinationSection({ petId, species, initialEditId }) {
     try {
       const { path } = await uploadFile({ file, purpose: 'scan' });
       pendingScan.hold(path);
-      const allPets = await entities.Pet.list();
+      // Only pets this person owns or co-owns are offered to the AI and
+      // matched against (spec 0076, PA-28): never a pet they only sit for.
+      // If that check fails, fall back to just this pet rather than the
+      // unfiltered list.
+      let allPets;
+      try {
+        allPets = await listOwnedPets();
+      } catch (err) {
+        console.error(err);
+        allPets = [await entities.Pet.get(petId)];
+      }
       const multiPet = allPets.length > 1;
       const petNameInstruction = multiPet
         ? ` This account has these pets: ${allPets.map(p => p.name).filter(Boolean).join(', ')}. For each vaccination, also include a "pet_name" field naming which of these pets it belongs to, if the document makes that clear (e.g. it's grouped under a pet's name, or this is a multi-pet invoice). If you can't tell which pet a line belongs to, omit "pet_name" rather than guessing.`

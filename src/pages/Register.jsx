@@ -10,6 +10,7 @@ import AuthLayout from '@/components/AuthLayout';
 import { TOS_LAST_UPDATED } from '@/lib/termsOfServiceContent';
 import { PRIVACY_POLICY_LAST_UPDATED } from '@/lib/privacyPolicyContent';
 import { setPendingOAuthConsent } from '@/lib/pendingOAuthConsent';
+import { GOOGLE_SIGN_IN_ENABLED } from '@/lib/authProviders';
 
 // Calls the sign-up Edge Function (supabase/functions/sign-up/index.ts)
 // instead of supabase.auth.signUp() directly, so the confirmation email
@@ -121,7 +122,10 @@ export default function Register() {
             </span>
           </label>
           <Button type="submit" className="w-full" disabled={loading || !agreedToTerms}>{loading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Sign Up'}</Button>
-          <Button type="button" variant="outline" className="w-full" onClick={handleGoogleLogin} disabled={!agreedToTerms}>Continue with Google</Button>
+          {/* Hidden while Google sign-in is off (spec 0076 / PA-20). */}
+          {GOOGLE_SIGN_IN_ENABLED && (
+            <Button type="button" variant="outline" className="w-full" onClick={handleGoogleLogin} disabled={!agreedToTerms}>Continue with Google</Button>
+          )}
         </form>
       )}
     </AuthLayout>
