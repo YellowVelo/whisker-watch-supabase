@@ -1,6 +1,8 @@
 # 0047_Signup_Consent_Gate_Specification_v1
 
 **Status:** Implemented
+
+**Update 2026-11-21 (spec 0076):** Google sign-in is switched off. Both Google buttons and Login's Terms checkbox are hidden. The consent handoff described here (`pendingOAuthConsent.js` → `AuthContext.jsx`) is kept for when Google is turned back on via `src/lib/authProviders.js`.
 **Date:** 2026-08-05
 **Related files:** `src/pages/Register.jsx`, `src/pages/Login.jsx`, `supabase/functions/sign-up/index.ts`, `supabase/migrations/0046_save_daily_check_ins_conflict_detection.sql` (most recent — this spec adds `0047_...`), `src/lib/termsOfServiceContent.js`, `src/lib/privacyPolicyContent.js`, `src/components/ui/checkbox.jsx`
 
