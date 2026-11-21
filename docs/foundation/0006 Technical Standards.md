@@ -142,6 +142,8 @@ Auth Provider
 
 Supabase Auth (email/password + magic link + Google OAuth)
 
+Google sign-in is switched off for now (spec 0076, PA-20): the provider isn't enabled in Supabase, so the button is hidden. Turn it back on with `GOOGLE_SIGN_IN_ENABLED` in `src/lib/authProviders.js` after enabling Google on all 3 projects.
+
 Rules
 
 Require email confirmation
@@ -250,7 +252,7 @@ Deploy Edge Functions via CLI
 
 | Address | Used by |
 |---|---|
-| `/` (the Site URL) | Google sign-in, `Login.jsx` / `Register.jsx` |
+| `/` (the Site URL) | Google sign-in, `Login.jsx` / `Register.jsx` (button hidden while Google is off, spec 0076; keep this address listed) |
 | `/reset-password` | Forgot Password, `ForgotPassword.jsx` |
 | `/verify-email` | Signup confirmation, `sign-up` function |
 | `/accept-invite` | Co-owner and sitter invites, `invite-co-owner` / `invite-sitter` |
