@@ -65,7 +65,7 @@ const MAX_PASSWORD_LENGTH = 128;
 // Edge Function runs on Deno and can't share an import with the Vite
 // frontend bundle.
 const TOS_VERSION = 'July 10, 2026';
-const PRIVACY_VERSION = 'June 30, 2026';
+const PRIVACY_VERSION = 'November 20, 2026';
 
 // Rate limits (see check_and_record_rate_limits, migration 0039). Shared
 // across both 'signup' and 'resend' actions for the same key — a

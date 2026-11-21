@@ -5,7 +5,7 @@
 
 import { getLegalSection } from './legalContent';
 
-export const PRIVACY_POLICY_LAST_UPDATED = 'June 30, 2026';
+export const PRIVACY_POLICY_LAST_UPDATED = 'November 20, 2026';
 
 export const PRIVACY_POLICY_SECTIONS = [
   {
@@ -53,7 +53,7 @@ export const PRIVACY_POLICY_SECTIONS = [
     subtitle: 'Understand who has access to your information and how sharing works.',
     icon: 'Users',
     body: [
-      { type: 'paragraph', text: 'By default, only you can see your pets’ data. If you invite a co-owner, that person will have full access to the pets you share with them, equivalent to your own access. If you invite a pet sitter, that person will have limited access to the specific pet-sitting period and pets you grant them.' },
+      { type: 'paragraph', text: 'By default, only you can see your pets’ data. If you invite a co-owner, that person will have full access to the pets you share with them, equivalent to your own access. If you invite a pet sitter, that person will have limited access to the pets you grant them, from the day before the pet-sitting period until the day after it ends.' },
     ],
   },
   {

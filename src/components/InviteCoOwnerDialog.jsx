@@ -123,7 +123,7 @@ export default function InviteCoOwnerDialog({ petId, petName, open, onOpenChange
       // registered account, not just a stuck pending invite (those now
       // get a real re-invite email sent automatically instead of
       // landing here — see the Edge Function's header comment).
-      setSuccessMsg(`${cleanEmail} already has a Whisker Watch account and can now see ${petName || 'this pet'}.`);
+      setSuccessMsg(`${cleanEmail} already has a Wysker Watch account and can now see ${petName || 'this pet'}.`);
     } else if (fnResp.data?.sent === false) {
       // Defensive fallback for a reason value not handled above (e.g. a
       // future suppression cause sendEmail() forgot to label). Showing
