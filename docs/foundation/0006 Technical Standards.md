@@ -88,6 +88,8 @@ All relationships must use real foreign keys
 
 Use ON DELETE CASCADE consistently
 
+Exception (spec 0075, migration 0058): a record's `created_by` → `auth.users` is `ON DELETE SET NULL`, so deleting an account never erases what that person entered on a shared pet. New record tables follow this.
+
 4. Edge Function Standards
 
 General Rules
@@ -218,7 +220,7 @@ Integration Tests
 
 Test Edge Functions
 
-As of 2026-07-31, this covers `delete-pet`/`delete-account` (8 Deno integration tests) and `resend-webhook` (11 Deno integration tests, `supabase/functions/resend-webhook/index.test.ts`) — all run against real `wysker-watch-dev` data via `.github/workflows/ci.yml`, required on `main`. The resend-webhook suite needed one extra secret beyond the others' pattern: its one suppression-round-trip test calls `send-email`/`clear-email-suppression` with a service_role bearer token, and those functions' auth check needs a legacy-JWT-format credential (a decodable `role` claim) rather than the newer opaque `sb_secret_...` key used elsewhere in CI — wired in as the `DEV_LEGACY_JWT_SECRET` GitHub secret. Not yet extended to other Edge Functions beyond these three.
+As of 2026-07-31, this covers `delete-pet`/`delete-account` (14 Deno integration tests as of 2026-11-21: delete-account 8, delete-pet 6, plus the database tests in `supabase/tests/`) and `resend-webhook` (11 Deno integration tests, `supabase/functions/resend-webhook/index.test.ts`) — all run against real `wysker-watch-dev` data via `.github/workflows/ci.yml`, required on `main`. The resend-webhook suite needed one extra secret beyond the others' pattern: its one suppression-round-trip test calls `send-email`/`clear-email-suppression` with a service_role bearer token, and those functions' auth check needs a legacy-JWT-format credential (a decodable `role` claim) rather than the newer opaque `sb_secret_...` key used elsewhere in CI — wired in as the `DEV_LEGACY_JWT_SECRET` GitHub secret. Not yet extended to other Edge Functions beyond these three.
 
 Test database migrations
 
@@ -247,6 +249,8 @@ Deploy Edge Functions via CLI
 **Added 2026-08-09** — a 4th Supabase project, `wysker-watch-restore-scratch`, exists solely as the target for the automated quarterly database restore drill (`.github/workflows/db-restore-test.yml`, see `docs/features/0048_Automated_Quarterly_Restore_Drill_Specification_v1.md`). It is not a deploy target — never run `supabase db push` or deploy Edge Functions to it. The restore drill wipes and rebuilds its `public` schema and `auth.users` from scratch on every run, so treat anything in it as disposable.
 
 **Convention (not automated, easy to miss):** every migration and Edge Function deploy should be pushed to all three projects — dev, staging, and prod — as part of shipping a change, not left on dev alone. This is manual (`supabase link --project-ref <ref>` then `db push`/`functions deploy`, repeated per project) and has been missed before (2026-07-25/26: two specs shipped to dev only, staging and prod caught up a day later once the gap was noticed).
+
+**Edge Function versions and startup check (added 2026-11-21, spec 0075).** Every `npm:`/`jsr:` import in an Edge Function names an exact version. An unpinned `@sentry/deno` picked up 11.16.0 on deploy and crashed `sign-up` on staging and prod for 22 hours (01:11–23:12 UTC), and no test noticed. Not yet followed everywhere: `supabase-js@2` and `@std/encoding@1` still float (PA-62). After any function deploy, send every function on that project an `OPTIONS` request and expect 200; a 500 with `WORKER_ERROR` means it crashed on startup. A local run doesn't prove a version is safe, because Supabase runs an older Deno (`supabase-edge-runtime-1.79.1`, compatible with Deno 2.1.4) than a current local install.
 
 **Supabase Auth → Redirect URLs (dashboard, not in the repo)** (added 2026-11-21, spec 0074). Supabase only sends people back to addresses on each project's Authentication → URL Configuration → Redirect URLs list. Anything missing silently falls back to the Site URL (Home), with no error anywhere. On 2026-11-21, prod's list was found missing `/reset-password` (most likely dropped when it was rewritten on 2026-07-26, spec 0021), so reset links landed signed in on Home instead of Set New Password. Every project must list every address below, on its own app domain:
 

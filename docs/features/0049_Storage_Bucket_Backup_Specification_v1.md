@@ -1,5 +1,7 @@
 # 0049_Storage_Bucket_Backup_Specification_v1
 
+> **Changed by spec 0075 (2026-11-21).** The backup no longer only adds files. Files deleted from the app now move to `deleted/uploads/` in R2 on the next nightly run, and R2's lifecycle rule removes them after 30 days. The run stops without moving anything if Supabase holds less than half of R2's file count; override once with `allow_large_prune`. The "only ever adds files" notes below describe the original design.
+
 **Status:** Draft
 **Date:** 2026-08-09
 **Related files:** [supabase/migrations/0002_storage_bucket.sql](../../supabase/migrations/0002_storage_bucket.sql), [.github/workflows/db-backup.yml](../../.github/workflows/db-backup.yml), [scripts/backup-db.sh](../../scripts/backup-db.sh), [docs/features/requirements-database-backups.md](requirements-database-backups.md), [docs/launch-punch-list.md](../launch-punch-list.md)
