@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { entities } from '@/api/entities';
 import { supabase } from '@/api/supabaseClient';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -10,6 +10,7 @@ import { UserPlus, Trash2, Mail, CheckCircle2 } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import { isDemoAccount } from '@/lib/accountType';
 import { PALETTE } from '@/lib/toneColors';
+import IconButton from '@/components/IconButton';
 
 export default function InviteSitterDialog({ petSitId, open, onOpenChange }) {
   const { user } = useAuth();
@@ -28,8 +29,15 @@ export default function InviteSitterDialog({ petSitId, open, onOpenChange }) {
     setLoaded(true);
   };
 
+  // Load whenever the parent opens the dialog. Radix only calls
+  // onOpenChange for changes the dialog makes itself (closing), never when
+  // the parent sets open=true, so loading from handleOpenChange meant the
+  // list never appeared (spec 0073, PA-53; same fix 0072 made for co-owners).
+  useEffect(() => {
+    if (open && petSitId) load();
+  }, [open, petSitId]);
+
   const handleOpenChange = (val) => {
-    if (val && !loaded) load();
     if (!val) { setEmail(''); setSuccessMsg(''); setError(''); setLoaded(false); setAccesses([]); }
     onOpenChange(val);
   };
@@ -54,13 +62,23 @@ export default function InviteSitterDialog({ petSitId, open, onOpenChange }) {
     const me = userData?.user;
     const cleanEmail = email.trim().toLowerCase();
     // Check if already invited
-    const existing = accesses.find(a => a.sitter_email === cleanEmail);
+    const existing = accesses.find(a => a.sitter_email.toLowerCase() === cleanEmail);
     if (!existing) {
-      await entities.PetSitterAccess.create({
-        pet_sit_id: petSitId,
-        owner_id: me.id,
-        sitter_email: cleanEmail,
-      });
+      try {
+        await entities.PetSitterAccess.create({
+          pet_sit_id: petSitId,
+          owner_id: me.id,
+          sitter_email: cleanEmail,
+        });
+      } catch (err) {
+        // The database refuses anyone who doesn't own every pet in the sit
+        // (migration 0057), so a failure here must surface rather than leave
+        // the button stuck on saving.
+        console.error('PetSitterAccess.create failed:', err);
+        setError("Couldn't save this invite. Please try again.");
+        setSaving(false);
+        return;
+      }
 
       // Send the invite email via the Edge Function.
       const { data: sessionData } = await supabase.auth.getSession();
@@ -79,7 +97,7 @@ export default function InviteSitterDialog({ petSitId, open, onOpenChange }) {
       } else if (fnResp.data?.reason === 'recipient_suppressed') {
         setSuccessMsg(`${cleanEmail} added as a sitter, but Wysker Watch couldn't email them — this address has previously failed to receive mail from us. They can still be reached another way to get set up with access.`);
       } else if (fnResp.data?.reason === 'exists') {
-        setSuccessMsg(`${cleanEmail} already has a Whisker Watch account and can now see this pet sit.`);
+        setSuccessMsg(`${cleanEmail} already has a Wysker Watch account. They'll see this pet sit from the day before it starts.`);
       } else if (fnResp.data?.sent === false) {
         // Defensive fallback for a reason value not handled above (e.g. a
         // future suppression cause sendEmail() forgot to label) — see
@@ -138,13 +156,16 @@ export default function InviteSitterDialog({ petSitId, open, onOpenChange }) {
             <Label className="text-[13px] text-muted-foreground uppercase tracking-wide">Invited Sitters</Label>
             {accesses.map(a => (
               <div key={a.id} className="flex items-center justify-between bg-secondary rounded-lg px-3 py-2">
-                <div className="flex items-center gap-2">
-                  <Mail className="h-3.5 w-3.5 text-muted-foreground" />
-                  <span className="text-sm">{a.sitter_email}</span>
+                <div className="flex items-center gap-2 min-w-0">
+                  <Mail className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                  <span className="text-sm break-all">{a.sitter_email}</span>
                 </div>
-                <button onClick={() => setRemoveConfirmId(a.id)} className="text-muted-foreground hover:text-destructive transition-colors p-1">
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
+                <IconButton
+                  icon={Trash2}
+                  aria-label={`Remove ${a.sitter_email}`}
+                  onClick={() => setRemoveConfirmId(a.id)}
+                  iconClassName="text-muted-foreground"
+                />
               </div>
             ))}
           </div>
