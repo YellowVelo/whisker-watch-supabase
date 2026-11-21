@@ -103,6 +103,10 @@ A one-page checklist run against every `Critical`/`High` page before the Accessi
 | `/register`: password mismatch and <8-char password are blocked client-side before any network call | High | `[Manual]` |
 | `/register`: successful signup shows "check your email" state | Critical | `[Manual]` |
 | `/forgot-password`: submitting a non-existent email still shows the same success copy (enumeration-safe) | High | `[Manual]` |
+| `/forgot-password`: a failed send shows an error (rate-limit or general) and keeps the form, never a false "sent" (spec 0074) | Critical | `[Playwright: public-legal-and-reset.spec.js]` |
+| A password-reset link redirects to `/reset-password` (Supabase Redirect URLs list, spec 0074) | Critical | `[Deno: supabase/tests/password_reset_redirect.test.ts]` on dev; run by hand per project |
+| A reset-link login that lands on any other page is moved to Set New Password (spec 0074) | High | `[Vitest: passwordRecovery.test.js]` |
+| Reset email arrives at a non-team address and its link opens Set New Password (spec 0074) | Critical | `[Manual]` — Given prod (then staging), When a reset is requested for petsitter1@ (an alias to Lynn), Then the branded email arrives and its link opens Set New Password. |
 | `/reset-password`: submit stays disabled until the recovery session is confirmed ready | Medium | `[Manual]` |
 | `/accept-invite`: valid sitter invite redeems and redirects to `/pet-sitter` | Critical | `[Manual]` |
 | `/accept-invite`: valid co-owner invite redeems and redirects to `/pets?highlight={petId}` | Critical | `[Manual]` |
@@ -235,6 +239,8 @@ A one-page checklist run against every `Critical`/`High` page before the Accessi
 | Support FAQ: accordion items expand/collapse independently | Medium | `[Playwright: support-faq.spec.js]` |
 | Support: "Email support" mailto link targets the correct address | Medium | `[Playwright: support-faq.spec.js]` |
 | Privacy/Terms: section list navigates to each detail page | Low | `[Manual]` |
+| Privacy/Terms and their section pages open while signed out, with no app frame; signed in, they keep the bottom nav (spec 0074) | Critical | `[Playwright: public-legal-and-reset.spec.js]` |
+| Privacy/Terms: Back on a page opened in a fresh tab goes to Login (signed out), the Menu (signed in), or the document's list (section pages) (spec 0074) | Medium | `[Playwright: public-legal-and-reset.spec.js]` |
 | About page renders and Back works | Low | `[Manual]` |
 
 ### 5.10 Admin — High
