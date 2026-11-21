@@ -1,10 +1,12 @@
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import {
   ChevronLeft, ChevronRight, FileText, Calendar,
   Info, Stethoscope, Sparkles, User, Server, Scale, Mail,
 } from 'lucide-react';
 import IconButton from '../components/IconButton';
 import PageTransition from '../components/PageTransition';
+import useBackWithFallback from '../hooks/useBackWithFallback';
+import { useAuth } from '@/lib/AuthContext';
 import { TOS_LAST_UPDATED, TOS_SECTIONS } from '@/lib/termsOfServiceContent';
 
 // Menu -> Terms of Service: lists every section of terms-of-service.md, each
@@ -15,14 +17,16 @@ import { TOS_LAST_UPDATED, TOS_SECTIONS } from '@/lib/termsOfServiceContent';
 const SECTION_ICONS = { Info, Stethoscope, Sparkles, User, Server, Scale, FileText, Mail };
 
 export default function Terms() {
-  const navigate = useNavigate();
+  const { isAuthenticated } = useAuth();
+  // Opened in a new tab from the signup screens, there's no history (spec 0074).
+  const goBack = useBackWithFallback(isAuthenticated ? '/settings' : '/login');
 
   return (
     <PageTransition>
       <div className="min-h-screen pb-24">
         <header style={{ paddingTop: 'env(safe-area-inset-top)' }}>
           <div className="max-w-2xl mx-auto px-4 py-4 flex items-center gap-3">
-            <IconButton icon={ChevronLeft} onClick={() => navigate(-1)} aria-label="Back" />
+            <IconButton icon={ChevronLeft} onClick={goBack} aria-label="Back" />
             <h1 className="text-[28px] font-semibold">Terms of Service</h1>
           </div>
         </header>

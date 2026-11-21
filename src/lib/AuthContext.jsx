@@ -5,6 +5,7 @@ import { detectTimezone, shouldAutoPopulateTimezone } from '@/lib/timezone';
 import { track } from '@/lib/analytics';
 import { takePendingOAuthConsent } from '@/lib/pendingOAuthConsent';
 import { setSentryAccountType, clearSentryAccountType } from '@/lib/errorMonitoring';
+import { shouldRedirectToReset, RESET_PASSWORD_PATH } from '@/lib/passwordRecovery';
 
 const AuthContext = createContext(undefined);
 
@@ -55,7 +56,17 @@ export const AuthProvider = ({ children }) => {
 
     // Keep state in sync if the user logs in/out in another tab,
     // or when a session refreshes/expires.
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
+      // Spec 0074: a reset-link login that landed anywhere but
+      // /reset-password goes there. A full-page replace, because
+      // AuthProvider sits above <Router> (App.jsx); the session is already
+      // saved, so the reload finds it. supabase-js announces
+      // PASSWORD_RECOVERY only after verifying the link's token over the
+      // network, so this listener is registered well before it fires.
+      if (shouldRedirectToReset(event, window.location.pathname)) {
+        window.location.replace(RESET_PASSWORD_PATH);
+        return;
+      }
       if (session?.user) {
         loadUserWithProfile(session.user);
       } else {

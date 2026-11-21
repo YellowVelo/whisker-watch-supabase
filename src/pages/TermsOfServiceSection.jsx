@@ -1,7 +1,8 @@
-import { useNavigate, useParams } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import { ChevronLeft } from 'lucide-react';
 import IconButton from '../components/IconButton';
 import PageTransition from '../components/PageTransition';
+import useBackWithFallback from '../hooks/useBackWithFallback';
 import { getTermsOfServiceSection, TOS_LAST_UPDATED, TOS_LAST_UPDATED_SECTION } from '@/lib/termsOfServiceContent';
 import { BodyBlock } from '../components/legalContentBlocks';
 
@@ -10,7 +11,7 @@ import { BodyBlock } from '../components/legalContentBlocks';
 // sections since they share the same paragraph/bullet-list body shape.
 
 export default function TermsOfServiceSection() {
-  const navigate = useNavigate();
+  const goBack = useBackWithFallback('/terms');
   const { sectionId } = useParams();
   const section = getTermsOfServiceSection(sectionId);
 
@@ -19,7 +20,7 @@ export default function TermsOfServiceSection() {
       <div className="min-h-screen pb-24">
         <header style={{ paddingTop: 'env(safe-area-inset-top)' }}>
           <div className="max-w-2xl mx-auto px-4 py-4 flex items-center gap-3">
-            <IconButton icon={ChevronLeft} onClick={() => navigate(-1)} aria-label="Back" />
+            <IconButton icon={ChevronLeft} onClick={goBack} aria-label="Back" />
             <h1 className="text-[24px] font-semibold truncate">{section ? section.title : 'Terms of Service'}</h1>
           </div>
         </header>

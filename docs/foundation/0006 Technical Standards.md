@@ -246,6 +246,19 @@ Deploy Edge Functions via CLI
 
 **Convention (not automated, easy to miss):** every migration and Edge Function deploy should be pushed to all three projects — dev, staging, and prod — as part of shipping a change, not left on dev alone. This is manual (`supabase link --project-ref <ref>` then `db push`/`functions deploy`, repeated per project) and has been missed before (2026-07-25/26: two specs shipped to dev only, staging and prod caught up a day later once the gap was noticed).
 
+**Supabase Auth → Redirect URLs (dashboard, not in the repo)** (added 2026-11-21, spec 0074). Supabase only sends people back to addresses on each project's Authentication → URL Configuration → Redirect URLs list. Anything missing silently falls back to the Site URL (Home), with no error anywhere. On 2026-11-21, prod's list was found missing `/reset-password` (most likely dropped when it was rewritten on 2026-07-26, spec 0021), so reset links landed signed in on Home instead of Set New Password. Every project must list every address below, on its own app domain:
+
+| Address | Used by |
+|---|---|
+| `/` (the Site URL) | Google sign-in, `Login.jsx` / `Register.jsx` |
+| `/reset-password` | Forgot Password, `ForgotPassword.jsx` |
+| `/verify-email` | Signup confirmation, `sign-up` function |
+| `/accept-invite` | Co-owner and sitter invites, `invite-co-owner` / `invite-sitter` |
+
+Domains: prod is the bare `https://wyskerwatch.com` plus `https://www.wyskerwatch.com`; dev is `http://localhost:5173`; staging uses its own address. Prod lists no `localhost` and no broad wildcards (spec 0069). **Rule:** any new `redirectTo` in code is added to this table and to all three dashboards in the same change. `supabase/tests/password_reset_redirect.test.ts` checks `/reset-password` on dev in CI; run it by hand against staging/prod with that project's keys and `RESET_REDIRECT_BASE`.
+
+**Auth emails go through Supabase's custom SMTP, not `sendEmail.ts`** (added 2026-11-21, spec 0074). Password-reset emails are sent by Supabase Auth itself, through Resend's SMTP (`smtp.resend.com`, sender `Wysker Watch <no-reply@wyskerwatch.com>`, one Resend API key per project), on all three projects. Before 2026-11-21, prod used Supabase's built-in mailer, which only delivers to Supabase team members. The Reset Password template in each dashboard is a rendered copy of `supabase/functions/_shared/email/templates/password-reset.ts` (via `layout.ts`, link `{{ .ConfirmationURL }}`); change both together. The app's test-account email suppression doesn't apply to these emails.
+
 **Per-function deploy settings live in `supabase/config.toml`** (added 2026-10-19, spec 0066). Today that's only resend-webhook's `verify_jwt = false`. Always pass `--project-ref` explicitly rather than relying on the linked project. Spec 0066 found the CLI linked to prod during routine work.
 
 **Migration history intentionally diverges between projects.** `0003`, `0007`, and `0027` contain one-time inserts of real personal pet data tied to specific production `user_id`s — they were deliberately never run on `wysker-watch-dev`/`wysker-watch-staging` and are reconciled there via `supabase migration repair --status applied` (marks them resolved without executing their SQL) rather than run. If `supabase db push` on dev/staging ever refuses with "Found local migration files to be inserted before the last migration," check whether the blocking file is one of these three (or a similar prod-only data migration) before reaching for `--include-all` — that flag would actually try to run them.
