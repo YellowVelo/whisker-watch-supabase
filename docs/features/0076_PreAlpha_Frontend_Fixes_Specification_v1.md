@@ -1,6 +1,6 @@
 # 0076_PreAlpha_Frontend_Fixes_Specification_v1
 
-**Status:** Draft. Waiting for Lynn's review. Scope and the two decisions were confirmed by Lynn on 2026-11-21: all 5 items, hide Google, and "delete, except reminders".
+**Status:** Draft. Scope and decisions confirmed by Lynn on 2026-11-21 (all 5 items, hide Google, "delete, except reminders"). Open Questions resolved and copy approved the same day (OQ1 became PA-61). Waiting for approval of the spec itself.
 **Date:** 2026-11-21
 **Lane:** Frontend (`src/`, `e2e/`, docs only). No migration, Edge Function, CI or `supabase/tests` change.
 **Punch list:** PA-20 (P1), PA-28, PA-55, PA-58 (P2), PA-48 (P2, the check-in-history part only). Pre-Alpha Audit tab, `docs/planning/Wysker_Watch_Launch_Plan.xlsx`.
@@ -25,7 +25,7 @@ Spec 0075 (account deletion, branch `claude/gallant-maxwell-vadhux`) changes `de
 4. **I found a bug in the "is this a pet I only sit for?" check that PA-28 depends on.** Today it counts *any* pet in a sit you were invited to as sitter-only, even a pet you own. Normally harmless, but this spec uses the check to block Edit Pet. An owner who was ever added as a sitter on their own pet's sit (it happens in testing) would be locked out of editing their own pet. The fix: a pet you own or co-own is never sitter-only. This also fixes the Pets tab, which would wrongly put such a pet under "Pets I Sit".
 5. **Sitters can only reach Edit Pet and Vet Report by typing the address.** The app never shows them a button to either page (a sitter's pet card only opens Trends). So for those two the fix is a "Only this pet's owners can do this" screen with a Back button, rather than hiding buttons. The database already stops a sitter from saving changes. This makes the page say so up front instead of failing on Save.
 6. **Scan Record was the real leak.** When an owner scans a vet invoice, the app sends the names of *all* pets it can see to the AI, including pets the owner only sits for. It could then attach a scanned line to that sitter-only pet, and the save would fail. After this fix, the AI only hears about pets the owner owns or co-owns.
-7. **Out of scope, but found: other screens also mix in sitter-only pets.** Home's daily check-in cards, Ask Wysker's pet picker and the Pet Sitter page's pet picker all use the same unfiltered pet list. The Pet Sitter page belongs with PA-60 (sitter permissions, a Back End lane item). I recommend adding Home and Ask Wysker to the punch list as a new item rather than widening this spec. See Open Question 1.
+7. **Out of scope, but found: other screens also mix in sitter-only pets.** Home's daily check-in cards, Ask Wysker's pet picker and the Pet Sitter page's pet picker all use the same unfiltered pet list. The Pet Sitter page belongs with PA-60 (sitter permissions, a Back End lane item). I recommend adding Home and Ask Wysker to the punch list as a new item rather than widening this spec. Lynn chose a new item: PA-61.
 8. **The 44px "x" fix needs one small addition to the shared icon button.** The shared `IconButton` always draws a bordered circle. That looks wrong inside a soft chip, and the Design System says chips have no outlines. I'll add a plain look (no background or border, still a 44px tap area) to the shared component, rather than hand-building a one-off button. The same tiny "x" buttons exist on the Food and Medication sections (2 more places). They're listed in Repo Findings, not fixed here.
 9. **Notifications seeding needs the CLI, so one test is local-only.** Normal users can't create notifications (only the server can), so the new end-to-end test seeds them through `supabase db query --linked`, the same way `vaccination-due-reminders.spec.js` does. That means it's skipped in CI, like that one. The "what does Clear do to each notification" logic also gets a unit test, which does run in CI.
 10. **The bell's unread number may be stale today.** The header looks up the count only once, when it first appears, so marking something read may not update the bell until a full reload. This spec makes it look again on every page change. Without that, AC3 couldn't pass.
@@ -99,7 +99,7 @@ None provided. Layout for Notifications: "Mark all read" and "Clear all" are two
   - New `listOwnedPets(order)` = `Pet.list(order)` minus sitter-only ids.
   - `VaccinationSection.jsx` `handleScan` uses `listOwnedPets()` in place of `entities.Pet.list()`. If the sitter check fails, it falls back to the current pet only. It never sends the unfiltered list.
   - `PetEdit.jsx` and `VetExport.jsx` call `getSitterOnlyPetIds()` alongside `Pet.get` and render a small shared `OwnersOnlyNotice` (new, `src/components/OwnersOnlyNotice.jsx`: an icon, one line of text and a Back `Button`; tokens only).
-  - Copy: "Only this pet's owners can do this." **This is user-facing copy for Lynn to approve** (see Open Question 2).
+  - Copy: "Only this pet's owners can do this." Copy approved by Lynn 2026-11-21.
 - **PA-55:**
   - `IconButton.jsx` gets a `variant` prop. `'default'` (today's look) and `'plain'` (`bg-transparent`, no border, still `h-11 w-11`, icon size via `iconClassName`).
   - `PetEdit.jsx` chips use `<IconButton variant="plain" icon={X} iconClassName="h-3.5 w-3.5" aria-label={`Remove ${n}`} className="-my-3 -mr-3" />`. The negative margins keep the chip the same visible size while the tap area grows to 44px.
@@ -127,14 +127,16 @@ None provided. Layout for Notifications: "Mark all read" and "Clear all" are two
 
 - Turning Google sign-in on.
 - A server-side "hidden" flag for notifications.
-- Filtering sitter-only pets out of Home, Ask Wysker or the Pet Sitter page (OQ1 / PA-60).
+- Filtering sitter-only pets out of Home, Ask Wysker or the Pet Sitter page (PA-61 / PA-60).
 - Server-side checks on who may download a Vet Report (PA-12's Edge Function).
 - Fixing Food/Medication's small buttons, or the toast-visibility timeout.
 
 ## Open Questions
 
-1. Add a new punch-list item for "Home and Ask Wysker still include sitter-only pets", or fold them into this spec? **Recommendation:** new item, to keep this bundle small.
-2. Approve the copy:
+Both resolved by Lynn on 2026-11-21.
+
+1. **Resolved: new item.** Home and Ask Wysker's sitter-only pets are now **PA-61** on the punch list, not part of this spec.
+2. **Resolved: copy approved as written:**
    - "Only this pet's owners can do this." (Edit Pet / Vet Report, for sitters)
    - "Clear all notifications?" with buttons "Cancel" and "Clear all"
    - "Mark all read"
