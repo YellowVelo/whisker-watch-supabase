@@ -15,7 +15,14 @@
 // disposable wysker-watch-restore-scratch project). If SENTRY_DSN is
 // unset, reportError() is a no-op — monitoring must never be able to
 // break a function.
-import * as Sentry from 'npm:@sentry/deno';
+//
+// The version is pinned on purpose (spec 0075, 2026-11-21). Unpinned, every
+// deploy takes the newest release, and 11.16.0 (2026-11-20) crashes the
+// function on startup when Sentry.init runs. Every request then fails with
+// WORKER_ERROR, including requests that never report an error. 11.15.0 is
+// the last version confirmed working on Supabase's Edge runtime. Before
+// raising it, deploy a function using it to dev and call it once.
+import * as Sentry from 'npm:@sentry/deno@11.15.0';
 
 const dsn = Deno.env.get('SENTRY_DSN');
 const environment = Deno.env.get('SENTRY_ENVIRONMENT') || 'development';

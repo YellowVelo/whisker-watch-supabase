@@ -16,12 +16,16 @@
 //
 // Behavior depends on the caller's relationship to the pet:
 //   - Sole owner (created_by, no linked co-owners):
-//       delete the pet's photo from Storage (if any), delete the
-//       `pets` row. Every child table cascades on pet_id. -> mode: 'deleted'
+//       delete the `pets` row (every child table cascades on pet_id),
+//       then its photo and scanned documents from Storage, except a
+//       document also linked to another pet (spec 0075). -> mode: 'deleted'
 //   - Primary owner, pet has a linked co-owner:
-//       ownership transfers to the oldest linked co-owner (same
-//       tie-break rule as delete-account); the pet is NOT destroyed.
-//       The new owner gets an in-app notification. -> mode: 'transferred'
+//       transfer_pet_ownership() (migration 0058, shared with
+//       delete-account) passes the pet to the oldest linked co-owner in
+//       one transaction: every other co-owner keeps access, the caller's
+//       pet sits for this pet pass on (or the pet is taken out of a sit
+//       that also covers the caller's other pets), and the new owner is
+//       notified. The pet is NOT destroyed. -> mode: 'transferred'
 //   - Co-owner (not primary):
 //       only the caller's own pet_co_owners row is removed; the pet
 //       and all its data are untouched. The primary owner gets an
@@ -31,6 +35,7 @@
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import { reportError } from '../_shared/errorReporting.ts';
 import { deletablePetPhotoPath } from '../_shared/petPhoto.ts';
+import { removePaths } from '../_shared/storageFiles.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!;
@@ -148,53 +153,23 @@ Deno.serve(async (req) => {
     const linked = (coOwners ?? []).filter(c => c.co_owner_user_id != null);
 
     if (linked.length > 0) {
-      // Transfer ownership to the earliest linked co-owner; pet survives.
-      const newOwner = linked[0];
+      // Pass the pet to the earliest linked co-owner; pet survives. One
+      // database transaction (0058), so a failure leaves nothing half-done.
+      const { data: newOwner, error: transferError } = await admin.rpc('transfer_pet_ownership', {
+        p_pet_id: petId,
+        p_from_user: userId,
+        p_reason: 'pet_removed',
+        p_handle_sits: true,
+      });
 
-      const { error: transferError } = await admin
-        .from('pets')
-        .update({ created_by: newOwner.co_owner_user_id })
-        .eq('id', petId);
-
-      if (transferError) {
+      if (transferError || !newOwner) {
         console.error('Error transferring pet:', transferError);
+        reportError(transferError ?? new Error('transfer_pet_ownership returned no new owner'), {
+          function: 'delete-pet',
+          step: 'transfer',
+        });
         return json({ error: `Failed to transfer ownership of "${pet.name}"` }, 500);
       }
-
-      // The promoted co-owner no longer needs a pet_co_owners row (they
-      // are now created_by directly). created_by has already been
-      // transferred above, so from here on we report an error rather
-      // than a silent "success" if cleanup fails — the transfer itself
-      // isn't rolled back (there's no transaction spanning these calls,
-      // matching the existing delete-account pattern), but the caller
-      // and logs need to know the sharing records may be inconsistent.
-      const { error: dropPromotedRowError } = await admin
-        .from('pet_co_owners')
-        .delete()
-        .eq('id', newOwner.id);
-
-      if (dropPromotedRowError) {
-        console.error('Error removing promoted co-owner row after transfer:', dropPromotedRowError);
-        return json({ error: `Ownership of "${pet.name}" was transferred, but cleanup failed. Please contact support.` }, 500);
-      }
-
-      // Any remaining co-owners' rows should now point at the new owner.
-      const { error: repointCoOwnersError } = await admin
-        .from('pet_co_owners')
-        .update({ owner_id: newOwner.co_owner_user_id })
-        .eq('pet_id', petId)
-        .neq('co_owner_user_id', newOwner.co_owner_user_id);
-
-      if (repointCoOwnersError) {
-        console.error('Error repointing remaining co-owners after transfer:', repointCoOwnersError);
-        return json({ error: `Ownership of "${pet.name}" was transferred, but cleanup failed. Please contact support.` }, 500);
-      }
-
-      await admin.from('notifications').insert({
-        user_id: newOwner.co_owner_user_id,
-        type: 'ownership_transfer',
-        message: `${actorName} removed ${pet.name} from their account. You are now the sole owner.`,
-      });
 
       return json({ success: true, mode: 'transferred', pet_name: pet.name });
     }
@@ -241,14 +216,31 @@ Deno.serve(async (req) => {
       }
     }
 
-    const path = deletablePetPhotoPath(pet);
-    if (path) {
-      const { error: removeError } = await admin.storage.from('uploads').remove([path]);
-      if (removeError) {
-        // Non-fatal — log and continue; an orphaned storage object is
-        // preferable to blocking the delete entirely.
-        console.warn('Storage removal error (continuing):', removeError.message);
+    // Files to delete once the pet is gone: its photo, and each scanned
+    // document not also linked to another pet (a scan can cover several
+    // pets, spec 0061/0071). Looked up now, because the pet_documents rows
+    // cascade away with the pet.
+    const { data: docs, error: docsError } = await admin
+      .from('pet_documents')
+      .select('storage_path')
+      .eq('pet_id', petId);
+    if (docsError) {
+      console.error('Error looking up pet documents:', docsError);
+      return json({ error: 'Failed to look up documents for this pet' }, 500);
+    }
+    const docPaths = [...new Set((docs ?? []).map((d) => d.storage_path as string))];
+    let sharedDocPaths = new Set<string>();
+    if (docPaths.length > 0) {
+      const { data: shared, error: sharedError } = await admin
+        .from('pet_documents')
+        .select('storage_path')
+        .in('storage_path', docPaths)
+        .neq('pet_id', petId);
+      if (sharedError) {
+        console.error('Error checking shared documents:', sharedError);
+        return json({ error: 'Failed to look up documents for this pet' }, 500);
       }
+      sharedDocPaths = new Set((shared ?? []).map((d) => d.storage_path as string));
     }
 
     const { error: deleteError } = await admin
@@ -260,6 +252,20 @@ Deno.serve(async (req) => {
     if (deleteError) {
       console.error('Error deleting pet:', deleteError);
       return json({ error: 'Failed to delete pet' }, 500);
+    }
+
+    const photoPath = deletablePetPhotoPath(pet);
+    const filesToDelete = [
+      ...(photoPath ? [photoPath] : []),
+      ...docPaths.filter((p) => !sharedDocPaths.has(p) && !p.startsWith('shared/')),
+    ];
+    const removeError = await removePaths(admin, filesToDelete);
+    if (removeError) {
+      // Non-fatal: the pet is already gone and nobody can open these files
+      // any more (the storage read rule follows the pet). Reported so a
+      // leftover file can be cleaned up by hand.
+      console.warn('Storage removal error (continuing):', removeError);
+      reportError(new Error(`delete-pet storage cleanup: ${removeError}`), { function: 'delete-pet', step: 'remove_files' });
     }
 
     return json({ success: true, mode: 'deleted', pet_name: pet.name });

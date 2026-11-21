@@ -10,36 +10,44 @@
 // JWT, never from the request body, so a caller can never delete
 // someone else's account by tampering with the payload.
 //
-// What happens, in order:
+// What happens, in order (spec 0075):
 //   1. Auth check — reject any request without a valid session.
 //   2. Guard: refuse for account_type 'test'/'demo' (see below).
-//   3. Find pets where this user is the primary owner (created_by).
-//      - If co-owners exist: reassign created_by to the oldest co-owner,
-//        delete the departing user's pet_co_owners rows, write an
-//        in-app notification to the new primary owner.
-//      - If sole-owned: leave as-is; the pet cascades when auth row goes.
-//   4. Find pets where this user is a co-owner (not created_by).
-//      Write an in-app notification to the primary owner, then the
-//      pet_co_owners row cascades automatically in step 6.
-//   5. Delete all Storage objects under uploads/{userId}/.
-//   6. Delete the auth.users row (service-role). This is the last step —
-//      it cascades: profiles, sole-owned pets and all their children,
-//      remaining pet_co_owners rows, sitter access records.
+//   3. List every file in the user's storage folder (all pages).
+//   4. prepare_account_deletion() (migration 0058) does every database
+//      step in ONE all-or-nothing transaction: pets the user is primary
+//      owner of pass to their oldest linked co-owner (every other
+//      co-owner keeps access); the user's co-owner links are removed and
+//      the primary owners notified; pet sits and sitter invites they set
+//      up pass to the pets' surviving owner, or end if no one owns all of
+//      the sit's pets; beta/early-adopter signups are removed. It returns
+//      the files to delete: the folder's files plus the photo and
+//      documents of pets being deleted, minus any file a surviving pet
+//      still uses (a transferred pet keeps its photo and documents).
+//   5. Delete those files, 100 at a time.
+//   6. Delete the auth.users row. This cascades: profile, pets with no
+//      co-owner (and all their records), notifications, analytics events,
+//      sitter invites addressed to this user. Records this user entered on
+//      surviving pets are kept, with created_by cleared (0058).
 //
-// On any failure before step 6 the function returns an error without
-// touching the auth row, so the account is never left half-deleted.
+// If step 4 fails, nothing has changed. If step 5 or 6 fails, the
+// database work is already done but the account still exists; the caller
+// gets an error and can simply try again: step 4 is safe to run twice
+// (nothing is transferred or notified a second time), and the remaining
+// files are listed afresh.
 //
 // The guard in step 2 exists because this function has no other
-// protection against deleting the shared internal test1@/test2@/demo1@
-// identities (unlike reset-sandbox-account, which exists specifically to
-// wipe test/demo *data* without ever touching the login row). Losing one
-// of those accounts to a misdirected call — a bad CI run, a manual test
+// protection against deleting the shared internal test/demo identities
+// (unlike reset-sandbox-account, which exists specifically to wipe
+// test/demo *data* without ever touching the login row). Losing one of
+// those accounts to a misdirected call — a bad CI run, a manual test
 // against the wrong project — would mean recreating it by hand in
 // Supabase Auth and re-running the account_type allowlist migration.
 // Production and owner accounts are unaffected by this guard.
 
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import { reportError } from '../_shared/errorReporting.ts';
+import { listFolderPaths, removePaths } from '../_shared/storageFiles.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!;
@@ -50,11 +58,24 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+const RETRY_HINT = 'Please try again. If it keeps failing, contact support.';
+
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
     headers: { ...corsHeaders, 'Content-Type': 'application/json' },
   });
+}
+
+// Every failure is sent to Sentry as well as the function log (spec 0068
+// P1-6: early-return errors used to reach only the console).
+function fail(step: string, detail: unknown, message: string) {
+  console.error(`delete-account ${step}:`, detail);
+  reportError(detail instanceof Error ? detail : new Error(`${step}: ${JSON.stringify(detail)}`), {
+    function: 'delete-account',
+    step,
+  });
+  return json({ error: message }, 500);
 }
 
 Deno.serve(async (req) => {
@@ -74,8 +95,8 @@ Deno.serve(async (req) => {
 
     const userId = user.id;
 
-    // All subsequent DB work uses the service-role client so it can
-    // bypass RLS and act on rows across multiple users.
+    // All subsequent work uses the service-role client so it can act on
+    // rows across multiple users.
     const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
     // ── 2. Guard: refuse for account_type 'test'/'demo' ───────────────────
@@ -86,7 +107,7 @@ Deno.serve(async (req) => {
       .single();
 
     if (accountError || !callerAccount) {
-      return json({ error: 'Failed to look up account' }, 500);
+      return fail('lookup_account', accountError, 'Failed to look up account');
     }
     if (callerAccount.account_type === 'test' || callerAccount.account_type === 'demo') {
       return json(
@@ -95,135 +116,34 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Prefer the caller's first name in notifications shown to the
-    // other party — falling back to email only if they never set one
-    // (there's no full profile/settings UI yet for editing this).
-    const { data: callerProfile } = await admin
-      .from('profiles')
-      .select('first_name')
-      .eq('id', userId)
-      .maybeSingle();
-    const actorName = callerProfile?.first_name || user.email || 'A former co-owner';
-
-    // ── 3. Handle pets where this user is the primary owner ──────────────
-    const { data: ownedPets, error: petsError } = await admin
-      .from('pets')
-      .select('id, name')
-      .eq('created_by', userId);
-
-    if (petsError) {
-      console.error('Error fetching owned pets:', petsError);
-      return json({ error: 'Failed to look up owned pets' }, 500);
+    // ── 3. List the user's files ─────────────────────────────────────────
+    let folderPaths: string[];
+    try {
+      folderPaths = await listFolderPaths(admin, userId);
+    } catch (err) {
+      return fail('list_files', err, `We couldn't delete your account. ${RETRY_HINT}`);
     }
 
-    for (const pet of ownedPets ?? []) {
-      // Find all co-owners for this pet, oldest tenure first.
-      const { data: coOwners, error: coError } = await admin
-        .from('pet_co_owners')
-        .select('id, co_owner_user_id, co_owner_email, created_at')
-        .eq('pet_id', pet.id)
-        .order('created_at', { ascending: true });
-
-      if (coError) {
-        console.error(`Error fetching co-owners for pet ${pet.id}:`, coError);
-        return json({ error: `Failed to look up co-owners for pet "${pet.name}"` }, 500);
-      }
-
-      // Filter to co-owners who have actually accepted (have a user_id linked).
-      const linked = (coOwners ?? []).filter(c => c.co_owner_user_id != null);
-
-      if (linked.length === 0) {
-        // Sole-owned pet — will cascade-delete when auth row is removed. Nothing to do.
-        continue;
-      }
-
-      // Transfer ownership to the earliest linked co-owner.
-      const newOwner = linked[0];
-
-      const { error: transferError } = await admin
-        .from('pets')
-        .update({ created_by: newOwner.co_owner_user_id })
-        .eq('id', pet.id);
-
-      if (transferError) {
-        console.error(`Error transferring pet ${pet.id}:`, transferError);
-        return json({ error: `Failed to transfer ownership of "${pet.name}"` }, 500);
-      }
-
-      // Remove the departing user's pet_co_owners rows for this pet.
-      // (The cascade on auth.users deletion would do this too, but doing
-      // it explicitly here keeps the state clean before the auth delete.)
-      await admin
-        .from('pet_co_owners')
-        .delete()
-        .eq('pet_id', pet.id)
-        .eq('owner_id', userId);
-
-      // Also update owner_id on remaining co-owner rows for this pet so
-      // they correctly reference the new primary owner.
-      await admin
-        .from('pet_co_owners')
-        .update({ owner_id: newOwner.co_owner_user_id })
-        .eq('pet_id', pet.id)
-        .neq('co_owner_user_id', newOwner.co_owner_user_id);
-
-      // Write an in-app notification to the new primary owner.
-      await admin.from('notifications').insert({
-        user_id: newOwner.co_owner_user_id,
-        type: 'ownership_transfer',
-        message: `${actorName} deleted their account. You are now the sole owner of ${pet.name}.`,
-      });
+    // ── 4. All database steps, in one transaction ────────────────────────
+    const { data: prepared, error: prepareError } = await admin.rpc('prepare_account_deletion', {
+      p_user_id: userId,
+      p_folder_paths: folderPaths,
+    });
+    if (prepareError || !prepared) {
+      return fail('prepare', prepareError, `We couldn't delete your account. ${RETRY_HINT}`);
     }
 
-    // ── 4. Handle pets where this user is a co-owner (not created_by) ───
-    const { data: coOwnedRows, error: coOwnedError } = await admin
-      .from('pet_co_owners')
-      .select('pet_id, owner_id, pets(name)')
-      .eq('co_owner_user_id', userId);
-
-    if (coOwnedError) {
-      console.error('Error fetching co-owned pets:', coOwnedError);
-      return json({ error: 'Failed to look up co-owned pets' }, 500);
-    }
-
-    for (const row of coOwnedRows ?? []) {
-      const petName = (row.pets as { name: string } | null)?.name ?? 'your pet';
-      // Notify the primary owner that this co-owner is leaving.
-      await admin.from('notifications').insert({
-        user_id: row.owner_id,
-        type: 'co_owner_removed',
-        message: `${actorName} deleted their account and no longer has access to ${petName}.`,
-      });
-      // The pet_co_owners row itself cascades when the auth row is deleted (step 5).
-    }
-
-    // ── 5. Clean up Storage ──────────────────────────────────────────────
-    // Delete all objects under uploads/{userId}/ in the uploads bucket.
-    const { data: storageList, error: listError } = await admin.storage
-      .from('uploads')
-      .list(userId);
-
-    if (listError) {
-      // Non-fatal — log and continue. A missing/empty folder is fine.
-      console.warn('Storage list error (continuing):', listError.message);
-    } else if (storageList && storageList.length > 0) {
-      const paths = storageList.map(f => `${userId}/${f.name}`);
-      const { error: removeError } = await admin.storage
-        .from('uploads')
-        .remove(paths);
-      if (removeError) {
-        console.error('Storage removal error:', removeError);
-        return json({ error: 'Failed to delete storage files' }, 500);
-      }
+    // ── 5. Delete files ──────────────────────────────────────────────────
+    const filesToDelete: string[] = prepared.files_to_delete ?? [];
+    const removeError = await removePaths(admin, filesToDelete);
+    if (removeError) {
+      return fail('remove_files', removeError, `We couldn't finish deleting your account. ${RETRY_HINT}`);
     }
 
     // ── 6. Delete the auth.users row (must be last) ──────────────────────
-    // This cascades: profiles, sole-owned pets (and all their child rows),
-    // remaining pet_co_owners rows, pet_sitter_access rows.
     const { error: deleteError } = await admin.auth.admin.deleteUser(userId);
     if (deleteError) {
-      console.error('deleteUser error:', deleteError);
-      return json({ error: 'Failed to delete account' }, 500);
+      return fail('delete_user', deleteError, `We couldn't finish deleting your account. ${RETRY_HINT}`);
     }
 
     return json({ success: true });
