@@ -6,7 +6,7 @@
 // Runs as test1@ (the suite's shared session). Setup uses test1@'s own
 // signed-in client, making the same calls the app does (create a pet, a sit
 // and an email-only invite), so no privileged access is needed. Each test
-// makes and deletes its own pet; the sit and invite cascade away with it.
+// makes and deletes its own pet and sit; the invite cascades with the sit.
 
 import { test, expect } from './fixtures.js';
 import { createClient } from '@supabase/supabase-js';
@@ -49,9 +49,12 @@ test.describe('Share with Sitter dialog', () => {
     sitId = sit.id;
   });
 
+  // Sit first: a sit can only be deleted by someone who owns every pet in it
+  // (migration 0057), and a deleted pet belongs to nobody. (The app's own
+  // Delete Pet goes through delete-pet, which removes the pet from its sits.)
   test.afterEach(async () => {
-    if (petId) await owner.client.from('pets').delete().eq('id', petId);
     if (sitId) await owner.client.from('pet_sits').delete().eq('id', sitId);
+    if (petId) await owner.client.from('pets').delete().eq('id', petId);
   });
 
   async function openShareDialog(page) {
