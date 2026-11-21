@@ -86,7 +86,7 @@ None. No UI changes apart from the Privacy Policy text.
 
 ## Technical Spec
 
-- **Schema (migration `00NN_account_deletion_data_safety.sql`, numbered at build time as the next free number after whatever spec 0074 (other session) adds):**
+- **Schema (migration `0058_account_deletion_data_safety.sql`; spec 0074 added no migration, so 0058 is next):**
   - `created_by` → `ON DELETE SET NULL`, and `DROP NOT NULL`, on `daily_check_ins`, `observations`, `vaccinations`, `medications`, `bloodwork`, `food_logs`, `pet_foods`, `pet_baselines`, `pet_onboarding`, `symptom_logs`, `wellness_scores`, `pet_sit_logs`. Find each foreign key by catalog lookup (`pg_constraint` where the column is `created_by` and the target is `auth.users`), not by assumed name, because production has drifted from migration history before (0052/0063). Inserts still set `created_by` (app and `save_daily_check_ins`), so new rows aren't affected.
   - `pet_co_owners.created_by` → `ON DELETE SET NULL` + `DROP NOT NULL` (the bug in Before You Approve, item 5). The insert rule from 0056 still requires `created_by = auth.uid()` on new rows.
   - `pet_sitter_access.sitter_user_id` → `ON DELETE CASCADE` (FR5/AC8).
