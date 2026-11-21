@@ -1,6 +1,6 @@
 # 0076_PreAlpha_Frontend_Fixes_Specification_v1
 
-**Status:** Draft. Scope and decisions confirmed by Lynn on 2026-11-21 (all 5 items, hide Google, "delete, except reminders"). Open Questions resolved and copy approved the same day (OQ1 became PA-61). Waiting for approval of the spec itself.
+**Status:** Approved by Lynn 2026-11-21 (scope, decisions, copy, and the spec as a whole). Built on `claude/spec-0076-frontend-fixes`; PR open, not merged or deployed yet.
 **Date:** 2026-11-21
 **Lane:** Frontend (`src/`, `e2e/`, docs only). No migration, Edge Function, CI or `supabase/tests` change.
 **Punch list:** PA-20 (P1), PA-28, PA-55, PA-58 (P2), PA-48 (P2, the check-in-history part only). Pre-Alpha Audit tab, `docs/planning/Wysker_Watch_Launch_Plan.xlsx`.
@@ -141,3 +141,20 @@ Both resolved by Lynn on 2026-11-21.
    - "Clear all notifications?" with buttons "Cancel" and "Clear all"
    - "Mark all read"
    - Error: "Couldn't update your notifications. Please try again."
+
+## Build Notes (2026-11-21)
+
+1. **Where "Mark all read" and "Clear all" sit.** They're on their own row just above the list, right-aligned, not on the title row as the Visual Reference said. The 28px title plus two buttons doesn't fit across a phone screen.
+2. **Two new bits of on-screen text that weren't in the approved copy list.** If the Notifications page can't load, it now shows "We couldn't load your notifications." and a "Try again" button. Before, it showed the loading placeholder forever (Repo Findings). Needs Lynn's OK.
+3. **check-in-history fix, simpler than planned.** The test waits for the month to finish loading, then steps back one month if the seeded day isn't there. Seeds are at most 15 days old, so one step is always enough. The time-zone change wasn't needed, because being a day off either way doesn't change which month the day is in. The previous-month path was checked by temporarily seeding 25 days back (passed, then reverted). Faking the browser clock wouldn't have worked, because the seeding runs outside the browser.
+4. **AC9.** The `vaccination-scan-review.spec.js` stub wasn't extended. AC9 is covered by `src/lib/petsClient.test.js` plus a manual scan, as the Test Plan allowed.
+5. **Test results.**
+   - `npm run lint`, `npm run typecheck` and `npx vitest run` (152/152) all pass.
+   - Playwright: every new test passes: `login.spec.js` (Google hidden), `notifications-clear.spec.js` (4, local), `pet-sitter.spec.js` (owners-only notice), and `pet-edit-conditions.spec.js` (44px chips).
+   - 5 older tests in `check-in-history.spec.js` and `pet-edit-conditions.spec.js` failed in the combined run, and each passed when run alone.
+   - Cause: **`delete-pet` on dev currently crashes (`WORKER_ERROR`)**, so each test's cleanup fails and leaves an identically named pet behind for the next test. That function is being rebuilt by the Back End lane (spec 0075). It isn't touched here.
+   - Leftover `E2E History Pet` / `E2E EditPet` pets on test1@ (14 as of 2026-11-21) can be removed once `delete-pet` works again.
+6. **Design-system-check:** clean for new code.
+   - Pre-existing, not changed: Edit Pet's and Vet Report's sticky headers use a hand-picked `z-20` (Amendment #12) and `border-white/8` instead of `border-border`.
+   - The "Clear all" confirm button uses the app-wide default primary button style (the known Amendment #1 issue).
+

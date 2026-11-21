@@ -80,11 +80,24 @@ async function openHistoryCalendar(page, { seedDate, seedStatus } = {}) {
   return calendar;
 }
 
+// The calendar opens on the current month, but a check-in seeded 10 or
+// 15 days ago is in the previous month during the first 10-15 days of
+// every month (punch list PA-48, fixed in spec 0076). The seed is at most
+// 15 days old, so it's either in this month or the one before. Callers
+// first wait for the month to finish loading (day buttons only render
+// once its check-ins are in), so "not here" really means "last month".
+async function revealSeededDay(calendar, dayButton) {
+  if (await dayButton.count() > 0) return;
+  await calendar.getByRole('button', { name: 'Previous month' }).click();
+}
+
 test('tapping a day with an existing check-in opens it pre-filled', async ({ page }) => {
   const seedDate = isoDateDaysAgo(10);
   const calendar = await openHistoryCalendar(page, { seedDate, seedStatus: 'great' });
 
   const dayButton = calendar.locator(`button[aria-label$=", great"]`).first();
+  await calendar.locator('button[aria-label$=", no check-in yet"]').first().waitFor({ timeout: 10000 });
+  await revealSeededDay(calendar, dayButton);
   await expect(dayButton).toBeVisible({ timeout: 10000 });
   await dayButton.click();
 
@@ -144,6 +157,8 @@ test('backing out of the confirmation leaves the day unchanged', async ({ page }
   const calendar = await openHistoryCalendar(page, { seedDate, seedStatus: 'great' });
 
   const dayButton = calendar.locator('button[aria-label$=", great"]').first();
+  await calendar.locator('button[aria-label$=", no check-in yet"]').first().waitFor({ timeout: 10000 });
+  await revealSeededDay(calendar, dayButton);
   const dayLabel = await dayButton.getAttribute('aria-label');
   await dayButton.click();
 

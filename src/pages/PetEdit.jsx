@@ -14,6 +14,8 @@ import PetIdentityFields from '@/components/onboarding/fields/PetIdentityFields'
 import { resolveDate, decomposeDateParts } from '@/components/onboarding/fields/DateInfoFields';
 import InviteCoOwnerDialog from '@/components/InviteCoOwnerDialog';
 import { useAuth } from '@/lib/AuthContext';
+import { getSitterOnlyPetIds } from '@/lib/petsClient';
+import OwnersOnlyNotice from '@/components/OwnersOnlyNotice';
 
 // Spec 0036: the pet-identity half of the old EditPetSheet split out onto
 // its own routed page (Conditions moved to PetConditions.jsx instead).
@@ -65,9 +67,21 @@ export default function PetEdit() {
   const [coOwnerOpen, setCoOwnerOpen] = useState(false);
   const { user } = useAuth();
 
+  const [sitterOnly, setSitterOnly] = useState(false);
+
   useEffect(() => {
-    entities.Pet.get(petId)
-      .then((p) => { setPet(p); setForm(formFromPet(p)); })
+    // A pet this person only sits for gets the owners-only notice instead
+    // of the form (spec 0076, PA-28). If the sitter check itself fails,
+    // show the form: the database still refuses a sitter's save.
+    Promise.all([
+      entities.Pet.get(petId),
+      getSitterOnlyPetIds().catch((err) => { console.error(err); return new Set(); }),
+    ])
+      .then(([p, sitterOnlyIds]) => {
+        setSitterOnly(sitterOnlyIds.has(petId));
+        setPet(p);
+        setForm(formFromPet(p));
+      })
       .catch(() => setError("We couldn't load this pet."))
       .finally(() => setLoading(false));
   }, [petId]);
@@ -155,7 +169,9 @@ export default function PetEdit() {
         </div>
 
         <div className="max-w-2xl mx-auto px-4 py-5">
-          {loading || !pet || !form ? (
+          {!loading && sitterOnly ? (
+            <OwnersOnlyNotice />
+          ) : loading || !pet || !form ? (
             <div className="flex justify-center py-16">
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
             </div>
@@ -176,9 +192,14 @@ export default function PetEdit() {
                   {form.nicknames.map(n => (
                     <span key={n} className="inline-flex items-center gap-1 text-[13px] bg-accent/20 text-accent-foreground px-2.5 py-1 rounded-full">
                       {n}
-                      <button type="button" onClick={() => set('nicknames', form.nicknames.filter(x => x !== n))}>
-                        <X className="h-3 w-3" />
-                      </button>
+                      <IconButton
+                        variant="plain"
+                        icon={X}
+                        iconClassName="h-3.5 w-3.5 text-current"
+                        className="-my-3 -mr-3"
+                        aria-label={`Remove ${n}`}
+                        onClick={() => set('nicknames', form.nicknames.filter(x => x !== n))}
+                      />
                     </span>
                   ))}
                 </div>
@@ -198,9 +219,14 @@ export default function PetEdit() {
                   {form.favorite_activities.map(a => (
                     <span key={a} className="inline-flex items-center gap-1 text-[13px] bg-primary/10 text-primary px-2.5 py-1 rounded-full">
                       {a}
-                      <button type="button" onClick={() => set('favorite_activities', form.favorite_activities.filter(x => x !== a))}>
-                        <X className="h-3 w-3" />
-                      </button>
+                      <IconButton
+                        variant="plain"
+                        icon={X}
+                        iconClassName="h-3.5 w-3.5 text-current"
+                        className="-my-3 -mr-3"
+                        aria-label={`Remove ${a}`}
+                        onClick={() => set('favorite_activities', form.favorite_activities.filter(x => x !== a))}
+                      />
                     </span>
                   ))}
                 </div>

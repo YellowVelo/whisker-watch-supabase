@@ -147,3 +147,31 @@ test('Back without saving discards changes on Edit Pet', async ({ page }) => {
   await expect(page.getByRole('heading', { name: DOG_NAME })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Should Not Persist' })).toHaveCount(0);
 });
+
+// Spec 0076 (PA-55): the chips' remove "x" has a 44px tap area and still
+// removes the chip.
+test('Edit Pet chip remove buttons are at least 44px and remove the chip', async ({ page }) => {
+  const supabase = createClient(process.env.VITE_SUPABASE_URL, process.env.VITE_SUPABASE_ANON_KEY);
+  const { data: auth, error: signInError } = await supabase.auth.signInWithPassword({
+    email: process.env.PLAYWRIGHT_TEST1_EMAIL,
+    password: process.env.PLAYWRIGHT_TEST1_PASSWORD,
+  });
+  if (signInError) throw signInError;
+  const { data: pet, error } = await supabase
+    .from('pets')
+    .insert({ created_by: auth.user.id, name: DOG_NAME, species: 'Dog', nicknames: ['Beanie'], favorite_activities: ['Fetch'] })
+    .select('id')
+    .single();
+  if (error) throw error;
+
+  await page.goto(`/pet/${pet.id}/edit`);
+  for (const label of ['Remove Beanie', 'Remove Fetch']) {
+    const button = page.getByRole('button', { name: label });
+    await expect(button).toBeVisible({ timeout: 10000 });
+    const box = await button.boundingBox();
+    expect(box.width).toBeGreaterThanOrEqual(44);
+    expect(box.height).toBeGreaterThanOrEqual(44);
+    await button.click();
+    await expect(button).toHaveCount(0);
+  }
+});

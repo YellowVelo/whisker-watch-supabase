@@ -227,3 +227,14 @@ test('tapping a badge only fires the row\'s existing navigation to Trends, nothi
   await row.getByRole('group').first().click();
   await expect(page).toHaveURL(new RegExp(`/pet/${petWithCheckinId}/trends`), { timeout: 15000 });
 });
+
+// Spec 0076 (PA-28): a sitter who types the address of an owner-only page
+// for a pet they only sit for gets a notice, not the form or download.
+test('a sitter opening Edit Pet or Vet Report for a sat pet sees the owners-only notice', async ({ page }) => {
+  for (const suffix of ['edit', 'export']) {
+    await page.goto(`/pet/${petWithCheckinId}/${suffix}`);
+    await expect(page.getByText("Only this pet's owners can do this.")).toBeVisible({ timeout: 15000 });
+    await expect(page.getByRole('button', { name: 'Back' }).last()).toBeVisible();
+  }
+  await expect(page.getByRole('button', { name: 'Download Report' })).toHaveCount(0);
+});
