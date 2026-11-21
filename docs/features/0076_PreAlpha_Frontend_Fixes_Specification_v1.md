@@ -145,7 +145,7 @@ Both resolved by Lynn on 2026-11-21.
 ## Build Notes (2026-11-21)
 
 1. **Where "Mark all read" and "Clear all" sit.** They're on their own row just above the list, right-aligned, not on the title row as the Visual Reference said. The 28px title plus two buttons doesn't fit across a phone screen.
-2. **Two new bits of on-screen text that weren't in the approved copy list.** If the Notifications page can't load, it now shows "We couldn't load your notifications." and a "Try again" button. Before, it showed the loading placeholder forever (Repo Findings). Needs Lynn's OK.
+2. **Two new bits of on-screen text that weren't in the approved copy list.** If the Notifications page can't load, it now shows "We couldn't load your notifications." and a "Try again" button. Before, it showed the loading placeholder forever (Repo Findings). Approved by Lynn 2026-11-21.
 3. **check-in-history fix, simpler than planned.** The test waits for the month to finish loading, then steps back one month if the seeded day isn't there. Seeds are at most 15 days old, so one step is always enough. The time-zone change wasn't needed, because being a day off either way doesn't change which month the day is in. The previous-month path was checked by temporarily seeding 25 days back (passed, then reverted). Faking the browser clock wouldn't have worked, because the seeding runs outside the browser.
 4. **AC9.** The `vaccination-scan-review.spec.js` stub wasn't extended. AC9 is covered by `src/lib/petsClient.test.js` plus a manual scan, as the Test Plan allowed.
 5. **Test results.**
