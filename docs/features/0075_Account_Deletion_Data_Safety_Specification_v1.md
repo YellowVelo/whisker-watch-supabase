@@ -1,6 +1,6 @@
 # 0075_Account_Deletion_Data_Safety_Specification_v1
 
-**Status:** Approved (Lynn, 2026-11-21: 1A sits pass to the new owner, 2A keep email logs + say so, 3A 30-day backup window, policy wording approved, OQ2 yes). Building.
+**Status:** Approved (Lynn, 2026-11-21: 1A sits pass to the new owner, 2A keep email logs + say so, 3A 30-day backup window, policy wording approved, OQ2 yes). Built 2026-11-21 on `claude/gallant-maxwell-vadhux` (see Build Notes). Not yet deployed anywhere.
 **Date:** 2026-11-21
 **Lane:** Backend (migration + Edge Functions + backup script)
 **Punch list:** PA-06, PA-07 (both P0), PA-14 (P1). Pre-Alpha Audit tab, `docs/planning/Wysker_Watch_Launch_Plan.xlsx`. Source findings: spec 0068 P0-5, P0-6, P1-5 and two of its P2s ("delete-account can partly finish", "misleading header comment").
@@ -120,3 +120,20 @@ None. No UI changes apart from the Privacy Policy text.
 ## Open Questions
 
 None. Both resolved by Lynn on 2026-11-21: the decisions and policy wording are approved, and OQ2 is yes (sits follow a removed shared pet too).
+
+## Build Notes (2026-11-21)
+
+1. **Verified locally, not yet on dev.** This cloud session has no Supabase login, so nothing has been pushed to any project. Instead, every migration (0001–0058, minus prod-only data import 0027) was loaded into a throwaway local Postgres 16 with small stand-ins for Supabase's `auth`/`storage` schemas, and 7 scenarios were run against 0058 (3-person transfer with records, files, sits and a retry; split sit ending; sitter deleting; co-owner leaving; delete-pet transfer with single and mixed sits; browser roles refused; foreign-key rules). All passed, and a deliberately wrong expectation was confirmed to fail. The Deno integration tests type-check but still need a run against dev (they call the deployed functions).
+2. **Bug caught during the build:** the first draft's "remove sits left with no pets" step would have deleted every empty sit in the database, not just this person's. Fixed before any test run. It now only touches sits that included a pet being deleted.
+3. **New notification wording (needs Lynn's approval before prod):**
+   - Transfer, account deleted: *"{Name} deleted their account. You are now the primary owner of {Pet}."* (was "…the sole owner of {Pet}." Wrong when other co-owners remain.)
+   - Transfer, pet removed: *"{Name} removed {Pet} from their account. You are now the primary owner."* (was "…You are now the sole owner.")
+   - Sit handed over: *"You now manage the pet sit for {Pets} ({Dec 1 – Dec 5}), which {Name} set up."*
+   - Pet taken out of a sit: *"{Pet} was taken out of the pet sit {Name} set up for {Pets} ({dates}). You can set up a new sit for {Pet} anytime."*
+   - Sit cancelled: *"{Name} deleted their account, so the pet sit they set up for {Pets} ({dates}) was cancelled. You can set up a new one anytime."*
+   - Co-owner left (unchanged): *"{Name} deleted their account and no longer has access to {Pet}."*
+4. **Found, not fixed (pre-existing):** when delete-account fails, Settings shows Supabase's generic "Edge Function returned a non-2xx status code" text, not the function's own message, because `supabase.functions.invoke` doesn't pass the body through on errors. The new "Please try again" messages therefore won't be seen until that's fixed (frontend lane).
+5. **Found, not fixed:** a co-owner who *leaves one pet* (delete-pet's "left" path) and had set up a sit covering it keeps that sit, though they no longer own the pet. Rare; same shape as PA-24.
+6. **First production backup run may hit the safety stop.** Before this change nothing was ever pruned, so R2's `uploads/` may hold many long-deleted files. If the first nightly run stops, re-run `storage-backup.yml` by hand with `allow_large_prune` ticked, once.
+7. `reset-sandbox-account` now uses the shared paginated storage helpers (`_shared/storageFiles.ts`) instead of its own loop. Its behavior is unchanged.
+8. Frontend change is the Privacy Policy text only (`src/lib/privacyPolicyContent.js`, date November 21, 2026). No `.jsx` changed, so design-system-check doesn't apply. Lint, typecheck, vitest (143) and build pass.
