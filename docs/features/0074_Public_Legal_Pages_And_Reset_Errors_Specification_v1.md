@@ -1,6 +1,6 @@
 # 0074_Public_Legal_Pages_And_Reset_Errors_Specification_v1
 
-**Status:** Approved (Lynn, 2026-11-21). Built 2026-11-21 on branch `build-0074-public-legal-reset`; frontend promote to prod pending (Lynn).
+**Status:** Shipped 2026-11-21. PR #40 merged (`c6bc3a0`); Lynn promoted the frontend to prod. No Supabase deploy needed.
 **Date:** 2026-11-21
 **Punch list:** PA-08, PA-09 (both P0, Pre-Alpha Audit tab, `docs/planning/Wysker_Watch_Launch_Plan.xlsx`). Source findings: spec 0068 P0-7, spec 0069 P0-2.
 **Related files:** `src/App.jsx`, `src/components/ProtectedRoute.jsx`, `src/pages/{Terms,TermsOfServiceSection,Privacy,PrivacyPolicySection}.jsx`, `src/pages/ForgotPassword.jsx`, `src/pages/ResetPassword.jsx` (unchanged), `src/pages/{Login,Register}.jsx` (link to the legal pages, unchanged), `src/lib/AuthContext.jsx`, `src/lib/errorMonitoring.js`, `src/api/supabaseClient.js`, `e2e/login.spec.js`, `supabase/tests/co_owner_access.test.ts` (pattern), `docs/foundation/0006 Technical Standards.md` §11, `docs/testing/QA_Test_Plan.md`
@@ -131,3 +131,11 @@ None provided. The error text uses the existing inline-error style on Login and 
 ## Open Questions
 
 - None blocking. The prod re-test after the redirect fix confirms AC8/AC9 manually.
+
+## Build Notes
+
+- **Shipped 2026-11-21:** PR #40 (`c6bc3a0`). Required CI checks passed, including the new `password_reset_redirect.test.ts` in the `edge-functions` job. Frontend promoted to prod by Lynn.
+- **Verified on prod (signed out, built-in browser):** `https://wyskerwatch.com/terms` shows Terms of Service, with no bottom nav and no redirect to `/login`. An automated headless check was blocked by Cloudflare Bot Fight Mode (expected), so the check was done in the Browser pane instead.
+- **Prod reset flow:** confirmed end to end by Lynn before the build (custom SMTP, branded template, `/reset-password` on the Redirect URLs list). The code here adds error messages, the reset-link backup and the CI check on top.
+- **Full local Playwright run before merge:** 95 passed, 3 failed. The 3 are `vaccination-due-reminders.spec.js`, broken by 7 leftover "Vaccination Due Soon" notifications on test1@'s dev account (known issue, CLAUDE.md). That file is skipped in CI.
+- **Implementation detail:** the new Playwright spec must import `test` from `e2e/fixtures.js`, not `@playwright/test`, to get the saved signed-in session; the first run failed the two signed-in tests for that reason.

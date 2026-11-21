@@ -130,7 +130,7 @@ None — no UI.
 
 ## Open Questions
 
-1. **(Unblocks P0-2)** In Supabase → prod → Authentication → Emails → SMTP Settings, is custom SMTP on? Which sender does it use?
+1. **(Unblocks P0-2)** In Supabase → prod → Authentication → Emails → SMTP Settings, is custom SMTP on? Which sender does it use? **Resolved 2026-11-21 (spec 0074):** it was off on prod. It's now on in all three projects, via Resend (`no-reply@wyskerwatch.com`).
 2. **Dashboard checklist (prod, then the same on dev/staging).** I can't read these from here; anything on this list can be fixed with a toggle:
    - Authentication → Sign In / Providers → Email: "Confirm email" **on** (confirmed via API), "Secure email change" **on**, "Allow new users to sign up" (currently **on**, see P1-2).
    - Same page: Email OTP / link expiry. Recommend ≤ 1 hour; the default is 1 hour, and the maximum allowed is 24.
