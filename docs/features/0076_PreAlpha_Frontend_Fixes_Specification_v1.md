@@ -1,6 +1,6 @@
 # 0076_PreAlpha_Frontend_Fixes_Specification_v1
 
-**Status:** Approved by Lynn 2026-11-21 (scope, decisions, copy, and the spec as a whole). Built on `claude/spec-0076-frontend-fixes`; PR open, not merged or deployed yet.
+**Status:** Shipped 2026-11-21. PR #42 merged (`af6be98`); Lynn promoted the frontend to prod. No Supabase deploy needed.
 **Date:** 2026-11-21
 **Lane:** Frontend (`src/`, `e2e/`, docs only). No migration, Edge Function, CI or `supabase/tests` change.
 **Punch list:** PA-20 (P1), PA-28, PA-55, PA-58 (P2), PA-48 (P2, the check-in-history part only). Pre-Alpha Audit tab, `docs/planning/Wysker_Watch_Launch_Plan.xlsx`.
