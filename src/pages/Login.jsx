@@ -12,6 +12,7 @@ import { SEED_SCENARIOS } from '@/lib/seedTestData';
 import { TOS_LAST_UPDATED } from '@/lib/termsOfServiceContent';
 import { PRIVACY_POLICY_LAST_UPDATED } from '@/lib/privacyPolicyContent';
 import { setPendingOAuthConsent } from '@/lib/pendingOAuthConsent';
+import { GOOGLE_SIGN_IN_ENABLED } from '@/lib/authProviders';
 
 const RESEND_COOLDOWN_SECONDS = 60;
 const DEMO_SHOWCASE_SCENARIO = SEED_SCENARIOS.find((s) => s.key === 'demo_showcase');
@@ -201,23 +202,30 @@ export default function Login() {
             <Loader2 className="h-4 w-4 animate-spin" />
           ) : 'Sign In'}
         </Button>
-        <label htmlFor="login-agree-terms" className="flex items-start gap-3 min-h-11 py-1 cursor-pointer">
-          <Checkbox
-            id="login-agree-terms"
-            checked={agreedToTerms}
-            onCheckedChange={(checked) => setAgreedToTerms(checked === true)}
-            className="mt-0.5"
-          />
-          <span className="text-sm text-muted-foreground">
-            I agree to the{' '}
-            <Link to="/terms" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Terms of Service</Link>
-            {' '}and{' '}
-            <Link to="/privacy" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Privacy Policy</Link>.
-          </span>
-        </label>
-        <Button type="button" variant="outline" className="w-full" onClick={handleGoogleLogin} disabled={!agreedToTerms}>
-          Continue with Google
-        </Button>
+        {/* Login's Terms checkbox only unlocks the Google button (email
+            sign-in never needs it), so both are hidden together while
+            Google sign-in is off. Spec 0076 / PA-20. */}
+        {GOOGLE_SIGN_IN_ENABLED && (
+          <>
+            <label htmlFor="login-agree-terms" className="flex items-start gap-3 min-h-11 py-1 cursor-pointer">
+              <Checkbox
+                id="login-agree-terms"
+                checked={agreedToTerms}
+                onCheckedChange={(checked) => setAgreedToTerms(checked === true)}
+                className="mt-0.5"
+              />
+              <span className="text-sm text-muted-foreground">
+                I agree to the{' '}
+                <Link to="/terms" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Terms of Service</Link>
+                {' '}and{' '}
+                <Link to="/privacy" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Privacy Policy</Link>.
+              </span>
+            </label>
+            <Button type="button" variant="outline" className="w-full" onClick={handleGoogleLogin} disabled={!agreedToTerms}>
+              Continue with Google
+            </Button>
+          </>
+        )}
       </form>
     </AuthLayout>
   );

@@ -44,3 +44,22 @@ test('visiting a protected URL while logged out redirects to login with no conso
   await expect(page).toHaveURL('/login');
   expect(errors).toEqual([]);
 });
+
+// Spec 0076 (PA-20): Google sign-in is switched off, so its button is
+// hidden on both pages, and so is Login's Terms checkbox (it only ever
+// unlocked the Google button). Register keeps its checkbox, which still
+// gates Sign Up.
+test('the Google button is hidden on Login and Register', async ({ page }) => {
+  await page.goto('/login');
+  await expect(page.getByRole('button', { name: 'Sign In' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Continue with Google' })).toHaveCount(0);
+  await expect(page.getByRole('checkbox')).toHaveCount(0);
+
+  await page.goto('/register');
+  const signUp = page.getByRole('button', { name: 'Sign Up' });
+  await expect(signUp).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Continue with Google' })).toHaveCount(0);
+  await expect(signUp).toBeDisabled();
+  await page.getByRole('checkbox', { name: /I agree to the/ }).click();
+  await expect(signUp).toBeEnabled();
+});

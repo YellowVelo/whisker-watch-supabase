@@ -7,6 +7,8 @@ import { ArrowLeft, FileDown, PawPrint } from 'lucide-react';
 import { downloadVetReport } from '@/lib/checkin/vetReportClient';
 import IconButton from '@/components/IconButton';
 import PetPhoto from '@/components/PetPhoto';
+import OwnersOnlyNotice from '@/components/OwnersOnlyNotice';
+import { getSitterOnlyPetIds } from '@/lib/petsClient';
 
 // Vet Export Feature Spec v2 §4.2 — this page does not fetch report data
 // itself. It only fetches minimal pet identity for display; the actual
@@ -23,10 +25,20 @@ export default function VetExport() {
   const [loading, setLoading] = useState(true);
   const [downloading, setDownloading] = useState(false);
 
+  const [sitterOnly, setSitterOnly] = useState(false);
+
   useEffect(() => {
     if (!petId || petId === ':petId') return;
-    entities.Pet.get(petId)
-      .then(setPet)
+    // Sitters get the owners-only notice instead of the download (spec
+    // 0076, PA-28). A failed sitter check falls back to the normal page.
+    Promise.all([
+      entities.Pet.get(petId),
+      getSitterOnlyPetIds().catch((err) => { console.error(err); return new Set(); }),
+    ])
+      .then(([p, sitterOnlyIds]) => {
+        setSitterOnly(sitterOnlyIds.has(petId));
+        setPet(p);
+      })
       .catch(() => setPet(null))
       .finally(() => setLoading(false));
   }, [petId]);
@@ -55,6 +67,9 @@ export default function VetExport() {
         <h1 className="text-[28px] font-semibold text-white">Vet Report</h1>
       </div>
 
+      {sitterOnly ? (
+        <OwnersOnlyNotice />
+      ) : (
       <div className="max-w-lg mx-auto px-6 py-10">
         <div className="flex items-center gap-3 mb-6">
           <PetPhoto
@@ -84,6 +99,7 @@ export default function VetExport() {
           </Button>
         </div>
       </div>
+      )}
     </div>
   );
 }

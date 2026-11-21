@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { Heart } from 'lucide-react';
 import NotificationBell from './NotificationBell';
 import AskWyskerAction from './AskWyskerAction';
@@ -11,10 +12,14 @@ import { Z } from '@/lib/zIndex';
 // this was Home-only state passed into NotificationBell as a prop.
 export default function AppHeader() {
   const [unreadCount, setUnreadCount] = useState(0);
+  const { pathname } = useLocation();
 
+  // Re-checked on every page change (spec 0076): the header stays mounted
+  // across pages, so fetching once left the bell stale after reading or
+  // clearing notifications.
   useEffect(() => {
     getUnreadCount().then(setUnreadCount).catch(() => {});
-  }, []);
+  }, [pathname]);
 
   return (
     <header
