@@ -153,7 +153,7 @@ Both resolved by Lynn on 2026-11-21.
    - Playwright: every new test passes: `login.spec.js` (Google hidden), `notifications-clear.spec.js` (4, local), `pet-sitter.spec.js` (owners-only notice), and `pet-edit-conditions.spec.js` (44px chips).
    - 5 older tests in `check-in-history.spec.js` and `pet-edit-conditions.spec.js` failed in the combined run, and each passed when run alone.
    - Cause: **`delete-pet` on dev currently crashes (`WORKER_ERROR`)**, so each test's cleanup fails and leaves an identically named pet behind for the next test. That function is being rebuilt by the Back End lane (spec 0075). It isn't touched here.
-   - Leftover `E2E History Pet` / `E2E EditPet` pets on test1@ (14 as of 2026-11-21) can be removed once `delete-pet` works again.
+   - **Full suite re-run later on 2026-11-21: 105/105 passed locally** (nothing skipped). By then `delete-pet` on dev was working again (its outage was temporary), and the 14 leftover test pets were deleted through it.
 6. **Design-system-check:** clean for new code.
    - Pre-existing, not changed: Edit Pet's and Vet Report's sticky headers use a hand-picked `z-20` (Amendment #12) and `border-white/8` instead of `border-border`.
    - The "Clear all" confirm button uses the app-wide default primary button style (the known Amendment #1 issue).
