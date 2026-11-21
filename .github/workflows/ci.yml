@@ -110,6 +110,18 @@ jobs:
     # down would mean parallelizing via multiple test accounts, a real
     # infra change tracked as a possible future follow-up, not done here.
     timeout-minutes: 20
+    # workers:1 only serializes tests within one run. Two CI runs at once
+    # (e.g. main's run after a merge plus a new PR's) still ran against the
+    # same test1@ account in parallel and broke each other: on 2026-11-20
+    # main's and PR #35's e2e jobs overlapped 23:18-23:24 UTC and both
+    # failed, one picking up a pet the other had just created. This group
+    # makes every e2e job, on every branch, wait for the previous one.
+    # cancel-in-progress is false so a running job is never killed; note
+    # GitHub keeps only one job waiting per group, so if a third arrives
+    # the older waiting one is skipped (its newer commit's run covers it).
+    concurrency:
+      group: e2e-shared-dev-accounts
+      cancel-in-progress: false
     # Spec 0055: runs the local Playwright suite (spec 0024) against
     # wysker-watch-dev, same account/project as the edge-functions job
     # above. continue-on-error below is deliberate, not a mistake — the
