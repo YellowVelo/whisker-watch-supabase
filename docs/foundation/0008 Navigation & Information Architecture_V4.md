@@ -54,7 +54,7 @@ Purpose: "How are my pets today?"
 Implemented in `src/pages/Home.jsx`. Shows:
 
 - A personalized greeting via `buildGreeting(user.first_name, hour)` (`src/lib/greeting.js`) — "Good morning/afternoon/evening, {First Name}" if a first name is on file, otherwise a bare time-of-day greeting — followed by "How are your pets today?"
-- A notification bell (`NotificationBell.jsx`, backed by `getUnreadCount()` in `src/lib/notifications/notificationClient.js`)
+- A notification bell (`NotificationBell.jsx`, backed by `getUnreadCount()` in `src/lib/notifications/notificationClient.js`, re-checked on every page change since spec 0076)
 - One `PetSummaryCard` per active (non-memorial) pet, ordered by most-recently-added pet first (`entities.Pet.list('-created_date')`, not alphabetical and not by check-in status) — **not** `WellnessCard`, which no longer exists. Each card shows identity, condition/medication chips (or a "Healthy" badge), a Vibe icon + label for today's status, and per-attribute direction chips (Health group + Weight) — no numeric score or ring of any kind. Directly beneath each card, a separate one-line `CheckInStatusBanner` row — **not** `CheckInCard`, which no longer exists — shows either a tappable "Start {pet}'s Daily Check-In" prompt or today's completed status.
 
 **`PetSummaryCard` links out to a pet's Trends screen (`/pet/:petId/trends`); `CheckInStatusBanner` does not** (corrected 2026-07-31, spec `0026`) — once a pet has checked in today, tapping the banner reopens that check-in for editing instead of navigating anywhere. Trends remains reachable via `PetSummaryCard` and the Pets-tab Wellbeing chips. Pet Profile is not reachable by tapping anything on Home; see the Pet Profile section below for its real, current entry points (a "Pet Profiles" Menu directory previously documented here no longer exists).
@@ -70,7 +70,7 @@ Purpose: "Tell me everything about my pets" — browsing and long-term managemen
 Implemented in `src/pages/Pets.jsx`. Shows, in order:
 
 1. Active pets
-2. Pets I Sit (pets the signed-in user has sitter-only access to, via `getSitterOnlyPetIds()` in `src/lib/petsClient.js`)
+2. Pets I Sit (pets the signed-in user has sitter-only access to, via `getSitterOnlyPetIds()` in `src/lib/petsClient.js`). A pet the person owns or co-owns is never sitter-only. For a sitter-only pet, `/pet/:petId/edit` and `/pet/:petId/export` show an owners-only notice (spec 0076).
 3. Rainbow Bridge (memorial pets)
 
 Active and Rainbow Bridge pet rows render `ExpandablePetProfileCard`, which embeds the shared `PetProfileContent` component (`context="pets"`) — the only way this component is rendered anywhere in the app today (see Pet Profile section below). Collapsed, each row shows photo/species icon, name, species, breed, sex, computed age, and condition chips — **no Wellness Score or trend of any kind**; instead, five Wellbeing direction chips (Energy, Mobility, Breathing, Skin/Itching, Behavior) compare today's state to yesterday's. Tapping "Show More" expands the row **in place** to reveal the pet's full profile (action pills + all summary cards) — this is the primary, day-to-day way most owners reach Pet Profile content; see the Pet Profile section below.
@@ -168,7 +168,7 @@ Notifications (new)
 
 Purpose: an in-app notification list — not a push-notification settings screen.
 
-Implemented in `src/pages/Notifications.jsx` (route `/notifications`), backed by `entities.Notification` (the `notifications` table, see Data Model_V2.md §3.21) via `src/lib/notifications/notificationClient.js`. Unread rows are visually distinct (blue tint); tapping a row marks it read. Currently the only notification type generated is `ownership_transfer` (fired by the `delete-account` Edge Function when a co-owned pet's primary owner deletes their account).
+Implemented in `src/pages/Notifications.jsx` (route `/notifications`), backed by `entities.Notification` (the `notifications` table, see Data Model_V2.md §3.21) via `src/lib/notifications/notificationClient.js`. Unread rows are visually distinct (blue tint); tapping a row marks it read. Two types are generated today: `ownership_transfer` (from the `delete-account` Edge Function, when a co-owned pet's primary owner deletes their account) and `vaccination_due` reminders (the daily reminder job, spec 0034). Each row has a dismiss "x", and the page has Mark all read and Clear all (spec 0076). Clearing deletes a notice but only marks a vaccine reminder read, because the daily job would otherwise send it again. Read reminders are hidden.
 
 Privacy, Terms of Service (real screens — no longer placeholders)
 
