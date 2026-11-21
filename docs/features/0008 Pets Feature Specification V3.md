@@ -100,7 +100,7 @@ There is **no chevron and no full-card tap target that navigates to Pet Profile.
 
 ## **4. Pets I Sit Section — not previously documented**
 
-Displayed only when the signed-in user has active **sitter-only** access (`PetSitterAccess`/`PetSit`, via `getSitterOnlyPetIds()`) to at least one pet — specifically excluding any pet they also own or co-own, which appears in Active Pets instead (a pet's row in `Pet.list()` is now visible to both an owner and a sitter thanks to RLS granting sitter read access, so the split has to be made explicitly client-side rather than assumed from "this pet showed up in my list").
+Displayed only when the signed-in user has active **sitter-only** access (`PetSitterAccess`/`PetSit`, via `getSitterOnlyPetIds()`) to at least one pet — specifically excluding any pet they also own or co-own, which appears in Active Pets instead (enforced in code only since spec 0076; before, the check didn't actually exclude them, so such a pet could land in Pets I Sit) (a pet's row in `Pet.list()` is now visible to both an owner and a sitter thanks to RLS granting sitter read access, so the split has to be made explicitly client-side rather than assumed from "this pet showed up in my list").
 
 Header: **PETS I SIT**
 
