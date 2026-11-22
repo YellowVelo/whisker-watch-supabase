@@ -12,8 +12,10 @@
 import type { EmailTemplate } from '../types.ts';
 import coOwnerInvitation from './co-owner-invitation.ts';
 import coOwnerInvitationReminder from './co-owner-invitation-reminder.ts';
+import coOwnerAdded from './co-owner-added.ts';
 import sitterInvitation from './sitter-invitation.ts';
 import sitterInvitationReminder from './sitter-invitation-reminder.ts';
+import sitterAdded from './sitter-added.ts';
 import welcome from './welcome.ts';
 import verifyEmail from './verify-email.ts';
 import passwordReset from './password-reset.ts';
@@ -23,8 +25,10 @@ import earlyAdopterConfirmation from './early-adopter-confirmation.ts';
 export const templates: Map<string, EmailTemplate> = new Map([
   [coOwnerInvitation.name, coOwnerInvitation],
   [coOwnerInvitationReminder.name, coOwnerInvitationReminder],
+  [coOwnerAdded.name, coOwnerAdded],
   [sitterInvitation.name, sitterInvitation],
   [sitterInvitationReminder.name, sitterInvitationReminder],
+  [sitterAdded.name, sitterAdded],
   [welcome.name, welcome],
   [verifyEmail.name, verifyEmail],
   [passwordReset.name, passwordReset],

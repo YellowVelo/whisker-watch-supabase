@@ -24,8 +24,16 @@
 // `role` claim and require `service_role`. This avoids the brittleness
 // of string-comparing against SUPABASE_SERVICE_ROLE_KEY, whose exact
 // value/format can differ from what a given project's dashboard hands
-// you (legacy JWT-format keys vs. the newer opaque sb_secret_/
-// sb_publishable_ key format) — see getJwtRole below.
+// you — see getJwtRole below.
+//
+// Key formats (tested on wysker-watch-dev 2026-11-22, spec 0077): only a
+// legacy service-role JWT works here. Requests carrying the newer opaque
+// sb_secret_ or sb_publishable_ keys DO get past the gateway and reach
+// this code, which refuses them (401), because they aren't JWTs. So the
+// gateway check protects against forged JWTs, and this code against
+// everything else; both are needed. That gateway check is recorded as
+// `verify_jwt = true` in supabase/config.toml (PA-21) — never deploy
+// this function with --no-verify-jwt.
 //
 // Other Edge Functions that need to send email should generally prefer
 // importing `sendEmail` from ../_shared/email/sendEmail.ts directly

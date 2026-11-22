@@ -12,6 +12,18 @@
 # A deploy without this setting silently turns the check back on and
 # breaks bounce/delivery tracking. All other functions keep the default
 # (verify_jwt = true).
+#
+# send-email and clear-email-suppression are ops-only (service-role JWT
+# only). Their code reads the token's role without checking its signature,
+# so their safety DEPENDS on the gateway's JWT check. It's written down here
+# so it never rests on a default (spec 0077, PA-21). Never deploy either
+# with --no-verify-jwt.
 
 [functions.resend-webhook]
 verify_jwt = false
+
+[functions.send-email]
+verify_jwt = true
+
+[functions.clear-email-suppression]
+verify_jwt = true

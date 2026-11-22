@@ -34,18 +34,34 @@
 // redeems the token via verifyOtp() and has the new co-owner set a
 // password before landing on the pet's profile.
 //
+// Spec 0077 (PA-10, PA-36) lockdown:
+//   - Rate limit: 10 invite requests per person per hour, shared with
+//     invite-sitter (_shared/inviteRateLimit.ts). Checked before anything
+//     else, so refused requests count too.
+//   - Only the pet's primary owner (pets.created_by — the only person who
+//     can add co-owners since migration 0056) can send, and only for a
+//     pending (not yet linked) pet_co_owners row for that address. Anything
+//     else is 404 'Invite not found' and no email.
+//   - The pet's name comes from the pets table; any petName in the body is
+//     ignored (the browser used to choose what a branded email said).
+//   - An address that already has an account gets the 'co-owner-added'
+//     email and the SAME { sent: true } reply as a new address, so the
+//     reply never reveals whether an account exists. Resend's messageId is
+//     never returned (with it, anyone could fake a bounce — 0068 P0-4).
+//
 // Request body:
 //   {
 //     coOwnerEmail: string,   // required — who to invite
-//     petName: string,        // required — shown in the email subject/body
-//     petId: string,          // required — used to build the redirect URL
+//     petId: string,          // required — the pet; also used in the accept URL
+//     petName?: string,       // ignored since spec 0077 (looked up server-side)
 //   }
 //
 // Response:
-//   { sent: true }                        — invite (or re-invite) email sent
-//   { sent: false, reason: 'exists' }     — already a registered Whisker Watch user
+//   { sent: true }                        — invite, re-invite or "added you" email sent
 //   { sent: false, reason: 'test_or_demo_account' } — inviter is test/demo, no real email sent
 //   { sent: false, reason: 'recipient_suppressed' } — invitee's address previously bounced/complained, no real email sent
+//   429 { error }                         — over the invite rate limit
+//   404 { error: 'Invite not found' }     — not the primary owner, or no pending invite for that address
 //   { error: string }                     — something went wrong
 
 import { createClient } from 'jsr:@supabase/supabase-js@2';
@@ -54,6 +70,8 @@ import { EmailServiceError } from '../_shared/email/types.ts';
 import { getValidatedAppUrl } from '../_shared/appUrl.ts';
 import { isAlreadyRegisteredError } from '../_shared/authErrors.ts';
 import { reportError } from '../_shared/errorReporting.ts';
+import { checkInviteRateLimit } from '../_shared/inviteRateLimit.ts';
+import { escapeLike } from '../_shared/escapeLike.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!;
@@ -63,6 +81,58 @@ const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
+
+// Sends one email and turns the result into this function's reply. Never
+// returns Resend's messageId (spec 0077).
+async function sendAndRespond(opts: {
+  to: string;
+  template: string;
+  variables: Record<string, string>;
+  relatedEntityId: string;
+  sentByUserId: string;
+}): Promise<Response> {
+  try {
+    const emailResult = await sendEmail({
+      to: opts.to,
+      template: opts.template,
+      variables: opts.variables,
+      // email_logs correlates to the pet_co_owners row itself.
+      relatedEntityType: 'pet_co_owners',
+      relatedEntityId: opts.relatedEntityId,
+      // Ensures a fresh email_logs row is always claimed and finalized,
+      // including for a renderTemplate validation failure before any
+      // network call (sendEmail.ts only logs a pre-send failure via the
+      // idempotency-claim row).
+      idempotencyKey: crypto.randomUUID(),
+      // sendEmail() itself decides whether the sender is a test/demo
+      // account and suppresses the real send — see
+      // requirements-centralized-email-suppression.md.
+      sentByUserId: opts.sentByUserId,
+    });
+
+    if (emailResult.suppressed) {
+      // suppressionReason distinguishes "sending account is test/demo"
+      // from "this recipient address previously bounced/complained"
+      // (types.ts); InviteCoOwnerDialog.jsx branches on it.
+      return new Response(JSON.stringify({ sent: false, reason: emailResult.suppressionReason }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    return new Response(JSON.stringify({ sent: true }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  } catch (err) {
+    if (err instanceof EmailServiceError) {
+      console.error('sendEmail error:', err.code, err.message);
+      return new Response(JSON.stringify({ error: err.message }), {
+        status: 502,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+    throw err;
+  }
+}
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -90,16 +160,61 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { coOwnerEmail, petName, petId } = await req.json();
-    if (!coOwnerEmail || !petName || !petId) {
-      return new Response(JSON.stringify({ error: 'coOwnerEmail, petName, and petId are required' }), {
+    // Use the service-role client for admin operations (inviting users).
+    const adminClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+
+    // Spec 0077: rate limit first, so every request past the login check
+    // counts — including ones refused below.
+    const rate = await checkInviteRateLimit(adminClient, userData.user.id);
+    if (rate === 'unavailable') {
+      return new Response(JSON.stringify({ error: 'Unable to process this request right now' }), {
+        status: 503,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+    if (rate === 'limited') {
+      return new Response(JSON.stringify({ error: "You've sent a lot of invites in the last hour. Try again later." }), {
+        status: 429,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    const { coOwnerEmail, petId } = await req.json();
+    if (!coOwnerEmail || !petId) {
+      return new Response(JSON.stringify({ error: 'coOwnerEmail and petId are required' }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    // Use the service-role client for admin operations (inviting users).
-    const adminClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+    // Spec 0077: only the primary owner, and only for a real pending
+    // invite. Same 404 for every failure so the reply reveals nothing.
+    const notFound = () =>
+      new Response(JSON.stringify({ error: 'Invite not found' }), {
+        status: 404,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    const { data: pet } = await adminClient
+      .from('pets')
+      .select('id, name, created_by')
+      .eq('id', petId)
+      .maybeSingle();
+    if (!pet || pet.created_by !== userData.user.id) {
+      return notFound();
+    }
+    const { data: coOwnerRow } = await adminClient
+      .from('pet_co_owners')
+      .select('id')
+      .eq('pet_id', petId)
+      .ilike('co_owner_email', escapeLike(coOwnerEmail))
+      .is('co_owner_user_id', null)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (!coOwnerRow) {
+      return notFound();
+    }
+    const petName = pet.name;
 
     // Only needed here for the email body's owner_name — the
     // test/demo suppression check itself now lives in sendEmail()
@@ -169,20 +284,25 @@ Deno.serve(async (req) => {
         p_email: coOwnerEmail,
       });
 
+      // Fail closed if we can't tell the two cases apart: treat it as a
+      // registered account and send the "added you" email (no sign-in
+      // link), rather than risk emailing a real user a fresh login link.
       if (hasPasswordError) {
-        // Fail closed to the previous, safe behavior: if we can't tell
-        // the two cases apart, don't risk re-emailing a real existing
-        // user a fresh sign-in link — just report them as already
-        // registered, same as before this distinction existed.
         console.error('email_has_password error:', hasPasswordError);
-        return new Response(JSON.stringify({ sent: false, reason: 'exists' }), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
       }
-
-      if (hasPassword) {
-        return new Response(JSON.stringify({ sent: false, reason: 'exists' }), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      if (hasPasswordError || hasPassword) {
+        // Spec 0077 (PA-36): existing accounts get told, and the reply
+        // is the same { sent: true } a new address gets.
+        return await sendAndRespond({
+          to: coOwnerEmail,
+          template: 'co-owner-added',
+          variables: {
+            owner_name: inviterProfile?.first_name || userData.user.email,
+            pet_name: petName,
+            signin_url: `${appUrl}/login`,
+          },
+          relatedEntityId: coOwnerRow.id,
+          sentByUserId: userData.user.id,
         });
       }
 
@@ -232,66 +352,17 @@ Deno.serve(async (req) => {
     // than a first-time ask — see co-owner-invitation-reminder.ts.
     const emailTemplate = tokenType === 'recovery' ? 'co-owner-invitation-reminder' : 'co-owner-invitation';
 
-    // The pet_co_owners row was already created by the client before this
-    // function ran (see InviteCoOwnerDialog.jsx) — look up its own id so
-    // email_logs.related_entity_id actually correlates to that row rather
-    // than reusing petId (a different table's id) under the same
-    // 'pet_co_owners' related_entity_type label.
-    const { data: coOwnerRow } = await adminClient
-      .from('pet_co_owners')
-      .select('id')
-      .eq('pet_id', petId)
-      .eq('co_owner_email', coOwnerEmail)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    try {
-      const emailResult = await sendEmail({
-        to: coOwnerEmail,
-        template: emailTemplate,
-        variables: {
-          owner_name: inviterProfile?.first_name || userData.user.email,
-          pet_name: petName,
-          accept_url: acceptUrl,
-        },
-        relatedEntityType: 'pet_co_owners',
-        relatedEntityId: coOwnerRow?.id ?? petId,
-        // Ensures a fresh email_logs row is always claimed and finalized
-        // — including for a renderTemplate validation failure before any
-        // network call is made — rather than silently leaving no trace
-        // when no idempotency key is provided (sendEmail.ts only logs a
-        // pre-send failure via the idempotency-claim row).
-        idempotencyKey: crypto.randomUUID(),
-        // Lets sendEmail() itself decide whether this is a test/demo
-        // account and suppress the real send — see
-        // requirements-centralized-email-suppression.md.
-        sentByUserId: userData.user.id,
-      });
-
-      if (emailResult.suppressed) {
-        // suppressionReason distinguishes "sending account is test/demo"
-        // from "this recipient address previously bounced/complained" —
-        // see types.ts. The two mean different things to the frontend
-        // (InviteCoOwnerDialog.jsx branches on this reason string).
-        return new Response(JSON.stringify({ sent: false, reason: emailResult.suppressionReason }), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
-
-      return new Response(JSON.stringify({ sent: true, messageId: emailResult.messageId }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    } catch (err) {
-      if (err instanceof EmailServiceError) {
-        console.error('sendEmail error:', err.code, err.message);
-        return new Response(JSON.stringify({ error: err.message }), {
-          status: 502,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
-      throw err;
-    }
+    return await sendAndRespond({
+      to: coOwnerEmail,
+      template: emailTemplate,
+      variables: {
+        owner_name: inviterProfile?.first_name || userData.user.email,
+        pet_name: petName,
+        accept_url: acceptUrl,
+      },
+      relatedEntityId: coOwnerRow.id,
+      sentByUserId: userData.user.id,
+    });
   } catch (err) {
     console.error('Edge Function error:', err);
     reportError(err, { function: 'invite-co-owner' });

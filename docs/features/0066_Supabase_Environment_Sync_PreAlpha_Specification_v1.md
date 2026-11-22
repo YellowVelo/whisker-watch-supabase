@@ -96,6 +96,7 @@ None — no UI.
 ## Results (2026-10-19 → 2026-10-23)
 
 - **AC1:** all 52 migrations recorded on all 3 projects. Live RLS policies (including the 4 `storage.objects` rules), tables, columns, triggers and storage buckets are identical across dev, staging and prod. The only difference is invisible line-ending characters in 6 database function bodies (`save_daily_check_ins`, `claim_pending_sitter_invites`, `is_pet_owner`, `is_pet_sit_sitter`, `is_pet_sitter`, `set_updated_at`), which is harmless: identical apart from whitespace.
+  - **Correction (2026-11-22, spec 0077, PA-23):** "identical" was wrong for one thing this check never compared: **who may run each database function**. The function permission lists differed (16 differences, found by spec 0068 P1-7): prod and dev let logged-out and signed-in visitors run server-only functions, staging didn't. Migration `0059` (spec 0077) sets every function's permissions explicitly on all three projects. Any future cross-project comparison must include `pg_proc.proacl` and `pg_default_acl` (see `0006 Technical Standards.md` §11).
 - **AC2:** on dev, `config.toml` alone kept resend-webhook's `verify_jwt=false`, with no manual flag. Staging and prod got both safeguards (config plus `--no-verify-jwt`).
 - **AC3:** all 14 functions updated on each project (dev 2026-10-20 UTC, staging and prod 2026-10-23), and the live code downloaded back from each project matches main.
 - **AC4:** staging fast-forwarded to `c36f7a4` (main after PR #18). No drift in either direction.

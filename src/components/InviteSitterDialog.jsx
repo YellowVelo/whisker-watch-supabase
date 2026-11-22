@@ -11,6 +11,7 @@ import { useAuth } from '@/lib/AuthContext';
 import { isDemoAccount } from '@/lib/accountType';
 import { PALETTE } from '@/lib/toneColors';
 import IconButton from '@/components/IconButton';
+import { isRateLimited } from '@/lib/inviteErrors';
 
 export default function InviteSitterDialog({ petSitId, open, onOpenChange }) {
   const { user } = useAuth();
@@ -61,23 +62,26 @@ export default function InviteSitterDialog({ petSitId, open, onOpenChange }) {
     const { data: userData } = await supabase.auth.getUser();
     const me = userData?.user;
     const cleanEmail = email.trim().toLowerCase();
-    // Check if already invited
+    // Check if already invited. An invite that hasn't been accepted yet is
+    // resent (spec 0077); one that has been accepted is left alone, as before.
     const existing = accesses.find(a => a.sitter_email.toLowerCase() === cleanEmail);
-    if (!existing) {
-      try {
-        await entities.PetSitterAccess.create({
-          pet_sit_id: petSitId,
-          owner_id: me.id,
-          sitter_email: cleanEmail,
-        });
-      } catch (err) {
-        // The database refuses anyone who doesn't own every pet in the sit
-        // (migration 0057), so a failure here must surface rather than leave
-        // the button stuck on saving.
-        console.error('PetSitterAccess.create failed:', err);
-        setError("Couldn't save this invite. Please try again.");
-        setSaving(false);
-        return;
+    if (!existing?.sitter_user_id) {
+      if (!existing) {
+        try {
+          await entities.PetSitterAccess.create({
+            pet_sit_id: petSitId,
+            owner_id: me.id,
+            sitter_email: cleanEmail,
+          });
+        } catch (err) {
+          // The database refuses anyone who doesn't own every pet in the sit
+          // (migration 0057), so a failure here must surface rather than leave
+          // the button stuck on saving.
+          console.error('PetSitterAccess.create failed:', err);
+          setError("Couldn't save this invite. Please try again.");
+          setSaving(false);
+          return;
+        }
       }
 
       // Send the invite email via the Edge Function.
@@ -88,7 +92,9 @@ export default function InviteSitterDialog({ petSitId, open, onOpenChange }) {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
 
-      if (fnResp.error) {
+      if (isRateLimited(fnResp.error)) {
+        setSuccessMsg(`${cleanEmail} added as a sitter, but you've sent a lot of invites in the last hour, so we couldn't email them yet. Try inviting them again in an hour.`);
+      } else if (fnResp.error) {
         // Access record is already saved; just warn rather than block.
         console.error('invite-sitter function error:', fnResp.error);
         setSuccessMsg(`${cleanEmail} added as a sitter, but the invite email could not be sent. Try inviting them again — if it keeps failing, they can also use "Forgot password" on the login screen with this email.`);
@@ -96,8 +102,6 @@ export default function InviteSitterDialog({ petSitId, open, onOpenChange }) {
         setSuccessMsg(`${cleanEmail} added as a sitter. No real email was sent (test/demo accounts don't send production email) — they'll see this pet sit on their next login.`);
       } else if (fnResp.data?.reason === 'recipient_suppressed') {
         setSuccessMsg(`${cleanEmail} added as a sitter, but Wysker Watch couldn't email them — this address has previously failed to receive mail from us. They can still be reached another way to get set up with access.`);
-      } else if (fnResp.data?.reason === 'exists') {
-        setSuccessMsg(`${cleanEmail} already has a Wysker Watch account. They'll see this pet sit from the day before it starts.`);
       } else if (fnResp.data?.sent === false) {
         // Defensive fallback for a reason value not handled above (e.g. a
         // future suppression cause sendEmail() forgot to label) — see

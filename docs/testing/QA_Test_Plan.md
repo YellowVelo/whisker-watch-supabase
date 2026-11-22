@@ -139,7 +139,7 @@ A one-page checklist run against every `Critical`/`High` page before the Accessi
 | Pet Conditions page: category search + save persists | High | `[Playwright: pet-edit-conditions.spec.js]` |
 | Retired `/pet/:petId` and `/pet/:petId/profile` routes still resolve (redirect to `/pets?highlight=`) | Medium | `[Manual]` — regression case for old bookmarks/links. |
 | Invite Co-Owner: blocked entirely on demo accounts | High | `[Manual]` |
-| Invite Co-Owner: self-invite and duplicate-invite both rejected with correct copy | High | `[Manual]` |
+| Invite Co-Owner: self-invite rejected; inviting someone who has already accepted shows "Already a co-owner." (an invite not yet accepted is resent instead, spec 0077) | High | `[Manual]` |
 | Invite Co-Owner: remove asks "Remove {email} as a co-owner?"; Cancel keeps them, Remove takes them off the list (spec 0072) | High | `[Playwright: co-owner.spec.js]` |
 | Memorial Dialog: marking a pet as memorial moves it to the Rainbow Bridge section | Medium | `[Manual]` |
 | Vaccination Calendar Export produces a real downloadable `.ics` file | Critical | `[Playwright: vaccination-calendar-export.spec.js]` |
@@ -220,6 +220,14 @@ A one-page checklist run against every `Critical`/`High` page before the Accessi
 | Edit Pet as a co-owner: the button reads **View Co-Owners**, the list is read-only ("Only the primary owner can add or remove co-owners."), with no email field or remove buttons | High | `[Playwright: co-owner.spec.js]` — local only: signs in as coowner1@, which CI has no secret for. |
 | Invite Co-Owner: an invite the database refuses shows "We couldn't add that co-owner. Please try again." and the button works again | High | `[Playwright: co-owner.spec.js]` |
 | Each environment's `pet_co_owners` policies match migration 0056: `pet_co_owners_insert_primary_owner`, `pet_co_owners_select_any_owner`, `pet_co_owners_delete_primary_owner`, and none of 0004's three | Critical | `[Manual]` — E2E and Deno only target dev. Run `select policyname from pg_policies where schemaname='public' and tablename='pet_co_owners'` on each project after pushing 0056. Run 2026-11-20, pass on dev, staging and prod (spec 0072 Build Note 6). |
+| **Invite email lockdown (spec 0077):** invite-co-owner sends only for the pet's primary owner and a pending invite for that address; a stranger, a non-primary co-owner, or an address with no pending invite gets "Invite not found" and no email | Critical | `[Deno: supabase/tests/invite_emails.test.ts]` |
+| Invite email lockdown: invite-sitter sends only for the sit's creator and a pending sitter invite for that address; otherwise "Invite not found" | Critical | `[Deno: supabase/tests/invite_emails.test.ts]` |
+| Invite email lockdown: an address that already has an account gets the "added you" email (`co-owner-added` / `sitter-added`) and the same reply as a new address; no reply carries a `messageId` | High | `[Deno: supabase/tests/invite_emails.test.ts]` |
+| Invite email lockdown: the 11th invite request in an hour (both functions together, refused ones included) gets "too many invites" and no email | High | `[Deno: supabase/tests/invite_emails.test.ts]` |
+| Invite dialogs show the rate-limit message ("…you've sent a lot of invites in the last hour…"); re-inviting a co-owner who hasn't accepted resends and lists them once | High | `[Playwright: invite-email-responses.spec.js]` |
+| "Added you" emails arrive and read right: from a **non-test** account, invite `coowner1@` (co-owner) and `petsitter1@` (sitter) | High | `[Manual]` — test accounts' emails are dropped by design (spec 0077) |
+| **Function lockdown (spec 0077):** logged-out and signed-in callers can't run any server-only database function (including the fake-bounce one); signed-in-only helpers still work; `is_pet_owner` only answers about the caller | Critical | `[Deno: supabase/tests/function_permissions.test.ts]` |
+| Each environment's function permissions match migration 0059 (run the check query in `0006 Technical Standards.md` §11 on dev, staging and prod) | Critical | `[Manual]` — run after any migration that adds or changes a function |
 
 ### 5.8 Account / Settings — Critical (destructive flows)
 
