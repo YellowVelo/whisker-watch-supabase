@@ -171,4 +171,4 @@ None. Lynn answered the one open question ("existing accounts get an email") on 
 3. **Startup check:** all 14 functions on staging and on prod answer `OPTIONS` with 200.
 4. **Frontend:** Lynn promoted the `main` build to prod. The CLI is relinked to dev.
 5. **Punch list:** PA-05, PA-10, PA-21, PA-23, PA-29, PA-36 marked Complete.
-6. **Still manual:** the real "added you" email check from a non-test account (QA plan §5.7). Lynn is doing it.
+6. **Manual email check passed (Lynn, 2026-11-22):** from her own account, the co-owner "added you" email arrived and read well, its sign-in link worked, and the invited account saw the shared pet after signing in (QA plan §5.7).
