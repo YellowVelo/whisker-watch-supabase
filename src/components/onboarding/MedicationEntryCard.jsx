@@ -10,6 +10,7 @@ import { uploadFile, UploadRejectedError } from '@/api/storageClient';
 import { usePendingScan, scanErrorText } from '@/lib/scannedDocuments';
 import { invokeAI } from '@/api/aiClient';
 import { FREQUENCY_OPTIONS } from '@/lib/onboardingConfig';
+import { reportClientError } from '@/lib/errorMonitoring';
 
 const emptyEntry = (petId) => ({ pet_id: petId, name: '', dosage: '', frequency: '', reminder_enabled: false });
 
@@ -63,7 +64,7 @@ export default function MedicationEntryCard({ petId, petName, onContinue, onSkip
         frequency: FREQUENCY_OPTIONS.includes(result?.frequency) ? result.frequency : f.frequency,
       }));
     } catch (err) {
-      console.error('Failed to scan medication label:', err);
+      reportClientError(err, { feature: 'onboarding_medication', note: 'Failed to scan medication label' });
       pendingScan.discard();
       setError(err instanceof UploadRejectedError || err?.status === 413
         ? scanErrorText(err)
@@ -88,7 +89,7 @@ export default function MedicationEntryCard({ petId, petName, onContinue, onSkip
       await pendingScan.keep([petId]);
       return created;
     } catch (err) {
-      console.error('Failed to save medication:', err);
+      reportClientError(err, { feature: 'onboarding_medication', note: 'Failed to save medication' });
       setError("Couldn't save that medication — check your connection and try again.");
       return null;
     } finally {

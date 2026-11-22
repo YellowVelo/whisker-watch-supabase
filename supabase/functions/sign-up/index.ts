@@ -40,14 +40,14 @@
 //                          (bad input, rate-limited, provider failure),
 //                          never conditioned on whether the email exists.
 
-import { createClient } from 'jsr:@supabase/supabase-js@2';
+import { createClient } from 'jsr:@supabase/supabase-js@2.119.2';
 import { sendEmail } from '../_shared/email/sendEmail.ts';
 import { EmailServiceError } from '../_shared/email/types.ts';
 import { isValidEmail, normalizeEmail } from '../_shared/email/utils.ts';
 import { scopedCorsHeaders } from '../_shared/cors.ts';
 import { getValidatedAppUrl } from '../_shared/appUrl.ts';
 import { isAlreadyRegisteredError } from '../_shared/authErrors.ts';
-import { reportError } from '../_shared/errorReporting.ts';
+import { serverError } from '../_shared/errorReporting.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -386,8 +386,6 @@ Deno.serve(async (req) => {
 
     return genericSent(cors);
   } catch (err) {
-    console.error('sign-up Edge Function error:', err);
-    reportError(err, { function: 'sign-up' });
-    return jsonResponse({ error: (err as Error).message || 'Unknown error' }, 500, cors);
+    return serverError(err, { function: 'sign-up' }, cors);
   }
 });

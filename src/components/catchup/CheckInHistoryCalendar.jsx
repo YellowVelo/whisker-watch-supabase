@@ -11,6 +11,7 @@ import { detectTimezone, dateStrInTimezone } from '@/lib/timezone';
 import { track } from '@/lib/analytics';
 import useFocusTrap from '@/hooks/useFocusTrap';
 import { Z } from '@/lib/zIndex';
+import { reportClientError } from '@/lib/errorMonitoring';
 
 const WEEKDAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
@@ -65,7 +66,7 @@ export default function CheckInHistoryCalendar({ pet, onClose, onProgress }) {
     setLoading(true);
     getCheckInsForDateRange(pet.id, enumerateDates(floorDate, todayDate))
       .then((rows) => { if (!cancelled) setCheckInsByDate(rows); })
-      .catch((err) => console.error(err))
+      .catch((err) => reportClientError(err, { feature: 'checkin_history' }))
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
     // floorDate/todayDate are fixed for the life of this overlay — only a
@@ -97,7 +98,7 @@ export default function CheckInHistoryCalendar({ pet, onClose, onProgress }) {
     track('check_in_history_day_saved', { pet_id: pet.id, check_in_date: dateStr });
     getCheckInsForDateRange(pet.id, [dateStr])
       .then((rows) => setCheckInsByDate((prev) => ({ ...prev, ...rows })))
-      .catch((err) => console.error(err));
+      .catch((err) => reportClientError(err, { feature: 'checkin_history' }));
     onProgress?.();
   };
 

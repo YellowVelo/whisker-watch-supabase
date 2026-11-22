@@ -94,6 +94,31 @@ test.describe('Share with Sitter dialog', () => {
     expect(rows ?? []).toHaveLength(0);
   });
 
+  test('a failed remove shows an error and keeps the sitter listed (spec 0078 AC9)', async ({ page }) => {
+    const { error } = await owner.client.from('pet_sitter_access').insert({
+      pet_sit_id: sitId, owner_id: owner.userId, created_by: owner.userId, sitter_email: invitee,
+    });
+    if (error) throw new Error(`could not create invite: ${error.message}`);
+
+    // Stand in for the delete failing (e.g. a dropped connection or a
+    // server error); reads still go through.
+    await page.route('**/rest/v1/pet_sitter_access*', (route) =>
+      route.request().method() === 'DELETE'
+        ? route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ message: 'server error' }) })
+        : route.continue(),
+    );
+
+    const dialog = await openShareDialog(page);
+    await expect(dialog.getByText(invitee)).toBeVisible();
+    await dialog.getByRole('button', { name: `Remove ${invitee}` }).click();
+    await page.getByRole('alertdialog').getByRole('button', { name: 'Remove' }).click();
+
+    await expect(dialog.getByText("We couldn't remove that sitter. Please try again.")).toBeVisible();
+    await expect(dialog.getByText(invitee)).toBeVisible();
+    const { data: rows } = await owner.client.from('pet_sitter_access').select('id').eq('pet_sit_id', sitId);
+    expect(rows ?? []).toHaveLength(1);
+  });
+
   test('a refused invite shows an error instead of hanging (AC11)', async ({ page }) => {
     // Stand in for the database refusing the insert (migration 0057) by
     // failing the request itself; the Edge Function is never reached.

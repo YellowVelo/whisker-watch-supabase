@@ -16,7 +16,7 @@ import { PALETTE } from '@/lib/toneColors';
 import { useToast } from '@/components/ui/use-toast';
 import { aiErrorText } from '@/lib/aiGuardrails';
 import ScanReviewSheet from '@/components/ScanReviewSheet';
-import { Sentry } from '@/lib/errorMonitoring';
+import { Sentry, reportClientError } from '@/lib/errorMonitoring';
 
 const EMPTY_FORM = { vaccine_name: '', date_given: '', next_due_date: '', administered_by: '', lot_number: '', notes: '' };
 
@@ -113,7 +113,7 @@ export default function VaccinationSection({ petId, species, initialEditId }) {
       try {
         allPets = await listOwnedPets();
       } catch (err) {
-        console.error(err);
+        reportClientError(err, { feature: 'vaccinations' });
         allPets = [await entities.Pet.get(petId)];
       }
       const multiPet = allPets.length > 1;

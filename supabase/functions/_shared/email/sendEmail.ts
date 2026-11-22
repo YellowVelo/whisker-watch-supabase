@@ -18,7 +18,7 @@
 // later, asynchronously, once Resend reports what actually happened.
 // See docs/features/0020_Resend_Bounce_Delivery_Webhook_Specification_v1.md.
 
-import { createClient, type SupabaseClient } from 'jsr:@supabase/supabase-js@2';
+import { createClient, type SupabaseClient } from 'jsr:@supabase/supabase-js@2.119.2';
 import { renderTemplate } from './renderTemplate.ts';
 import { EmailServiceError, type SendEmailParams, type SendEmailResult } from './types.ts';
 import { isValidEmail, normalizeEmail } from './utils.ts';

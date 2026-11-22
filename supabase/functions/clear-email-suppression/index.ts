@@ -31,7 +31,7 @@
 //   404 { error: 'No active suppression found for this address' }
 //   4xx/5xx { error: string }
 
-import { createClient } from 'jsr:@supabase/supabase-js@2';
+import { createClient } from 'jsr:@supabase/supabase-js@2.119.2';
 import { normalizeEmail } from '../_shared/email/utils.ts';
 import { reportError } from '../_shared/errorReporting.ts';
 

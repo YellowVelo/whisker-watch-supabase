@@ -12,6 +12,7 @@ import PageTransition from '../components/PageTransition';
 import usePullToRefresh from '../hooks/usePullToRefresh';
 import PullToRefreshIndicator from '../components/PullToRefreshIndicator';
 import PetPhoto from '@/components/PetPhoto';
+import { reportClientError } from '@/lib/errorMonitoring';
 
 const todayStr = (timezone) => dateStrInTimezone(timezone, 0);
 
@@ -62,7 +63,7 @@ export default function Pets() {
       petList = await entities.Pet.list('-created_date');
       setLoadError(false);
     } catch (err) {
-      console.error(err);
+      reportClientError(err, { feature: 'pets' });
       setLoadError(true);
       setLoading(false);
       return;
@@ -79,7 +80,7 @@ export default function Pets() {
     try {
       sitterOnlyIds = await getSitterOnlyPetIds();
     } catch (err) {
-      console.error(err);
+      reportClientError(err, { feature: 'pets' });
     }
     setPets(petList.filter((p) => !sitterOnlyIds.has(p.id)));
     setSharedPets(petList.filter((p) => sitterOnlyIds.has(p.id)));
@@ -233,7 +234,7 @@ function SitterPetRow({ pet }) {
         setWellbeingUnavailable(false);
       } catch (err) {
         if (cancelled) return;
-        console.error(err);
+        reportClientError(err, { feature: 'pets' });
         setWellbeingDirections(null);
         setWellbeingUnavailable(true);
       }

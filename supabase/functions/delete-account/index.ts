@@ -45,8 +45,8 @@
 // Supabase Auth and re-running the account_type allowlist migration.
 // Production and owner accounts are unaffected by this guard.
 
-import { createClient } from 'jsr:@supabase/supabase-js@2';
-import { reportError } from '../_shared/errorReporting.ts';
+import { createClient } from 'jsr:@supabase/supabase-js@2.119.2';
+import { reportError, serverError } from '../_shared/errorReporting.ts';
 import { listFolderPaths, removePaths } from '../_shared/storageFiles.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
@@ -149,8 +149,6 @@ Deno.serve(async (req) => {
     return json({ success: true });
 
   } catch (err) {
-    console.error('delete-account unexpected error:', err);
-    reportError(err, { function: 'delete-account' });
-    return json({ error: (err as Error).message ?? 'Unknown error' }, 500);
+    return serverError(err, { function: 'delete-account' }, corsHeaders);
   }
 });

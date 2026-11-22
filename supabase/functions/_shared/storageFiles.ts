@@ -4,7 +4,7 @@
 // by default), so a single call silently misses files for heavier users.
 // These helpers page through a folder and delete in batches.
 
-import type { SupabaseClient } from 'jsr:@supabase/supabase-js@2';
+import type { SupabaseClient } from 'jsr:@supabase/supabase-js@2.119.2';
 
 const PAGE_SIZE = 100;
 const BUCKET = 'uploads';

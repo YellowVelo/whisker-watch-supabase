@@ -1,0 +1,42 @@
+name: Edge Function Startup Check
+
+# Spec 0078 (punch list PA-62): every hour, check that every Edge Function on
+# dev, staging and prod starts. On 2026-11-21 a broken library release
+# crashed sign-up on staging and prod for 22 hours, and nothing noticed.
+#
+# Only sends OPTIONS requests (no login, no keys, changes nothing). The
+# three project URLs are GitHub Actions *variables*, not secrets: every
+# visitor's browser already has them.
+#
+# GitHub can start scheduled jobs late when it's busy (PA-63 saw ~8 hours
+# for the nightly backups), so "hourly" is a best effort, not a pager.
+# A failed run emails whoever last changed this file's schedule.
+
+on:
+  schedule:
+    - cron: '7 * * * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        project: [dev, staging, prod]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check every function starts (${{ matrix.project }})
+        env:
+          PROJECT_URL: ${{ matrix.project == 'dev' && vars.DEV_SUPABASE_URL || matrix.project == 'staging' && vars.STAGING_SUPABASE_URL || vars.PROD_SUPABASE_URL }}
+        run: |
+          if [ -z "$PROJECT_URL" ]; then
+            echo "The ${{ matrix.project }} project URL variable isn't set (Settings > Secrets and variables > Actions > Variables)." >&2
+            exit 1
+          fi
+          bash scripts/check-functions-start.sh "$PROJECT_URL"

@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { supabase } from '@/api/supabaseClient';
 import AuthLayout from '@/components/AuthLayout';
 import { Loader2, Mail } from 'lucide-react';
+import { reportClientError } from '@/lib/errorMonitoring';
 
 // Landing page for the branded signup-confirmation email (sent via the
 // sign-up Edge Function — see supabase/functions/sign-up/index.ts) and
@@ -64,7 +65,7 @@ export default function VerifyEmail() {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
       if (confirmError) {
-        console.error('confirm-email function error:', confirmError);
+        reportClientError(confirmError, { feature: 'verify_email', note: 'confirm-email function error' });
       }
 
       setStatus('ready');

@@ -206,7 +206,7 @@ Deno.test('co-owner lockdown (spec 0072)', async (t) => {
 });
 
 Deno.test('co-owner lockdown: is_primary_pet_owner is not callable logged out', async () => {
-  const { createClient } = await import('jsr:@supabase/supabase-js@2');
+  const { createClient } = await import('jsr:@supabase/supabase-js@2.119.2');
   const anon = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_ANON_KEY')!);
   const { error } = await anon.rpc('is_primary_pet_owner', {
     p_pet_id: crypto.randomUUID(),

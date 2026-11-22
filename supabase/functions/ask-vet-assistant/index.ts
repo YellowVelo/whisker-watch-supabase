@@ -46,9 +46,9 @@
 // check; the existing anon-key client below still does the actual
 // caller-identity check.
 
-import { createClient } from 'jsr:@supabase/supabase-js@2';
-import { encodeBase64 } from 'jsr:@std/encoding@1/base64';
-import { reportError } from '../_shared/errorReporting.ts';
+import { createClient } from 'jsr:@supabase/supabase-js@2.119.2';
+import { encodeBase64 } from 'jsr:@std/encoding@1.0.11/base64';
+import { serverError } from '../_shared/errorReporting.ts';
 
 const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY');
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
@@ -261,11 +261,6 @@ Deno.serve(async (req) => {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   } catch (err) {
-    console.error('Edge Function error:', err);
-    reportError(err, { function: 'ask-vet-assistant' });
-    return new Response(JSON.stringify({ error: err.message || 'Unknown error' }), {
-      status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+    return serverError(err, { function: 'ask-vet-assistant' }, corsHeaders);
   }
 });

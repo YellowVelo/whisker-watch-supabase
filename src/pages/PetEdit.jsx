@@ -16,6 +16,7 @@ import InviteCoOwnerDialog from '@/components/InviteCoOwnerDialog';
 import { useAuth } from '@/lib/AuthContext';
 import { getSitterOnlyPetIds } from '@/lib/petsClient';
 import OwnersOnlyNotice from '@/components/OwnersOnlyNotice';
+import { reportClientError } from '@/lib/errorMonitoring';
 
 // Spec 0036: the pet-identity half of the old EditPetSheet split out onto
 // its own routed page (Conditions moved to PetConditions.jsx instead).
@@ -75,7 +76,7 @@ export default function PetEdit() {
     // show the form: the database still refuses a sitter's save.
     Promise.all([
       entities.Pet.get(petId),
-      getSitterOnlyPetIds().catch((err) => { console.error(err); return new Set(); }),
+      getSitterOnlyPetIds().catch((err) => { reportClientError(err, { feature: 'pet_edit' }); return new Set(); }),
     ])
       .then(([p, sitterOnlyIds]) => {
         setSitterOnly(sitterOnlyIds.has(petId));
@@ -151,7 +152,7 @@ export default function PetEdit() {
       await entities.Pet.update(pet.id, payload);
       navigate('/pets');
     } catch (err) {
-      console.error('Failed to save pet:', err);
+      reportClientError(err, { feature: 'pet_edit', note: 'Failed to save pet' });
       setError('Unable to save changes. Please try again.');
       setSaving(false);
     }

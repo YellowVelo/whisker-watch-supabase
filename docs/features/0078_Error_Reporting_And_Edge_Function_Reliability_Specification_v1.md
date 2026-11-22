@@ -1,6 +1,6 @@
 # 0078_Error_Reporting_And_Edge_Function_Reliability_Specification_v1
 
-**Status:** Approved by Lynn 2026-11-22. Building.
+**Status:** Built 2026-11-22. All 14 functions live and tested on dev; staging and prod pending (deploy, then the startup check), then frontend promotion.
 **Date:** 2026-11-22
 **Branch:** `claude/error-reporting-reliability`
 **Migration:** none expected. `0060` is reserved for this spec in case the build finds it needs one.
@@ -135,6 +135,17 @@ No new UI. The only visible changes are error text in existing error spots, whic
 - Making the hourly check punctual. That's the same GitHub delay as PA-63.
 - Changing which backend errors reach Sentry by account type (backend reports every account today, and keeps doing so).
 - Sentry alert rules (who gets emailed for which error). You can set those in Sentry's dashboard any time; I can suggest some later.
+
+## Build Notes (2026-11-22)
+
+1. **The startup check needed more than a 200.** First run: pointing the script at a wrong address still got "200 OK" for every function. Some other part of Supabase answers some `OPTIONS` requests itself without running any function code. The script now also requires the `x-deno-execution-id` header, which only a running function sends back. Checked both ways: all 14 pass on dev, staging and prod, and the wrong address fails all 14.
+2. **The invite spinner crash that remained.** If the dialog's "who am I?" check (`supabase.auth.getUser()`) failed mid-save, the handler crashed on `me.email` and left the button stuck. `try/finally` now always clears it. The new e2e test (AC10) causes exactly that failure. Unexpected failures reuse each dialog's existing approved wording ("We couldn't add that co-owner. Please try again." / "Couldn't save this invite. Please try again."), so no new copy was needed beyond the approved sitter-removal message.
+3. **Raw messages replaced in the invite functions:** `generateLink` errors now go through `serverError`, and the email service's errors are reported to Sentry (tagged `step: send_email`, with the code) and answered with the plain message, status 502. The dialogs treat any error as "the invite email could not be sent", so they behave the same.
+4. **The app error helper also wraps Supabase's plain error objects** in a real `Error` (named `Error <code>`), so Sentry shows "permission denied for table pets" instead of "Object captured as exception". `scannedDocuments.js` had its own Sentry call plus a `console.error`. Both became one `reportClientError`. Turnstile's load failure is tagged `expected: 'true'`.
+5. **Pre-existing, not fixed here:** `deno check` finds 22 type errors on `main` in `ask-vet-assistant`, `generate-vet-report` and `sign-up` (19 on this branch, because removing the raw `err.message` replies removed 3). CI never type-checks functions, so they went unnoticed. Logged as **PA-65**.
+6. **`deno.lock` refreshed.** Because of the root `package.json`, Deno uses this lockfile for local and CI test runs. It still has an unused `jsr:@supabase/supabase-js@2 → 2.110.7` line, which is harmless, since every import now names `2.119.2`.
+7. **The hourly workflow can't run until merged.** GitHub only runs scheduled and manually started workflows from the default branch. AC3's first manual run happens right after the merge. The three URL variables were set on 2026-11-22 with `gh variable set`, from `supabase projects list`.
+8. **Verified on dev:** all 14 functions deployed. The startup check passes, and the JWT settings are unchanged (`resend-webhook` off, the rest on). All 32 Deno integration tests pass, plus the 4 hygiene tests. A malformed body sent to `ask-vet-assistant` as test1@ (20:43:50 UTC) got `{"error":"Something went wrong. Please try again."}`, status 500, in 1.3s, and the function still started afterwards (the flush didn't break the runtime). Vitest: 163/163. New and changed e2e: 13/13. Lint, typecheck and build are clean. design-system-check: clean (no markup changed).
 
 ## Open Questions
 

@@ -29,6 +29,7 @@ import { useAuth } from '@/lib/AuthContext';
 import { detectTimezone, dateStrInTimezone } from '@/lib/timezone';
 import WellbeingChipGrid from '@/components/WellbeingChipGrid';
 import PetPhoto from '@/components/PetPhoto';
+import { reportClientError, functionErrorMessage } from '@/lib/errorMonitoring';
 
 const todayStr = (timezone) => dateStrInTimezone(timezone, 0);
 
@@ -185,7 +186,7 @@ export default function PetProfileContent({ petId, onReload = undefined, expande
       setPet(petData);
       setPetError(false);
     } catch (err) {
-      console.error(err);
+      reportClientError(err, { feature: 'pet_profile' });
       setPetError(true);
       setHeaderLoading(false);
       setDetailsLoading(false);
@@ -206,7 +207,7 @@ export default function PetProfileContent({ petId, onReload = undefined, expande
     const nextErrors = {};
 
     setWeightSummary(weightR.status === 'fulfilled' ? weightR.value : null);
-    if (weightR.status === 'rejected') { console.error(weightR.reason); nextErrors.weight = true; }
+    if (weightR.status === 'rejected') { reportClientError(weightR.reason, { feature: 'pet_profile' }); nextErrors.weight = true; }
 
     // Wellbeing chips (Energy/Mobility/Breathing/Itching/Behavior) are only
     // rendered in the Pets-tab collapsed card, so this extra fetch is
@@ -218,14 +219,14 @@ export default function PetProfileContent({ petId, onReload = undefined, expande
         setWellbeingDirections(await getWellbeingDirections(petId, todayCheckIn, yesterdayCheckIn));
         setWellbeingUnavailable(false);
       } catch (err) {
-        console.error(err);
+        reportClientError(err, { feature: 'pet_profile' });
         setWellbeingDirections(null);
         setWellbeingUnavailable(true);
       }
     }
 
     setTodayCheckIn(checkInR.status === 'fulfilled' ? checkInR.value : null);
-    if (checkInR.status === 'rejected') { console.error(checkInR.reason); nextErrors.observations = true; }
+    if (checkInR.status === 'rejected') { reportClientError(checkInR.reason, { feature: 'pet_profile' }); nextErrors.observations = true; }
 
     setErrors((prev) => ({ ...prev, ...nextErrors }));
     setDetailsLoading(false);
@@ -251,27 +252,27 @@ export default function PetProfileContent({ petId, onReload = undefined, expande
     const nextErrors = {};
 
     setMedications(medsR.status === 'fulfilled' ? medsR.value : []);
-    if (medsR.status === 'rejected') { console.error(medsR.reason); nextErrors.medications = true; }
+    if (medsR.status === 'rejected') { reportClientError(medsR.reason, { feature: 'pet_profile' }); nextErrors.medications = true; }
 
     const todayStrVal = todayStr(timezone);
     setFoods(foodsR.status === 'fulfilled' ? foodsR.value.filter((f) => f.active && (!f.end_date || f.end_date >= todayStrVal)) : []);
-    if (foodsR.status === 'rejected') { console.error(foodsR.reason); nextErrors.food = true; }
+    if (foodsR.status === 'rejected') { reportClientError(foodsR.reason, { feature: 'pet_profile' }); nextErrors.food = true; }
 
     setVaccinations(vaxR.status === 'fulfilled' ? vaxR.value : []);
-    if (vaxR.status === 'rejected') { console.error(vaxR.reason); nextErrors.vaccinations = true; }
+    if (vaxR.status === 'rejected') { reportClientError(vaxR.reason, { feature: 'pet_profile' }); nextErrors.vaccinations = true; }
 
     setOnboarding(onboardingR.status === 'fulfilled' ? (onboardingR.value[0] || null) : null);
-    if (onboardingR.status === 'rejected') { console.error(onboardingR.reason); nextErrors.baseline = true; }
+    if (onboardingR.status === 'rejected') { reportClientError(onboardingR.reason, { feature: 'pet_profile' }); nextErrors.baseline = true; }
 
     setTimelineCount(timelineR.status === 'fulfilled' ? timelineR.value.length : null);
-    if (timelineR.status === 'rejected') { console.error(timelineR.reason); nextErrors.timeline = true; }
+    if (timelineR.status === 'rejected') { reportClientError(timelineR.reason, { feature: 'pet_profile' }); nextErrors.timeline = true; }
 
     setHealthRecordsCount(healthRecordsR.status === 'fulfilled' ? healthRecordsR.value : null);
-    if (healthRecordsR.status === 'rejected') { console.error(healthRecordsR.reason); nextErrors.healthRecords = true; }
+    if (healthRecordsR.status === 'rejected') { reportClientError(healthRecordsR.reason, { feature: 'pet_profile' }); nextErrors.healthRecords = true; }
 
     const todayRow = checkInR.status === 'fulfilled' ? checkInR.value : null;
     if (checkInR.status === 'rejected') {
-      console.error(checkInR.reason);
+      reportClientError(checkInR.reason, { feature: 'pet_profile' });
       nextErrors.observations = true;
       setTodayObservationValues({});
     } else {
@@ -279,7 +280,7 @@ export default function PetProfileContent({ petId, onReload = undefined, expande
         const values = await getObservationValuesForCheckIns({ [petId]: todayRow });
         setTodayObservationValues(values[petId] || {});
       } catch (err) {
-        console.error(err);
+        reportClientError(err, { feature: 'pet_profile' });
         nextErrors.observations = true;
         setTodayObservationValues({});
       }
@@ -342,7 +343,7 @@ export default function PetProfileContent({ petId, onReload = undefined, expande
         body: { pet_id: petId },
       });
       if (error || !data?.success) {
-        setDeletePetError(error?.message ?? data?.error ?? "We couldn't delete this pet. Please try again.");
+        setDeletePetError(await functionErrorMessage(error, data, "We couldn't delete this pet. Please try again."));
         setDeletingPet(false);
         return;
       }

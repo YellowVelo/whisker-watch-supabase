@@ -22,6 +22,7 @@ import { useAuth } from '@/lib/AuthContext';
 import { detectTimezone } from '@/lib/timezone';
 import { track } from '@/lib/analytics';
 import { PALETTE } from '@/lib/toneColors';
+import { reportClientError } from '@/lib/errorMonitoring';
 
 // Builds Home's Weight chip state from petProfileClient's
 // getWeightSummariesForPets (batched — Weight stays on symptom_logs per
@@ -119,17 +120,17 @@ export default function Home() {
           setCheckIns(todayRows);
           setCheckInsUnavailable(false);
         } else {
-          console.error(todayRowsR.reason);
+          reportClientError(todayRowsR.reason, { feature: 'home' });
           setCheckIns({});
           setCheckInsUnavailable(true);
         }
 
         const yesterdayRows = yesterdayRowsR.status === 'fulfilled' ? yesterdayRowsR.value : {};
         setYesterdayCheckIns(yesterdayRows);
-        if (yesterdayRowsR.status === 'rejected') console.error(yesterdayRowsR.reason);
+        if (yesterdayRowsR.status === 'rejected') reportClientError(yesterdayRowsR.reason, { feature: 'home' });
 
         setMedicationCounts(medCountsR.status === 'fulfilled' ? medCountsR.value : {});
-        if (medCountsR.status === 'rejected') console.error(medCountsR.reason);
+        if (medCountsR.status === 'rejected') reportClientError(medCountsR.reason, { feature: 'home' });
 
         try {
           const directions = await getHealthAttributeDirectionsForPets(petIds, todayRows, yesterdayRows);
@@ -138,7 +139,7 @@ export default function Home() {
           setAttributesUnavailable(false);
         } catch (err) {
           if (isStale()) return;
-          console.error(err);
+          reportClientError(err, { feature: 'home' });
           setAttributeDirections({});
           setAttributesUnavailable(true);
         }
@@ -149,7 +150,7 @@ export default function Home() {
           setWeightStates(Object.fromEntries(activePets.map((p) => [p.id, buildWeightState(weightSummaries[p.id])])));
         } catch (err) {
           if (isStale()) return;
-          console.error(err);
+          reportClientError(err, { feature: 'home' });
           setWeightStates(Object.fromEntries(activePets.map((p) => [p.id, { direction: null, comparisonLabel: 'Not enough data', unavailable: true }])));
         }
 
@@ -168,14 +169,14 @@ export default function Home() {
             if (result.status === 'fulfilled') {
               missedByPet[pet.id] = result.value;
             } else {
-              console.error(result.reason);
+              reportClientError(result.reason, { feature: 'home' });
               missedByPet[pet.id] = { missedDates: [], count: 0 };
             }
           });
           setMissedDaysByPet(missedByPet);
         } catch (err) {
           if (isStale()) return;
-          console.error(err);
+          reportClientError(err, { feature: 'home' });
           setMissedDaysByPet({});
         }
 
@@ -200,7 +201,7 @@ export default function Home() {
       setStale(false);
     } catch (err) {
       if (isStale()) return;
-      console.error(err);
+      reportClientError(err, { feature: 'home' });
       if (hasLoadedOnceRef.current) {
         setStale(true); // keep showing cached data
       } else {
@@ -457,7 +458,7 @@ export default function Home() {
             const savedPet = checkInSheet.pet;
             setCheckInSheet(null);
             refreshPetCard(savedPet).catch((err) => {
-              console.error(err);
+              reportClientError(err, { feature: 'home' });
               toast({ description: 'Saved, but unable to refresh this card. Pull down to refresh.' });
             });
           }}
@@ -471,7 +472,7 @@ export default function Home() {
           onClose={() => { setCatchUpFlowOpen(false); setCatchUpPet(null); }}
           onPetProgress={(pet) => {
             refreshPetCard(pet).catch((err) => {
-              console.error(err);
+              reportClientError(err, { feature: 'home' });
               toast({ description: 'Saved, but unable to refresh this card. Pull down to refresh.' });
             });
           }}

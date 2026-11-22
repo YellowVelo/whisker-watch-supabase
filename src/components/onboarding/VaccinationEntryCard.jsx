@@ -8,6 +8,7 @@ import { uploadFile, UploadRejectedError } from '@/api/storageClient';
 import { usePendingScan, scanErrorText } from '@/lib/scannedDocuments';
 import { invokeAI } from '@/api/aiClient';
 import { getVaccines } from '@/lib/speciesConfig';
+import { reportClientError } from '@/lib/errorMonitoring';
 
 const emptyEntry = (petId) => ({ pet_id: petId, vaccine_name: '', date_given: '', next_due_date: '', administered_by: '', lot_number: '', notes: '' });
 
@@ -67,7 +68,7 @@ export default function VaccinationEntryCard({ petId, petName, species, onContin
         lot_number: result?.lot_number || f.lot_number,
       }));
     } catch (err) {
-      console.error('Failed to scan vaccination record:', err);
+      reportClientError(err, { feature: 'onboarding_vaccination', note: 'Failed to scan vaccination record' });
       pendingScan.discard();
       setError(err instanceof UploadRejectedError || err?.status === 413
         ? scanErrorText(err)
@@ -95,7 +96,7 @@ export default function VaccinationEntryCard({ petId, petName, species, onContin
       await pendingScan.keep([petId]);
       return created;
     } catch (err) {
-      console.error('Failed to save vaccination:', err);
+      reportClientError(err, { feature: 'onboarding_vaccination', note: 'Failed to save vaccination' });
       setError("Couldn't save that vaccination — check your connection and try again.");
       return null;
     } finally {

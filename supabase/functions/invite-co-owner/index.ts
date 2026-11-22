@@ -64,12 +64,12 @@
 //   404 { error: 'Invite not found' }     — not the primary owner, or no pending invite for that address
 //   { error: string }                     — something went wrong
 
-import { createClient } from 'jsr:@supabase/supabase-js@2';
+import { createClient } from 'jsr:@supabase/supabase-js@2.119.2';
 import { sendEmail } from '../_shared/email/sendEmail.ts';
 import { EmailServiceError } from '../_shared/email/types.ts';
 import { getValidatedAppUrl } from '../_shared/appUrl.ts';
 import { isAlreadyRegisteredError } from '../_shared/authErrors.ts';
-import { reportError } from '../_shared/errorReporting.ts';
+import { GENERIC_ERROR, reportError, serverError } from '../_shared/errorReporting.ts';
 import { checkInviteRateLimit } from '../_shared/inviteRateLimit.ts';
 import { escapeLike } from '../_shared/escapeLike.ts';
 
@@ -124,8 +124,11 @@ async function sendAndRespond(opts: {
     });
   } catch (err) {
     if (err instanceof EmailServiceError) {
+      // Spec 0078 (PA-35): the email provider's own message stays in the
+      // log and Sentry, not the reply.
       console.error('sendEmail error:', err.code, err.message);
-      return new Response(JSON.stringify({ error: err.message }), {
+      reportError(err, { function: 'invite-co-owner', step: 'send_email', code: String(err.code) });
+      return new Response(JSON.stringify({ error: GENERIC_ERROR }), {
         status: 502,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
@@ -263,11 +266,7 @@ Deno.serve(async (req) => {
 
     if (linkError) {
       if (!isAlreadyRegisteredError(linkError)) {
-        console.error('generateLink error:', linkError);
-        return new Response(JSON.stringify({ error: linkError.message }), {
-          status: 500,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
+        return serverError(linkError, { function: 'invite-co-owner', step: 'generate_link' }, corsHeaders);
       }
 
       // "Already registered" covers two different situations that
@@ -318,11 +317,7 @@ Deno.serve(async (req) => {
       });
 
       if (recoveryLinkError) {
-        console.error('generateLink (recovery) error:', recoveryLinkError);
-        return new Response(JSON.stringify({ error: recoveryLinkError.message }), {
-          status: 500,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
+        return serverError(recoveryLinkError, { function: 'invite-co-owner', step: 'generate_recovery_link' }, corsHeaders);
       }
 
       tokenHash = recoveryLinkData?.properties?.hashed_token;
@@ -364,11 +359,6 @@ Deno.serve(async (req) => {
       sentByUserId: userData.user.id,
     });
   } catch (err) {
-    console.error('Edge Function error:', err);
-    reportError(err, { function: 'invite-co-owner' });
-    return new Response(JSON.stringify({ error: err.message || 'Unknown error' }), {
-      status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+    return serverError(err, { function: 'invite-co-owner' }, corsHeaders);
   }
 });

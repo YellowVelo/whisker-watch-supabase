@@ -8,6 +8,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { PALETTE } from '@/lib/toneColors';
 import PillToggle from '@/components/PillToggle';
 import BottomSheet from '@/components/BottomSheet';
+import { reportClientError } from '@/lib/errorMonitoring';
 
 const VIBE_LABELS = { great: 'Great Day', off: 'Off Day', tough: 'Tough Day', skipped: 'Skipped' };
 
@@ -131,7 +132,7 @@ export default function DailyCheckInSheet({ pet, date, onClose, onSaved, isCatch
       track('vibe_recorded', { pet_id: pet.id, check_in_date: date, status: 'great', symptom_count: 0 });
       onSaved?.();
     } catch (err) {
-      console.error(err);
+      reportClientError(err, { feature: 'daily_checkin' });
       setError('Unable to save check-in. Please try again.');
       setStage('initial');
     }
@@ -164,7 +165,7 @@ export default function DailyCheckInSheet({ pet, date, onClose, onSaved, isCatch
       }
       onSaved?.();
     } catch (err) {
-      console.error(err);
+      reportClientError(err, { feature: 'daily_checkin' });
       setError('Unable to save check-in. Please try again.');
       setStage(vibeStatus ? 'details' : 'initial');
     }
@@ -194,7 +195,7 @@ export default function DailyCheckInSheet({ pet, date, onClose, onSaved, isCatch
       await markSkipped(pet.id, date, isCatchUp ? 'catch_up' : 'app');
       onSaved?.();
     } catch (err) {
-      console.error(err);
+      reportClientError(err, { feature: 'daily_checkin' });
       setError('Unable to save check-in. Please try again.');
       setStage('initial');
     }
@@ -247,7 +248,7 @@ export default function DailyCheckInSheet({ pet, date, onClose, onSaved, isCatch
       if (isCatchUp) track('catch_up_completed', { pet_id: pet.id, check_in_date: date, status: vibeStatus });
       onSaved?.();
     } catch (err) {
-      console.error(err);
+      reportClientError(err, { feature: 'daily_checkin' });
       setError('Unable to save check-in. Please try again.');
       setStage('details');
     }

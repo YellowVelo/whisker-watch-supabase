@@ -9,7 +9,7 @@
 // ask-vet-assistant (spec 0050). That RPC is service-role only, so callers
 // pass their service-role client.
 
-import type { SupabaseClient } from 'jsr:@supabase/supabase-js@2';
+import type { SupabaseClient } from 'jsr:@supabase/supabase-js@2.119.2';
 
 export const INVITE_RATE_LIMIT = 10;
 export const INVITE_RATE_WINDOW_SECONDS = 60 * 60;

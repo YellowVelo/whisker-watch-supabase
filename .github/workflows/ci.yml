@@ -74,7 +74,14 @@ jobs:
             supabase/tests/co_owner_access.test.ts \
             supabase/tests/sitter_access.test.ts \
             supabase/tests/password_reset_redirect.test.ts \
-            supabase/tests/account_deletion.test.ts             supabase/tests/function_permissions.test.ts             supabase/tests/invite_emails.test.ts
+            supabase/tests/account_deletion.test.ts \
+            supabase/tests/function_permissions.test.ts \
+            supabase/tests/invite_emails.test.ts
+
+      - name: Run Edge Function code checks (spec 0078 - exact library versions, no raw error messages)
+        run: |
+          deno test --allow-read --allow-env --node-modules-dir=none \
+            supabase/tests/function_hygiene.test.ts
 
       - name: Run resend-webhook integration tests
         env:

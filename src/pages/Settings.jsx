@@ -18,6 +18,7 @@ import { SEED_SCENARIOS } from '@/lib/seedTestData';
 import { deleteAccount, resetSandboxAccount, signOutBestEffort } from '@/lib/accountClient';
 import { useInstallPrompt } from '@/lib/InstallPromptContext';
 import { PALETTE } from '@/lib/toneColors';
+import { functionErrorMessage } from '@/lib/errorMonitoring';
 
 // Design System Amendment #6 (2026-07-30) — account-type color now sourced
 // from the semantic tone tokens instead of raw Tailwind colors (spec 0028):
@@ -126,7 +127,7 @@ export default function Settings() {
     try {
       const { data, error } = await resetSandboxAccount();
       if (error || !data?.success) {
-        setResetError(error?.message ?? data?.error ?? 'Reset failed. Please try again.');
+        setResetError(await functionErrorMessage(error, data, 'Reset failed. Please try again.'));
         setResetting(false);
         return;
       }
@@ -148,7 +149,7 @@ export default function Settings() {
       // clear existing sample data first so each scenario starts clean.
       const { data, error } = await resetSandboxAccount();
       if (error || !data?.success) {
-        setSeedError(error?.message ?? data?.error ?? 'Could not clear existing sample data before seeding.');
+        setSeedError(await functionErrorMessage(error, data, 'Could not clear existing sample data before seeding.'));
         setSeeding(false);
         return;
       }
@@ -170,7 +171,7 @@ export default function Settings() {
     try {
       const { data, error } = await deleteAccount();
       if (error || !data?.success) {
-        setDeleteError(error?.message ?? data?.error ?? 'Unable to delete account. Please try again later.');
+        setDeleteError(await functionErrorMessage(error, data, 'Unable to delete account. Please try again later.'));
         setDeleting(false);
         return;
       }

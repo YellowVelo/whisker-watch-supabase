@@ -25,7 +25,7 @@
 // type is acknowledged (200) and ignored, in case the Resend dashboard
 // is ever configured to send more than the three types above.
 
-import { createClient } from 'jsr:@supabase/supabase-js@2';
+import { createClient } from 'jsr:@supabase/supabase-js@2.119.2';
 import { normalizeEmail } from '../_shared/email/utils.ts';
 import { computeSignature, constantTimeEqual, webhookSecretToBytes } from '../_shared/webhookSignature.ts';
 import { reportError } from '../_shared/errorReporting.ts';
