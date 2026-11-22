@@ -11,6 +11,7 @@ import { useAuth } from '@/lib/AuthContext';
 import { isDemoAccount } from '@/lib/accountType';
 import { PALETTE } from '@/lib/toneColors';
 import IconButton from '@/components/IconButton';
+import { isRateLimited } from '@/lib/inviteErrors';
 
 // Invite a co-owner (e.g. a spouse) to a pet. Unlike sitter access,
 // a co-owner gets full owner-level rights: editing, logging, and
@@ -75,36 +76,44 @@ export default function InviteCoOwnerDialog({ petId, petName, open, onOpenChange
       return;
     }
     const existing = coOwners.find(c => c.co_owner_email.toLowerCase() === cleanEmail);
-    if (existing) {
+    // Spec 0077: only someone who has accepted is "already a co-owner". An
+    // invite that hasn't been accepted yet is resent instead, so the
+    // "try inviting them again" advice below actually works.
+    if (existing?.co_owner_user_id) {
       setError('Already a co-owner.');
       setSaving(false);
       return;
     }
 
-    try {
-      await entities.PetCoOwner.create({
-        pet_id: petId,
-        owner_id: me.id,
-        co_owner_email: cleanEmail,
-      });
-    } catch (err) {
-      // The database refuses anyone but the primary owner (migration 0056),
-      // so a failure here must surface rather than leave the button stuck.
-      console.error('PetCoOwner.create failed:', err);
-      setError("We couldn't add that co-owner. Please try again.");
-      setSaving(false);
-      return;
+    if (!existing) {
+      try {
+        await entities.PetCoOwner.create({
+          pet_id: petId,
+          owner_id: me.id,
+          co_owner_email: cleanEmail,
+        });
+      } catch (err) {
+        // The database refuses anyone but the primary owner (migration 0056),
+        // so a failure here must surface rather than leave the button stuck.
+        console.error('PetCoOwner.create failed:', err);
+        setError("We couldn't add that co-owner. Please try again.");
+        setSaving(false);
+        return;
+      }
     }
 
-    // Send the invite email via the Edge Function.
+    // Send the invite email via the Edge Function. The pet's name is looked
+    // up server-side (spec 0077), so it isn't sent.
     const { data: sessionData } = await supabase.auth.getSession();
     const token = sessionData?.session?.access_token;
     const fnResp = await supabase.functions.invoke('invite-co-owner', {
-      body: { coOwnerEmail: cleanEmail, petName, petId },
+      body: { coOwnerEmail: cleanEmail, petId },
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     });
 
-    if (fnResp.error) {
+    if (isRateLimited(fnResp.error)) {
+      setSuccessMsg(`${cleanEmail} added as co-owner, but you've sent a lot of invites in the last hour, so we couldn't email them yet. Try inviting them again in an hour.`);
+    } else if (fnResp.error) {
       // Access record is already saved; just warn rather than block. Note:
       // by this point the invite-co-owner function may have already
       // created the invitee's auth account (via generateLink) before the
@@ -117,19 +126,13 @@ export default function InviteCoOwnerDialog({ petId, petName, open, onOpenChange
       setSuccessMsg(`${cleanEmail} added as co-owner. No real email was sent (test/demo accounts don't send production email) — they'll see ${petName || 'the pet'} on their next login.`);
     } else if (fnResp.data?.reason === 'recipient_suppressed') {
       setSuccessMsg(`${cleanEmail} added as co-owner, but Wysker Watch couldn't email them — this address has previously failed to receive mail from us. They can still be reached another way to get set up with access.`);
-    } else if (fnResp.data?.reason === 'exists') {
-      // By this point invite-co-owner has already checked
-      // email_has_password() and confirmed this is a genuinely
-      // registered account, not just a stuck pending invite (those now
-      // get a real re-invite email sent automatically instead of
-      // landing here — see the Edge Function's header comment).
-      setSuccessMsg(`${cleanEmail} already has a Wysker Watch account and can now see ${petName || 'this pet'}.`);
     } else if (fnResp.data?.sent === false) {
       // Defensive fallback for a reason value not handled above (e.g. a
       // future suppression cause sendEmail() forgot to label). Showing
-      // this generic, honest copy is deliberately safer than falling
-      // through to the "already has an account" message above, which
-      // would be actively false for a case this branch doesn't recognize.
+      // this generic, honest copy is deliberately safer than claiming an
+      // email went out. (Since spec 0077 there's no "already has an
+      // account" reply: existing accounts get their own email and the same
+      // { sent: true } as anyone else, so the reply reveals nothing.)
       setSuccessMsg(`${cleanEmail} added as co-owner, but no invite email was sent. Try inviting them again if this seems wrong.`);
     } else {
       setSuccessMsg(`Invite sent to ${cleanEmail}!`);

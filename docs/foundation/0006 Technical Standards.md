@@ -252,6 +252,19 @@ Deploy Edge Functions via CLI
 
 **Edge Function versions and startup check (added 2026-11-21, spec 0075).** Every `npm:`/`jsr:` import in an Edge Function names an exact version. An unpinned `@sentry/deno` picked up 11.16.0 on deploy and crashed `sign-up` on staging and prod for 22 hours (01:11–23:12 UTC), and no test noticed. Not yet followed everywhere: `supabase-js@2` and `@std/encoding@1` still float (PA-62). After any function deploy, send every function on that project an `OPTIONS` request and expect 200; a 500 with `WORKER_ERROR` means it crashed on startup. A local run doesn't prove a version is safe, because Supabase runs an older Deno (`supabase-edge-runtime-1.79.1`, compatible with Deno 2.1.4) than a current local install.
 
+**Database function permissions (added 2026-11-22, spec 0077).** Since migration `0059`, a new function in `public` can't be run by logged-out (`anon`) or signed-in (`authenticated`) users unless its migration grants it on purpose. A helper that RLS rules call as the user needs `grant execute on function … to authenticated` (never `anon`). A function only Edge Functions call needs only `service_role`. Revoking from `public` alone is not enough: Supabase grants `anon`/`authenticated` separately, and that gap is how PA-05 happened. Migration history doesn't prove permissions match across projects (0066 missed it), so after pushing any migration that adds or changes a function, run this on **each** project and compare. No row may show `anon=` or a bare `=X/` (everyone), and the `postgres`/`public` default-privileges row must not list `anon` or `authenticated`:
+
+```sql
+select p.proname, p.proacl::text acl, coalesce(array_to_string(p.proconfig, ','), '-') cfg
+from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+where n.nspname = 'public' order by 1;
+
+select coalesce(defaclnamespace::regnamespace::text, 'ALL') schema, defaclacl::text acl
+from pg_default_acl where defaclrole = 'postgres'::regrole and defaclobjtype = 'f';
+```
+
+`supabase/tests/function_permissions.test.ts` checks every function's group on dev in CI. When you add a function, add it to that file's lists and to the right group in migration `0059`'s pattern.
+
 **Supabase Auth → Redirect URLs (dashboard, not in the repo)** (added 2026-11-21, spec 0074). Supabase only sends people back to addresses on each project's Authentication → URL Configuration → Redirect URLs list. Anything missing silently falls back to the Site URL (Home), with no error anywhere. On 2026-11-21, prod's list was found missing `/reset-password` (most likely dropped when it was rewritten on 2026-07-26, spec 0021), so reset links landed signed in on Home instead of Set New Password. Every project must list every address below, on its own app domain:
 
 | Address | Used by |

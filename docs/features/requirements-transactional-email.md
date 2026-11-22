@@ -11,7 +11,7 @@ Every outbound transactional email (co-owner invitations + reminders, welcome, v
 
 ## Functional Requirements
 
-- **Templates** (registered in `templates/index.ts`, a `Map` — deliberately not a plain object, to avoid prototype-pollution lookups like `templates['__proto__']` resolving to a truthy value): `co-owner-invitation`, `co-owner-invitation-reminder`, `welcome`, `verify-email`, `password-reset`.
+- **Templates** (registered in `templates/index.ts`, a `Map` — deliberately not a plain object, to avoid prototype-pollution lookups like `templates['__proto__']` resolving to a truthy value): `co-owner-invitation`, `co-owner-invitation-reminder`, `co-owner-added`, `sitter-invitation`, `sitter-invitation-reminder`, `sitter-added`, `welcome`, `verify-email`, `password-reset`, `beta-signup-confirmation`, `early-adopter-confirmation` (11, as of spec 0077). The two `-added` emails go to people who already have an account, instead of an invite link (spec 0077).
 - **Two call paths:**
   1. Direct import of `sendEmail()` from `_shared/email/sendEmail.ts` — used by Edge Functions (e.g. `invite-co-owner`) that already run server-side and need no network hop.
   2. The `send-email` HTTP Edge Function — for callers that aren't themselves an Edge Function with module access (scheduled jobs, external workers, manual QA via curl).

@@ -106,7 +106,7 @@ Add a call to `supabase.rpc('claim_pending_sitter_invites')` in `doLoadUserWithP
 ### Frontend: `src/components/InviteSitterDialog.jsx`
 
 - After `entities.PetSitterAccess.create(...)` succeeds, call a new `invite-sitter` Edge Function (mirroring `InviteCoOwnerDialog.jsx`'s call to `invite-co-owner`), passing `petSitId` and the sitter's email.
-- Surface the same three outcome states `InviteCoOwnerDialog.jsx` already handles: sent, `test_or_demo_account` (no real email), and `exists` (already has an account) — same success-message pattern, sitter-appropriate wording.
+- Surface the same three outcome states `InviteCoOwnerDialog.jsx` already handles: sent, `test_or_demo_account` (no real email), and `exists` (already has an account) — same success-message pattern, sitter-appropriate wording. (Superseded by spec 0077: there's no `exists` reply any more. Existing accounts get the `sitter-added` email and the same `{ sent: true }` reply as anyone else, so the dialog never reveals whether an address has an account.)
 - Remove the stale "Phase D — not yet built" comment block (lines 43–50) once this ships.
 
 ### New Edge Function: `supabase/functions/invite-sitter/index.ts`
