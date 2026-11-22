@@ -1,6 +1,6 @@
 # 0077_Server_Function_And_Invite_Email_Lockdown_Specification_v1
 
-**Status:** Approved by Lynn 2026-11-22 (spec and copy). Building.
+**Status:** Shipped 2026-11-22. PR #49 merged (`bb109c0`). Migration 0059 and both invite functions on dev, staging and prod; Lynn promoted the frontend to prod.
 **Date:** 2026-11-22
 **Branch:** `claude/server-function-lockdown`
 **Migration:** `0059_server_function_lockdown.sql` (reserved)
@@ -163,3 +163,12 @@ None. Lynn answered the one open question ("existing accounts get an email") on 
 4. **`send-email` key formats (PA-21), tested on dev:** both `sb_secret_` and `sb_publishable_` keys get past the gateway and are refused by the function's own code (401). The header comment now says so. `supabase/config.toml` records `verify_jwt = true` for `send-email` and `clear-email-suppression`.
 5. **Pre-existing, not fixed:** `deno check` reports `'err' is of type 'unknown'` in both invite functions' outer `catch`. It was there before this change, and CI doesn't type-check Edge Functions.
 6. **Trigger functions keep `service_role`** (as well as their owner). The revoke removed `public`/`anon`/`authenticated` only. Harmless: the Secret key can already do anything, and PostgREST doesn't expose trigger functions.
+
+## Rollout (2026-11-22)
+
+1. **Dev:** migration `0059` and `invite-co-owner`/`invite-sitter` pushed during the build (Build Notes #1).
+2. **Staging and prod:** Lynn ran `supabase db push` and deployed both functions on each. The `0006` §11 permission query is clean on both: signed-in helpers have `authenticated` and no `anon`, server-only and trigger functions have only `postgres` (+ `service_role`), and every function has `search_path=public`. The migration's own leftover check passed on both, so no function is runnable by `anon`/everyone. Staging's trigger functions show `postgres` only (staging never had the `service_role` grant on them), while dev's and prod's also show `service_role`. Both are fine.
+3. **Startup check:** all 14 functions on staging and on prod answer `OPTIONS` with 200.
+4. **Frontend:** Lynn promoted the `main` build to prod. The CLI is relinked to dev.
+5. **Punch list:** PA-05, PA-10, PA-21, PA-23, PA-29, PA-36 marked Complete.
+6. **Still manual:** the real "added you" email check from a non-test account (QA plan §5.7). Lynn is doing it.
