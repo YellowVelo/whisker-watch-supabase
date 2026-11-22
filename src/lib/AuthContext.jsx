@@ -4,7 +4,7 @@ import { entities } from '@/api/entities';
 import { detectTimezone, shouldAutoPopulateTimezone } from '@/lib/timezone';
 import { track } from '@/lib/analytics';
 import { takePendingOAuthConsent } from '@/lib/pendingOAuthConsent';
-import { setSentryAccountType, clearSentryAccountType } from '@/lib/errorMonitoring';
+import { setSentryAccountType, clearSentryAccountType, reportClientError } from '@/lib/errorMonitoring';
 import { shouldRedirectToReset, RESET_PASSWORD_PATH } from '@/lib/passwordRecovery';
 
 const AuthContext = createContext(undefined);
@@ -101,7 +101,7 @@ export const AuthProvider = ({ children }) => {
     // once already linked.
     const { error: claimError } = await supabase.rpc('claim_pending_co_owner_invites');
     if (claimError) {
-      console.error('Failed to link pending co-owner invites:', claimError);
+      reportClientError(claimError, { feature: 'auth', note: 'Failed to link pending co-owner invites' });
     }
 
     // Same linking step for sitter invites — links pet_sitter_access.
@@ -109,7 +109,7 @@ export const AuthProvider = ({ children }) => {
     // the pet-sit, not just see that they've been granted access.
     const { error: sitterClaimError } = await supabase.rpc('claim_pending_sitter_invites');
     if (sitterClaimError) {
-      console.error('Failed to link pending sitter invites:', sitterClaimError);
+      reportClientError(sitterClaimError, { feature: 'auth', note: 'Failed to link pending sitter invites' });
     }
 
     let { data: profile, error } = await supabase
@@ -145,7 +145,7 @@ export const AuthProvider = ({ children }) => {
         if (!updateError) {
           profile = updated;
         } else {
-          console.error('Failed to record OAuth signup consent:', updateError);
+          reportClientError(updateError, { feature: 'auth', note: 'Failed to record OAuth signup consent' });
         }
       }
     }
@@ -215,7 +215,7 @@ export const AuthProvider = ({ children }) => {
         await loadUserWithProfile(data.user);
       }
     } catch (error) {
-      console.error('User auth check failed:', error);
+      reportClientError(error, { feature: 'auth', note: 'User auth check failed' });
       setAuthError({ type: 'unknown', message: error.message || 'Failed to check auth' });
       setUser(null);
       setIsAuthenticated(false);

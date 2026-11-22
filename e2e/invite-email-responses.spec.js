@@ -101,6 +101,24 @@ test.describe('Invite dialogs: replies from the invite functions', () => {
     expect(rows).toHaveLength(1);
   });
 
+  // Spec 0078 (AC10): an unexpected failure mid-save never leaves the Invite
+  // button stuck. Failing the dialog's "who am I?" check (auth/v1/user)
+  // used to crash the handler on `me.email` before it cleared "saving".
+  // The route goes in after the page loads, so the app's own sign-in
+  // check at startup isn't affected.
+  test('co-owner: an unexpected failure mid-save shows an error and frees the button (spec 0078 AC10)', async ({ page }) => {
+    const invitee = `e2e-co-stuck-${stamp}@example.com`;
+    const calls = await stubFunction(page, 'invite-co-owner', 200, { sent: true });
+    const dialog = await openCoOwnerDialog(page);
+    await page.route('**/auth/v1/user*', (route) => route.abort('connectionfailed'));
+    await dialog.getByPlaceholder('partner@email.com').fill(invitee);
+    await dialog.getByRole('button', { name: 'Invite' }).click();
+
+    await expect(dialog.getByText("We couldn't add that co-owner. Please try again.")).toBeVisible();
+    await expect(dialog.getByRole('button', { name: 'Invite' })).toBeEnabled();
+    expect(calls.count).toBe(0);
+  });
+
   test('sitter: a rate-limited reply shows the rate-limit message (AC12)', async ({ page }) => {
     const invitee = `e2e-sit-rate-${stamp}@example.com`;
     const today = new Date().toISOString().slice(0, 10);

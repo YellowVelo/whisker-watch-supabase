@@ -12,6 +12,7 @@ import { isDemoAccount } from '@/lib/accountType';
 import { PALETTE } from '@/lib/toneColors';
 import IconButton from '@/components/IconButton';
 import { isRateLimited } from '@/lib/inviteErrors';
+import { reportClientError } from '@/lib/errorMonitoring';
 
 export default function InviteSitterDialog({ petSitId, open, onOpenChange }) {
   const { user } = useAuth();
@@ -49,76 +50,93 @@ export default function InviteSitterDialog({ petSitId, open, onOpenChange }) {
     setSaving(true);
     setSuccessMsg('');
     setError('');
+    // Spec 0078 (PA-15): whatever fails below (a dropped connection, an
+    // unexpected error), the Send button never stays stuck on "saving".
+    try {
 
-    // Demo accounts don't invite sitters at all (spec 0026, out of scope
-    // for the account's automatic per-login reset) — blocked here, before
-    // creating any record, rather than relying on the reset to clean it up.
-    if (isDemoAccount(user)) {
-      setError("This isn't available on the demo account.");
-      setSaving(false);
-      return;
-    }
+      // Demo accounts don't invite sitters at all (spec 0026, out of scope
+      // for the account's automatic per-login reset) — blocked here, before
+      // creating any record, rather than relying on the reset to clean it up.
+      if (isDemoAccount(user)) {
+        setError("This isn't available on the demo account.");
+        setSaving(false);
+        return;
+      }
 
-    const { data: userData } = await supabase.auth.getUser();
-    const me = userData?.user;
-    const cleanEmail = email.trim().toLowerCase();
-    // Check if already invited. An invite that hasn't been accepted yet is
-    // resent (spec 0077); one that has been accepted is left alone, as before.
-    const existing = accesses.find(a => a.sitter_email.toLowerCase() === cleanEmail);
-    if (!existing?.sitter_user_id) {
-      if (!existing) {
-        try {
-          await entities.PetSitterAccess.create({
-            pet_sit_id: petSitId,
-            owner_id: me.id,
-            sitter_email: cleanEmail,
-          });
-        } catch (err) {
-          // The database refuses anyone who doesn't own every pet in the sit
-          // (migration 0057), so a failure here must surface rather than leave
-          // the button stuck on saving.
-          console.error('PetSitterAccess.create failed:', err);
-          setError("Couldn't save this invite. Please try again.");
-          setSaving(false);
-          return;
+      const { data: userData } = await supabase.auth.getUser();
+      const me = userData?.user;
+      const cleanEmail = email.trim().toLowerCase();
+      // Check if already invited. An invite that hasn't been accepted yet is
+      // resent (spec 0077); one that has been accepted is left alone, as before.
+      const existing = accesses.find(a => a.sitter_email.toLowerCase() === cleanEmail);
+      if (!existing?.sitter_user_id) {
+        if (!existing) {
+          try {
+            await entities.PetSitterAccess.create({
+              pet_sit_id: petSitId,
+              owner_id: me.id,
+              sitter_email: cleanEmail,
+            });
+          } catch (err) {
+            // The database refuses anyone who doesn't own every pet in the sit
+            // (migration 0057), so a failure here must surface rather than leave
+            // the button stuck on saving.
+            reportClientError(err, { feature: 'invite_sitter', note: 'PetSitterAccess.create failed' });
+            setError("Couldn't save this invite. Please try again.");
+            setSaving(false);
+            return;
+          }
+        }
+
+        // Send the invite email via the Edge Function.
+        const { data: sessionData } = await supabase.auth.getSession();
+        const token = sessionData?.session?.access_token;
+        const fnResp = await supabase.functions.invoke('invite-sitter', {
+          body: { sitterEmail: cleanEmail, petSitId },
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
+
+        if (isRateLimited(fnResp.error)) {
+          setSuccessMsg(`${cleanEmail} added as a sitter, but you've sent a lot of invites in the last hour, so we couldn't email them yet. Try inviting them again in an hour.`);
+        } else if (fnResp.error) {
+          // Access record is already saved; just warn rather than block.
+          reportClientError(fnResp.error, { feature: 'invite_sitter', note: 'invite-sitter function error' });
+          setSuccessMsg(`${cleanEmail} added as a sitter, but the invite email could not be sent. Try inviting them again — if it keeps failing, they can also use "Forgot password" on the login screen with this email.`);
+        } else if (fnResp.data?.reason === 'test_or_demo_account') {
+          setSuccessMsg(`${cleanEmail} added as a sitter. No real email was sent (test/demo accounts don't send production email) — they'll see this pet sit on their next login.`);
+        } else if (fnResp.data?.reason === 'recipient_suppressed') {
+          setSuccessMsg(`${cleanEmail} added as a sitter, but Wysker Watch couldn't email them — this address has previously failed to receive mail from us. They can still be reached another way to get set up with access.`);
+        } else if (fnResp.data?.sent === false) {
+          // Defensive fallback for a reason value not handled above (e.g. a
+          // future suppression cause sendEmail() forgot to label) — see
+          // InviteCoOwnerDialog.jsx's matching branch for the full rationale.
+          setSuccessMsg(`${cleanEmail} added as a sitter, but no invite email was sent. Try inviting them again if this seems wrong.`);
+        } else {
+          setSuccessMsg(`Invite sent to ${cleanEmail}!`);
         }
       }
-
-      // Send the invite email via the Edge Function.
-      const { data: sessionData } = await supabase.auth.getSession();
-      const token = sessionData?.session?.access_token;
-      const fnResp = await supabase.functions.invoke('invite-sitter', {
-        body: { sitterEmail: cleanEmail, petSitId },
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
-
-      if (isRateLimited(fnResp.error)) {
-        setSuccessMsg(`${cleanEmail} added as a sitter, but you've sent a lot of invites in the last hour, so we couldn't email them yet. Try inviting them again in an hour.`);
-      } else if (fnResp.error) {
-        // Access record is already saved; just warn rather than block.
-        console.error('invite-sitter function error:', fnResp.error);
-        setSuccessMsg(`${cleanEmail} added as a sitter, but the invite email could not be sent. Try inviting them again — if it keeps failing, they can also use "Forgot password" on the login screen with this email.`);
-      } else if (fnResp.data?.reason === 'test_or_demo_account') {
-        setSuccessMsg(`${cleanEmail} added as a sitter. No real email was sent (test/demo accounts don't send production email) — they'll see this pet sit on their next login.`);
-      } else if (fnResp.data?.reason === 'recipient_suppressed') {
-        setSuccessMsg(`${cleanEmail} added as a sitter, but Wysker Watch couldn't email them — this address has previously failed to receive mail from us. They can still be reached another way to get set up with access.`);
-      } else if (fnResp.data?.sent === false) {
-        // Defensive fallback for a reason value not handled above (e.g. a
-        // future suppression cause sendEmail() forgot to label) — see
-        // InviteCoOwnerDialog.jsx's matching branch for the full rationale.
-        setSuccessMsg(`${cleanEmail} added as a sitter, but no invite email was sent. Try inviting them again if this seems wrong.`);
-      } else {
-        setSuccessMsg(`Invite sent to ${cleanEmail}!`);
-      }
+      setEmail('');
+      setSaving(false);
+      load();
+    } catch (err) {
+      reportClientError(err, { feature: 'invite_sitter', note: 'Invite failed unexpectedly' });
+      setError("Couldn't save this invite. Please try again.");
+    } finally {
+      setSaving(false);
     }
-    setEmail('');
-    setSaving(false);
-    load();
   };
 
   const handleRemove = async (id) => {
-    await entities.PetSitterAccess.delete(id);
     setRemoveConfirmId(null);
+    // Spec 0078: a failed removal used to do nothing at all, with no
+    // message. Same handling as InviteCoOwnerDialog.jsx's handleRemove.
+    try {
+      await entities.PetSitterAccess.delete(id);
+    } catch (err) {
+      reportClientError(err, { feature: 'invite_sitter', note: 'PetSitterAccess.delete failed' });
+      setSuccessMsg('');
+      setError("We couldn't remove that sitter. Please try again.");
+    }
     load();
   };
 

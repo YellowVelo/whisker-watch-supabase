@@ -17,8 +17,8 @@
 //
 // Request body: none — always acts on the caller's own account.
 
-import { createClient } from 'jsr:@supabase/supabase-js@2';
-import { reportError } from '../_shared/errorReporting.ts';
+import { createClient } from 'jsr:@supabase/supabase-js@2.119.2';
+import { serverError } from '../_shared/errorReporting.ts';
 import { deletablePetPhotoPath } from '../_shared/petPhoto.ts';
 import { listFolderPaths, removePaths } from '../_shared/storageFiles.ts';
 
@@ -140,8 +140,6 @@ Deno.serve(async (req) => {
     return json({ success: true });
 
   } catch (err) {
-    console.error('reset-sandbox-account unexpected error:', err);
-    reportError(err, { function: 'reset-sandbox-account' });
-    return json({ error: (err as Error).message ?? 'Unknown error' }, 500);
+    return serverError(err, { function: 'reset-sandbox-account' }, corsHeaders);
   }
 });

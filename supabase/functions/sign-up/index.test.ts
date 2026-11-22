@@ -170,7 +170,7 @@ Deno.test('confirm-email: marks the caller\'s own account confirmed, independent
 
     const anonUrl = requireEnv('SUPABASE_URL');
     const anonKey = requireEnv('SUPABASE_ANON_KEY');
-    const { createClient } = await import('jsr:@supabase/supabase-js@2');
+    const { createClient } = await import('jsr:@supabase/supabase-js@2.119.2');
     const anon = createClient(anonUrl, anonKey);
     const { data: verified, error: verifyError } = await anon.auth.verifyOtp({
       token_hash: linkData.properties.hashed_token,

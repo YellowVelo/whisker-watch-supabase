@@ -15,6 +15,7 @@ import {
   clearNotifications,
   markAllRead,
 } from '@/lib/notifications/notificationClient';
+import { reportClientError } from '@/lib/errorMonitoring';
 
 const VACCINATION_STAGE_TITLE = {
   '30_day': 'Vaccination Due Soon',
@@ -42,7 +43,7 @@ export default function Notifications() {
       setNotifications(await listNotifications());
       setLoadError(false);
     } catch (err) {
-      console.error(err);
+      reportClientError(err, { feature: 'notifications' });
       setLoadError(true);
     } finally {
       setLoading(false);
@@ -103,7 +104,7 @@ export default function Notifications() {
     try {
       await save();
     } catch (err) {
-      console.error(err);
+      reportClientError(err, { feature: 'notifications' });
       setNotifications(previous);
       toast({ variant: 'destructive', description: UPDATE_ERROR_TEXT });
     }

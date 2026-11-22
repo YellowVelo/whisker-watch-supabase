@@ -13,6 +13,7 @@ import { TOS_LAST_UPDATED } from '@/lib/termsOfServiceContent';
 import { PRIVACY_POLICY_LAST_UPDATED } from '@/lib/privacyPolicyContent';
 import { setPendingOAuthConsent } from '@/lib/pendingOAuthConsent';
 import { GOOGLE_SIGN_IN_ENABLED } from '@/lib/authProviders';
+import { reportClientError, functionErrorMessage } from '@/lib/errorMonitoring';
 
 const RESEND_COOLDOWN_SECONDS = 60;
 const DEMO_SHOWCASE_SCENARIO = SEED_SCENARIOS.find((s) => s.key === 'demo_showcase');
@@ -78,7 +79,7 @@ export default function Login() {
 
         const { data: resetData, error: resetError } = await resetSandboxAccount();
         if (resetError || !resetData?.success) {
-          setError(resetError?.message ?? resetData?.error ?? 'Could not set up the demo account. Please try again.');
+          setError(await functionErrorMessage(resetError, resetData, 'Could not set up the demo account. Please try again.'));
           setSettingUpDemo(false);
           setLoading(false);
           return;
@@ -86,7 +87,7 @@ export default function Login() {
 
         await DEMO_SHOWCASE_SCENARIO.run();
       } catch (err) {
-        console.error('Demo account setup failed:', err);
+        reportClientError(err, { feature: 'demo_login', note: 'Demo account setup failed' });
         setError('Could not set up the demo account. Please try again.');
         setSettingUpDemo(false);
         setLoading(false);

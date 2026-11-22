@@ -8,6 +8,7 @@ import usePullToRefresh from '@/hooks/usePullToRefresh';
 import PullToRefreshIndicator from '@/components/PullToRefreshIndicator';
 import { getTimelineEvents, getTimelineCheckIns } from '@/lib/checkin/petProfileClient';
 import { TONE_COLOR } from '@/lib/toneColors';
+import { reportClientError } from '@/lib/errorMonitoring';
 
 // The pet's complete chronological health history (Feature Spec: Timeline
 // "contains all historical health events"), with check-in days rendered as
@@ -55,7 +56,7 @@ export default function Timeline() {
       setItems(merged);
       setLoadError(false);
     } catch (err) {
-      console.error(err);
+      reportClientError(err, { feature: 'timeline' });
       setLoadError(true);
     } finally {
       setLoading(false);

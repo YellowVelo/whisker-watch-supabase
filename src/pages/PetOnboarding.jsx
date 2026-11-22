@@ -9,6 +9,7 @@ import OnboardingWizard from '@/components/onboarding/OnboardingWizard';
 import OnboardingShell from '@/components/onboarding/OnboardingShell';
 import PetInfoCard from '@/components/onboarding/PetInfoCard';
 import { OUTER_STEPS } from '@/lib/onboardingConfig';
+import { reportClientError } from '@/lib/errorMonitoring';
 
 export default function PetOnboarding() {
   const { petId } = useParams();
@@ -30,7 +31,7 @@ export default function PetOnboarding() {
       if (wasCreated) track('onboarding_started', { pet_id: petId });
       setRow(onboardingRow);
     } catch (err) {
-      console.error('Failed to load onboarding:', err);
+      reportClientError(err, { feature: 'pet_onboarding', note: 'Failed to load onboarding' });
       setLoadError("We couldn't load this pet's profile. Please try again.");
     } finally {
       setLoading(false);

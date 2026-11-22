@@ -32,8 +32,8 @@
 //       in-app notification. -> mode: 'left'
 //   - Caller has no relationship to the pet -> 403.
 
-import { createClient } from 'jsr:@supabase/supabase-js@2';
-import { reportError } from '../_shared/errorReporting.ts';
+import { createClient } from 'jsr:@supabase/supabase-js@2.119.2';
+import { reportError, serverError } from '../_shared/errorReporting.ts';
 import { deletablePetPhotoPath } from '../_shared/petPhoto.ts';
 import { removePaths } from '../_shared/storageFiles.ts';
 
@@ -271,8 +271,6 @@ Deno.serve(async (req) => {
     return json({ success: true, mode: 'deleted', pet_name: pet.name });
 
   } catch (err) {
-    console.error('delete-pet unexpected error:', err);
-    reportError(err, { function: 'delete-pet' });
-    return json({ error: (err as Error).message ?? 'Unknown error' }, 500);
+    return serverError(err, { function: 'delete-pet' }, corsHeaders);
   }
 });

@@ -1,36 +1,119 @@
 {
   "version": "5",
   "specifiers": {
+    "jsr:@std/encoding@1.0.11": "1.0.11",
     "jsr:@supabase/supabase-js@2": "2.110.7",
+    "jsr:@supabase/supabase-js@2.119.2": "2.119.2",
+    "npm:@sentry/deno@11.15.0": "11.15.0",
     "npm:@supabase/auth-js@2.110.7": "2.110.7",
+    "npm:@supabase/auth-js@2.119.2": "2.119.2",
     "npm:@supabase/functions-js@2.110.7": "2.110.7",
+    "npm:@supabase/functions-js@2.119.2": "2.119.2",
     "npm:@supabase/postgrest-js@2.110.7": "2.110.7",
+    "npm:@supabase/postgrest-js@2.119.2": "2.119.2",
     "npm:@supabase/realtime-js@2.110.7": "2.110.7",
-    "npm:@supabase/storage-js@2.110.7": "2.110.7"
+    "npm:@supabase/realtime-js@2.119.2": "2.119.2",
+    "npm:@supabase/storage-js@2.110.7": "2.110.7",
+    "npm:@supabase/storage-js@2.119.2": "2.119.2",
+    "npm:pdf-lib@1.17.1": "1.17.1"
   },
   "jsr": {
+    "@std/encoding@1.0.11": {
+      "integrity": "e7cef2f0b3153bccc17431e7c864a1de03a4b6d9647389c43e08aaa775d37385"
+    },
     "@supabase/supabase-js@2.110.7": {
       "integrity": "83173da8163098aa34d8d382351209233c3288884f6071dfea0a4e4e68f6f969",
       "dependencies": [
-        "npm:@supabase/auth-js",
-        "npm:@supabase/functions-js",
-        "npm:@supabase/postgrest-js",
-        "npm:@supabase/realtime-js",
-        "npm:@supabase/storage-js"
+        "npm:@supabase/auth-js@2.110.7",
+        "npm:@supabase/functions-js@2.110.7",
+        "npm:@supabase/postgrest-js@2.110.7",
+        "npm:@supabase/realtime-js@2.110.7",
+        "npm:@supabase/storage-js@2.110.7"
+      ]
+    },
+    "@supabase/supabase-js@2.119.2": {
+      "integrity": "e692a57e2e5ae408136cc32da9bebf50155cb73bfa014a28c16efb7b1c154eba",
+      "dependencies": [
+        "npm:@supabase/auth-js@2.119.2",
+        "npm:@supabase/functions-js@2.119.2",
+        "npm:@supabase/postgrest-js@2.119.2",
+        "npm:@supabase/realtime-js@2.119.2",
+        "npm:@supabase/storage-js@2.119.2"
       ]
     }
   },
   "npm": {
+    "@opentelemetry/api@1.10.0": {
+      "integrity": "sha512-lMkyes8iHrG+mk6WH7X70MdCLI2RS0FwNBY1PyQ8UemaijE2m5mv5A0Niy3HtbYTFrgkUEQjFMXmSAk2hQDuPQ=="
+    },
+    "@pdf-lib/standard-fonts@1.0.0": {
+      "integrity": "sha512-hU30BK9IUN/su0Mn9VdlVKsWBS6GyhVfqjwl1FjZN4TxP6cCw0jP2w7V3Hf5uX7M0AZJ16vey9yE0ny7Sa59ZA==",
+      "dependencies": [
+        "pako"
+      ]
+    },
+    "@pdf-lib/upng@1.0.1": {
+      "integrity": "sha512-dQK2FUMQtowVP00mtIksrlZhdFXQZPC+taih1q4CvPZ5vqdxR/LKBaFg0oAfzd1GlHZXXSPdQfzQnt+ViGvEIQ==",
+      "dependencies": [
+        "pako"
+      ]
+    },
+    "@sentry/conventions@0.33.0": {
+      "integrity": "sha512-5aa3g/VOnMoL8yHbfkYIWBYC3BLgMudgRNBTKNMrcMEj1mE9aKIt/CYCG7sasijhiSU4nTcSEzyM2voIVzLCng=="
+    },
+    "@sentry/core@11.15.0": {
+      "integrity": "sha512-zsprEOu/voisojJFnDIhPd+GhycAli/aqjV752eQHiNOrAwAvigCadsSh2ND5e1AEycvSmZTxOOhCNjWzSZ4Ng==",
+      "dependencies": [
+        "@sentry/conventions"
+      ]
+    },
+    "@sentry/deno@11.15.0": {
+      "integrity": "sha512-Zl0DA/kdKquAgVLj1uJ5pqXx1zsb0MvDYWQrfqze/wv0RlI8h2sM9l/BqkSTKOxSTvIRB8hrOdinAWH5Fk+i/Q==",
+      "dependencies": [
+        "@opentelemetry/api",
+        "@sentry/conventions",
+        "@sentry/core",
+        "@sentry/server-runtime-injection",
+        "@sentry/server-utils"
+      ]
+    },
+    "@sentry/server-runtime-injection@11.15.0": {
+      "integrity": "sha512-aNOpbh1w1ivyoTqS2eOtC5O49KJL+i+xVd6KRyzVYldOKNtWdBATXPTjiUtTlH0ItnOgzg1cL4YAEhcd3vUqwg==",
+      "dependencies": [
+        "@sentry/core",
+        "@sentry/server-utils"
+      ]
+    },
+    "@sentry/server-utils@11.15.0": {
+      "integrity": "sha512-ASBVOTAaXLNL3P2icwKgnLBH1kljLFybXcQCvSH4WseZAxeLQJYm90N5p2LhWTpM+7E8uClQtbWzxYcLjUG7RA==",
+      "dependencies": [
+        "@opentelemetry/api",
+        "@sentry/conventions",
+        "@sentry/core"
+      ]
+    },
     "@supabase/auth-js@2.110.7": {
       "integrity": "sha512-M5Bpl4hCv6kHcOO/xM06Dyfg1mYLHljMkp1plhzG9IRZPc3czvyMsSN1XpL5+GKisOKM3lSN59zhpcm6sMVXfA==",
       "dependencies": [
-        "tslib"
+        "tslib@2.8.1"
+      ]
+    },
+    "@supabase/auth-js@2.119.2": {
+      "integrity": "sha512-zWi7pGT6XIMWG0Ja5Unvsv9ixwgLTq/pnWNzGVwVXlr/onraf3v4VwepCFSlxGrvNyKRmhn7O6e4CHF1TJg73Q==",
+      "dependencies": [
+        "tslib@2.8.1"
       ]
     },
     "@supabase/functions-js@2.110.7": {
       "integrity": "sha512-megYmexlYEoR/0qlsr4Snh9wtzAodO7MAri3NMevZrXzNvQRKlvmTcSBoKGLQEPDakgDZMqbMdf9DwoZz6qfoA==",
       "dependencies": [
-        "tslib"
+        "tslib@2.8.1"
+      ]
+    },
+    "@supabase/functions-js@2.119.2": {
+      "integrity": "sha512-0pmNQRKahGbezgUV2m02l7j4t0Wdl7KMNNMWGCMe76beA7e1IfTPihtNssqWWw1IjqMDi0axoqLiDPzcdbPuGw==",
+      "dependencies": [
+        "tslib@2.8.1"
       ]
     },
     "@supabase/phoenix@0.4.5": {
@@ -39,25 +122,60 @@
     "@supabase/postgrest-js@2.110.7": {
       "integrity": "sha512-ban6YV0djhVaqVYezlOARKLIuOBSvLLhyQVZjA2nxPrtswhxHCl1+gI4giFgI9ATQAaMNbUZb4JXiuL5lEA/5g==",
       "dependencies": [
-        "tslib"
+        "tslib@2.8.1"
+      ]
+    },
+    "@supabase/postgrest-js@2.119.2": {
+      "integrity": "sha512-Q5RIy5wD79jArQSID06JXqS9F+bKLcTr81Yz7hwk2qkMX4fWMru4HLvG3UvoY0FlQzjcjXqVba7+6GeaItq6UQ==",
+      "dependencies": [
+        "tslib@2.8.1"
       ]
     },
     "@supabase/realtime-js@2.110.7": {
       "integrity": "sha512-AMtZjyFA2gsmjuxopPNS/sRznLQHG0Ht5x+ytTPTOh3vAcOTUlVRLx7gW4/CONNnbb3PKOkE+HmM35HOSbmomQ==",
       "dependencies": [
         "@supabase/phoenix",
-        "tslib"
+        "tslib@2.8.1"
+      ]
+    },
+    "@supabase/realtime-js@2.119.2": {
+      "integrity": "sha512-1xHRbZ8RgKq8Qn50uNJMnBdkuzK35GQTo1hx2+bC3QvCxbzXnFkbmq2ZyT9xSjOCuLBfD5ve3ZKxJcbWefL3ow==",
+      "dependencies": [
+        "@supabase/phoenix",
+        "tslib@2.8.1"
       ]
     },
     "@supabase/storage-js@2.110.7": {
       "integrity": "sha512-2tcDE8cjEDy1uKxKavBpKQod1JdMV1jDXQag48TCa+kycmJOltc0yVabC0BUlhOwAl6WykXU2aOsH3ELMtZrmQ==",
       "dependencies": [
         "iceberg-js",
-        "tslib"
+        "tslib@2.8.1"
+      ]
+    },
+    "@supabase/storage-js@2.119.2": {
+      "integrity": "sha512-dbzPuYKYc3/HGz+cRXAK45zR5FWMEH6lr2Is13ZOExhOBCM3F0iO96Z9VuhlLA64vPLeSQP24O/jesWg1QY6fw==",
+      "dependencies": [
+        "iceberg-js",
+        "tslib@2.8.1"
       ]
     },
     "iceberg-js@0.8.1": {
       "integrity": "sha512-1dhVQZXhcHje7798IVM+xoo/1ZdVfzOMIc8/rgVSijRK38EDqOJoGula9N/8ZI5RD8QTxNQtK/Gozpr+qUqRRA=="
+    },
+    "pako@1.0.11": {
+      "integrity": "sha512-4hLB8Py4zZce5s4yd9XzopqwVv/yGNhV1Bl8NTmCq1763HeK2+EwVTv+leGeL13Dnh2wfbqowVPXCIO0z4taYw=="
+    },
+    "pdf-lib@1.17.1": {
+      "integrity": "sha512-V/mpyJAoTsN4cnP31vc0wfNA1+p20evqqnap0KLoRUN0Yk/p3wN52DOEsL4oBFcLdb76hlpKPtzJIgo67j/XLw==",
+      "dependencies": [
+        "@pdf-lib/standard-fonts",
+        "@pdf-lib/upng",
+        "pako",
+        "tslib@1.14.1"
+      ]
+    },
+    "tslib@1.14.1": {
+      "integrity": "sha512-Xni35NKzjgMrwevysHTCArtLDpPvye8zV/0E4EyYn43P7/7qvQwPh9BGkHewbMulVntbigmcT7rdX3BNo9wRJg=="
     },
     "tslib@2.8.1": {
       "integrity": "sha512-oJFu94HQb+KVduSUQL7wnpmqnfmLsOA/nAh6b6EH0wCEoK0/mPeXU6c3wKDV83MkOuHPRHtSXKKU99IBazS/2w=="
@@ -112,14 +230,8 @@
         "npm:@radix-ui/react-avatar@^1.1.3",
         "npm:@radix-ui/react-checkbox@^1.1.4",
         "npm:@radix-ui/react-collapsible@^1.1.3",
-        "npm:@radix-ui/react-context-menu@^2.2.6",
         "npm:@radix-ui/react-dialog@^1.1.6",
-        "npm:@radix-ui/react-dropdown-menu@^2.1.6",
-        "npm:@radix-ui/react-hover-card@^1.1.6",
         "npm:@radix-ui/react-label@^2.1.2",
-        "npm:@radix-ui/react-menubar@^1.1.6",
-        "npm:@radix-ui/react-navigation-menu@^1.2.5",
-        "npm:@radix-ui/react-popover@^1.1.6",
         "npm:@radix-ui/react-progress@^1.1.2",
         "npm:@radix-ui/react-radio-group@^1.2.3",
         "npm:@radix-ui/react-scroll-area@^1.2.3",
@@ -132,7 +244,6 @@
         "npm:@radix-ui/react-toast@^1.2.2",
         "npm:@radix-ui/react-toggle-group@^1.1.2",
         "npm:@radix-ui/react-toggle@^1.1.2",
-        "npm:@radix-ui/react-tooltip@^1.1.8",
         "npm:@sentry/react@^10.70.0",
         "npm:@stripe/react-stripe-js@3",
         "npm:@stripe/stripe-js@^5.2.0",
@@ -160,20 +271,17 @@
         "npm:framer-motion@^11.16.4",
         "npm:globals@^15.14.0",
         "npm:html2canvas@^1.4.1",
-        "npm:input-otp@^1.4.2",
         "npm:jspdf@^4.2.1",
         "npm:lodash@^4.17.21",
         "npm:lucide-react@0.475",
         "npm:moment@^2.30.1",
         "npm:next-themes@~0.4.4",
         "npm:postcss@^8.5.3",
-        "npm:react-day-picker@^8.10.1",
         "npm:react-dom@^18.2.0",
         "npm:react-hook-form@^7.54.2",
         "npm:react-leaflet@^4.2.1",
         "npm:react-markdown@^9.0.1",
         "npm:react-quill@2",
-        "npm:react-resizable-panels@^2.1.7",
         "npm:react-router-dom@^6.26.0",
         "npm:react@^18.2.0",
         "npm:recharts@^2.15.4",

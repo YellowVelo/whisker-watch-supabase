@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef } from 'react';
 import { supabase } from '@/api/supabaseClient';
 import { removeUploadedFile, UploadRejectedError, UPLOAD_MESSAGES } from '@/api/storageClient';
 import { aiErrorText } from '@/lib/aiGuardrails';
-import { Sentry } from '@/lib/errorMonitoring';
+import { reportClientError } from '@/lib/errorMonitoring';
 
 /**
  * Scanned vet documents (spec 0071).
@@ -30,8 +30,7 @@ export async function linkScannedDocument({ petIds, path, kind }) {
       ignoreDuplicates: true,
     });
   if (error) {
-    console.error('Could not link scanned document:', error.message);
-    Sentry.captureException(error, { tags: { feature: 'scan_document_link', kind } });
+    reportClientError(error, { feature: 'scan_document_link', note: 'Could not link scanned document', kind });
   }
 }
 

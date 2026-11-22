@@ -22,7 +22,7 @@
 //                                account, used only to exercise the
 //                                account_type='test' guard path
 
-import { createClient, type SupabaseClient } from 'jsr:@supabase/supabase-js@2';
+import { createClient, type SupabaseClient } from 'jsr:@supabase/supabase-js@2.119.2';
 
 export function requireEnv(name: string): string {
   const value = Deno.env.get(name);

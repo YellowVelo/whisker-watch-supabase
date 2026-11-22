@@ -12,6 +12,7 @@ import { Loader2, Cat as CatIcon, Dog as DogIcon } from 'lucide-react';
 import { PALETTE } from '@/lib/toneColors';
 import PetIdentityFields from './fields/PetIdentityFields';
 import { resolveDate, isDateInfoValid } from './fields/DateInfoFields';
+import { reportClientError } from '@/lib/errorMonitoring';
 
 const emptyForm = {
   name: '', breed: '', photo_path: '', color_markings: '',
@@ -124,7 +125,7 @@ export default function PetInfoCard({ onCreated }) {
     try {
       created = await entities.Pet.create(payload);
     } catch (err) {
-      console.error('Failed to save pet:', err);
+      reportClientError(err, { feature: 'onboarding_pet_info', note: 'Failed to save pet' });
       setSaving(false);
       setError('Unable to create pet. Please try again.');
       return;

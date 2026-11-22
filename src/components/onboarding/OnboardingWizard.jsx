@@ -15,6 +15,7 @@ import {
   getMobilityOptions, getBathroomOptions, getNextStep, getVisibleSteps,
   OUTER_STEPS, OUTER_STEP_LABELS, getOuterStep, getOuterStepNumber,
 } from '@/lib/onboardingConfig';
+import { reportClientError } from '@/lib/errorMonitoring';
 
 // The onboarding wizard engine. Renders exactly one card per step, saves
 // the answer for that step immediately (auto-save + resume requirement),
@@ -76,7 +77,7 @@ export default function OnboardingWizard({ pet, row, onRowChange, onComplete }) 
     try {
       await fn();
     } catch (err) {
-      console.error('Failed to save onboarding step:', err);
+      reportClientError(err, { feature: 'onboarding_step', note: 'Failed to save onboarding step' });
       setSaveError("Couldn't save that — check your connection and try again.");
     } finally {
       savingRef.current = false;

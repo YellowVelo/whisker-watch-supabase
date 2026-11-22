@@ -1,4 +1,5 @@
 import { useEffect, useRef, useId } from 'react';
+import { reportClientError } from '@/lib/errorMonitoring';
 
 const SCRIPT_SRC = 'https://challenges.cloudflare.com/turnstile/v0/api.js';
 let scriptLoadPromise = null;
@@ -45,7 +46,7 @@ export default function Turnstile({ onVerify, onError, onExpire }) {
     let cancelled = false;
 
     if (!siteKey) {
-      console.error('VITE_TURNSTILE_SITE_KEY is not configured — the beta signup form cannot verify submissions.');
+      reportClientError(new Error('VITE_TURNSTILE_SITE_KEY is not configured — the beta signup form cannot verify submissions.'), { feature: 'turnstile', kind: 'missing_site_key' });
       return undefined;
     }
 
@@ -62,7 +63,9 @@ export default function Turnstile({ onVerify, onError, onExpire }) {
         });
       })
       .catch((err) => {
-        console.error('Turnstile failed to load:', err.message);
+        // Usually a slow or blocked network, not a bug: tagged so it's easy to
+        // filter out of the Sentry dashboard (spec 0078).
+        reportClientError(err, { feature: 'turnstile', note: 'Turnstile failed to load', expected: 'true' });
         onError?.();
       });
 

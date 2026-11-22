@@ -12,6 +12,7 @@ import { formatDayLabel, formatMonthLabel, buildMonthGrid, parseDateStr } from '
 import { track } from '@/lib/analytics';
 import useFocusTrap from '@/hooks/useFocusTrap';
 import { Z } from '@/lib/zIndex';
+import { reportClientError } from '@/lib/errorMonitoring';
 
 // Spec 0015 (Multi-Day Catch-Up Check-In). Calendar/exceptions UI (PR 2)
 // plus the save path (PR 3): bulk-apply across selected exception days,
@@ -111,7 +112,7 @@ export default function CatchUpFlow({ pets, missedDaysByPet, onClose, onPetProgr
         const stillNeedsDetails = missedDates.some((d) => exceptionDates.has(d) && !nextCheckInsByDate[d]);
         if (!stillNeedsDetails) setStep('calendar');
       })
-      .catch((err) => console.error(err));
+      .catch((err) => reportClientError(err, { feature: 'catchup_flow' }));
     track('multi_day_catch_up_day_saved', { pet_id: selectedPet.id, check_in_date: savedDate });
     onPetProgress?.(selectedPet);
   };
@@ -149,7 +150,7 @@ export default function CatchUpFlow({ pets, missedDaysByPet, onClose, onPetProgr
         const stillNeedsDetails = missedDates.some((d) => exceptionDates.has(d) && !nextCheckInsByDate[d]);
         if (!stillNeedsDetails) setStep('calendar');
       })
-      .catch((err) => console.error(err));
+      .catch((err) => reportClientError(err, { feature: 'catchup_flow' }));
     onPetProgress?.(selectedPet);
   };
 
@@ -179,7 +180,7 @@ export default function CatchUpFlow({ pets, missedDaysByPet, onClose, onPetProgr
       onPetProgress?.(selectedPet);
       setStep('complete');
     } catch (err) {
-      console.error(err);
+      reportClientError(err, { feature: 'catchup_flow' });
       setFinishError("Couldn't finish catch up — check your connection and try again.");
     } finally {
       setFinishing(false);

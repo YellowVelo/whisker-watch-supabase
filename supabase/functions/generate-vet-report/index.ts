@@ -34,7 +34,7 @@
 // performance guidance); a note is added to the report when older data
 // exists but isn't shown.
 
-import { createClient } from 'jsr:@supabase/supabase-js@2';
+import { createClient } from 'jsr:@supabase/supabase-js@2.119.2';
 import { PDFDocument, StandardFonts, rgb } from 'npm:pdf-lib@1.17.1';
 import { reportError } from '../_shared/errorReporting.ts';
 

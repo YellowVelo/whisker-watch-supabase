@@ -6,6 +6,7 @@ import { entities } from '@/api/entities';
 import IconButton from '@/components/IconButton';
 import PageTransition from '@/components/PageTransition';
 import ConditionsPicker from '@/components/onboarding/fields/ConditionsPicker';
+import { reportClientError } from '@/lib/errorMonitoring';
 
 // Spec 0036: Conditions split out of the old EditPetSheet onto its own
 // routed page, reusing the same grouped + searchable picker onboarding's
@@ -34,7 +35,7 @@ export default function PetConditions() {
       await entities.Pet.update(pet.id, { conditions });
       navigate('/pets');
     } catch (err) {
-      console.error('Failed to save conditions:', err);
+      reportClientError(err, { feature: 'pet_conditions', note: 'Failed to save conditions' });
       setError('Unable to save changes. Please try again.');
       setSaving(false);
     }

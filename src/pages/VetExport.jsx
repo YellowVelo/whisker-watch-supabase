@@ -9,6 +9,7 @@ import IconButton from '@/components/IconButton';
 import PetPhoto from '@/components/PetPhoto';
 import OwnersOnlyNotice from '@/components/OwnersOnlyNotice';
 import { getSitterOnlyPetIds } from '@/lib/petsClient';
+import { reportClientError } from '@/lib/errorMonitoring';
 
 // Vet Export Feature Spec v2 §4.2 — this page does not fetch report data
 // itself. It only fetches minimal pet identity for display; the actual
@@ -33,7 +34,7 @@ export default function VetExport() {
     // 0076, PA-28). A failed sitter check falls back to the normal page.
     Promise.all([
       entities.Pet.get(petId),
-      getSitterOnlyPetIds().catch((err) => { console.error(err); return new Set(); }),
+      getSitterOnlyPetIds().catch((err) => { reportClientError(err, { feature: 'vet_export' }); return new Set(); }),
     ])
       .then(([p, sitterOnlyIds]) => {
         setSitterOnly(sitterOnlyIds.has(petId));

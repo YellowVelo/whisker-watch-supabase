@@ -7,6 +7,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { PALETTE } from '@/lib/toneColors';
 import PillToggle from '@/components/PillToggle';
 import BottomSheet from '@/components/BottomSheet';
+import { reportClientError } from '@/lib/errorMonitoring';
 
 const PICKER_CATEGORIES = CATEGORIES.filter((c) => c.code !== 'medication_exception');
 
@@ -72,7 +73,7 @@ export default function BulkApplySheet({ pet, dates, onClose, onSaved }) {
       track('multi_day_catch_up_bulk_applied', { pet_id: pet.id, status: vibeStatus, dates_count: dates.length, categories: selectedCodes });
       onSaved?.(dates);
     } catch (err) {
-      console.error(err);
+      reportClientError(err, { feature: 'catchup_bulk_apply' });
       setError('Unable to save some of these days. Please try again.');
       setStage('details');
     }

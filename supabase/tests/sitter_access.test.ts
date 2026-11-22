@@ -16,7 +16,7 @@
 // Run (dev): deno test --allow-net --allow-env --node-modules-dir=none supabase/tests/sitter_access.test.ts
 
 import { assert, assertEquals } from 'https://deno.land/std@0.224.0/assert/mod.ts';
-import { createClient } from 'jsr:@supabase/supabase-js@2';
+import { createClient } from 'jsr:@supabase/supabase-js@2.119.2';
 import {
   adminClient,
   createScratchUser,
