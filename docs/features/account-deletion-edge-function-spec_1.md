@@ -1,5 +1,7 @@
 # Spec: Account Deletion Edge Function
 
+> **Partly superseded by spec 0075 (2026-11-21).** Every database step now runs in one all-or-nothing step (`prepare_account_deletion`, migration 0058). Records the person entered on a pet that survives are kept, with their name cleared. Every other co-owner keeps access. Only files belonging to deleted pets are removed. Pet sits are handed over or ended. A sitter's own invite is removed. The notice now says "primary owner". See `0075_Account_Deletion_Data_Safety_Specification_v1.md` for current behavior.
+
 **For:** Wysker Watch (Supabase + React/Vite)
 **Purpose:** Let a user permanently and fully delete their account, satisfying Apple App Store guideline 5.1.1(v) and the commitment already made in the Privacy Policy.
 **Pattern reference:** Model this after the existing `ask-vet-assistant` Edge Function — same auth-check pattern, same secrets handling.

@@ -80,8 +80,8 @@ Because a pet can have more than one owner (`pet_co_owners`), the function has t
 
 | Caller is... | Result | `mode` |
 |---|---|---|
-| Sole owner (no linked co-owners) | Pet and all dependent data permanently deleted | `deleted` |
-| Primary owner, pet has a linked co-owner | Ownership transfers to the oldest linked co-owner; the pet is not destroyed; the new owner receives an in-app notification | `transferred` |
+| Sole owner (no linked co-owners) | Pet and all dependent data permanently deleted. Also deletes the pet's photo and any scanned documents not linked to another pet (spec 0075). | `deleted` |
+| Primary owner, pet has a linked co-owner | Ownership transfers to the oldest linked co-owner; the pet is not destroyed; the new owner receives an in-app notification. Every other co-owner keeps access. A sit covering only this pet passes to the new owner; a sit that also covers a pet the leaving owner keeps stays with them, minus this pet (spec 0075, `transfer_pet_ownership`) | `transferred` |
 | A co-owner (not primary) | Only the caller's own `pet_co_owners` row is removed; the pet and all its data are untouched; the primary owner receives an in-app notification | `left` |
 
 ### Data Deleted
@@ -145,7 +145,7 @@ The fourth value, `owner`, represents a real personal-use account (e.g. an inter
 
 Test accounts support the full range of normal app functionality — add/edit/delete pet, onboarding, logs, medications, vaccines, documents, AI features, and report generation — plus two internal-only tools:
 
-**Reset Test Account** — `supabase/functions/reset-sandbox-account/index.ts`. Wipes all pets and pet-related data belonging to the calling user (owned pets, their cascaded data, pet photos in Storage, and any co-owner links), without touching the login/auth record. The function is server-guarded: it checks the caller's `account_type` and refuses (403) unless it is `test` or `demo` — production and owner accounts can never be reset this way.
+**Reset Test Account** — `supabase/functions/reset-sandbox-account/index.ts`. Wipes all pets and pet-related data belonging to the calling user (owned pets, their cascaded data, pet photos in Storage, and any co-owner links), without touching the login/auth record. It pages through every file in the user's folder, not just the first 100 (`_shared/storageFiles.ts`, spec 0075). The function is server-guarded: it checks the caller's `account_type` and refuses (403) unless it is `test` or `demo` — production and owner accounts can never be reset this way.
 
 **Seed Data** — `src/lib/seedTestData.js`, exposed in Settings. Each scenario creates realistic sample data through the normal entity API, so seeded data goes through the same validation and RLS paths a real user's data would. Shipped scenarios:
 
