@@ -1,6 +1,6 @@
 # 0078_Error_Reporting_And_Edge_Function_Reliability_Specification_v1
 
-**Status:** Built 2026-11-22. All 14 functions live and tested on dev; staging and prod pending (deploy, then the startup check), then frontend promotion.
+**Status:** Shipped 2026-11-22. PR #51 merged (`02ae6a7`). All 14 functions on dev, staging and prod; Lynn promoted the frontend to prod (Cloudflare version `17be8702`, branch `main`).
 **Date:** 2026-11-22
 **Branch:** `claude/error-reporting-reliability`
 **Migration:** none expected. `0060` is reserved for this spec in case the build finds it needs one.
@@ -146,6 +146,15 @@ No new UI. The only visible changes are error text in existing error spots, whic
 6. **`deno.lock` refreshed.** Because of the root `package.json`, Deno uses this lockfile for local and CI test runs. It still has an unused `jsr:@supabase/supabase-js@2 → 2.110.7` line, which is harmless, since every import now names `2.119.2`.
 7. **The hourly workflow can't run until merged.** GitHub only runs scheduled and manually started workflows from the default branch. AC3's first manual run happens right after the merge. The three URL variables were set on 2026-11-22 with `gh variable set`, from `supabase projects list`.
 8. **Verified on dev:** all 14 functions deployed. The startup check passes, and the JWT settings are unchanged (`resend-webhook` off, the rest on). All 32 Deno integration tests pass, plus the 4 hygiene tests. A malformed body sent to `ask-vet-assistant` as test1@ (20:43:50 UTC) got `{"error":"Something went wrong. Please try again."}`, status 500, in 1.3s, and the function still started afterwards (the flush didn't break the runtime). Vitest: 163/163. New and changed e2e: 13/13. Lint, typecheck and build are clean. design-system-check: clean (no markup changed).
+
+## Rollout (2026-11-22)
+
+- **Dev:** all 14 functions deployed by Claude during the build (see Build Notes #8).
+- **PR #51** merged as `02ae6a7` with all 5 checks green (frontend, edge-functions including the new hygiene tests, e2e, and both Cloudflare builds). Branch deleted.
+- **Hourly startup check (AC3):** first run started by hand right after the merge (GitHub Actions run 45070132270). It passed on dev, staging and prod.
+- **Staging and prod (AC11):** Lynn deployed all 14 functions to each. Afterwards `scripts/check-functions-start.sh` passed on both, all 14 functions on each showed a fresh deploy timestamp, and only `resend-webhook` has its login check off, as required.
+- **Sentry (AC5):** Lynn confirmed the deliberate `ask-vet-assistant` `SyntaxError` from dev arrived in Sentry. It came from Supabase's runtime (`/var/tmp/sb-co…`), so the background flush works. Sentry filed it under an older issue (JAVASCRIPT-REACT-8) with the same error type.
+- **Frontend:** promoted to prod by Lynn (Cloudflare `17be8702`, branch `main`, "Spec 0078: error re…"). Claude couldn't check the live bundle independently: Bot Fight Mode returns 403 to scripted requests, and there's no Cloudflare token on this machine.
 
 ## Open Questions
 
