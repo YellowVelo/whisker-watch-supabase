@@ -4,7 +4,7 @@ import AttributeTrendChip, { DIRECTION_CONFIG } from '@/components/AttributeTren
 import VibeIcon, { vibeAccessibleLabel } from '@/components/VibeIcon';
 import { getPetLabel } from '@/lib/speciesConfig';
 import { computeDetailedAge } from '@/lib/lifeStage';
-import { PALETTE } from '@/lib/toneColors';
+import { PALETTE, PALETTE_SOFT, tint } from '@/lib/toneColors';
 import PetPhoto from '@/components/PetPhoto';
 
 // Home's primary per-pet card (Daily Check-In, Vibe & Trends spec v5). One
@@ -131,8 +131,8 @@ export default function PetSummaryCard({
       onKeyDown={handleCardKeyDown}
       className="block rounded-2xl px-4 py-4 active:opacity-80 transition-opacity bg-card cursor-pointer"
       style={{
-        border: highlighted ? '1px solid rgba(111,183,255,0.5)' : '1px solid hsl(var(--border))',
-        boxShadow: highlighted ? '0 0 0 3px rgba(111,183,255,0.15)' : undefined,
+        border: highlighted ? `1px solid ${tint('sky', 0.5)}` : '1px solid hsl(var(--border))',
+        boxShadow: highlighted ? `0 0 0 3px ${PALETTE_SOFT.sky}` : undefined,
       }}
     >
       <div className="flex items-start gap-3.5">
@@ -149,17 +149,17 @@ export default function PetSummaryCard({
           <div className="flex flex-wrap gap-1.5 mt-2">
             {conditions ? (
               conditions.map((c) => (
-                <span key={c} className="text-[13px] font-medium px-2.5 py-1 rounded-full" style={{ background: 'rgba(169,174,181,0.15)', color: '#fff' }}>
+                <span key={c} className="text-[13px] font-medium px-2.5 py-1 rounded-full" style={{ background: PALETTE_SOFT.gray, color: '#fff' }}>
                   {c}
                 </span>
               ))
             ) : (
-              <span className="text-[13px] font-medium px-2.5 py-1 rounded-full flex items-center gap-1" style={{ background: 'rgba(76,199,176,0.15)', color: DIRECTION_CONFIG.up.color }}>
+              <span className="text-[13px] font-medium px-2.5 py-1 rounded-full flex items-center gap-1" style={{ background: PALETTE_SOFT.teal, color: DIRECTION_CONFIG.up.color }}>
                 <Heart className="h-3 w-3" aria-hidden="true" /> Healthy
               </span>
             )}
             {medicationCount > 0 && (
-              <span className="text-[13px] font-medium px-2.5 py-1 rounded-full flex items-center gap-1" style={{ background: 'rgba(169,174,181,0.15)', color: '#fff' }}>
+              <span className="text-[13px] font-medium px-2.5 py-1 rounded-full flex items-center gap-1" style={{ background: PALETTE_SOFT.gray, color: '#fff' }}>
                 <Pill className="h-3 w-3" aria-hidden="true" /> {medicationCount} Medication{medicationCount === 1 ? '' : 's'}
               </span>
             )}

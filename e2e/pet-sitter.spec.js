@@ -70,6 +70,13 @@ const PET_NO_CHECKIN_NAME = `E2E Sitter Test Pet B ${RUN_ID}`;
 
 let petWithCheckinId;
 let petNoCheckinId;
+// Whether test4@ owns or co-owns any pets of its own on dev (spec 0079's
+// AC2 needs a sitter with none; checked in beforeAll, not assumed).
+let test4OwnsPets = false;
+// IDs of the two seeded pets that test4@ can actually read as a sitter
+// (checked in beforeAll). AC1/AC3 assert sat pets are *absent*; without
+// this they'd pass vacuously if the sit never gave test4@ access.
+let satPetIdsVisibleToTest4 = [];
 
 test.beforeAll(async () => {
   const supabase = newClient();
@@ -136,11 +143,34 @@ test.beforeAll(async () => {
     password: process.env.PLAYWRIGHT_TEST4_SITTER_PASSWORD,
   });
   if (sitterSignInError) throw sitterSignInError;
+  // Link the invite inserted above to test4@'s account, the same call the
+  // app makes on every sign-in (AuthContext.jsx). Sitter visibility checks
+  // sitter_user_id (is_pet_sitter(), migration 0057), which only
+  // claim_pending_sitter_invites() (0028) sets, so without this the query
+  // below sees no sat pets. It only touches unlinked invites for the
+  // caller's own email; the browser's sign-in later repeats it as a no-op.
+  const { error: claimError } = await sitterClient.rpc('claim_pending_sitter_invites');
+  if (claimError) throw claimError;
   const { data: sitterProfile } = await sitterClient
     .from('profiles')
     .select('timezone')
     .eq('id', sitterAuth.user.id)
     .maybeSingle();
+  const [ownPetsR, coOwnedR] = await Promise.all([
+    sitterClient.from('pets').select('id').eq('created_by', sitterAuth.user.id).limit(1),
+    sitterClient.from('pet_co_owners').select('pet_id').eq('co_owner_user_id', sitterAuth.user.id).limit(1),
+  ]);
+  if (ownPetsR.error) throw ownPetsR.error;
+  if (coOwnedR.error) throw coOwnedR.error;
+  test4OwnsPets = (ownPetsR.data?.length || 0) + (coOwnedR.data?.length || 0) > 0;
+
+  const { data: visibleSatPets, error: visibleSatPetsError } = await sitterClient
+    .from('pets')
+    .select('id')
+    .in('id', [petWithCheckinId, petNoCheckinId]);
+  if (visibleSatPetsError) throw visibleSatPetsError;
+  satPetIdsVisibleToTest4 = (visibleSatPets || []).map((p) => p.id);
+
   const localTz = sitterProfile?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
   const dateStrInTz = (instant) =>
     new Intl.DateTimeFormat('en-CA', { timeZone: localTz, year: 'numeric', month: '2-digit', day: '2-digit' }).format(instant);
@@ -237,4 +267,66 @@ test('a sitter opening Edit Pet or Vet Report for a sat pet sees the owners-only
     await expect(page.getByRole('button', { name: 'Back' }).last()).toBeVisible();
   }
   await expect(page.getByRole('button', { name: 'Download Report' })).toHaveCount(0);
+});
+
+// Spec 0079 (PA-61): Home and Ask Wysker's general chat list only pets the
+// person owns or co-owns. test4@ only sits for the two pets seeded above.
+const SAT_PET_NAMES = [PET_WITH_CHECKIN_NAME, PET_NO_CHECKIN_NAME];
+
+// Precondition for the "absent" checks below: test4@ really can see both
+// sat pets, in the database (beforeAll) and in the app (the Pets page).
+async function expectSitterCanSeeSatPets(page) {
+  expect(satPetIdsVisibleToTest4.sort()).toEqual([petWithCheckinId, petNoCheckinId].sort());
+  await page.goto('/pets');
+  for (const name of SAT_PET_NAMES) {
+    await expect(page.locator('a').filter({ hasText: name })).toBeVisible({ timeout: 15000 });
+  }
+}
+
+// The Pet Sitter card shows on Home both with and without pets of one's
+// own once someone sits for others' pets, so it marks Home as loaded.
+async function openHomeAsSitter(page) {
+  await page.goto('/');
+  await dismissAnyOpenSheet(page);
+  await expect(page.getByRole('link', { name: /Pet Sitter/ })).toBeVisible({ timeout: 15000 });
+}
+
+test('AC1: a pet the sitter only sits for is not in Home\'s pet list', async ({ page }) => {
+  await expectSitterCanSeeSatPets(page);
+  await openHomeAsSitter(page);
+  for (const name of SAT_PET_NAMES) {
+    await expect(page.getByText(name)).toHaveCount(0);
+  }
+});
+
+test('AC2: a sitter with no pets of their own sees the welcome screen and a Pet Sitter card', async ({ page }) => {
+  test.skip(test4OwnsPets, 'test4@ owns or co-owns pets on dev; the welcome-screen card is covered by src/pages/Home.test.js');
+  await openHomeAsSitter(page);
+  await expect(page.getByRole('heading', { name: 'Welcome to Wysker Watch' })).toBeVisible();
+  const card = page.getByRole('link', { name: /Pet Sitter/ });
+  await expect(card).toContainText("See the pets you're sitting");
+  await card.click();
+  await expect(page).toHaveURL('/pet-sitter');
+});
+
+test('AC3: Ask Wysker\'s general chat does not tell the AI about a sat pet', async ({ page }) => {
+  let capturedPrompt = null;
+  await page.route('**/functions/v1/ask-vet-assistant', async (route) => {
+    if (route.request().method() === 'OPTIONS') return route.fulfill({ status: 200, body: 'ok' });
+    capturedPrompt = JSON.parse(route.request().postData()).prompt;
+    await route.fulfill({ json: { reply: 'E2E canned reply', urgent: false } });
+  });
+
+  await expectSitterCanSeeSatPets(page);
+  await openHomeAsSitter(page);
+  await page.getByRole('button', { name: 'Ask Wysker' }).click();
+  await expect(page.getByRole('heading', { name: 'Ask Wysker' })).toBeVisible();
+  await page.getByPlaceholder('Ask about any of your pets…').fill('What should I feed them?');
+  await page.getByPlaceholder('Ask about any of your pets…').press('Enter');
+
+  await expect.poll(() => capturedPrompt, { timeout: 15000 }).not.toBeNull();
+  await expect(page.getByText('E2E canned reply')).toBeVisible();
+  for (const name of SAT_PET_NAMES) {
+    expect(capturedPrompt).not.toContain(name);
+  }
 });

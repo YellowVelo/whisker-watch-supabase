@@ -7,7 +7,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Plus, Pencil, X, ShieldCheck, CheckCircle2, Bug, Heart, Pill, Calendar, Check } from 'lucide-react';
-import { PALETTE } from '@/lib/toneColors';
+import { PALETTE, PALETTE_SOFT } from '@/lib/toneColors';
 import { format, parseISO, addMonths } from 'date-fns';
 import SmartSelect from './SmartSelect';
 
@@ -28,8 +28,8 @@ const computeNextDue = (startDate, frequency) => {
 // tone tokens (via inline style) instead of raw light-mode Tailwind
 // classes, so these badges look correct regardless of device theme.
 const MED_TYPE_BADGE = {
-  'Flea & Tick': { label: 'Flea & Tick', icon: Bug, background: 'rgba(76,199,176,0.15)', color: PALETTE.teal },
-  'Heartworm':   { label: 'Heartworm',   icon: Heart, background: 'rgba(111,183,255,0.15)', color: PALETTE.sky },
+  'Flea & Tick': { label: 'Flea & Tick', icon: Bug, background: PALETTE_SOFT.teal, color: PALETTE.teal },
+  'Heartworm':   { label: 'Heartworm',   icon: Heart, background: PALETTE_SOFT.sky, color: PALETTE.sky },
 };
 
 const MED_TYPE_ICON = { 'Flea & Tick': Bug, 'Heartworm': Heart, 'General': Pill };
@@ -271,7 +271,7 @@ function MedButton({ med, given, onGive, onEdit, onDelete, past = false }) {
             <div className="flex items-center gap-1.5 flex-wrap">
                               <p className="text-sm font-semibold">{med.name}</p>
                               {med.prescribed && (
-                                <span className="flex items-center gap-0.5 text-[13px] px-1.5 py-0.5 rounded-full" style={{ background: 'rgba(229,115,115,0.15)', color: PALETTE.red }}>
+                                <span className="flex items-center gap-0.5 text-[13px] px-1.5 py-0.5 rounded-full" style={{ background: PALETTE_SOFT.red, color: PALETTE.red }}>
                                   <ShieldCheck className="h-2.5 w-2.5" /> Rx
                                 </span>
                               )}
@@ -303,7 +303,7 @@ function MedButton({ med, given, onGive, onEdit, onDelete, past = false }) {
             <div className="flex items-center gap-1.5">
               <p className="text-sm font-medium">{med.name}</p>
               {med.prescribed && (
-                <span className="flex items-center gap-0.5 text-[13px] px-1.5 py-0.5 rounded-full" style={{ background: 'rgba(229,115,115,0.15)', color: PALETTE.red }}>
+                <span className="flex items-center gap-0.5 text-[13px] px-1.5 py-0.5 rounded-full" style={{ background: PALETTE_SOFT.red, color: PALETTE.red }}>
                   <ShieldCheck className="h-2.5 w-2.5" /> Rx
                 </span>
               )}

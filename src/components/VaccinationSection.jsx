@@ -12,7 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Plus, Syringe, Pencil, Trash2, Bell, Upload, Loader2 } from 'lucide-react';
 import { format, parseISO, differenceInDays } from 'date-fns';
 import { getVaccines, vaccineNamesMatch } from '@/lib/speciesConfig';
-import { PALETTE } from '@/lib/toneColors';
+import { PALETTE, PALETTE_SOFT } from '@/lib/toneColors';
 import { useToast } from '@/components/ui/use-toast';
 import { aiErrorText } from '@/lib/aiGuardrails';
 import ScanReviewSheet from '@/components/ScanReviewSheet';
@@ -27,9 +27,9 @@ const EMPTY_FORM = { vaccine_name: '', date_given: '', next_due_date: '', admini
 function getReminderStatus(next_due_date) {
   if (!next_due_date) return null;
   const days = differenceInDays(parseISO(next_due_date), new Date());
-  if (days < 0) return { label: `Overdue by ${Math.abs(days)}d`, background: 'rgba(229,115,115,0.15)', color: PALETTE.red };
-  if (days <= 30) return { label: `Due in ${days}d`, background: 'rgba(244,199,107,0.15)', color: PALETTE.amber };
-  return { label: `Due ${format(parseISO(next_due_date), 'MMM d, yyyy')}`, background: 'rgba(76,199,176,0.15)', color: PALETTE.teal };
+  if (days < 0) return { label: `Overdue by ${Math.abs(days)}d`, background: PALETTE_SOFT.red, color: PALETTE.red };
+  if (days <= 30) return { label: `Due in ${days}d`, background: PALETTE_SOFT.amber, color: PALETTE.amber };
+  return { label: `Due ${format(parseISO(next_due_date), 'MMM d, yyyy')}`, background: PALETTE_SOFT.teal, color: PALETTE.teal };
 }
 
 export default function VaccinationSection({ petId, species, initialEditId }) {

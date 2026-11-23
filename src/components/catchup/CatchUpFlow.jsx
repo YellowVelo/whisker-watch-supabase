@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { X, ChevronLeft, ChevronRight, CircleDashed, Minus, Check, Loader2, ClipboardList } from 'lucide-react';
-import { PALETTE } from '@/lib/toneColors';
+import { PALETTE, PALETTE_SOFT } from '@/lib/toneColors';
 import VibeIcon from '@/components/VibeIcon';
 import IconButton from '@/components/IconButton';
 import PillToggle from '@/components/PillToggle';
@@ -377,7 +377,7 @@ function PetSelectStep({ pets, missedDaysByPet, onSelect }) {
 function EntryStep({ petName, missedCount, onGetStarted, onMaybeLater }) {
   return (
     <div className="flex flex-col items-center text-center gap-5 py-8">
-      <div className="h-16 w-16 rounded-full flex items-center justify-center" style={{ background: 'rgba(111,183,255,0.15)' }}>
+      <div className="h-16 w-16 rounded-full flex items-center justify-center" style={{ background: PALETTE_SOFT.sky }}>
         <ClipboardList className="h-8 w-8" style={{ color: PALETTE.sky }} aria-hidden="true" />
       </div>
       <div>
@@ -545,7 +545,7 @@ function ExceptionsStep({ dates, selectedDates, onToggleSelect, onOpenDetails, o
               onClick={() => onOpenDetails(dateStr)}
               aria-label={`Open details for ${formatDayLabel(dateStr)}`}
               className="h-9 w-9 rounded-full flex items-center justify-center flex-shrink-0"
-              style={{ background: 'rgba(169,174,181,0.15)' }}
+              style={{ background: PALETTE_SOFT.gray }}
             >
               <ChevronRight className="h-4 w-4 text-tier-secondary" aria-hidden="true" />
             </button>
@@ -559,7 +559,7 @@ function ExceptionsStep({ dates, selectedDates, onToggleSelect, onOpenDetails, o
 function CompleteStep({ petName, onDone }) {
   return (
     <div className="flex flex-col items-center text-center gap-5 py-12">
-      <div className="h-16 w-16 rounded-full flex items-center justify-center" style={{ background: 'rgba(111,183,255,0.15)' }}>
+      <div className="h-16 w-16 rounded-full flex items-center justify-center" style={{ background: PALETTE_SOFT.sky }}>
         <Check className="h-8 w-8" style={{ color: PALETTE.sky }} />
       </div>
       <div>

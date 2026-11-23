@@ -24,7 +24,7 @@ import {
 } from '@/lib/checkin/petProfileClient';
 import { getPetLabel } from '@/lib/speciesConfig';
 import { computeDetailedAge } from '@/lib/lifeStage';
-import { PALETTE, RING_COLOR } from '@/lib/toneColors';
+import { PALETTE, RING_COLOR, PALETTE_SOFT, tint } from '@/lib/toneColors';
 import { useAuth } from '@/lib/AuthContext';
 import { detectTimezone, dateStrInTimezone } from '@/lib/timezone';
 import WellbeingChipGrid from '@/components/WellbeingChipGrid';
@@ -105,9 +105,9 @@ function ActionPill({ icon: Icon, label, onClick, danger = false, disabled = fal
       aria-label={label}
       className="flex items-center gap-1.5 rounded-full px-3.5 h-10 text-[13px] font-semibold flex-shrink-0 disabled:opacity-40 transition-opacity active:opacity-70"
       style={{
-        background: danger ? 'rgba(229,115,115,0.12)' : 'rgba(255,255,255,0.06)',
+        background: danger ? tint('red', 0.12) : 'rgba(255,255,255,0.06)',
         color: danger ? PALETTE.red : '#fff',
-        border: `1px solid ${danger ? 'rgba(229,115,115,0.3)' : 'rgba(255,255,255,0.1)'}`,
+        border: `1px solid ${danger ? tint('red', 0.3) : 'rgba(255,255,255,0.1)'}`,
       }}
     >
       <Icon className="h-4 w-4" aria-hidden="true" /> {label}
@@ -433,7 +433,7 @@ export default function PetProfileContent({ petId, onReload = undefined, expande
         {pet.conditions?.length > 0 && (
           <div className="flex flex-wrap justify-center gap-2 mt-3">
             {pet.conditions.map((c) => (
-              <span key={c} className="inline-flex items-center gap-1.5 text-[13px] font-medium px-3 py-1.5 rounded-full" style={{ background: 'rgba(244,199,107,0.12)', border: '1px solid rgba(244,199,107,0.3)', color: PALETTE.amber }}>
+              <span key={c} className="inline-flex items-center gap-1.5 text-[13px] font-medium px-3 py-1.5 rounded-full" style={{ background: tint('amber', 0.12), border: `1px solid ${tint('amber', 0.3)}`, color: PALETTE.amber }}>
                 <ShieldCheck className="h-3.5 w-3.5" /> {c}
               </span>
             ))}
@@ -513,7 +513,7 @@ export default function PetProfileContent({ petId, onReload = undefined, expande
 
             {/* ── BASELINE ── */}
             <ListRow
-              icon={HeartPulse} iconBg="rgba(76,199,176,0.15)" iconColor={PALETTE.teal}
+              icon={HeartPulse} iconBg={PALETTE_SOFT.teal} iconColor={PALETTE.teal}
               title="Baseline" subtitle={baselineSubtitle}
               value={baselineValue} valueColor={baselineState === 'complete' ? PALETTE.teal : PALETTE.amber}
               to={`/pet/${petId}/baseline`} error={errors.baseline}
@@ -523,7 +523,7 @@ export default function PetProfileContent({ petId, onReload = undefined, expande
             {/* Spec 0036: own routed page, separate from Edit Pet — reuses
                 onboarding's grouped + searchable condition picker. */}
             <ListRow
-              icon={ClipboardList} iconBg="rgba(244,199,107,0.15)" iconColor={PALETTE.amber}
+              icon={ClipboardList} iconBg={PALETTE_SOFT.amber} iconColor={PALETTE.amber}
               title="Conditions" subtitle={conditionsCount > 0 ? 'Chronic conditions and diagnoses' : 'No conditions added.'}
               value={conditionsCount > 0 ? conditionsCount : 'Add Condition'}
               valueColor={conditionsCount > 0 ? '#fff' : PALETTE.amber}
@@ -532,7 +532,7 @@ export default function PetProfileContent({ petId, onReload = undefined, expande
 
             {/* ── MEDICATIONS ── */}
             <ListRow
-              icon={Pill} iconBg="rgba(111,183,255,0.15)" iconColor={PALETTE.sky}
+              icon={Pill} iconBg={PALETTE_SOFT.sky} iconColor={PALETTE.sky}
               title="Medications" subtitle={medicationsCount > 0 ? `${medicationsCount} active medication${medicationsCount === 1 ? '' : 's'}` : 'No medications.'}
               value={medicationsCount > 0 ? medicationsCount : 'Add Medication'}
               valueColor={medicationsCount > 0 ? '#fff' : PALETTE.sky}
@@ -541,7 +541,7 @@ export default function PetProfileContent({ petId, onReload = undefined, expande
 
             {/* ── FOOD ── */}
             <ListRow
-              icon={Utensils} iconBg="rgba(76,199,176,0.15)" iconColor={PALETTE.teal}
+              icon={Utensils} iconBg={PALETTE_SOFT.teal} iconColor={PALETTE.teal}
               title="Food" subtitle={foodsCount > 0 ? `${foodsCount} active food${foodsCount === 1 ? '' : 's'}` : 'No food configured.'}
               value={foodsCount > 0 ? foodsCount : 'Add Food'}
               valueColor={foodsCount > 0 ? '#fff' : PALETTE.teal}
@@ -550,7 +550,7 @@ export default function PetProfileContent({ petId, onReload = undefined, expande
 
             {/* ── VACCINATIONS ── */}
             <ListRow
-              icon={ShieldCheck} iconBg="rgba(111,183,255,0.15)" iconColor={PALETTE.sky}
+              icon={ShieldCheck} iconBg={PALETTE_SOFT.sky} iconColor={PALETTE.sky}
               title="Vaccinations" subtitle={vaxSummary.total === 0 ? 'No vaccinations recorded.' : vaxSummary.isOverdue ? 'Overdue' : 'Up to date'}
               value={vaxSummary.total === 0 ? 'Add Vaccination' : `${vaxSummary.current} / ${vaxSummary.total}`}
               valueColor={vaxSummary.total === 0 ? PALETTE.sky : vaxSummary.isOverdue ? PALETTE.red : PALETTE.sky}
@@ -559,7 +559,7 @@ export default function PetProfileContent({ petId, onReload = undefined, expande
 
             {/* ── WEIGHT ── */}
             <ListRow
-              icon={Scale} iconBg="rgba(169,174,181,0.15)" iconColor={PALETTE.gray}
+              icon={Scale} iconBg={PALETTE_SOFT.gray} iconColor={PALETTE.gray}
               title="Weight"
               subtitle={weightValLbs
                 ? `${weightValLbs} lbs${weightDeltaLbs != null ? ` · ${weightDeltaLbs < 0 ? 'Down' : weightDeltaLbs > 0 ? 'Up' : 'Steady at'} ${Math.abs(weightDeltaLbs).toFixed(1)} lbs` : ''}`
@@ -575,7 +575,7 @@ export default function PetProfileContent({ petId, onReload = undefined, expande
             {/* ── OBSERVATIONS ── */}
             {checkedInToday ? (
               <ListRow
-                icon={TrendingUp} iconBg="rgba(244,199,107,0.15)" iconColor={PALETTE.amber}
+                icon={TrendingUp} iconBg={PALETTE_SOFT.amber} iconColor={PALETTE.amber}
                 title="Observations" subtitle="Trends and recent observations"
                 value="Edit Daily Check-In" valueColor={PALETTE.amber}
                 onClick={() => setCheckInOpen(true)} error={errors.observations}
@@ -595,7 +595,7 @@ export default function PetProfileContent({ petId, onReload = undefined, expande
               </ListRow>
             ) : (
               <ListRow
-                icon={TrendingUp} iconBg="rgba(244,199,107,0.15)" iconColor={PALETTE.amber}
+                icon={TrendingUp} iconBg={PALETTE_SOFT.amber} iconColor={PALETTE.amber}
                 title="Observations" subtitle="No observations yet."
                 value="Start Daily Check-In" valueColor={PALETTE.amber}
                 onClick={() => setCheckInOpen(true)} error={errors.observations}
@@ -609,7 +609,7 @@ export default function PetProfileContent({ petId, onReload = undefined, expande
                 day, saved or blank, can be reviewed or corrected — not
                 just the days Catch-Up happened to still consider missed. */}
             <ListRow
-              icon={History} iconBg="rgba(169,174,181,0.15)" iconColor={PALETTE.gray}
+              icon={History} iconBg={PALETTE_SOFT.gray} iconColor={PALETTE.gray}
               title="Check-In History" subtitle="Review or correct a past day"
               onClick={() => setHistoryOpen(true)}
             />
@@ -621,21 +621,21 @@ export default function PetProfileContent({ petId, onReload = undefined, expande
                 expanded view too (spec 0023 step 7). Trends itself is
                 unchanged; this only adds a link to it. */}
             <ListRow
-              icon={LineChart} iconBg="rgba(111,183,255,0.15)" iconColor={PALETTE.sky}
+              icon={LineChart} iconBg={PALETTE_SOFT.sky} iconColor={PALETTE.sky}
               title="Trends" subtitle="Range charts and patterns over time"
               to={`/pet/${petId}/trends`}
             />
 
             {/* ── VET EXPORT ── */}
             <ListRow
-              icon={FileDown} iconBg="rgba(244,199,107,0.15)" iconColor={PALETTE.amber}
+              icon={FileDown} iconBg={PALETTE_SOFT.amber} iconColor={PALETTE.amber}
               title="Vet Report" subtitle="Download a clinic-ready health report"
               to={`/pet/${petId}/export`}
             />
 
             {/* ── TIMELINE ── */}
             <ListRow
-              icon={Clock} iconBg="rgba(169,174,181,0.15)" iconColor={PALETTE.gray}
+              icon={Clock} iconBg={PALETTE_SOFT.gray} iconColor={PALETTE.gray}
               title="Timeline" subtitle={timelineCount ? 'Complete health history' : "Events will appear as your pet's health history grows."}
               value={timelineCount ? `${timelineCount} Event${timelineCount === 1 ? '' : 's'}` : null}
               valueColor={PALETTE.gray} to={`/pet/${petId}/timeline`} error={errors.timeline}
@@ -646,7 +646,7 @@ export default function PetProfileContent({ petId, onReload = undefined, expande
                 derived from) rather than the unrelated Documents placeholder,
                 so the number shown here always matches what's on the other side. */}
             <ListRow
-              icon={FileText} iconBg="rgba(111,183,255,0.15)" iconColor={PALETTE.sky}
+              icon={FileText} iconBg={PALETTE_SOFT.sky} iconColor={PALETTE.sky}
               title="Health Records" subtitle={healthRecordsCount ? 'Lab results, vet visits, and documents' : 'No records uploaded.'}
               value={healthRecordsCount ? `${healthRecordsCount} File${healthRecordsCount === 1 ? '' : 's'}` : 'Add Record'}
               valueColor={PALETTE.sky} to={`/pet/${petId}/health-records`} error={errors.healthRecords}

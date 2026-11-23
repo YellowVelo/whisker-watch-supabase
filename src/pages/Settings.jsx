@@ -17,7 +17,7 @@ import { getDisplayName } from '@/lib/profileName';
 import { SEED_SCENARIOS } from '@/lib/seedTestData';
 import { deleteAccount, resetSandboxAccount, signOutBestEffort } from '@/lib/accountClient';
 import { useInstallPrompt } from '@/lib/InstallPromptContext';
-import { PALETTE } from '@/lib/toneColors';
+import { PALETTE, PALETTE_SOFT, tint } from '@/lib/toneColors';
 import { functionErrorMessage } from '@/lib/errorMonitoring';
 
 // Design System Amendment #6 (2026-07-30) — account-type color now sourced
@@ -25,10 +25,10 @@ import { functionErrorMessage } from '@/lib/errorMonitoring';
 // Owner = sky (identity accent), Test = good/teal, Demo = warn/amber,
 // Production = bad/red.
 const ACCOUNT_TYPE_BADGES = {
-  production: { label: 'Production', color: PALETTE.red, background: 'rgba(229,115,115,0.15)' },
-  test: { label: 'Test', color: PALETTE.teal, background: 'rgba(76,199,176,0.15)' },
-  demo: { label: 'Demo', color: PALETTE.amber, background: 'rgba(244,199,107,0.15)' },
-  owner: { label: 'Owner', color: PALETTE.sky, background: 'rgba(111,183,255,0.15)' },
+  production: { label: 'Production', color: PALETTE.red, background: PALETTE_SOFT.red },
+  test: { label: 'Test', color: PALETTE.teal, background: PALETTE_SOFT.teal },
+  demo: { label: 'Demo', color: PALETTE.amber, background: PALETTE_SOFT.amber },
+  owner: { label: 'Owner', color: PALETTE.sky, background: PALETTE_SOFT.sky },
 };
 
 // Pet Sitter and AI were removed from here (spec 0023 step 9) — both now
@@ -266,11 +266,11 @@ export default function Settings() {
           </Link>
 
           {canInstall && (
-            <div className="rounded-2xl overflow-hidden" style={{ background: 'rgba(111,183,255,0.08)', border: '1px solid rgba(111,183,255,0.25)' }}>
+            <div className="rounded-2xl overflow-hidden" style={{ background: tint('sky', 0.08), border: `1px solid ${tint('sky', 0.25)}` }}>
               <MenuListRow
                 icon={Download}
                 iconClassName="text-primary"
-                iconBg="rgba(111,183,255,0.16)"
+                iconBg={tint('sky', 0.16)}
                 title="Install App"
                 subtitle="Add Wysker Watch to your device"
                 onClick={handleInstallApp}
@@ -318,7 +318,7 @@ export default function Settings() {
             <MenuListRow
               icon={LogOut}
               iconColor={PALETTE.sky}
-              iconBg="rgba(111,183,255,0.14)"
+              iconBg={tint('sky', 0.14)}
               title="Sign Out"
               subtitle="Sign out of Wysker Watch"
               onClick={handleSignOutSelected}
@@ -326,7 +326,7 @@ export default function Settings() {
             <MenuListRow
               icon={Trash2}
               iconColor={PALETTE.red}
-              iconBg="rgba(229,115,115,0.14)"
+              iconBg={tint('red', 0.14)}
               destructive
               title="Delete Account"
               subtitle="Permanently delete your account and all data"

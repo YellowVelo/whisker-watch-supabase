@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { PawPrint, Sparkles, ChevronRight, CalendarClock, UsersRound } from 'lucide-react';
 import { entities } from '@/api/entities';
 import PetSummaryCard from '../components/PetSummaryCard';
+import ListRow from '../components/ListRow';
 import CheckInStatusBanner from '../components/CheckInStatusBanner';
 import DailyCheckInModal from '../components/DailyCheckInModal';
 import CatchUpFlow from '../components/catchup/CatchUpFlow';
@@ -16,12 +17,12 @@ import {
   todayStr as todayStrTz, yesterdayStr as yesterdayStrTz,
 } from '@/lib/checkin/checkinClient';
 import { getWeightSummariesForPets } from '@/lib/checkin/petProfileClient';
-import { getActiveMedicationCountsForPets } from '@/lib/petsClient';
+import { getActiveMedicationCountsForPets, loadOwnedPets } from '@/lib/petsClient';
 import { buildGreeting } from '@/lib/greeting';
 import { useAuth } from '@/lib/AuthContext';
 import { detectTimezone } from '@/lib/timezone';
 import { track } from '@/lib/analytics';
-import { PALETTE } from '@/lib/toneColors';
+import { PALETTE, PALETTE_SOFT } from '@/lib/toneColors';
 import { reportClientError } from '@/lib/errorMonitoring';
 
 // Builds Home's Weight chip state from petProfileClient's
@@ -41,6 +42,47 @@ function buildWeightState(summary) {
   return { direction, comparisonLabel: consecutive ? 'versus yesterday' : 'versus previous entry' };
 }
 
+// The Pet Sitter card: shown under the pet list, and on the welcome
+// screen for someone who only sits for other people's pets (spec 0079).
+function PetSitterCard({ subtitle }) {
+  return (
+    <ListRow
+      to="/pet-sitter"
+      icon={UsersRound}
+      iconBg={PALETTE_SOFT.teal}
+      iconColor={PALETTE.teal}
+      title="Pet Sitter"
+      subtitle={subtitle}
+      wrapSubtitle
+    />
+  );
+}
+
+// Home's welcome screen for someone with no pets of their own. Adds the
+// Pet Sitter card only when they sit for someone else's pets (spec 0079,
+// AC2/AC2b). Exported for its render test.
+export function HomeWelcome({ sitterOnlyCount }) {
+  return (
+    <div className="py-20">
+      <div className="text-center">
+        <div className="h-20 w-20 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
+          <PawPrint className="h-10 w-10 text-primary" />
+        </div>
+        <h2 className="text-2xl font-semibold mb-2">Welcome to Wysker Watch</h2>
+        <p className="text-muted-foreground mb-6 max-w-sm mx-auto">Let's add your first pet.</p>
+        <Link to="/pets" className="inline-flex items-center gap-2 rounded-md bg-background text-white border-2 border-primary px-5 h-10 text-sm font-medium">
+          Add Pet
+        </Link>
+      </div>
+      {sitterOnlyCount > 0 && (
+        <div className="mt-8">
+          <PetSitterCard subtitle="See the pets you're sitting" />
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Home() {
   const { user } = useAuth();
   // Falls back to the device timezone, then UTC, only until the profile's
@@ -51,6 +93,10 @@ export default function Home() {
   const yesterdayStr = () => yesterdayStrTz(timezone);
 
   const [pets, setPets] = useState([]);
+  // How many pets the person only sits for (spec 0079): those are kept
+  // off Home's list, but a sitter with no pets of their own still gets
+  // the Pet Sitter card on the welcome screen.
+  const [sitterOnlyCount, setSitterOnlyCount] = useState(0);
   const [checkIns, setCheckIns] = useState({}); // pet_id -> today's daily_check_in row (carries .status Vibe + .symptom_count)
   const [yesterdayCheckIns, setYesterdayCheckIns] = useState({}); // pet_id -> yesterday's row
   const [missedDaysByPet, setMissedDaysByPet] = useState({}); // pet_id -> { missedDates, count } (Catch Up, spec 0015)
@@ -99,9 +145,12 @@ export default function Home() {
     const isStale = () => loadRequestIdRef.current !== requestId;
 
     try {
-      const petList = await entities.Pet.list('-created_date');
+      // Owned and co-owned pets only (spec 0079, PA-61): a pet the
+      // person only sits for stays on the Pet Sitter page.
+      const { pets: petList, sitterOnlyCount: sitOnly } = await loadOwnedPets('-created_date', 'home');
       if (isStale()) return;
       setPets(petList);
+      setSitterOnlyCount(sitOnly);
 
       const activePets = petList.filter((p) => !p.is_memorial);
       const petIds = activePets.map((p) => p.id);
@@ -377,16 +426,7 @@ export default function Home() {
             <button onClick={loadData} className="text-sm font-medium text-primary underline">Retry</button>
           </div>
         ) : pets.length === 0 ? (
-          <div className="text-center py-20">
-            <div className="h-20 w-20 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
-              <PawPrint className="h-10 w-10 text-primary" />
-            </div>
-            <h2 className="text-2xl font-semibold mb-2">Welcome to Wysker Watch</h2>
-            <p className="text-muted-foreground mb-6 max-w-sm mx-auto">Let's add your first pet.</p>
-            <Link to="/pets" className="inline-flex items-center gap-2 rounded-md bg-background text-white border-2 border-primary px-5 h-10 text-sm font-medium">
-              Add Pet
-            </Link>
-          </div>
+          <HomeWelcome sitterOnlyCount={sitterOnlyCount} />
         ) : (
           <div className="space-y-6">
             {stale && (
@@ -430,19 +470,7 @@ export default function Home() {
               </div>
             )}
 
-            <Link
-              to="/pet-sitter"
-              className="flex items-center gap-3 rounded-2xl px-4 py-4 active:opacity-80 transition-opacity bg-card border border-border"
-            >
-              <div className="h-11 w-11 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(76,199,176,0.15)' }}>
-                <UsersRound className="h-5 w-5" style={{ color: PALETTE.teal }} />
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="text-base font-semibold text-foreground">Pet Sitter</p>
-                <p className="text-sm text-muted-foreground">Manage sitting periods and sitter access</p>
-              </div>
-              <ChevronRight className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-            </Link>
+            <PetSitterCard subtitle="Manage sitting periods and sitter access" />
           </div>
         )}
       </main>
