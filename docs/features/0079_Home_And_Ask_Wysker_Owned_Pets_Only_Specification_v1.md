@@ -2,7 +2,7 @@
 
 *Also covers: shared tinted colors (Design System Amendment 6), added by Lynn 2026-11-23.*
 
-**Status:** Approved (Lynn, 2026-11-23: sitter card wording "See the pets you're sitting"; Part B full color fix; Settings rainbow colors → option (b), a separate punch-list item).
+**Status:** Built 2026-11-23 on `claude/wysker-watch-sdlc-agents-wfmint` (first `/ship-feature` run). Not yet deployed. Approved by Lynn 2026-11-23: sitter card wording "See the pets you're sitting"; Part B full color fix; Settings rainbow colors → option (b), a separate punch-list item.
 **Date:** 2026-11-23
 **Branch:** `claude/wysker-watch-sdlc-agents-wfmint`
 **Migration:** none
@@ -111,3 +111,15 @@ No mockup. Home's existing welcome screen, with the existing Pet Sitter card bel
 1. **Resolved (Lynn, 2026-11-23): option (b).** Settings' rainbow colors become a separate punch-list item, added at wrap-up. Original question: **Settings' rainbow menu rows.** Six Settings rows each use their own color (purple, orange, green, fuchsia, amber, light blue) that isn't in the design system. Amendment 6 says list-row icon backgrounds should use the shared colors, but switching would visibly change Settings. Options: (a) leave as is and record it as an accepted exception in the Design System doc; (b) a separate small item to map them onto the five shared colors. Recommendation: (b), as its own punch-list item, since it's a look change you'd want to see first.
 
 Part A: Lynn chose (2026-11-23) the existing welcome screen plus the Pet Sitter card for sitters with no pets, and approved the subtitle "See the pets you're sitting".
+
+## Build Notes (2026-11-23)
+
+First run of `/ship-feature` (`docs/foundation/0011 SDLC Governance.md`). Both tasks NORMAL.
+
+- **Task 1 (Part A, PA-61):** reviewer PASS on the first look, but `design-system-check` flagged the Pet Sitter card as a hand-built copy of `ListRow` (Amendment 8). Fix round 1 moved it to `ListRow`, and a fresh review then **failed** it: `ListRow` cut the owners' subtitle off with "…" on 320–400px phones, which the spec said wouldn't change. Lynn chose to keep `ListRow` and let the subtitle wrap (new opt-in `wrapSubtitle` prop; other rows unaffected). Fix round 2 → fresh review PASS. Checked at 320px: the subtitle wraps to 2 lines; at 390px it fits on one.
+- **Task 2 (Part B):** reviewer PASS, first time. **69** hand-typed tints in 18 files (not 65 as estimated), each kept at its exact strength. Checked in Chromium: 19 color/strength pairs, 45 background/border/shadow combinations, 0 differences, 0 pixel differences.
+- **QA:** PASS for everything runnable here. It added a check that test4@ really can see the sat pets before AC1/AC3 assert they're hidden, an 8-digit hex case for the guard, a hex-vs-channel drift check, and owned-pets edge cases. 183 unit tests.
+- **Final whole-branch review:** PASS.
+- **Not run locally:** the Playwright tests (AC1–AC4) and real-screen visual checks (AC9), since this cloud session had no `.env.playwright`. They first run in CI's e2e job. The AC2 e2e test skips itself if test4@ owns pets on dev; `Home.test.js` covers the card either way.
+- **Extra beyond the original text:** `AskWyskerSheet`'s general branch now reports a pet-list failure to Sentry (it had no `.catch` before).
+- **Follow-ups (Launch Plan, Pre-Alpha Audit):** PA-66 Settings rainbow colors; PA-67 card for not-yet-started/ended sits; PA-68 a failed sit read is silently ignored; PA-69 Ask Wysker has no message on pet-load failure (pet-page path also unreported); PA-70 welcome-screen Add Pet button 40px / primary style; PA-64 extended with the toast 1px case.
