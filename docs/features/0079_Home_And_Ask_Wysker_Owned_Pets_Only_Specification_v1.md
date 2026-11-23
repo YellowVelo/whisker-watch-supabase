@@ -2,7 +2,7 @@
 
 *Also covers: shared tinted colors (Design System Amendment 6), added by Lynn 2026-11-23.*
 
-**Status:** Draft
+**Status:** Approved (Lynn, 2026-11-23: sitter card wording "See the pets you're sitting"; Part B full color fix; Settings rainbow colors → option (b), a separate punch-list item).
 **Date:** 2026-11-23
 **Branch:** `claude/wysker-watch-sdlc-agents-wfmint`
 **Migration:** none
@@ -107,6 +107,6 @@ No mockup. Home's existing welcome screen, with the existing Pet Sitter card bel
 
 ## Open Questions
 
-1. **Settings' rainbow menu rows (not blocking).** Six Settings rows each use their own color (purple, orange, green, fuchsia, amber, light blue) that isn't in the design system. Amendment 6 says list-row icon backgrounds should use the shared colors, but switching would visibly change Settings. Options: (a) leave as is and record it as an accepted exception in the Design System doc; (b) a separate small item to map them onto the five shared colors. Recommendation: (b), as its own punch-list item, since it's a look change you'd want to see first.
+1. **Resolved (Lynn, 2026-11-23): option (b).** Settings' rainbow colors become a separate punch-list item, added at wrap-up. Original question: **Settings' rainbow menu rows.** Six Settings rows each use their own color (purple, orange, green, fuchsia, amber, light blue) that isn't in the design system. Amendment 6 says list-row icon backgrounds should use the shared colors, but switching would visibly change Settings. Options: (a) leave as is and record it as an accepted exception in the Design System doc; (b) a separate small item to map them onto the five shared colors. Recommendation: (b), as its own punch-list item, since it's a look change you'd want to see first.
 
 Part A: Lynn chose (2026-11-23) the existing welcome screen plus the Pet Sitter card for sitters with no pets, and approved the subtitle "See the pets you're sitting".
