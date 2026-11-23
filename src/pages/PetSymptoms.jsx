@@ -7,7 +7,7 @@ import { format, parseISO } from 'date-fns';
 import SymptomLogForm from '../components/SymptomLogForm';
 import IconButton from '../components/IconButton';
 import PageTransition from '../components/PageTransition';
-import { PALETTE } from '@/lib/toneColors';
+import { PALETTE, PALETTE_SOFT, tint } from '@/lib/toneColors';
 import { Z } from '@/lib/zIndex';
 import useFocusTrap from '@/hooks/useFocusTrap';
 
@@ -16,8 +16,8 @@ function Chip({ icon: Icon, label, danger = false }) {
     <span
       className="inline-flex items-center gap-1 text-[13px] rounded-full px-2 py-0.5"
       style={danger
-        ? { color: PALETTE.red, background: 'rgba(229,115,115,0.15)' }
-        : { color: 'var(--text-secondary)', background: 'rgba(169,174,181,0.15)' }}
+        ? { color: PALETTE.red, background: PALETTE_SOFT.red }
+        : { color: 'var(--text-secondary)', background: PALETTE_SOFT.gray }}
     >
       {Icon && <Icon className="h-3 w-3" />}
       {label}
@@ -104,7 +104,7 @@ export default function PetSymptoms() {
                         <div key={log.id} className="relative">
                           <div
                             className="absolute -left-6 top-3.5 w-3.5 h-3.5 rounded-full"
-                            style={{ background: PALETTE.teal, boxShadow: '0 0 8px rgba(76,199,176,0.5)' }}
+                            style={{ background: PALETTE.teal, boxShadow: `0 0 8px ${tint('teal', 0.5)}` }}
                           />
                           <div
                             className="rounded-2xl p-4 bg-card border border-border"

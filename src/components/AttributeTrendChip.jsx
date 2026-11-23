@@ -1,5 +1,5 @@
 import { ArrowUp, ArrowDown, Equal, Minus } from 'lucide-react';
-import { PALETTE } from '@/lib/toneColors';
+import { PALETTE, PALETTE_SOFT } from '@/lib/toneColors';
 
 // Health Score Revision V2 — the one place that renders a direction state
 // (spec §8.2/§14.1: "Create or update AttributeTrendChip" / "up: green,
@@ -36,9 +36,9 @@ export default function AttributeTrendChip({ label, direction = 'unknown', compa
   if (state === 'loading') {
     return (
       <div className="rounded-xl px-3 py-2.5 flex items-center gap-2 bg-card" aria-busy="true">
-        <div className="h-3.5 w-3.5 rounded-full animate-pulse flex-shrink-0" style={{ background: 'rgba(169,174,181,0.15)' }} />
+        <div className="h-3.5 w-3.5 rounded-full animate-pulse flex-shrink-0" style={{ background: PALETTE_SOFT.gray }} />
         <div className="min-w-0 flex-1 space-y-1">
-          <div className="h-3 w-16 rounded-full animate-pulse" style={{ background: 'rgba(169,174,181,0.15)' }} />
+          <div className="h-3 w-16 rounded-full animate-pulse" style={{ background: PALETTE_SOFT.gray }} />
         </div>
       </div>
     );

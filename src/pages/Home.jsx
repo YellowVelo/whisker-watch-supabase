@@ -22,7 +22,7 @@ import { buildGreeting } from '@/lib/greeting';
 import { useAuth } from '@/lib/AuthContext';
 import { detectTimezone } from '@/lib/timezone';
 import { track } from '@/lib/analytics';
-import { PALETTE } from '@/lib/toneColors';
+import { PALETTE, PALETTE_SOFT } from '@/lib/toneColors';
 import { reportClientError } from '@/lib/errorMonitoring';
 
 // Builds Home's Weight chip state from petProfileClient's
@@ -49,7 +49,7 @@ function PetSitterCard({ subtitle }) {
     <ListRow
       to="/pet-sitter"
       icon={UsersRound}
-      iconBg="rgba(76,199,176,0.15)"
+      iconBg={PALETTE_SOFT.teal}
       iconColor={PALETTE.teal}
       title="Pet Sitter"
       subtitle={subtitle}

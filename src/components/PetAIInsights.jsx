@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { invokeAI } from '@/api/aiClient';
 import { Sparkles, RefreshCw, AlertTriangle, CircleCheck, Lightbulb } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { PALETTE } from '@/lib/toneColors';
+import { PALETTE, PALETTE_SOFT } from '@/lib/toneColors';
 import { formatBaselineForAI } from '@/lib/baselineContext';
 import { AI_DISCLAIMER_SENTENCE, URGENT_FLAG_INSTRUCTION, aiErrorText } from '@/lib/aiGuardrails';
 import AIEmergencyNotice from './AIEmergencyNotice';
@@ -105,9 +105,9 @@ Respond in JSON with this structure:
   };
 
   const iconFor = (type) => {
-    if (type === 'warning') return { background: 'rgba(244,199,107,0.15)', color: PALETTE.amber, icon: AlertTriangle };
-    if (type === 'positive') return { background: 'rgba(76,199,176,0.15)', color: PALETTE.teal, icon: CircleCheck };
-    return { background: 'rgba(111,183,255,0.15)', color: PALETTE.sky, icon: Lightbulb };
+    if (type === 'warning') return { background: PALETTE_SOFT.amber, color: PALETTE.amber, icon: AlertTriangle };
+    if (type === 'positive') return { background: PALETTE_SOFT.teal, color: PALETTE.teal, icon: CircleCheck };
+    return { background: PALETTE_SOFT.sky, color: PALETTE.sky, icon: Lightbulb };
   };
 
   return (

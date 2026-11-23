@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Plus, Pencil, X, ShieldCheck, Utensils } from 'lucide-react';
-import { PALETTE } from '@/lib/toneColors';
+import { PALETTE, PALETTE_SOFT } from '@/lib/toneColors';
 import { format, parseISO } from 'date-fns';
 import SmartSelect from './SmartSelect';
 
@@ -17,13 +17,13 @@ const emptyFood = (petId) => ({ pet_id: petId, name: '', brand: '', food_type: '
 // tone tokens (via inline style) instead of raw light-mode Tailwind
 // classes, so these badges look correct regardless of device theme.
 const typeColors = {
-  'Wet food': { background: 'rgba(111,183,255,0.15)', color: PALETTE.sky },
-  'Dry food': { background: 'rgba(244,199,107,0.15)', color: PALETTE.amber },
-  Raw: { background: 'rgba(76,199,176,0.15)', color: PALETTE.teal },
-  'Freeze-dried': { background: 'rgba(169,174,181,0.15)', color: PALETTE.gray },
-  Treat: { background: 'rgba(111,183,255,0.15)', color: PALETTE.sky },
-  Supplement: { background: 'rgba(76,199,176,0.15)', color: PALETTE.teal },
-  Other: { background: 'rgba(169,174,181,0.15)', color: PALETTE.gray },
+  'Wet food': { background: PALETTE_SOFT.sky, color: PALETTE.sky },
+  'Dry food': { background: PALETTE_SOFT.amber, color: PALETTE.amber },
+  Raw: { background: PALETTE_SOFT.teal, color: PALETTE.teal },
+  'Freeze-dried': { background: PALETTE_SOFT.gray, color: PALETTE.gray },
+  Treat: { background: PALETTE_SOFT.sky, color: PALETTE.sky },
+  Supplement: { background: PALETTE_SOFT.teal, color: PALETTE.teal },
+  Other: { background: PALETTE_SOFT.gray, color: PALETTE.gray },
 };
 
 export default function FoodSection({ petId }) {
@@ -206,7 +206,7 @@ function FoodCard({ food, onEdit, onDelete, onToggle, typeColors }) {
             {food.prescription && (
               <span
                 className="flex items-center gap-1 text-[13px] px-2 py-0.5 rounded-full"
-                style={{ background: 'rgba(229,115,115,0.15)', color: PALETTE.red }}
+                style={{ background: PALETTE_SOFT.red, color: PALETTE.red }}
               >
                 <ShieldCheck className="h-3 w-3" /> Rx
               </span>

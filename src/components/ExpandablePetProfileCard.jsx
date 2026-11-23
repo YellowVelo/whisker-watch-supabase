@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import PetProfileContent from './PetProfileContent';
+import { PALETTE_SOFT, tint } from '@/lib/toneColors';
 
 // Pets screen card (Nav + Daily Check-In UX Refresh spec #5/#6). The card's
 // own identity + wellness-ring circles (from PetProfileContent) ARE the
@@ -17,8 +18,8 @@ export default function ExpandablePetProfileCard({ pet, highlighted = false, car
       className="rounded-2xl px-4 py-4"
       style={{
         background: 'rgba(255,255,255,0.05)',
-        border: highlighted ? '1px solid rgba(111,183,255,0.5)' : '1px solid rgba(255,255,255,0.08)',
-        boxShadow: highlighted ? '0 0 0 3px rgba(111,183,255,0.15)' : undefined,
+        border: highlighted ? `1px solid ${tint('sky', 0.5)}` : '1px solid rgba(255,255,255,0.08)',
+        boxShadow: highlighted ? `0 0 0 3px ${PALETTE_SOFT.sky}` : undefined,
       }}
     >
       <PetProfileContent

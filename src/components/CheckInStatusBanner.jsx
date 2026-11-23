@@ -1,5 +1,5 @@
 import { Sun, Minus, Cloud, CloudLightning, Clock } from 'lucide-react';
-import { PALETTE } from '@/lib/toneColors';
+import { PALETTE, tint } from '@/lib/toneColors';
 
 // One-line Daily Check-In status row nested directly under a pet's card on
 // Home — a single compact row per pet rather than a separate "Today's
@@ -21,7 +21,7 @@ const CONFIG = {
 export default function CheckInStatusBanner({ pet, checkIn, onStartCheckIn, error = false, onRetry }) {
   if (error) {
     return (
-      <div className="flex items-center justify-between gap-2 rounded-xl px-3.5 py-2.5" style={{ background: 'rgba(229,115,115,0.08)' }}>
+      <div className="flex items-center justify-between gap-2 rounded-xl px-3.5 py-2.5" style={{ background: tint('red', 0.08) }}>
         <span className="text-[13px] text-tier-secondary">Unable to load {pet.name}'s check-in.</span>
         {onRetry && (
           <button onClick={onRetry} className="text-[13px] font-semibold text-primary flex-shrink-0 min-h-[44px] px-2">Retry</button>

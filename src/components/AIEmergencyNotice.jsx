@@ -1,5 +1,6 @@
 import { AlertTriangle } from 'lucide-react';
 import { emergencyRedirectText } from '@/lib/aiGuardrails';
+import { tint } from '@/lib/toneColors';
 
 // Fixed, hard-stop emergency redirect (spec 0041) — shown in place of an AI
 // answer, never alongside one. No bypass/continue action of any kind, by
@@ -10,7 +11,7 @@ export default function AIEmergencyNotice({ petName }) {
   return (
     <div
       className="flex gap-3 p-4 rounded-xl border"
-      style={{ background: 'rgba(229,115,115,0.12)', borderColor: 'rgba(229,115,115,0.35)' }}
+      style={{ background: tint('red', 0.12), borderColor: tint('red', 0.35) }}
       role="alert"
     >
       <AlertTriangle className="h-5 w-5 shrink-0 mt-0.5" style={{ color: 'var(--tone-bad)' }} />

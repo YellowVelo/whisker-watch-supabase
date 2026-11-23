@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import { ChevronRight } from 'lucide-react';
+import { PALETTE_SOFT } from '@/lib/toneColors';
 
 // Design System Amendment #8 (2026-07-30) — the canonical icon + title +
 // subtitle + chevron row, replacing PetProfileContent.jsx's `NavCard` and
@@ -28,11 +29,9 @@ export default function ListRow({
         <div
           className={`rounded-full flex items-center justify-center flex-shrink-0 ${standalone ? 'h-11 w-11' : 'h-10 w-10'}`}
           // Default fallback for callers that omit iconBg (spec 0028,
-          // Amendment #6) — rgba(169,174,181,x) is --tone-neutral's own
-          // hex tinted, matching the same rgba-of-token-hex convention
-          // already used everywhere else in this codebase (CSS var()
-          // can't take an inline alpha suffix the way a literal hex can).
-          style={{ background: iconBg || 'rgba(169,174,181,0.15)' }}
+          // Amendment #6): --tone-neutral at 15%, from the shared
+          // channel variable in index.css (spec 0079 Part B).
+          style={{ background: iconBg || PALETTE_SOFT.gray }}
         >
           <Icon className={`h-5 w-5 ${iconClassName || 'text-white/80'}`} style={iconColor ? { color: iconColor } : undefined} aria-hidden="true" />
         </div>

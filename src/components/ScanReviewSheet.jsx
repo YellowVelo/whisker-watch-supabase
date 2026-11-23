@@ -3,7 +3,7 @@ import BottomSheet from '@/components/BottomSheet';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
-import { PALETTE } from '@/lib/toneColors';
+import { PALETTE, PALETTE_SOFT } from '@/lib/toneColors';
 
 // Review step for the Vaccination "Scan Record" AI scan (spec 0061).
 // Nothing from a scan is saved until the owner confirms here — this is
@@ -53,7 +53,7 @@ export default function ScanReviewSheet({ groups, saving, onToggle, onEdit, onCo
                         <span
                           className="text-[13px] px-2 py-0.5 rounded-full shrink-0"
                           style={{
-                            background: item.matchedExistingId ? 'rgba(244,199,107,0.15)' : 'rgba(111,183,255,0.15)',
+                            background: item.matchedExistingId ? PALETTE_SOFT.amber : PALETTE_SOFT.sky,
                             color: item.matchedExistingId ? PALETTE.amber : PALETTE.sky,
                           }}
                         >
