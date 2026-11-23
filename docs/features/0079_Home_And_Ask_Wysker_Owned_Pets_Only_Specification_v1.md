@@ -2,7 +2,7 @@
 
 *Also covers: shared tinted colors (Design System Amendment 6), added by Lynn 2026-11-23.*
 
-**Status:** Built 2026-11-23 on `claude/wysker-watch-sdlc-agents-wfmint` (first `/ship-feature` run). Not yet deployed. Approved by Lynn 2026-11-23: sitter card wording "See the pets you're sitting"; Part B full color fix; Settings rainbow colors → option (b), a separate punch-list item.
+**Status:** Shipped 2026-11-23. PR #54 merged (`a700043`); Lynn promoted the frontend to prod. No backend deploy needed. First `/ship-feature` run. Approved by Lynn 2026-11-23: sitter card wording "See the pets you're sitting"; Part B full color fix; Settings rainbow colors → option (b), a separate punch-list item.
 **Date:** 2026-11-23
 **Branch:** `claude/wysker-watch-sdlc-agents-wfmint`
 **Migration:** none
@@ -120,6 +120,6 @@ First run of `/ship-feature` (`docs/foundation/0011 SDLC Governance.md`). Both t
 - **Task 2 (Part B):** reviewer PASS, first time. **69** hand-typed tints in 18 files (not 65 as estimated), each kept at its exact strength. Checked in Chromium: 19 color/strength pairs, 45 background/border/shadow combinations, 0 differences, 0 pixel differences.
 - **QA:** PASS for everything runnable here. It added a check that test4@ really can see the sat pets before AC1/AC3 assert they're hidden, an 8-digit hex case for the guard, a hex-vs-channel drift check, and owned-pets edge cases. 183 unit tests.
 - **Final whole-branch review:** PASS.
-- **Not run locally:** the Playwright tests (AC1–AC4) and real-screen visual checks (AC9), since this cloud session had no `.env.playwright`. They first run in CI's e2e job. The AC2 e2e test skips itself if test4@ owns pets on dev; `Home.test.js` covers the card either way.
+- **Not run locally:** the Playwright tests (AC1–AC4) and real-screen visual checks (AC9), since this cloud session had no `.env.playwright`. **CI result (PR #54, final commit):** the full e2e suite passed, 108 passed / 0 failed / 8 skipped (expected), including AC1, AC2 (test4@ owns no pets on dev, so it ran) and AC3. The first CI run had caught a QA test bug (the precondition queried before test4@'s invite was claimed), fixed by calling `claim_pending_sitter_invites()` in `beforeAll`. One earlier run was cancelled when GitHub took 11 minutes to install browsers.
 - **Extra beyond the original text:** `AskWyskerSheet`'s general branch now reports a pet-list failure to Sentry (it had no `.catch` before).
 - **Follow-ups (Launch Plan, Pre-Alpha Audit):** PA-66 Settings rainbow colors; PA-67 card for not-yet-started/ended sits; PA-68 a failed sit read is silently ignored; PA-69 Ask Wysker has no message on pet-load failure (pet-page path also unreported); PA-70 welcome-screen Add Pet button 40px / primary style; PA-64 extended with the toast 1px case.
