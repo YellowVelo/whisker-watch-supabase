@@ -30,7 +30,7 @@
 
 1. Home's "How are your pets today?" list shows only pets the person owns or co-owns. A pet they only pet-sit doesn't appear there. That covers its card, its check-in buttons, its "catch up on missed days" prompt and its "Complete profile" prompt.
 2. A pet the person owns or co-owns always appears, even if they're also listed as a sitter for it.
-3. Someone with no owned or co-owned pets sees Home's existing welcome screen ("Let's add your first pet"). If they're sitting for anyone's pets, the welcome screen also shows the existing Pet Sitter card, linking to `/pet-sitter`, with the subtitle **"See the pets you're sitting"** (approved by Lynn, 2026-11-23). A brand-new owner who sits for nobody sees the welcome screen exactly as today, with no card. People who have pets keep today's Pet Sitter card and wording ("Manage sitting periods and sitter access") unchanged.
+3. Someone with no owned or co-owned pets sees Home's existing welcome screen ("Let's add your first pet"). If they're sitting for anyone's pets, the welcome screen also shows the existing Pet Sitter card, linking to `/pet-sitter`, with the subtitle **"See the pets you're sitting"** (approved by Lynn, 2026-11-23). A brand-new owner who sits for nobody sees the welcome screen exactly as today, with no card. People who have pets keep today's Pet Sitter wording ("Manage sitting periods and sitter access"), shown in full. **Decision (Lynn, 2026-11-23, during build):** the card uses the shared `ListRow` component (Design System Amendment #8) with a new opt-in setting that lets the subtitle wrap to a second line instead of being cut off with "…". The owners' card therefore changes very slightly to match the app's other rows (13px subtitle in the tertiary text color, `ListRow`'s icon gap), which Lynn approved. Other `ListRow` users are unaffected.
 4. Ask Wysker's general chat (opened when no specific pet is in view) only tells the AI about pets the person owns or co-owns, so it never describes a sat pet (name, breed, conditions) as part of "your household".
 5. If the sitter lookup fails, both screens show every pet, as today, and the failure is reported to Sentry.
 
@@ -100,7 +100,8 @@ No mockup. Home's existing welcome screen, with the existing Pet Sitter card bel
 
 - The Pet Sitter page's pet picker (PA-60).
 - Ask Wysker opened from a specific pet's page.
-- Changing the Pet Sitter card or its wording for people who have pets.
+- Changing the Pet Sitter card's wording for people who have pets. (Its styling moving onto `ListRow` was approved during build; see FR3.)
+- Showing the welcome-screen Pet Sitter card for a sit that hasn't started yet or ended over a day ago. **Lynn, 2026-11-23:** a separate follow-up punch-list item, added at wrap-up.
 - Part B: Settings' rainbow menu-row colors (`Settings.jsx` lines 38–43), Support's and Timeline's two non-palette tints, and the see-through white layers. See Open Questions.
 - Part B: any visible color change.
 - Replacing the inline fallbacks in Pets.jsx / Edit Pet / Vet Report with the new helper.
