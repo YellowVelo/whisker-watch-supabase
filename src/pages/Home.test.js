@@ -40,5 +40,7 @@ describe('HomeWelcome', () => {
     expect(html).toContain('See the pets you&#x27;re sitting');
     expect(html).toContain('href="/pet-sitter"');
     expect(html).not.toContain('Manage sitting periods and sitter access');
+    // The title and subtitle are inside the one link to /pet-sitter.
+    expect(html).toMatch(/<a [^>]*href="\/pet-sitter"[^>]*>(?:(?!<\/a>).)*Pet Sitter(?:(?!<\/a>).)*See the pets you&#x27;re sitting(?:(?!<\/a>).)*<\/a>/s);
   });
 });

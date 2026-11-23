@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { PawPrint, Sparkles, ChevronRight, CalendarClock, UsersRound } from 'lucide-react';
 import { entities } from '@/api/entities';
 import PetSummaryCard from '../components/PetSummaryCard';
+import ListRow from '../components/ListRow';
 import CheckInStatusBanner from '../components/CheckInStatusBanner';
 import DailyCheckInModal from '../components/DailyCheckInModal';
 import CatchUpFlow from '../components/catchup/CatchUpFlow';
@@ -45,19 +46,14 @@ function buildWeightState(summary) {
 // screen for someone who only sits for other people's pets (spec 0079).
 function PetSitterCard({ subtitle }) {
   return (
-    <Link
+    <ListRow
       to="/pet-sitter"
-      className="flex items-center gap-3 rounded-2xl px-4 py-4 active:opacity-80 transition-opacity bg-card border border-border"
-    >
-      <div className="h-11 w-11 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(76,199,176,0.15)' }}>
-        <UsersRound className="h-5 w-5" style={{ color: PALETTE.teal }} />
-      </div>
-      <div className="min-w-0 flex-1">
-        <p className="text-base font-semibold text-foreground">Pet Sitter</p>
-        <p className="text-sm text-muted-foreground">{subtitle}</p>
-      </div>
-      <ChevronRight className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-    </Link>
+      icon={UsersRound}
+      iconBg="rgba(76,199,176,0.15)"
+      iconColor={PALETTE.teal}
+      title="Pet Sitter"
+      subtitle={subtitle}
+    />
   );
 }
 

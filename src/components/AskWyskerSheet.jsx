@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { X, Sparkles, MessageCircle } from 'lucide-react';
 import { entities } from '@/api/entities';
 import { loadOwnedPets } from '@/lib/petsClient';
+import { reportClientError } from '@/lib/errorMonitoring';
 import PetAIInsights from './PetAIInsights';
 import PetAIChat from './PetAIChat';
 import GeneralAskWyskerChat from './GeneralAskWyskerChat';
@@ -53,6 +54,10 @@ export default function AskWyskerSheet({ open, onOpenChange, context }) {
       // chat never describes a pet the person only sits for as theirs.
       loadOwnedPets('-created_date', 'ask_wysker')
         .then(({ pets }) => setAllPets(pets.filter((p) => !p.is_memorial)))
+        .catch((err) => {
+          setAllPets([]);
+          reportClientError(err, { feature: 'ask_wysker' });
+        })
         .finally(() => setLoading(false));
     }
   }, [open, petId]);
