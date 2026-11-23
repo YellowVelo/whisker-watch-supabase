@@ -6,6 +6,7 @@
 
 import { supabase } from '@/api/supabaseClient';
 import { entities } from '@/api/entities';
+import { reportClientError } from '@/lib/errorMonitoring';
 
 export async function getActiveMedicationCountsForPets(petIds) {
   if (!petIds.length) return {};
@@ -71,4 +72,29 @@ export async function listOwnedPets(order = undefined) {
     getSitterOnlyPetIds(),
   ]);
   return pets.filter((p) => !sitterOnlyIds.has(p.id));
+}
+
+// Home and Ask Wysker's general chat (spec 0079, PA-61): the person's
+// owned and co-owned pets, plus how many pets they only sit for (Home
+// uses that to show the Pet Sitter card on its welcome screen).
+//
+// The pet list and the sitter lookup run together. If Pet.list() fails,
+// that error passes up as before. If only the sitter lookup fails, the
+// failure is reported and every pet is returned, as these screens did
+// before spec 0079 (the database, not this screen, decides what can be
+// saved).
+export async function loadOwnedPets(order, feature) {
+  const [pets, sitterR] = await Promise.all([
+    entities.Pet.list(order),
+    getSitterOnlyPetIds().then(
+      (ids) => ({ ids, err: null }),
+      (err) => ({ ids: null, err }),
+    ),
+  ]);
+  if (sitterR.ids === null) {
+    reportClientError(sitterR.err, { feature, note: 'sitter-only pet lookup failed; showing all pets' });
+    return { pets, sitterOnlyCount: 0 };
+  }
+  const owned = pets.filter((p) => !sitterR.ids.has(p.id));
+  return { pets: owned, sitterOnlyCount: pets.length - owned.length };
 }

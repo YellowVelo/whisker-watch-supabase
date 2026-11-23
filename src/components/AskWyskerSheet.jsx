@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { X, Sparkles, MessageCircle } from 'lucide-react';
 import { entities } from '@/api/entities';
+import { loadOwnedPets } from '@/lib/petsClient';
 import PetAIInsights from './PetAIInsights';
 import PetAIChat from './PetAIChat';
 import GeneralAskWyskerChat from './GeneralAskWyskerChat';
@@ -48,8 +49,10 @@ export default function AskWyskerSheet({ open, onOpenChange, context }) {
         })
         .finally(() => setLoading(false));
     } else {
-      entities.Pet.list('-created_date')
-        .then((pets) => setAllPets(pets.filter((p) => !p.is_memorial)))
+      // Owned and co-owned pets only (spec 0079, PA-61), so the general
+      // chat never describes a pet the person only sits for as theirs.
+      loadOwnedPets('-created_date', 'ask_wysker')
+        .then(({ pets }) => setAllPets(pets.filter((p) => !p.is_memorial)))
         .finally(() => setLoading(false));
     }
   }, [open, petId]);
