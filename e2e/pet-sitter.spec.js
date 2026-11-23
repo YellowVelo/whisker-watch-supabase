@@ -143,6 +143,14 @@ test.beforeAll(async () => {
     password: process.env.PLAYWRIGHT_TEST4_SITTER_PASSWORD,
   });
   if (sitterSignInError) throw sitterSignInError;
+  // Link the invite inserted above to test4@'s account, the same call the
+  // app makes on every sign-in (AuthContext.jsx). Sitter visibility checks
+  // sitter_user_id (is_pet_sitter(), migration 0057), which only
+  // claim_pending_sitter_invites() (0028) sets, so without this the query
+  // below sees no sat pets. It only touches unlinked invites for the
+  // caller's own email; the browser's sign-in later repeats it as a no-op.
+  const { error: claimError } = await sitterClient.rpc('claim_pending_sitter_invites');
+  if (claimError) throw claimError;
   const { data: sitterProfile } = await sitterClient
     .from('profiles')
     .select('timezone')
