@@ -73,6 +73,10 @@ let petNoCheckinId;
 // Whether test4@ owns or co-owns any pets of its own on dev (spec 0079's
 // AC2 needs a sitter with none; checked in beforeAll, not assumed).
 let test4OwnsPets = false;
+// IDs of the two seeded pets that test4@ can actually read as a sitter
+// (checked in beforeAll). AC1/AC3 assert sat pets are *absent*; without
+// this they'd pass vacuously if the sit never gave test4@ access.
+let satPetIdsVisibleToTest4 = [];
 
 test.beforeAll(async () => {
   const supabase = newClient();
@@ -151,6 +155,13 @@ test.beforeAll(async () => {
   if (ownPetsR.error) throw ownPetsR.error;
   if (coOwnedR.error) throw coOwnedR.error;
   test4OwnsPets = (ownPetsR.data?.length || 0) + (coOwnedR.data?.length || 0) > 0;
+
+  const { data: visibleSatPets, error: visibleSatPetsError } = await sitterClient
+    .from('pets')
+    .select('id')
+    .in('id', [petWithCheckinId, petNoCheckinId]);
+  if (visibleSatPetsError) throw visibleSatPetsError;
+  satPetIdsVisibleToTest4 = (visibleSatPets || []).map((p) => p.id);
 
   const localTz = sitterProfile?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
   const dateStrInTz = (instant) =>
@@ -254,6 +265,16 @@ test('a sitter opening Edit Pet or Vet Report for a sat pet sees the owners-only
 // person owns or co-owns. test4@ only sits for the two pets seeded above.
 const SAT_PET_NAMES = [PET_WITH_CHECKIN_NAME, PET_NO_CHECKIN_NAME];
 
+// Precondition for the "absent" checks below: test4@ really can see both
+// sat pets, in the database (beforeAll) and in the app (the Pets page).
+async function expectSitterCanSeeSatPets(page) {
+  expect(satPetIdsVisibleToTest4.sort()).toEqual([petWithCheckinId, petNoCheckinId].sort());
+  await page.goto('/pets');
+  for (const name of SAT_PET_NAMES) {
+    await expect(page.locator('a').filter({ hasText: name })).toBeVisible({ timeout: 15000 });
+  }
+}
+
 // The Pet Sitter card shows on Home both with and without pets of one's
 // own once someone sits for others' pets, so it marks Home as loaded.
 async function openHomeAsSitter(page) {
@@ -263,6 +284,7 @@ async function openHomeAsSitter(page) {
 }
 
 test('AC1: a pet the sitter only sits for is not in Home\'s pet list', async ({ page }) => {
+  await expectSitterCanSeeSatPets(page);
   await openHomeAsSitter(page);
   for (const name of SAT_PET_NAMES) {
     await expect(page.getByText(name)).toHaveCount(0);
@@ -287,6 +309,7 @@ test('AC3: Ask Wysker\'s general chat does not tell the AI about a sat pet', asy
     await route.fulfill({ json: { reply: 'E2E canned reply', urgent: false } });
   });
 
+  await expectSitterCanSeeSatPets(page);
   await openHomeAsSitter(page);
   await page.getByRole('button', { name: 'Ask Wysker' }).click();
   await expect(page.getByRole('heading', { name: 'Ask Wysker' })).toBeVisible();

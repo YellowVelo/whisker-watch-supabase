@@ -26,19 +26,20 @@ describe('tint (spec 0079 Part B)', () => {
     expect(() => tint('purple', 0.15)).toThrow();
   });
 
-  it('index.css defines each channel variable once, matching its hex color', () => {
+  it('index.css defines each channel variable once, and it matches index.css\'s own hex variable', () => {
     const css = fs.readFileSync(path.resolve(__dirname, '..', 'index.css'), 'utf8');
-    const expected = {
-      '--tone-good-rgb': '76 199 176',
-      '--tone-warn-rgb': '244 199 107',
-      '--tone-bad-rgb': '229 115 115',
-      '--tone-neutral-rgb': '169 174 181',
-      '--accent-sky-rgb': '111 183 255',
+    const readOnce = (name) => {
+      const defs = [...css.matchAll(new RegExp(`(?<![\\w-])${name}\\s*:\\s*([^;]+);`, 'g'))];
+      expect(defs, `${name} should be defined exactly once in index.css`).toHaveLength(1);
+      return defs[0][1].trim();
     };
-    for (const [name, value] of Object.entries(expected)) {
-      const defs = css.match(new RegExp(`${name}\\s*:\\s*([^;]+);`, 'g')) || [];
-      expect(defs).toHaveLength(1);
-      expect(defs[0].split(':')[1].replace(';', '').trim()).toBe(value);
+    const pairs = ['--tone-good', '--tone-warn', '--tone-bad', '--tone-neutral', '--accent-sky'];
+    for (const hexVar of pairs) {
+      const hex = readOnce(hexVar);
+      expect(hex, `${hexVar} should be a 6-digit hex color`).toMatch(/^#[0-9a-f]{6}$/i);
+      const fromHex = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)).join(' ');
+      const channels = readOnce(`${hexVar}-rgb`).split(/\s+/).map(Number).join(' ');
+      expect(channels, `${hexVar}-rgb should match ${hexVar} (${hex})`).toBe(fromHex);
     }
   });
 });
@@ -51,7 +52,8 @@ const TRIPLE_RE = new RegExp(
   `rgba?\\(\\s*(?:${TRIPLES.map((t) => t.split(',').join('(?:\\s*,\\s*|\\s+)')).join('|')})`,
   'i',
 );
-const HEX_RE = new RegExp(`#(?:${HEXES.join('|')})(?![0-9a-f])`, 'i');
+// 6-digit (#4CC7B0) or 8-digit with alpha (#4CC7B026).
+const HEX_RE = new RegExp(`#(?:${HEXES.join('|')})(?:[0-9a-f]{2})?(?![0-9a-f])`, 'i');
 
 function findPaletteLiterals(text) {
   return TRIPLE_RE.test(text) || HEX_RE.test(text);
@@ -65,6 +67,14 @@ describe('no hand-typed palette colors in the app (spec 0079, AC7/AC8)', () => {
     expect(findPaletteLiterals("'rgb(169,174,181)'")).toBe(true);
     expect(findPaletteLiterals("'#6fb7ff'")).toBe(true);
     expect(findPaletteLiterals("'#E57373'")).toBe(true);
+    expect(findPaletteLiterals("'#4CC7B026'")).toBe(true);
+    expect(findPaletteLiterals("'#a9aeb5ff'")).toBe(true);
+    expect(findPaletteLiterals('border: 1px solid #F4C76B80;')).toBe(true);
+    expect(findPaletteLiterals("'rgba( 111 , 183 , 255 , .5)'")).toBe(true);
+    expect(findPaletteLiterals("'#4CC7B0A'")).toBe(false); // 7 digits isn't a color
+    expect(findPaletteLiterals("'#4CC7B0123'")).toBe(false); // nor 9
+    expect(findPaletteLiterals("'#FFFFFF26'")).toBe(false);
+    expect(findPaletteLiterals("'rgba(76,199,177,0.15)'")).toBe(false);
     expect(findPaletteLiterals("tint('teal', 0.15)")).toBe(false);
     expect(findPaletteLiterals("'rgba(255,255,255,0.1)'")).toBe(false);
   });

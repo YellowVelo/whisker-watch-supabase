@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // Fake data for one signed-in person ("me"):
 //   pet-own     — I created it, and I'm also listed as a sitter on it
@@ -125,5 +125,56 @@ describe('loadOwnedPets', () => {
     state.petListError = err;
     await expect(loadOwnedPets('-created_date', 'home')).rejects.toBe(err);
     expect(reportClientError).not.toHaveBeenCalled();
+  });
+});
+
+// QA edge cases for spec 0079 (PA-61).
+describe('loadOwnedPets edge cases', () => {
+  const saved = {};
+  beforeEach(() => {
+    Object.assign(saved, {
+      pets: state.pets, sits: state.sits, createdByMe: state.createdByMe, coOwnerRows: state.coOwnerRows,
+    });
+  });
+  afterEach(() => {
+    Object.assign(state, saved);
+  });
+
+  // A sitter with no pets of their own (test4@'s situation): Home shows the
+  // welcome screen, and Ask Wysker gets an empty list ("no pets on file yet").
+  it('a person who only sits gets no pets and a count of every sat pet', async () => {
+    state.createdByMe = [];
+    state.coOwnerRows = [];
+    state.sits = { 'sit-1': { pet_ids: ['pet-a', 'pet-b'] }, 'sit-2': { pet_ids: ['pet-c'] } };
+    state.pets = ['pet-a', 'pet-b', 'pet-c'].map((id) => ({ id }));
+    const { pets, sitterOnlyCount } = await loadOwnedPets('-created_date', 'ask_wysker');
+    expect(pets).toEqual([]);
+    expect(sitterOnlyCount).toBe(3);
+  });
+
+  // Pets owned by two different people, sat in one sit: both dropped.
+  it('drops sat pets from more than one owner, keeping my own', async () => {
+    state.sits = { 'sit-1': { pet_ids: ['friend1-pet'] }, 'sit-2': { pet_ids: ['friend2-pet', 'pet-own'] } };
+    state.pets = ['pet-own', 'friend1-pet', 'friend2-pet'].map((id) => ({ id }));
+    const { pets, sitterOnlyCount } = await loadOwnedPets('-created_date', 'home');
+    expect(pets.map((p) => p.id)).toEqual(['pet-own']);
+    expect(sitterOnlyCount).toBe(2);
+  });
+
+  // Deleted records: a sit row that's gone, or a sit still naming a pet that
+  // was deleted (or that the database no longer lets me read, e.g. outside
+  // the sit window), never inflates the count or breaks the list.
+  it('ignores a deleted sit and a sat pet that is no longer in the pet list', async () => {
+    state.sits = { 'sit-1': { pet_ids: ['pet-friend', 'pet-deleted'] } }; // sit-2 deleted
+    const { pets, sitterOnlyCount } = await loadOwnedPets('-created_date', 'home');
+    expect(pets.map((p) => p.id)).toEqual(['pet-own', 'pet-coown', 'pet-other']);
+    expect(sitterOnlyCount).toBe(1);
+    expect(reportClientError).not.toHaveBeenCalled();
+  });
+
+  it('a brand-new account with no pets and no sits gets an empty list and zero', async () => {
+    state.pets = [];
+    state.accesses = [];
+    expect(await loadOwnedPets('-created_date', 'home')).toEqual({ pets: [], sitterOnlyCount: 0 });
   });
 });
