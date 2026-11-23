@@ -53,6 +53,7 @@ function PetSitterCard({ subtitle }) {
       iconColor={PALETTE.teal}
       title="Pet Sitter"
       subtitle={subtitle}
+      wrapSubtitle
     />
   );
 }

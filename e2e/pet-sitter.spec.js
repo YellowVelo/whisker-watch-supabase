@@ -282,6 +282,7 @@ test('AC2: a sitter with no pets of their own sees the welcome screen and a Pet 
 test('AC3: Ask Wysker\'s general chat does not tell the AI about a sat pet', async ({ page }) => {
   let capturedPrompt = null;
   await page.route('**/functions/v1/ask-vet-assistant', async (route) => {
+    if (route.request().method() === 'OPTIONS') return route.fulfill({ status: 200, body: 'ok' });
     capturedPrompt = JSON.parse(route.request().postData()).prompt;
     await route.fulfill({ json: { reply: 'E2E canned reply', urgent: false } });
   });

@@ -8,18 +8,19 @@ import { ChevronRight } from 'lucide-react';
 // bg-card/border-border card, matching NavCard's usage (one row = one
 // card). Pass `standalone={false}` for a bare row meant to sit inside an
 // already-bordered `divide-y` group, matching MenuListRow's usage in
-// Settings.
+// Settings. `wrapSubtitle` (spec 0079, opt-in, default off) lets the
+// subtitle wrap onto a second line instead of being cut off with "…".
 /**
  * @param {{
  *   icon: any, iconBg?: any, iconColor?: any, iconClassName?: any,
  *   title: any, subtitle?: any, value?: any, valueColor?: any,
  *   to?: any, onClick?: any, error?: any, destructive?: boolean,
- *   standalone?: boolean, children?: any,
+ *   standalone?: boolean, wrapSubtitle?: boolean, children?: any,
  * }} props
  */
 export default function ListRow({
   icon: Icon, iconBg, iconColor, iconClassName, title, subtitle, value, valueColor,
-  to, onClick, error, destructive = false, standalone = true, children,
+  to, onClick, error, destructive = false, standalone = true, wrapSubtitle = false, children,
 }) {
   const content = (
     <>
@@ -39,7 +40,7 @@ export default function ListRow({
           <p className={`font-semibold truncate ${standalone ? 'text-[16px] text-white' : 'text-[15px]'} ${destructive ? 'text-destructive' : standalone ? '' : 'text-white'}`}>
             {title}
           </p>
-          <p className="text-[13px] text-tier-tertiary truncate">{error ? 'Unable to load' : subtitle}</p>
+          <p className={`text-[13px] text-tier-tertiary ${wrapSubtitle ? 'break-words' : 'truncate'}`}>{error ? 'Unable to load' : subtitle}</p>
         </div>
         {!error && value != null && (
           <span className="text-base font-semibold flex-shrink-0" style={{ color: valueColor || '#fff' }}>{value}</span>
