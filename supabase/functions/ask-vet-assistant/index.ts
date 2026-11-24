@@ -31,19 +31,24 @@
 //   - { summary: null }         Trends summary with too few check-ins
 //   - { not_enough_data: true } Pet Insights with too few check-ins
 //
+// Order of checks (spec 0080): auth -> parse -> emergency stop (chats) ->
+// file checks (scans) -> pet data and gates, read as the caller -> rate
+// check -> Anthropic. Every reply that doesn't call the AI comes before the
+// rate check, so it doesn't use up the person's allowance (FR10).
+//
 // Who may do what:
 //   - The caller must be a signed-in Supabase user (401 otherwise).
 //   - Pet data is read with the CALLER's own client, so the database's
 //     access rules decide what the AI is told. A pet the caller can't see
 //     is refused with 403 forbidden_pet. Sitters can ask about a pet
 //     during its sit, as before; household chat and the multi-pet scan
-//     only list pets the caller owns or co-owns.
+//     only list pets the caller owns or co-owns. Loading it only reads.
 //   - Files (spec 0071): the function never fetches a caller-supplied URL.
 //     It only reads a file_path in the caller's own folder (a scan they
 //     just uploaded) or linked in pet_documents to a pet they own, and
 //     downloads it with the service role. Size and type are checked before
 //     anything is sent to Anthropic.
-//   - The service role is used only for the rate-limit call and the file
+//   - The service role is used only for the rate-limit calls and the file
 //     download.
 //
 // Safety (spec 0041, enforced here by spec 0080 FR5): a chat question with
@@ -55,8 +60,12 @@
 // Rate limits (specs 0050 and 0080): one all-or-nothing call to
 // check_and_record_rate_limits_windowed (migration 0060) checks two limits
 // per user: 20 requests per 10 minutes (429 rate_limited) and 100 per 24
-// hours (429 daily_limit, also reported to Sentry as a warning). A failed
-// rate check refuses the request (503) rather than risk a paid AI call.
+// hours (429 daily_limit). Only requests that are about to call the AI are
+// counted. A failed rate check refuses the request (503) rather than risk a
+// paid AI call. The daily-limit Sentry warning goes out at most once per
+// person per 24 hours (FR10), gated by check_and_record_rate_limit on the
+// key ask-vet-assistant:daily-warned:user:<id>; if that gate call fails,
+// the warning is skipped and the 429 still goes back.
 
 import { createClient, type SupabaseClient } from 'jsr:@supabase/supabase-js@2.119.2';
 import { encodeBase64 } from 'jsr:@std/encoding@1.0.11/base64';
@@ -304,9 +313,24 @@ Deno.serve(async (req) => {
       return jsonResponse({ urgent: true });
     }
 
-    // Rate limits, before any real work, so a rejected request never
-    // reaches Anthropic. Keyed per user: every caller has a real session.
     const adminClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+
+    // Scans: check and read the file before anything else.
+    let fileBlock: FileBlock | null = null;
+    if ('file_path' in task) {
+      const file = await loadScanFile(task.file_path, userId, supabaseClient, adminClient);
+      if ('refusal' in file) return file.refusal;
+      fileBlock = file.block;
+    }
+
+    // Pet data and the no-AI replies (forbidden_pet, not_enough_data,
+    // summary: null), read as the caller, before the rate check.
+    const built = await buildPrompt(task, userId, supabaseClient);
+    if ('reply' in built) return built.reply;
+    const { system, user } = built.prompt;
+
+    // Rate limits, right before the AI, so a rejected request never
+    // reaches Anthropic. Keyed per user: every caller has a real session.
     const { data: overLimit, error: rateError } = await adminClient.rpc('check_and_record_rate_limits_windowed', {
       p_keys: [`ask-vet-assistant:user:${userId}`, `ask-vet-assistant:daily:user:${userId}`],
       p_limits: [RATE_LIMIT, DAILY_LIMIT],
@@ -325,12 +349,20 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: RATE_LIMITED_MESSAGE, code: 'rate_limited' }, 429);
     }
     if (overLimit === 2) {
-      // FR10: so Lynn can see whether 100 a day is too low.
-      reportError(
-        new Error('ask-vet-assistant daily AI cap reached'),
-        { function: 'ask-vet-assistant', feature: 'ai_daily_cap', user_id: userId },
-        'warning',
-      );
+      // FR10: so Lynn can see whether 100 a day is too low, at most once
+      // per person per 24 hours.
+      const { data: firstToday, error: warnGateError } = await adminClient.rpc('check_and_record_rate_limit', {
+        p_key: `ask-vet-assistant:daily-warned:user:${userId}`,
+        p_limit: 1,
+        p_window_seconds: DAILY_WINDOW_SECONDS,
+      });
+      if (!warnGateError && firstToday === true) {
+        reportError(
+          new Error('ask-vet-assistant daily AI cap reached'),
+          { function: 'ask-vet-assistant', feature: 'ai_daily_cap', user_id: userId },
+          'warning',
+        );
+      }
       return jsonResponse({ error: DAILY_LIMIT_MESSAGE, code: 'daily_limit' }, 429);
     }
     if (overLimit !== 0) {
@@ -340,18 +372,6 @@ Deno.serve(async (req) => {
       });
       return jsonResponse({ error: 'Unable to process this request right now' }, 503);
     }
-
-    // Scans: check and read the file before anything else.
-    let fileBlock: FileBlock | null = null;
-    if ('file_path' in task) {
-      const file = await loadScanFile(task.file_path, userId, supabaseClient, adminClient);
-      if ('refusal' in file) return file.refusal;
-      fileBlock = file.block;
-    }
-
-    const built = await buildPrompt(task, userId, supabaseClient);
-    if ('reply' in built) return built.reply;
-    const { system, user } = built.prompt;
 
     // Never send an empty text block: the scans' whole user message is the file.
     const contentBlocks: (FileBlock | { type: 'text'; text: string })[] = [];

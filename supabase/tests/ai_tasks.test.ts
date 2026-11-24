@@ -15,10 +15,17 @@
 //     emergency stop runs before the rate check and the AI call.)
 //   - A sitter can't have the AI read the sat pet's documents (403
 //     forbidden_file), the same rule as opening them directly.
+//   - A sitter whose sit has ended (outside pet_sit_is_open()'s window,
+//     migration 0057) and a removed co-owner get 403 forbidden_pet.
+//   - FR9/FR10: over the 100-a-day cap, pet chat gets 429 daily_limit with
+//     wording A every time, and only one Sentry warning is recorded (one row
+//     on the daily-warned key). The cap is reached by seeding
+//     rate_limit_hits with the service role; the request is refused at the
+//     rate check, before the AI.
 //
 // Same shape as ai_context.test.ts: users are created and signed in once
 // for the whole file (Supabase Auth limits sign-ins per IP). The service
-// role only cleans up.
+// role only cleans up, apart from seeding the daily-cap rows.
 //
 // Run (dev): deno test --allow-net --allow-env --node-modules-dir=none supabase/tests/ai_tasks.test.ts
 
@@ -40,12 +47,22 @@ const PNG_BYTES = Uint8Array.from(
 
 const PET_NAME = 'Ai Tasks Secret Pet';
 const FN = 'ask-vet-assistant';
+// Wording A (spec 0080).
+const DAILY_LIMIT_MESSAGE = "You've reached today's limit for Ask Wysker and document scans. You can try again tomorrow.";
+
+function utcDate(offsetDays = 0): string {
+  const d = new Date();
+  d.setUTCDate(d.getUTCDate() + offsetDays);
+  return d.toISOString().slice(0, 10);
+}
 
 Deno.test('ask-vet-assistant task requests (spec 0080)', async (t) => {
-  const [owner, sitter, stranger] = await Promise.all([
+  const [owner, sitter, stranger, oldSitter, exCoOwner] = await Promise.all([
     createScratchUser('aitask-owner'),
     createScratchUser('aitask-sitter'),
     createScratchUser('aitask-stranger'),
+    createScratchUser('aitask-oldsitter'),
+    createScratchUser('aitask-excoowner'),
   ]);
   const admin = adminClient();
   let petId: string | null = null;
@@ -82,6 +99,39 @@ Deno.test('ask-vet-assistant task requests (spec 0080)', async (t) => {
     if (inviteError) throw new Error(`sitter invite failed: ${inviteError.message}`);
     const { error: claimError } = await sitter.client.rpc('claim_pending_sitter_invites');
     if (claimError) throw new Error(`sitter claim failed: ${claimError.message}`);
+
+    // A sit that ended 2 days ago (UTC). pet_sit_is_open() (migration 0057)
+    // allows start_date - 1 through end_date + 1, so this one is closed.
+    const { data: oldSit, error: oldSitError } = await owner.client
+      .from('pet_sits')
+      .insert({
+        created_by: owner.userId, pet_ids: [petId], start_date: utcDate(-5), end_date: utcDate(-2),
+        sitter_name: 'Ai Tasks Old Sitter',
+      })
+      .select('id')
+      .single();
+    if (oldSitError || !oldSit) throw new Error(`old sit insert failed: ${oldSitError?.message}`);
+    const { error: oldInviteError } = await owner.client.from('pet_sitter_access').insert({
+      pet_sit_id: oldSit.id, owner_id: owner.userId, created_by: owner.userId, sitter_email: oldSitter.email,
+    });
+    if (oldInviteError) throw new Error(`old sitter invite failed: ${oldInviteError.message}`);
+    const { error: oldClaimError } = await oldSitter.client.rpc('claim_pending_sitter_invites');
+    if (oldClaimError) throw new Error(`old sitter claim failed: ${oldClaimError.message}`);
+
+    // A co-owner added the legitimate way (invite, then claim), then removed
+    // by the owner, as co_owner_access.test.ts does.
+    const { data: coRow, error: coError } = await owner.client
+      .from('pet_co_owners')
+      .insert({ pet_id: petId, owner_id: owner.userId, created_by: owner.userId, co_owner_email: exCoOwner.email })
+      .select('id')
+      .single();
+    if (coError || !coRow) throw new Error(`co-owner invite failed: ${coError?.message}`);
+    const { error: coClaimError } = await exCoOwner.client.rpc('claim_pending_co_owner_invites');
+    if (coClaimError) throw new Error(`co-owner claim failed: ${coClaimError.message}`);
+    const { data: seenAsCoOwner } = await exCoOwner.client.from('pets').select('id').eq('id', petId);
+    assertEquals(seenAsCoOwner?.length, 1, 'the co-owner should see the pet before removal');
+    const { error: removeError } = await owner.client.from('pet_co_owners').delete().eq('id', coRow.id);
+    if (removeError) throw new Error(`co-owner removal failed: ${removeError.message}`);
 
     await t.step('AC1: own instructions or an unknown task are refused with 400 unknown_task', async () => {
       const bodies: Record<string, unknown>[] = [
@@ -124,6 +174,24 @@ Deno.test('ask-vet-assistant task requests (spec 0080)', async (t) => {
       }
     });
 
+    await t.step('a sitter whose sit has ended and a removed co-owner get 403 forbidden_pet', async () => {
+      const bodies: Record<string, unknown>[] = [
+        { task: 'pet_chat', pet_id: petId, question: 'How is she doing?' },
+        { task: 'pet_insights', pet_id: petId },
+        { task: 'trends_summary', pet_id: petId, range: '7D' },
+      ];
+      const callers = [['ended sitter', oldSitter], ['removed co-owner', exCoOwner]] as const;
+      for (const [who, caller] of callers) {
+        for (const body of bodies) {
+          const res = await callFunction(FN, caller.accessToken, body);
+          assertEquals(res.status, 403, `expected 403 for ${who} ${body.task}`);
+          assertEquals(res.json.code, 'forbidden_pet', `expected forbidden_pet for ${who} ${body.task}`);
+          const text = JSON.stringify(res.json);
+          assert(!text.includes(PET_NAME) && !text.includes('Secret Condition'), `${who} ${body.task} leaked pet details`);
+        }
+      }
+    });
+
     await t.step('AC2: a logged-out caller gets 401', async () => {
       const body = { task: 'pet_chat', pet_id: petId, question: 'How is she doing?' };
       // Signed out in the app: the publishable key stands in for a session.
@@ -159,10 +227,39 @@ Deno.test('ask-vet-assistant task requests (spec 0080)', async (t) => {
       assertEquals(res.status, 403);
       assertEquals(res.json.code, 'forbidden_file');
     });
+    await t.step('FR9/FR10: over the daily cap, 429 daily_limit with wording A, and one warning', async () => {
+      const now = new Date().toISOString();
+      const { error: seedError } = await admin
+        .from('rate_limit_hits')
+        .insert(Array.from({ length: 100 }, () => ({ rate_key: `ask-vet-assistant:daily:user:${owner.userId}`, created_at: now })));
+      if (seedError) throw new Error(`daily cap seed failed: ${seedError.message}`);
+
+      // A visible pet, so the request passes every gate and is refused at
+      // the rate check, before the AI.
+      const body = { task: 'pet_chat', pet_id: petId, question: 'How is she doing?' };
+      for (let i = 1; i <= 2; i++) {
+        const res = await callFunction(FN, owner.accessToken, body);
+        assertEquals(res.status, 429, `call ${i}: expected 429`);
+        assertEquals(res.json.code, 'daily_limit', `call ${i}: expected daily_limit`);
+        assertEquals(res.json.error, DAILY_LIMIT_MESSAGE, `call ${i}: expected wording A`);
+      }
+      const { count, error: countError } = await admin
+        .from('rate_limit_hits')
+        .select('id', { count: 'exact', head: true })
+        .eq('rate_key', `ask-vet-assistant:daily-warned:user:${owner.userId}`);
+      if (countError) throw new Error(`warned-key count failed: ${countError.message}`);
+      assertEquals(count, 1, 'expected exactly one daily-cap warning');
+    });
   } finally {
-    // Sits, invites and document links cascade with the pet or the user.
+    // Sits, invites, co-owner rows and document links cascade with the pet
+    // or the user. Rate-limit rows don't, so they're removed by key.
     if (petId) await admin.from('pets').delete().eq('id', petId);
     await admin.storage.from('uploads').remove([`${owner.userId}/aitask-scan.png`]);
-    for (const user of [owner, sitter, stranger]) await deleteScratchUser(user.userId);
+    await admin.from('rate_limit_hits').delete().in('rate_key', [
+      `ask-vet-assistant:user:${owner.userId}`,
+      `ask-vet-assistant:daily:user:${owner.userId}`,
+      `ask-vet-assistant:daily-warned:user:${owner.userId}`,
+    ]);
+    for (const user of [owner, sitter, stranger, oldSitter, exCoOwner]) await deleteScratchUser(user.userId);
   }
 });

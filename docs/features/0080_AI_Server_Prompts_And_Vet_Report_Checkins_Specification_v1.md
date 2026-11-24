@@ -89,7 +89,7 @@ A day with no rating at all counts under a separate "Not recorded" total, shown 
 7. Vaccine document scans match lines to the person's own pets, looked up on the server (spec 0076's rule).
 8. Pet Insights uses the last 30 days of daily check-ins: each day's Vibe and the symptoms logged, presented as two separate things. It also uses active medications, the baseline, and weight. It needs at least 2 non-skipped check-ins, as the Trends summary already does.
 9. Each person can make at most **100 AI requests in any 24 hours**, across all 8 tasks, on top of the existing 20 per 10 minutes. Over the limit, they see wording A and the AI is never called.
-10. Every time someone hits the daily limit, a warning goes to Sentry, so Lynn can see whether 100 is too low.
+10. When someone hits the daily limit, a warning goes to Sentry, **at most once per person per day** (Lynn, 2026-11-23, T5 review), so Lynn can see whether 100 is too low without one script or app bug flooding Sentry. Requests the server answers without calling the AI (not enough check-ins, no Trends summary, a pet the person can't see) don't count toward the 100.
 11. AI failures (the AI service erroring, or returning an unreadable answer) are reported to Sentry. Today they're only written to a log.
 12. The temporary file-link workaround from spec 0071 is removed. Only file paths are accepted. The old-photo-link fallback used when deleting a pet is removed too.
 
