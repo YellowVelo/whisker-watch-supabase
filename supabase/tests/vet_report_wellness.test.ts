@@ -6,18 +6,19 @@
 // Run: deno test --node-modules-dir=none supabase/tests/vet_report_wellness.test.ts
 
 import { assertEquals, assertThrows } from 'https://deno.land/std@0.224.0/assert/mod.ts';
-import type { CheckInRow } from '../functions/_shared/checkinRules.ts';
+import { dateStrInTimezone, type CheckInRow } from '../functions/_shared/checkinRules.ts';
 import {
   buildWellnessOverview,
+  overviewWindow,
   windowDates,
   WINDOW_DAYS,
   type WellnessObservation,
 } from '../functions/generate-vet-report/wellness.ts';
 import {
   humanizeCode,
+  layoutRuns,
   LEGEND_BLANK,
   LEGEND_NORMAL,
-  LEGEND_NOT_OBSERVED,
   LEGEND_ONE,
   LEGEND_TWO_PLUS,
   NO_CHECK_INS_TEXT,
@@ -28,6 +29,7 @@ import {
   symptomListText,
   VIBE_LABEL,
   VIBE_NOTE,
+  vibeTotalsParts,
   vibeTotalsText,
   windowText,
 } from '../functions/generate-vet-report/wellnessText.ts';
@@ -69,6 +71,30 @@ Deno.test('windowDates: 30 days ending on the given date, oldest first, across a
   assertEquals(dates[29], '2026-03-05');
   assertEquals(DATES[0], '2026-10-25');
   assertEquals(DATES[29], END);
+});
+
+Deno.test("overviewWindow: 30 calendar days ending today in the owner's time zone", () => {
+  // 2026-11-23 15:00 UTC = 10:00 in New York, 2026-11-24 00:00 in Tokyo.
+  const now = Date.parse('2026-11-23T15:00:00Z');
+  assertEquals(overviewWindow('America/New_York', now), { start: '2026-10-25', end: '2026-11-23' });
+  assertEquals(overviewWindow('Asia/Tokyo', now), { start: '2026-10-26', end: '2026-11-24' });
+  assertEquals(overviewWindow(null, now), { start: '2026-10-25', end: '2026-11-23' });
+});
+
+Deno.test("overviewWindow: a daylight-saving change in the window never moves the start off the chart's first day", () => {
+  // 2026-11-23 04:30 UTC = 2026-11-22 23:30 in New York (EST). Clocks went
+  // back on 2026-11-01, so 29x24 hours earlier is 00:30 EDT on Oct 25,
+  // one calendar day after the chart's first day (Oct 24).
+  const now = Date.parse('2026-11-23T04:30:00Z');
+  const w = overviewWindow('America/New_York', now);
+  assertEquals(w, { start: '2026-10-24', end: '2026-11-22' });
+  assertEquals(w.start, windowDates(w.end)[0]);
+  assertEquals(dateStrInTimezone('America/New_York', -29, now), '2026-10-25'); // the old, wrong start
+  // Spring forward (2026-03-08): the start still matches the chart.
+  const spring = Date.parse('2026-03-20T03:30:00Z'); // 2026-03-19 23:30 EDT
+  const s = overviewWindow('America/New_York', spring);
+  assertEquals(s, { start: '2026-02-18', end: '2026-03-19' });
+  assertEquals(s.start, windowDates(s.end)[0]);
 });
 
 Deno.test('windowDates: rejects a malformed date', () => {
@@ -151,6 +177,16 @@ Deno.test('skipped and missing days: skipped shows skipped (its symptoms ignored
 
 Deno.test('skipped-day symptoms alone never make a chart', () => {
   const o = build([day('s', DATES[0], 'skipped')], [obs('s', 'appetite', 'ate_much_less', 'Ate much less')]);
+  assertEquals(o.attributes, []);
+  assertEquals(o.noSymptoms, true);
+});
+
+Deno.test('an attribute whose only non-normal answers are "Not observed" never gets a chart', () => {
+  const checkIns = DATES.map((d, i) => day(`c${i}`, d, i === 3 ? 'skipped' : 'great'));
+  const observations = DATES.flatMap((_d, i) =>
+    i % 2 === 0 ? [obs(`c${i}`, 'bathroom', 'not_observed', 'Not observed')] : [obs(`c${i}`, 'bathroom', 'normal', 'Normal')]
+  );
+  const o = build(checkIns, observations);
   assertEquals(o.attributes, []);
   assertEquals(o.noSymptoms, true);
 });
@@ -278,8 +314,48 @@ Deno.test('only outside-window check-ins: counts as no check-ins', () => {
 
 // ── Approved wording B (spec 0080), wellnessText.ts ─────────────────────
 
-Deno.test('wording B: window text uses the report dates as given', () => {
-  assertEquals(windowText('Oct 25, 2026', 'Nov 23, 2026'), 'last 30 days (Oct 25, 2026 – Nov 23, 2026)');
+Deno.test('wording B: window text, same year: start without the year, end with it', () => {
+  assertEquals(windowText('2026-10-25', '2026-11-23'), 'last 30 days (Oct 25 – Nov 23, 2026)');
+  const o = build([]);
+  assertEquals(windowText(o.startDate, o.endDate), 'last 30 days (Oct 25 – Nov 23, 2026)');
+  assertEquals(windowText('2026-12-01', '2026-12-30'), 'last 30 days (Dec 1 – Dec 30, 2026)');
+});
+
+Deno.test('wording B: window text across New Year shows both years', () => {
+  assertEquals(windowText('2026-12-12', '2027-01-10'), 'last 30 days (Dec 12, 2026 – Jan 10, 2027)');
+  const dates = windowDates('2027-01-10');
+  assertEquals(windowText(dates[0], dates[29]), 'last 30 days (Dec 12, 2026 – Jan 10, 2027)');
+});
+
+Deno.test('Vibe totals parts: one "Label N" pair each, joined by " · " into the approved line', () => {
+  const v = { great: 21, off: 6, tough: 2, skipped: 1, noCheckIn: 0, notRecorded: 3 };
+  assertEquals(vibeTotalsParts(v), ['Great Day 21', 'Off Day 6', 'Tough Day 2', 'Skipped 1', 'No check-in 0', 'Not recorded 3']);
+  assertEquals(vibeTotalsParts(v).join(' · '), vibeTotalsText(v));
+});
+
+Deno.test('layoutRuns: a nowrap "Label N" pair is never split across lines; breaks fall after " ·"', () => {
+  // Width = character count. The prefix plus parts as index.ts builds them.
+  const measure = (t: string) => t.length;
+  const parts = vibeTotalsParts({ great: 21, off: 6, tough: 2, skipped: 1, noCheckIn: 1, notRecorded: 0 });
+  const runs = [
+    { text: 'How the days went', font: 'b' },
+    { text: " (the owner's own daily rating): ", font: 'r' },
+    ...parts.flatMap((part, i) =>
+      i < parts.length - 1 ? [{ text: `${part} ·`, font: 'r', nowrap: true }, { text: ' ', font: 'r' }] : [{ text: part, font: 'r', nowrap: true }]
+    ),
+  ];
+  for (const maxWidth of [30, 40, 55, 70, 75, 85, 100, 200]) {
+    const lines = layoutRuns(runs, maxWidth, measure).map((l) => l.map((r) => r.text).join(''));
+    assertEquals(
+      lines.join(' '),
+      "How the days went (the owner's own daily rating): Great Day 21 · Off Day 6 · Tough Day 2 · Skipped 1 · No check-in 1",
+    );
+    for (const line of lines) {
+      assertEquals(line, line.trim());
+      assertEquals(/^(\d|·)/.test(line), false, `line starts with a number or separator at width ${maxWidth}: "${line}"`);
+    }
+    for (const part of parts) assertEquals(lines.some((l) => l.includes(part)), true, `"${part}" was split at width ${maxWidth}`);
+  }
 });
 
 Deno.test('wording B: Vibe totals line, with Not recorded only when > 0', () => {
@@ -316,10 +392,10 @@ Deno.test('wording B: empty-state messages', () => {
   assertEquals(NO_SYMPTOMS_TEXT, 'No symptoms were logged in the last 30 days.');
 });
 
-Deno.test('legend wording', () => {
+Deno.test('legend wording: no "Not observed" item; Not observed days are blank', () => {
   assertEquals(
-    [LEGEND_NORMAL, LEGEND_ONE, LEGEND_TWO_PLUS, LEGEND_NOT_OBSERVED, LEGEND_BLANK],
-    ['Normal', '1 symptom', '2+ symptoms', 'Not observed', 'Blank = skipped or no check-in'],
+    [LEGEND_NORMAL, LEGEND_ONE, LEGEND_TWO_PLUS, LEGEND_BLANK],
+    ['Normal', '1 symptom', '2+ symptoms', 'Blank = skipped, no check-in, or not observed'],
   );
 });
 

@@ -16,18 +16,33 @@ export const NO_SYMPTOMS_TEXT = 'No symptoms were logged in the last 30 days.';
 export const LEGEND_NORMAL = 'Normal';
 export const LEGEND_ONE = '1 symptom';
 export const LEGEND_TWO_PLUS = '2+ symptoms';
-export const LEGEND_NOT_OBSERVED = 'Not observed';
-export const LEGEND_BLANK = 'Blank = skipped or no check-in';
+// A "Not observed" day draws nothing, like a skipped day (Lynn, 2026-11-24).
+export const LEGEND_BLANK = 'Blank = skipped, no check-in, or not observed';
 
-// "last 30 days (Oct 25, 2026 – Nov 23, 2026)". The dates come in already
-// formatted with the report's own date format.
-export function windowText(startLabel: string, endLabel: string): string {
-  return `last 30 days (${startLabel} – ${endLabel})`;
+// "Oct 25" / "Oct 25, 2026": the report's own date style (index.ts
+// formatDate, en-US short month), read as a calendar date (UTC).
+function shortDate(date: string, withYear: boolean): string {
+  const d = new Date(`${date}T00:00:00Z`);
+  if (Number.isNaN(d.getTime())) throw new Error(`Invalid date: ${date}`);
+  return d.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    ...(withYear ? { year: 'numeric' as const } : {}),
+    timeZone: 'UTC',
+  });
 }
 
-// "Great Day 21 · Off Day 6 · Tough Day 2 · Skipped 1 · No check-in 0",
-// plus " · Not recorded N" only when there are any.
-export function vibeTotalsText(v: VibeTotals): string {
+// Takes YYYY-MM-DD dates. Same year: "last 30 days (Oct 25 – Nov 23, 2026)".
+// Across New Year: "last 30 days (Dec 12, 2026 – Jan 10, 2027)" (Lynn,
+// 2026-11-24).
+export function windowText(startDate: string, endDate: string): string {
+  const sameYear = startDate.slice(0, 4) === endDate.slice(0, 4);
+  return `last 30 days (${shortDate(startDate, !sameYear)} – ${shortDate(endDate, true)})`;
+}
+
+// The Vibe totals as separate "Label N" pairs, so the PDF can wrap the line
+// only between pairs, never between a label and its number.
+export function vibeTotalsParts(v: VibeTotals): string[] {
   const parts = [
     `Great Day ${v.great}`,
     `Off Day ${v.off}`,
@@ -36,7 +51,56 @@ export function vibeTotalsText(v: VibeTotals): string {
     `No check-in ${v.noCheckIn}`,
   ];
   if (v.notRecorded > 0) parts.push(`Not recorded ${v.notRecorded}`);
-  return parts.join(' · ');
+  return parts;
+}
+
+// "Great Day 21 · Off Day 6 · Tough Day 2 · Skipped 1 · No check-in 0",
+// plus " · Not recorded N" only when there are any.
+export function vibeTotalsText(v: VibeTotals): string {
+  return vibeTotalsParts(v).join(' · ');
+}
+
+// Line breaking for one paragraph of runs, kept pure so it can be tested
+// without a PDF. Each run is split at spaces into words, except a `nowrap`
+// run, which stays whole (so "No check-in 0" never splits). `measure` gives
+// a piece's width in the run's font. Lines never start or end with a space.
+export interface LayoutRun<F> {
+  text: string;
+  font: F;
+  nowrap?: boolean;
+}
+
+export function layoutRuns<F>(
+  runs: readonly LayoutRun<F>[],
+  maxWidth: number,
+  measure: (text: string, font: F) => number,
+): { text: string; font: F }[][] {
+  const lines: { text: string; font: F }[][] = [[]];
+  let width = 0;
+  for (const run of runs) {
+    const tokens = run.nowrap ? [run.text] : run.text.split(/(\s+)/).filter(Boolean);
+    for (const token of tokens) {
+      const isSpace = /^\s+$/.test(token);
+      const text = isSpace ? ' ' : token;
+      const w = measure(text, run.font);
+      const line = lines[lines.length - 1];
+      if (isSpace && line.length === 0) continue; // no leading space on a wrapped line
+      if (!isSpace && width + w > maxWidth && line.length > 0) {
+        while (line.length && line[line.length - 1].text === ' ') {
+          width -= measure(' ', line[line.length - 1].font);
+          line.pop();
+        }
+        lines.push([{ text, font: run.font }]);
+        width = w;
+        continue;
+      }
+      line.push({ text, font: run.font });
+      width += w;
+    }
+  }
+  const last = lines[lines.length - 1];
+  while (last.length && last[last.length - 1].text === ' ') last.pop();
+  return lines;
 }
 
 // "Ate a little less (18 days), Ate much less (1 day)".

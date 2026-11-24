@@ -17,6 +17,7 @@
 import {
   attributeDaySeries,
   COUNTED_ATTRIBUTES,
+  dateStrInTimezone,
   isCountableSymptom,
   type CheckInRow,
   type ObservationRow,
@@ -88,6 +89,18 @@ export function windowDates(endDate: string): string[] {
   const dates: string[] = [];
   for (let i = WINDOW_DAYS - 1; i >= 0; i--) dates.push(addDays(endDate, -i));
   return dates;
+}
+
+// The window's first and last dates, for the check-in query and the
+// overview alike. The start is counted back in calendar days from today in
+// the owner's time zone, not 29×24 hours of real time, so a daylight-saving
+// change inside the window can't move it a day off the chart's first day.
+export function overviewWindow(
+  timezone: string | null | undefined,
+  nowMs: number = Date.now(),
+): { start: string; end: string } {
+  const end = dateStrInTimezone(timezone, 0, nowMs);
+  return { start: windowDates(end)[0], end };
 }
 
 export function buildWellnessOverview(input: WellnessInput): WellnessOverview {

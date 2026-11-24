@@ -4,10 +4,11 @@
 // Spec §5.1). Assembles a clinic-ready PDF health report for one pet and
 // returns it as a binary stream. The caller's own JWT is used to create
 // the Supabase client below, so every query is subject to normal RLS
-// (`is_pet_owner()`) — a user can only ever generate a report for a pet
-// they own or co-own. There is no separate "check the user owns this
-// pet" step because RLS makes that structurally true: a `pets` fetch for
-// a pet the caller doesn't own simply returns no row.
+// (`is_pet_owner()`, `is_pet_sitter()`), so a user can only generate a
+// report for a pet they can read: one they own or co-own, or (punch list
+// PA-72) one they're sitting for while the sit is open. There is no
+// separate "check the user owns this pet" step:
+// a `pets` fetch for a pet the caller can't read simply returns no row.
 //
 // Request body: { petId: string, format?: 'pdf' }
 //   - format is optional and currently only 'pdf' is supported (DOCX was
@@ -41,13 +42,13 @@
 import { createClient } from 'jsr:@supabase/supabase-js@2.119.2';
 import { PDFDocument, StandardFonts, rgb } from 'npm:pdf-lib@1.17.1';
 import { reportError } from '../_shared/errorReporting.ts';
-import { COUNTED_ATTRIBUTES, dateStrInTimezone, type CheckInRow } from '../_shared/checkinRules.ts';
-import { buildWellnessOverview, type WellnessDay, type WellnessObservation } from './wellness.ts';
+import { COUNTED_ATTRIBUTES, type CheckInRow } from '../_shared/checkinRules.ts';
+import { buildWellnessOverview, overviewWindow, type WellnessDay, type WellnessObservation } from './wellness.ts';
 import {
   humanizeCode,
+  layoutRuns,
   LEGEND_BLANK,
   LEGEND_NORMAL,
-  LEGEND_NOT_OBSERVED,
   LEGEND_ONE,
   LEGEND_TWO_PLUS,
   NO_CHECK_INS_TEXT,
@@ -58,7 +59,7 @@ import {
   symptomListText,
   VIBE_LABEL,
   VIBE_NOTE,
-  vibeTotalsText,
+  vibeTotalsParts,
   windowText,
 } from './wellnessText.ts';
 
@@ -106,9 +107,9 @@ const CONTENT_WIDTH = PAGE_WIDTH - MARGIN * 2;
 const BAR_NORMAL = rgb(169 / 255, 174 / 255, 181 / 255); // #A9AEB5
 const BAR_ONE_SYMPTOM = rgb(244 / 255, 199 / 255, 107 / 255); // #F4C76B
 const BAR_TWO_PLUS = rgb(229 / 255, 115 / 255, 115 / 255); // #E57373
-const BAR_NOT_OBSERVED = rgb(0.86, 0.87, 0.89); // light grey, half height
 
-type TextSegment = { text: string; font?: any };
+// `nowrap` keeps a segment on one line (e.g. "No check-in 0").
+type TextSegment = { text: string; font?: any; nowrap?: boolean };
 
 class ReportBuilder {
   doc: any;
@@ -211,30 +212,11 @@ class ReportBuilder {
   // One paragraph made of differently styled runs (e.g. a bold label then
   // regular text), wrapped word by word across the runs.
   richParagraph(segments: TextSegment[], { size = 10, color = rgb(0.15, 0.15, 0.15), gap = 4 } = {}) {
-    type Run = { text: string; font: any };
-    const lines: Run[][] = [[]];
-    let width = 0;
-    for (const seg of segments) {
-      const font = seg.font ?? this.font;
-      for (const token of seg.text.split(/(\s+)/).filter(Boolean)) {
-        const isSpace = /^\s+$/.test(token);
-        const text = isSpace ? ' ' : token;
-        const w = font.widthOfTextAtSize(text, size);
-        const line = lines[lines.length - 1];
-        if (isSpace && line.length === 0) continue; // no leading space on a wrapped line
-        if (!isSpace && width + w > CONTENT_WIDTH && line.length > 0) {
-          while (line.length && line[line.length - 1].text === ' ') {
-            width -= line[line.length - 1].font.widthOfTextAtSize(' ', size);
-            line.pop();
-          }
-          lines.push([{ text, font }]);
-          width = w;
-          continue;
-        }
-        line.push({ text, font });
-        width += w;
-      }
-    }
+    const lines = layoutRuns(
+      segments.map((seg) => ({ text: seg.text, font: seg.font ?? this.font, nowrap: seg.nowrap })),
+      CONTENT_WIDTH,
+      (text, font: any) => font.widthOfTextAtSize(text, size),
+    );
     for (const line of lines) {
       this.ensureSpace(size + gap);
       let x = MARGIN;
@@ -247,9 +229,9 @@ class ReportBuilder {
   }
 
   // 30-day bar chart for one attribute, oldest day on the left (spec 0080,
-  // FR16). Grey = Normal, amber = 1 symptom, red = 2+ symptoms, a
-  // half-height light grey bar = Not observed, and no bar for a skipped
-  // day or a day with no check-in. Bar color comes from the symptom count
+  // FR16). Grey = Normal, amber = 1 symptom, red = 2+ symptoms, and no
+  // bar for a skipped day, a day with no check-in, or a "Not observed" day
+  // (Lynn, 2026-11-24). Bar color comes from the symptom count
   // only, never the day's Vibe (FR17). First and last dates go under the
   // axis; the legend is drawn when `legend` is true.
   barChart(days: WellnessDay[], { height = 36, legend = false } = {}) {
@@ -267,11 +249,9 @@ class ReportBuilder {
     days.forEach((d, i) => {
       const x = MARGIN + i * slot + (slot - barWidth) / 2;
       let color = null;
-      let barHeight = height;
       if (d.state === 'normal') color = BAR_NORMAL;
       else if (d.state === 'observed') color = (d.count ?? 0) >= 2 ? BAR_TWO_PLUS : BAR_ONE_SYMPTOM;
-      else if (d.state === 'not_observed') { color = BAR_NOT_OBSERVED; barHeight = height / 2; }
-      if (color) this.page.drawRectangle({ x, y: bottom, width: barWidth, height: barHeight, color });
+      if (color) this.page.drawRectangle({ x, y: bottom, width: barWidth, height, color });
     });
 
     this.page.drawLine({
@@ -291,11 +271,10 @@ class ReportBuilder {
 
     if (legend) {
       const swatch = 8;
-      const items: { label: string; color: any; half?: boolean }[] = [
+      const items: { label: string; color: any }[] = [
         { label: LEGEND_NORMAL, color: BAR_NORMAL },
         { label: LEGEND_ONE, color: BAR_ONE_SYMPTOM },
         { label: LEGEND_TWO_PLUS, color: BAR_TWO_PLUS },
-        { label: LEGEND_NOT_OBSERVED, color: BAR_NOT_OBSERVED, half: true },
         { label: LEGEND_BLANK, color: null },
       ];
       let x = MARGIN;
@@ -308,8 +287,7 @@ class ReportBuilder {
           baseline -= labelSize + 5;
         }
         if (item.color) {
-          const h = item.half ? swatch / 2 : swatch;
-          this.page.drawRectangle({ x, y: baseline, width: swatch, height: h, color: item.color });
+          this.page.drawRectangle({ x, y: baseline, width: swatch, height: swatch, color: item.color });
           x += swatch + 4;
         }
         this.page.drawText(item.label, { x, y: baseline, size: labelSize, font: this.font, color: rgb(0.35, 0.35, 0.35) });
@@ -468,8 +446,9 @@ Deno.serve(async (req) => {
     // FR15). UTC if unset or invalid (dateStrInTimezone's fallback).
     const { data: profile } = await supabaseClient.from('profiles').select('first_name, last_name, email, timezone')
       .eq('id', userData.user.id).maybeSingle();
-    const overviewEnd = dateStrInTimezone(profile?.timezone, 0);
-    const overviewStart = dateStrInTimezone(profile?.timezone, -29);
+    // One window for the check-in query and the chart (overviewWindow
+    // counts calendar days, so a daylight-saving change can't split them).
+    const { start: overviewStart, end: overviewEnd } = overviewWindow(profile?.timezone);
 
     const [
       { data: checkInRows, error: checkInsError },
@@ -566,14 +545,16 @@ Deno.serve(async (req) => {
 
     // Wellness Overview (spec 0080, wording B as approved). Vibe totals
     // and symptom charts are separate (spec 0012 v5).
-    r.headingWithNote(OVERVIEW_HEADING, windowText(formatDate(overview.startDate), formatDate(overview.endDate)));
+    r.headingWithNote(OVERVIEW_HEADING, windowText(overview.startDate, overview.endDate));
     if (overview.noCheckIns) {
       r.paragraph(NO_CHECK_INS_TEXT, { color: rgb(0.5, 0.5, 0.5) });
     } else {
       r.richParagraph([
         { text: VIBE_LABEL, font: bold },
         { text: VIBE_NOTE },
-        { text: vibeTotalsText(overview.vibe) },
+        // Breaks only after a " ·", never inside a "Label N" pair.
+        ...vibeTotalsParts(overview.vibe).flatMap((part, i, all) =>
+          i < all.length - 1 ? [{ text: `${part} ·`, nowrap: true }, { text: ' ' }] : [{ text: part, nowrap: true }]),
       ]);
       r.y -= 6;
       if (overview.noSymptoms) {
@@ -712,7 +693,8 @@ Deno.serve(async (req) => {
       },
     });
   } catch (err) {
-    console.error('generate-vet-report error:', err);
+    // Not serverError(): vetReportClient.js shows body.error.message, so
+    // this keeps the { error: { code, message } } shape.
     reportError(err, { function: 'generate-vet-report' });
     return jsonError('report_generation_failed', 'Something went wrong generating this report', 500);
   }

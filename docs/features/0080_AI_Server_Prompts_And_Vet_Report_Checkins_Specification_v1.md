@@ -59,6 +59,10 @@ The existing 10-minute message stays: "You've reached the limit for AI requests.
 **C. Pet Insights, not enough check-ins** (approved by Lynn 2026-11-23; shown on the Insights card when the pet has fewer than 2 non-skipped check-ins in the last 30 days, and the AI isn't called):
 > **Not enough check-ins yet.** Insights look at {Pet}'s last 30 days of daily check-ins. Check in on at least 2 days and they'll be ready.
 
+Vet Report details decided by Lynn 2026-11-24 (T8 review):
+- An attribute appears only when a symptom was logged for it in the 30 days; "Not observed" answers never make an attribute appear. Inside a chart that does appear, a "Not observed" day draws nothing (blank, like a skipped day), and the legend's blank line reads "Blank = skipped, no check-in, or not observed".
+- Heading dates: same year → "(Oct 25 – Nov 23, 2026)" as approved; across New Year → both years, "(Dec 12, 2026 – Jan 10, 2027)".
+
 Vet Report empty states:
 > No symptoms were logged in the last 30 days.
 
