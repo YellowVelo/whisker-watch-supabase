@@ -20,8 +20,9 @@ import {
 } from '@/lib/checkin/checkinClient';
 import { getChipState } from '@/lib/checkin/chipLabels';
 import {
-  getWeightSummary, getVaccinationSummary, getTimelineEvents, getHealthRecordsCount,
+  getVaccinationSummary, getTimelineEvents, getHealthRecordsCount,
 } from '@/lib/checkin/petProfileClient';
+import { getWeightSummary } from '@/lib/weightClient';
 import { getPetLabel } from '@/lib/speciesConfig';
 import { computeDetailedAge } from '@/lib/lifeStage';
 import { PALETTE, RING_COLOR, PALETTE_SOFT, tint } from '@/lib/toneColors';

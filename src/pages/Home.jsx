@@ -16,7 +16,7 @@ import {
   getHealthAttributeDirectionsForPets, getMissedDaysForPet,
   todayStr as todayStrTz, yesterdayStr as yesterdayStrTz,
 } from '@/lib/checkin/checkinClient';
-import { getWeightSummariesForPets } from '@/lib/checkin/petProfileClient';
+import { getWeightSummariesForPets } from '@/lib/weightClient';
 import { getActiveMedicationCountsForPets, loadOwnedPets } from '@/lib/petsClient';
 import { buildGreeting } from '@/lib/greeting';
 import { useAuth } from '@/lib/AuthContext';
@@ -25,9 +25,9 @@ import { track } from '@/lib/analytics';
 import { PALETTE, PALETTE_SOFT } from '@/lib/toneColors';
 import { reportClientError } from '@/lib/errorMonitoring';
 
-// Builds Home's Weight chip state from petProfileClient's
-// getWeightSummariesForPets (batched — Weight stays on symptom_logs per
-// spec). Comparison text
+// Builds Home's Weight chip state from weightClient's
+// getWeightSummariesForPets (batched; weight lives in observations, spec
+// 0081). Comparison text
 // is "versus previous entry" unless the two most recent entries actually
 // fall on consecutive calendar days (spec §4.4/§9.3).
 function buildWeightState(summary) {

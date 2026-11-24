@@ -199,6 +199,10 @@ export async function getObservationValuesForCheckIns(checkInsByPetId) {
   const checkInIds = Object.values(checkInsByPetId).filter(Boolean).map((c) => c.id);
   if (checkInIds.length === 0) return {};
 
+  // `.in('daily_check_in_id', ...)` never matches a null, so standalone
+  // weights (no check-in, spec 0081) are never grouped into a check-in here.
+  // The other observations readers (getAttributeDirectionsForPets,
+  // trendsClient's getObservationTrend) filter the same way.
   const [{ data, error }, catalog] = await Promise.all([
     supabase
       .from('observations')

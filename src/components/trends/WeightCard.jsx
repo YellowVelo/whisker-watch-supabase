@@ -2,8 +2,9 @@ import { useEffect, useState } from 'react';
 import { Scale, ArrowDown, ArrowUp } from 'lucide-react';
 import MetricCardShell from './MetricCardShell';
 import TrendChart from './TrendChart';
-import { getWeightTrend } from '@/lib/checkin/trendsClient';
+import { getWeightTrend } from '@/lib/weightClient';
 import { PALETTE } from '@/lib/toneColors';
+import { reportClientError } from '@/lib/errorMonitoring';
 
 const RANGE_PERIOD_LABEL = { '24H': 'Today', '7D': 'Last 7 Days', '30D': 'Last 30 Days', '90D': 'Last 90 Days', '1Y': 'Last Year' };
 
@@ -15,7 +16,10 @@ export default function WeightCard({ petId, range, timezone }) {
     setState((s) => ({ ...s, loading: true, error: false }));
     getWeightTrend(petId, range, timezone)
       .then((data) => { if (!cancelled) setState({ loading: false, error: false, data }); })
-      .catch(() => { if (!cancelled) setState({ loading: false, error: true, data: null }); });
+      .catch((err) => {
+        reportClientError(err, { feature: 'trends', note: 'weight' });
+        if (!cancelled) setState({ loading: false, error: true, data: null });
+      });
     return () => { cancelled = true; };
   }, [petId, range, timezone]);
 

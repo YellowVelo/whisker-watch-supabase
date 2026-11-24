@@ -5,80 +5,14 @@
 //
 // The retired Wellness/Appetite/Energy/Symptoms ring scores (computed
 // here at read time from computeDayScore/computeTrend) are gone along
-// with the 5-ring row itself. Only Weight-related reads remain here.
+// with the 5-ring row itself. Weight reads moved to src/lib/weightClient.js
+// (spec 0081).
 
 import { supabase } from '@/api/supabaseClient';
 import { entities } from '@/api/entities';
 import { getObservationValuesForCheckIns } from './checkinClient';
 import { COUNTED_CATEGORIES, getCategory } from './config';
 import { getChipState } from './chipLabels';
-
-// Shared by getWeightSummary/getWeightSummariesForPets — turns a pet's
-// weight-bearing symptom_logs rows (already sorted oldest-first, already
-// capped to `days`) into the ring/card shape. Kept pure/sync so the batched
-// path below can reuse it without a second round trip per pet.
-function summarizeWeightLogs(withWeight) {
-  if (withWeight.length === 0) {
-    return { currentLbs: null, deltaLbs: null, score: null, statusLabel: null, sparkline: [] };
-  }
-
-  const toLbs = (grams) => grams / 453.59237;
-  const sparkline = withWeight.map((l) => ({ date: l.date, lbs: toLbs(l.weight_grams) }));
-  const currentLbs = sparkline[sparkline.length - 1].lbs;
-
-  if (sparkline.length < 2) {
-    return { currentLbs, deltaLbs: null, score: null, statusLabel: null, sparkline };
-  }
-
-  const prevLbs = sparkline[sparkline.length - 2].lbs;
-  const deltaLbs = currentLbs - prevLbs;
-  const pctChange = (currentLbs - prevLbs) / prevLbs;
-  const deduction = Math.min(40, Math.round(Math.abs(pctChange) * 1000));
-  const score = Math.max(0, 100 - deduction);
-  const statusLabel = Math.abs(pctChange) >= 0.02 ? 'Monitor' : 'Stable';
-
-  return { currentLbs, deltaLbs, score, statusLabel, sparkline };
-}
-
-// Weight ring + card data, from symptom_logs.weight_grams — the only place
-// weight is currently written (Data Model §3.8). Score is a deterministic
-// deduction from the day-over-day percent change, not a stored value;
-// there's no baseline-weight field yet, so "trend" compares the two most
-// recent entries rather than a true baseline (documented limitation,
-// carried over from the previous Pet Profile implementation).
-export async function getWeightSummary(petId, days = 30) {
-  const logs = await entities.SymptomLog.filter({ pet_id: petId }, '-date', 200);
-  const withWeight = logs.filter((l) => l.weight_grams != null).slice(0, days).reverse();
-  return summarizeWeightLogs(withWeight);
-}
-
-// Batched equivalent of calling getWeightSummary per pet — one
-// symptom_logs query instead of N (Health Score Revision V2, Home's
-// Weight chip needs this for every active pet on every load/pull-to-
-// refresh, so the same batching discipline as getCheckInsForPets/
-// getRecentWellnessForPets applies here too).
-export async function getWeightSummariesForPets(petIds, days = 30) {
-  const result = {};
-  for (const petId of petIds) result[petId] = summarizeWeightLogs([]);
-  if (petIds.length === 0) return result;
-
-  const { data, error } = await supabase
-    .from('symptom_logs')
-    .select('pet_id, date, weight_grams')
-    .in('pet_id', petIds)
-    .not('weight_grams', 'is', null)
-    .order('date', { ascending: false });
-  if (error) throw error;
-
-  const byPet = {};
-  for (const row of data) (byPet[row.pet_id] ||= []).push(row);
-
-  for (const petId of petIds) {
-    const withWeight = (byPet[petId] || []).slice(0, days).reverse();
-    result[petId] = summarizeWeightLogs(withWeight);
-  }
-  return result;
-}
 
 // Vaccination completion summary. `vaccinations` is the pet's full shot
 // history (one row per administration, e.g. an annual booster logged
