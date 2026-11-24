@@ -84,6 +84,12 @@ jobs:
           deno test --allow-read --allow-env --node-modules-dir=none \
             supabase/tests/function_hygiene.test.ts
 
+      # Pure unit tests, no secrets: no network, file or env permission.
+      - name: Run check-in counting rules unit tests (spec 0080)
+        run: |
+          deno test --node-modules-dir=none \
+            supabase/tests/checkin_rules.test.ts
+
       - name: Run resend-webhook integration tests
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_DEV_URL }}
