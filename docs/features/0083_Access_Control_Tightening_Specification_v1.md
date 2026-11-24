@@ -1,6 +1,6 @@
 # 0083_Access_Control_Tightening_Specification_v1
 
-**Status:** Draft, for Lynn's review. Not approved. No code until it is. Amended 2026-11-24 with Lynn's D4 (app-only control) and D5 (ownership scenarios): deleting a pet is now app-only.
+**Status:** Approved by Lynn 2026-11-24. Amended 2026-11-24 with Lynn's D4 (app-only control) and D5 (ownership scenarios): deleting a pet is now app-only.
 **Date:** 2026-11-24
 **Branch:** `claude/spec-0083-access-control` (off `main` at `ddd3d81`)
 **Migration:** `0062_access_control_tightening.sql` (reserved). Spec 0081 is being built in parallel on migration 0061.
@@ -10,7 +10,7 @@
 
 ## Lynn — what I need from you
 
-1. **Review and approve this spec**, including the "Before You Approve This" flags. This blocks everything else.
+1. ~~Review and approve this spec~~ Approved 2026-11-24.
 2. **Later, before merge:** OK the PROTECTED merge after the reviewer passes it. You'll get a plain "who can see/do what" summary.
 3. **Nothing to promote in Cloudflare.** This is database and server only, with no app changes. I deploy the migration and functions to dev myself, then to staging and prod after your merge OK.
 
