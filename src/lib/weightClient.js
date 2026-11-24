@@ -10,7 +10,8 @@
 //     of the chosen calendar date (Amendment 1, no new column).
 //
 // Every screen that shows weight reads through this file, so no screen
-// dates a weight differently. Writes go through `entities.Observation`;
+// dates a weight differently. Writes go through `entities.Observation`
+// (deletes use the client directly so a no-row delete is detected);
 // `observations` RLS already allows owners/co-owners to write and owners,
 // co-owners and open-sit sitters to read (migrations 0014/0045).
 //
@@ -123,22 +124,59 @@ export function compareWeightsNewestFirst(a, b) {
   return 0;
 }
 
-// One query for any number of pets. Returns { [petId]: entries newest-first }.
+// Rows per request. The server may cap a response below this (Supabase's
+// max_rows setting), so paging never relies on a full page meaning "more".
+export const WEIGHT_PAGE_SIZE = 1000;
+
+// A weight's date can come from its check-in rather than its own row, so
+// no server-side order on `observations` gives a correct "newest N"
+// cutoff. Instead every weight row is read, in id order, one page after
+// another (keyset on `id`), and sorted here. Each request asks for the
+// exact count of rows still to come; a page that returns fewer rows than
+// that count (whatever the server's cap) means there is another page, so
+// a capped response can never silently drop a weight.
+async function fetchAllWeightRows(petIds, typeId) {
+  const rows = [];
+  let lastId = null;
+  for (;;) {
+    let query = supabase
+      .from('observations')
+      .select(SELECT_COLUMNS, { count: 'exact' })
+      .in('pet_id', petIds)
+      .eq('observation_type_id', typeId)
+      .not('numeric_value', 'is', null);
+    if (lastId !== null) query = query.gt('id', lastId);
+    const { data, error, count } = await query
+      .order('id', { ascending: true })
+      .limit(WEIGHT_PAGE_SIZE);
+    if (error) throw error;
+    const page = data || [];
+    rows.push(...page);
+    if (page.length === 0) break;
+    if (typeof count === 'number' && page.length >= count) break;
+    lastId = page[page.length - 1].id;
+  }
+  return rows;
+}
+
+// A saved value the app would refuse today (the old check-in Weight box
+// didn't check its range) is not a weight and is never shown.
+const isShowableLbs = (value) => {
+  const n = Number(value);
+  return Number.isFinite(n) && roundLbs(n) >= WEIGHT_MIN_LBS && roundLbs(n) <= WEIGHT_MAX_LBS;
+};
+
+// Any number of pets, paged as above. Returns { [petId]: entries newest-first }.
 async function fetchWeightEntriesForPets(petIds) {
   const byPet = {};
   for (const petId of petIds) byPet[petId] = [];
   if (petIds.length === 0) return byPet;
 
   const typeId = await weightTypeId();
-  const { data, error } = await supabase
-    .from('observations')
-    .select(SELECT_COLUMNS)
-    .in('pet_id', petIds)
-    .eq('observation_type_id', typeId)
-    .not('numeric_value', 'is', null);
-  if (error) throw error;
+  const data = await fetchAllWeightRows(petIds, typeId);
 
-  for (const row of data || []) {
+  for (const row of data) {
+    if (!isShowableLbs(row.numeric_value)) continue;
     const entry = toEntry(row);
     if (!entry.date || !byPet[entry.petId]) continue;
     byPet[entry.petId].push(entry);
@@ -198,6 +236,13 @@ export async function updateWeight(entry, { date, lbs }, timezone) {
       throw Object.assign(new Error('check-in weight date cannot change'), { code: 'weight_date_locked' });
     }
     const value = validateWeightInput({ lbs }, timezone);
+    if (!entry.checkInId) throw new Error('updateWeight: check-in weight has no checkInId');
+    // Move the check-in's updated_at first (its set_updated_at trigger
+    // stamps now() on any update), so spec 0043's expectedUpdatedAt check
+    // sees this edit when a co-owner next saves that day. Doing it before
+    // the value change means a failure here changes nothing, and a failure
+    // after it only causes a harmless "changed by someone else" prompt.
+    await entities.DailyCheckIn.update(entry.checkInId, { updated_at: new Date().toISOString() });
     return entities.Observation.update(entry.id, { numeric_value: value });
   }
   const nextDate = date ?? entry.date;
@@ -210,8 +255,19 @@ export async function updateWeight(entry, { date, lbs }, timezone) {
 
 // Removes one weight row. For a check-in weight this clears that day's
 // Weight answer and leaves the check-in itself in place.
+// Throws code 'weight_not_found' if no row was deleted (already gone, or
+// the caller isn't allowed to delete it: RLS makes both look the same).
 export async function deleteWeight(entry) {
-  return entities.Observation.delete(entry.id);
+  const { data, error } = await supabase
+    .from('observations')
+    .delete()
+    .eq('id', entry.id)
+    .select('id');
+  if (error) throw error;
+  if (!data || data.length === 0) {
+    throw Object.assign(new Error('weight not found'), { code: 'weight_not_found' });
+  }
+  return true;
 }
 
 // Pet Profile's Weight card: current weight, change versus the previous

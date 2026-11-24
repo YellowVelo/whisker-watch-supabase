@@ -6,19 +6,40 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 // Amendment 1).
 
 const WEIGHT_TYPE_ID = 'type-weight';
-const state = { rows: [], queries: [] };
+// `rowCap` plays Supabase's max_rows: no response returns more rows than
+// this, whatever limit the query asks for. `deletableIds` are the rows a
+// delete is allowed to match (RLS); anything else deletes 0 rows.
+const state = { rows: [], queries: [], rowCap: 1000, deletableIds: null };
 
 function makeQuery(table) {
   const q = { table, calls: [] };
   const builder = {
-    select(cols) { q.calls.push(['select', cols]); return builder; },
+    select(cols, opts) { q.calls.push(['select', cols, opts]); return builder; },
     in(col, vals) { q.calls.push(['in', col, vals]); return builder; },
     eq(col, val) { q.calls.push(['eq', col, val]); return builder; },
     not(col, op, val) { q.calls.push(['not', col, op, val]); return builder; },
+    gt(col, val) { q.calls.push(['gt', col, val]); return builder; },
+    order(col, opts) { q.calls.push(['order', col, opts]); return builder; },
+    limit(n) { q.calls.push(['limit', n]); return builder; },
+    delete() { q.calls.push(['delete']); return builder; },
     then(resolve, reject) {
+      if (q.calls.some((c) => c[0] === 'delete')) {
+        const id = q.calls.find((c) => c[0] === 'eq' && c[1] === 'id')?.[2];
+        const allowed = state.deletableIds ? state.deletableIds.includes(id) : state.rows.some((r) => r.id === id);
+        state.rows = allowed ? state.rows.filter((r) => r.id !== id) : state.rows;
+        return Promise.resolve({ data: allowed ? [{ id }] : [], error: null }).then(resolve, reject);
+      }
       const petIds = q.calls.find((c) => c[0] === 'in' && c[1] === 'pet_id')?.[2] || [];
-      const data = state.rows.filter((r) => petIds.includes(r.pet_id));
-      return Promise.resolve({ data, error: null }).then(resolve, reject);
+      const after = q.calls.find((c) => c[0] === 'gt' && c[1] === 'id')?.[2];
+      let matching = state.rows.filter((r) => petIds.includes(r.pet_id) && r.numeric_value != null);
+      if (after !== undefined) matching = matching.filter((r) => r.id > after);
+      if (q.calls.some((c) => c[0] === 'order' && c[1] === 'id')) {
+        matching = [...matching].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+      }
+      const limit = q.calls.find((c) => c[0] === 'limit')?.[1] ?? Infinity;
+      const data = matching.slice(0, Math.min(limit, state.rowCap));
+      const wantsCount = q.calls.find((c) => c[0] === 'select')?.[2]?.count === 'exact';
+      return Promise.resolve({ data, error: null, count: wantsCount ? matching.length : null }).then(resolve, reject);
     },
   };
   state.queries.push(q);
@@ -28,10 +49,14 @@ function makeQuery(table) {
 const create = vi.fn(async (row) => ({ id: 'new', ...row }));
 const update = vi.fn(async (id, patch) => ({ id, ...patch }));
 const remove = vi.fn(async () => true);
+const checkInUpdate = vi.fn(async (id, patch) => ({ id, ...patch }));
 
 vi.mock('@/api/supabaseClient', () => ({ supabase: { from: (table) => makeQuery(table) } }));
 vi.mock('@/api/entities', () => ({
-  entities: { Observation: { create: (...a) => create(...a), update: (...a) => update(...a), delete: (...a) => remove(...a) } },
+  entities: {
+    Observation: { create: (...a) => create(...a), update: (...a) => update(...a), delete: (...a) => remove(...a) },
+    DailyCheckIn: { update: (...a) => checkInUpdate(...a) },
+  },
 }));
 vi.mock('@/lib/checkin/checkinClient', () => ({
   loadObservationCatalog: async () => ({ weight: { type: { id: WEIGHT_TYPE_ID }, optionsByValue: {} } }),
@@ -62,9 +87,13 @@ const fromCheckIn = (id, petId, checkInDate, lbs, observedAt, updatedAt = observ
 beforeEach(() => {
   state.rows = [];
   state.queries = [];
+  state.rowCap = 1000;
+  state.deletableIds = null;
   create.mockClear();
   update.mockClear();
   remove.mockClear();
+  checkInUpdate.mockReset();
+  checkInUpdate.mockImplementation(async (id, patch) => ({ id, ...patch }));
 });
 
 describe('weightDate: the one dating rule, both directions', () => {
@@ -181,6 +210,68 @@ describe('reads merge check-in and standalone weights', () => {
   });
 });
 
+describe('reads are complete whatever the server row cap', () => {
+  // 2,500 old weights, plus the newest weight on an id that sorts last, so
+  // a single capped response (first 1,000 rows) would leave it out.
+  const manyRows = () => {
+    const rows = Array.from({ length: 2500 }, (_, i) =>
+      standalone(`a${String(i).padStart(5, '0')}`, PET_A, '2025-01-01', 10 + (i % 10) / 10));
+    rows.push(fromCheckIn('zzz-newest', PET_A, '2026-11-20', 14.2, '2026-11-21T01:00:00+00:00'));
+    return rows;
+  };
+
+  it('pages past a 1,000-row cap so the newest weight is the current weight', async () => {
+    state.rows = manyRows();
+    const summary = await getWeightSummary(PET_A);
+    expect(summary.currentLbs).toBe(14.2);
+    const list = await listWeights(PET_A, 1);
+    expect(list[0].id).toBe('zzz-newest');
+  });
+
+  it('still pages correctly when the server cap is smaller than the page size', async () => {
+    state.rowCap = 7;
+    state.rows = manyRows().slice(-30);
+    const result = await getWeightSummariesForPets([PET_A]);
+    expect(result[PET_A].currentLbs).toBe(14.2);
+    expect(state.queries.length).toBeGreaterThan(1);
+  });
+
+  it('keyset-pages in id order, asking for the remaining count each time', async () => {
+    state.rowCap = 2;
+    state.rows = [
+      standalone('b', PET_A, '2026-11-01', 10),
+      standalone('a', PET_A, '2026-11-02', 11),
+      standalone('c', PET_A, '2026-11-03', 12),
+    ];
+    const list = await listWeights(PET_A);
+    expect(list.map((e) => e.id)).toEqual(['c', 'a', 'b']);
+    expect(state.queries).toHaveLength(2);
+    for (const q of state.queries) {
+      expect(q.calls).toContainEqual(['order', 'id', { ascending: true }]);
+      expect(q.calls.find((c) => c[0] === 'select')[2]).toEqual({ count: 'exact' });
+    }
+    expect(state.queries[0].calls.some((c) => c[0] === 'gt')).toBe(false);
+    expect(state.queries[1].calls).toContainEqual(['gt', 'id', 'b']);
+  });
+});
+
+describe('weights outside 0.1–300 lbs are never shown', () => {
+  it('skips 0, negative and over-300 values saved through the old check-in box', async () => {
+    state.rows = [
+      standalone('ok-low', PET_A, '2026-11-10', 0.1),
+      standalone('ok-high', PET_A, '2026-11-11', 300),
+      fromCheckIn('zero', PET_A, '2026-11-12', 0, '2026-11-12T12:00:00+00:00'),
+      fromCheckIn('neg', PET_A, '2026-11-13', -4, '2026-11-13T12:00:00+00:00'),
+      fromCheckIn('huge', PET_A, '2026-11-14', 300.1, '2026-11-14T12:00:00+00:00'),
+      fromCheckIn('tiny', PET_A, '2026-11-15', 0.04, '2026-11-15T12:00:00+00:00'),
+    ];
+    const list = await listWeights(PET_A);
+    expect(list.map((e) => e.id)).toEqual(['ok-high', 'ok-low']);
+    const summary = await getWeightSummary(PET_A);
+    expect(summary.currentLbs).toBe(300);
+  });
+});
+
 describe('ordering (FR6)', () => {
   it('orders by the weight\'s date, not by when a check-in row was (re)inserted', async () => {
     // Nov 10's check-in was re-saved today, so its row is brand new; it
@@ -293,15 +384,47 @@ describe('writes go through entities.Observation', () => {
   });
 
   it('updateWeight on a check-in weight changes only the value; its date is locked (FR3)', async () => {
-    const entry = { id: 'c1', date: '2026-11-18', lbs: 10, fromCheckIn: true };
+    const entry = { id: 'c1', date: '2026-11-18', lbs: 10, fromCheckIn: true, checkInId: 'ci-1' };
     await updateWeight(entry, { lbs: 11.0 }, tz);
     expect(update).toHaveBeenCalledWith('c1', { numeric_value: 11 });
     await expect(updateWeight(entry, { date: '2026-11-17', lbs: 11 }, tz)).rejects.toMatchObject({ code: 'weight_date_locked' });
     expect(update).toHaveBeenCalledTimes(1);
   });
 
+  it('updateWeight on a check-in weight moves that check-in\'s updated_at first (spec 0043)', async () => {
+    const entry = { id: 'c1', date: '2026-11-18', lbs: 10, fromCheckIn: true, checkInId: 'ci-1' };
+    await updateWeight(entry, { lbs: 11.0 }, tz);
+    expect(checkInUpdate).toHaveBeenCalledTimes(1);
+    expect(checkInUpdate.mock.calls[0][0]).toBe('ci-1');
+    expect(Object.keys(checkInUpdate.mock.calls[0][1])).toEqual(['updated_at']);
+    expect(checkInUpdate.mock.invocationCallOrder[0]).toBeLessThan(update.mock.invocationCallOrder[0]);
+  });
+
+  it('updateWeight leaves the weight unchanged if the check-in can\'t be touched', async () => {
+    checkInUpdate.mockRejectedValueOnce(new Error('no row'));
+    const entry = { id: 'c1', date: '2026-11-18', lbs: 10, fromCheckIn: true, checkInId: 'ci-1' };
+    await expect(updateWeight(entry, { lbs: 11.0 }, tz)).rejects.toThrow('no row');
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it('updateWeight on a standalone weight does not touch any check-in', async () => {
+    await updateWeight({ id: 's1', date: '2026-11-18', lbs: 10, fromCheckIn: false }, { lbs: 11 }, tz);
+    expect(checkInUpdate).not.toHaveBeenCalled();
+  });
+
   it('deleteWeight deletes the one observation row', async () => {
-    await deleteWeight({ id: 'c1', fromCheckIn: true });
-    expect(remove).toHaveBeenCalledWith('c1');
+    state.rows = [fromCheckIn('c1', PET_A, '2026-11-18', 10, '2026-11-18T12:00:00+00:00')];
+    await expect(deleteWeight({ id: 'c1', fromCheckIn: true })).resolves.toBe(true);
+    const q = state.queries.find((x) => x.calls.some((c) => c[0] === 'delete'));
+    expect(q.table).toBe('observations');
+    expect(q.calls).toContainEqual(['eq', 'id', 'c1']);
+    expect(state.rows).toHaveLength(0);
+  });
+
+  it('deleteWeight throws weight_not_found when no row was deleted (gone, or refused by RLS)', async () => {
+    state.rows = [standalone('s1', PET_A, '2026-11-18', 10)];
+    state.deletableIds = [];
+    await expect(deleteWeight({ id: 's1', fromCheckIn: false })).rejects.toMatchObject({ code: 'weight_not_found' });
+    await expect(deleteWeight({ id: 'missing', fromCheckIn: false })).rejects.toMatchObject({ code: 'weight_not_found' });
   });
 });
