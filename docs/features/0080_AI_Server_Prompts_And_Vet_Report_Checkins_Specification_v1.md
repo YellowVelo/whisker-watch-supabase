@@ -1,6 +1,6 @@
 # 0080_AI_Server_Prompts_And_Vet_Report_Checkins_Specification_v1
 
-**Status:** Approved by Lynn 2026-11-23. Wording A and B approved. Switchover: option (a), deploy and promote back to back. Anthropic monthly spend limit set. Her one change (Before You Approve item 5, Base44 wording) is made. Base44 cleanup (PA-71, PA-50, PA-51) is the next bundle (spec 0081), not part of this one.
+**Status:** Approved by Lynn 2026-11-23. Wording A and B approved. Switchover: option (a), deploy and promote back to back. Anthropic monthly spend limit set. Her one change (Before You Approve item 5, Base44 wording) is made. Base44 cleanup (PA-71, PA-50, PA-51) is the next bundle (spec 0081), not part of this one. Lynn OK'd the three T3-review clarifications (the `range` input, pet details allowed in the AI's fixed instructions, curly-apostrophe matching) on 2026-11-23.
 **Date:** 2026-11-23
 **Branch:** `claude/ai-vet-report`
 **Migration:** `0060` (reserved): fixes the shared rate limiter and adds a version that checks two time windows at once.
