@@ -87,12 +87,13 @@ jobs:
             supabase/tests/function_hygiene.test.ts
 
       # Pure unit tests, no secrets: no network, file or env permission.
-      - name: Run check-in counting rules, AI prompt and Vet Report overview unit tests (spec 0080)
+      - name: Run check-in counting rules, AI prompt, Vet Report overview and pet photo unit tests (spec 0080)
         run: |
           deno test --node-modules-dir=none \
             supabase/tests/checkin_rules.test.ts \
             supabase/tests/ai_prompts.test.ts \
-            supabase/tests/vet_report_wellness.test.ts
+            supabase/tests/vet_report_wellness.test.ts \
+            supabase/tests/pet_photo.test.ts
 
       - name: Run resend-webhook integration tests
         env:
