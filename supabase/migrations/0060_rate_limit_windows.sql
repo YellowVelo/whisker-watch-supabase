@@ -110,6 +110,11 @@ grant execute on function public.check_and_record_rate_limits(text[], integer[],
 -- its limit and records nothing, so a rejected request never uses up quota
 -- on any key. Same read-then-write margin as 0039's functions (accepted
 -- there for the same reasons).
+--
+-- Every window must be 1..172800 seconds and every limit must be 0 or more,
+-- or the call raises 22023 and records nothing. The 172800 (2-day) ceiling
+-- exists because cleanup deletes every row older than 2 days: a longer
+-- window would silently count only the last 2 days and under-count.
 create or replace function public.check_and_record_rate_limits_windowed(
   p_keys text[],
   p_limits integer[],
@@ -131,6 +136,17 @@ begin
     raise exception 'check_and_record_rate_limits_windowed: p_keys, p_limits and p_windows must be non-empty and the same length'
       using errcode = '22023';
   end if;
+
+  for i in 1 .. v_len loop
+    if p_windows[i] is null or p_windows[i] <= 0 or p_windows[i] > 172800 then
+      raise exception 'check_and_record_rate_limits_windowed: every window must be between 1 and 172800 seconds'
+        using errcode = '22023';
+    end if;
+    if p_limits[i] is null or p_limits[i] < 0 then
+      raise exception 'check_and_record_rate_limits_windowed: every limit must be 0 or more'
+        using errcode = '22023';
+    end if;
+  end loop;
 
   delete from rate_limit_hits
   where created_at < now() - interval '2 days';

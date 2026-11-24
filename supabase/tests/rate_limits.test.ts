@@ -151,6 +151,64 @@ Deno.test({
         }
         assertEquals(await hitCount(k), 0, 'a rejected call records nothing');
       });
+
+      await t.step('windowed: a null, zero, negative or over-2-day window, or a null or negative limit, raises', async () => {
+        const k = key('win-bad-args');
+        const other = key('win-bad-args-other');
+        const cases: Array<[string, Array<number | null>, Array<number | null>]> = [
+          ['null window', [1, 1], [600, null]],
+          ['zero window', [1, 1], [600, 0]],
+          ['negative window', [1, 1], [600, -1]],
+          ['window over 172800', [1, 1], [600, 172801]],
+          ['null limit', [1, null], [600, 600]],
+          ['negative limit', [1, -1], [600, 600]],
+        ];
+        for (const [label, limits, windows] of cases) {
+          const { data, error } = await adminClient().rpc('check_and_record_rate_limits_windowed', {
+            p_keys: [k, other],
+            p_limits: limits,
+            p_windows: windows,
+          });
+          assert(error, `expected an error for ${label}, got ${data}`);
+          assertEquals(error.code, '22023', label);
+        }
+        assertEquals(await hitCount(k), 0, 'a rejected call records nothing');
+        assertEquals(await hitCount(other), 0, 'a rejected call records nothing');
+
+        // The ceiling itself is allowed.
+        const ok = await windowed([k], [1], [172800]);
+        assertEquals(ok.error, null);
+        assertEquals(ok.data, 0, 'a 172800s window is accepted');
+      });
+
+      await t.step('FR13: a 23-hour-old hit survives a 10-minute check and counts in a 24-hour window', async () => {
+        const daily = key('daily-E');
+        const oldRow = await insertHit(daily, 23 * 60);
+
+        const { data, error } = await adminClient().rpc('check_and_record_rate_limit', {
+          p_key: key('ten-min-F'),
+          p_limit: 20,
+          p_window_seconds: 600,
+        });
+        assertEquals(error, null);
+        assertEquals(data, true);
+        assert(await rowExists(oldRow), 'key E\'s 23-hour-old row must survive a 600s check for key F');
+
+        // Limit 1 over 86400s: the 23-hour-old hit alone puts the key at its limit.
+        const res = await windowed([daily], [1], [86400]);
+        assertEquals(res.error, null);
+        assertEquals(res.data, 1, 'the 23-hour-old hit counts against a 24-hour window');
+        assertEquals(await hitCount(daily), 1, 'rejected call records nothing');
+      });
+
+      await t.step('cleanup: any call deletes rows older than 2 days', async () => {
+        const stale = await insertHit(key('stale-G'), 49 * 60);
+        assert(await rowExists(stale), 'setup: the 49-hour-old row exists before the call');
+        const { data, error } = await windowed([key('cleanup-H')], [20], [600]);
+        assertEquals(error, null);
+        assertEquals(data, 0);
+        assert(!(await rowExists(stale)), 'a 49-hour-old row must be deleted by the call');
+      });
     } finally {
       const { error } = await adminClient().from('rate_limit_hits').delete().like('rate_key', `${PREFIX}%`);
       if (error) throw new Error(`cleanup failed: ${error.message}`);
