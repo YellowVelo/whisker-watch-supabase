@@ -14,7 +14,8 @@
 import { supabase } from '@/api/supabaseClient';
 import { entities } from '@/api/entities';
 import { invokeAI } from '@/api/aiClient';
-import { loadObservationCatalog, BASELINE_VALUES, NOT_OBSERVED_VALUES } from './checkinClient';
+import { loadObservationCatalog } from './checkinClient';
+import { observationDaySeries } from './observationSeries';
 import { PALETTE } from '@/lib/toneColors';
 import { dateStrInTimezone } from '@/lib/timezone';
 
@@ -73,9 +74,7 @@ export async function getObservationTrend(petId, code, range, timezone) {
   }
 
   const scorableIds = inRange.filter((c) => c.status !== 'skipped').map((c) => c.id);
-  const countsByCheckIn = {};
-  const notObservedByCheckIn = {};
-  const symptomLabelsByCheckIn = {};
+  let observations = [];
   if (scorableIds.length > 0) {
     const { data, error } = await supabase
       .from('observations')
@@ -83,21 +82,16 @@ export async function getObservationTrend(petId, code, range, timezone) {
       .in('daily_check_in_id', scorableIds)
       .eq('observation_type_id', entry.type.id);
     if (error) throw error;
-    for (const obs of data) {
-      if (obs.value == null) continue;
-      if (NOT_OBSERVED_VALUES.has(obs.value)) { notObservedByCheckIn[obs.daily_check_in_id] = true; continue; }
-      if (BASELINE_VALUES.has(obs.value)) continue;
-      countsByCheckIn[obs.daily_check_in_id] = (countsByCheckIn[obs.daily_check_in_id] || 0) + 1;
-      (symptomLabelsByCheckIn[obs.daily_check_in_id] ||= []).push(entry.optionsByValue[obs.value]?.label || obs.value);
-    }
+    observations = data;
   }
 
-  const series = inRange.map((c) => {
-    if (c.status === 'skipped') return { date: c.check_in_date, state: 'skipped', count: null };
-    if (notObservedByCheckIn[c.id]) return { date: c.check_in_date, state: 'not_observed', count: null };
-    const count = countsByCheckIn[c.id] || 0;
-    return { date: c.check_in_date, state: count > 0 ? 'observed' : 'normal', count };
-  });
+  // Per-day rules live in observationSeries.js (spec 0080), shared with
+  // the parity test against the server's attributeDaySeries.
+  const { series, symptomLabelsByCheckIn } = observationDaySeries(
+    inRange,
+    observations,
+    (value) => entry.optionsByValue[value]?.label || value,
+  );
 
   // A stale in-range point must never be presented as today's current
   // state — same rule everywhere on this screen.

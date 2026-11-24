@@ -12,7 +12,9 @@ import { RANGE_OPTIONS as APP_RANGES, RANGE_DAYS as APP_RANGE_DAYS } from './che
 import {
   COUNTED_ATTRIBUTES, HEALTH_ATTRIBUTES as SERVER_HEALTH, WELLBEING_ATTRIBUTES as SERVER_WELLBEING,
   BASELINE_VALUES as SERVER_BASELINE, NOT_OBSERVED_VALUES as SERVER_NOT_OBSERVED,
+  attributeDaySeries as serverDaySeries,
 } from '../../supabase/functions/_shared/checkinRules.ts';
+import { observationDaySeries as appDaySeries } from './checkin/observationSeries';
 import {
   EMERGENCY_KEYWORD_PATTERNS as SERVER_EMERGENCY, detectEmergencyKeywords as serverDetect,
   BLOODWORK_FIELDS as SERVER_BLOODWORK, HEALTH_OPTIONS as SERVER_HEALTH_OPTIONS,
@@ -89,6 +91,46 @@ describe('app/server parity: check-in counting lists (spec 0012 v5)', () => {
   });
 });
 
+// Same cases through the Trends cards' per-day rule (app) and the Vet
+// Report / AI copy (server). Check-ins are given oldest first, the order
+// getObservationTrend passes them in.
+const ci = (id, check_in_date, status = 'great') => ({ id, check_in_date, status });
+const ob = (daily_check_in_id, value) => ({ daily_check_in_id, value });
+const DAY_SERIES_CASES = [
+  ['a normal day (only baseline answers)', [ci('a', '2026-11-01')], [ob('a', 'normal'), ob('a', 'none'), ob('a', 'no_change')]],
+  ['a completed day with no observation rows', [ci('a', '2026-11-01')], []],
+  ['one and two symptoms, with baseline and empty values mixed in',
+    [ci('a', '2026-11-01'), ci('b', '2026-11-02')],
+    [ob('a', 'ate_little_less'), ob('b', 'ate_much_less'), ob('b', 'ate_more'), ob('b', 'normal'), ob('b', null)]],
+  ['a skipped day with symptoms', [ci('a', '2026-11-01', 'skipped'), ci('b', '2026-11-02')], [ob('a', 'ate_much_less'), ob('b', 'ate_more')]],
+  ['"Not observed" alongside a symptom', [ci('a', '2026-11-01')], [ob('a', 'more_than_usual'), ob('a', 'not_observed')]],
+  ['"Not observed" on its own', [ci('a', '2026-11-01'), ci('b', '2026-11-02')], [ob('a', 'not_observed'), ob('b', 'normal')]],
+  ['observations for a check-in not in the list', [ci('a', '2026-11-01')], [ob('other', 'ate_much_less')]],
+  ['Off, Tough and unrated days', [ci('a', '2026-11-01', 'off'), ci('b', '2026-11-02', 'tough'), ci('c', '2026-11-03', null)],
+    [ob('a', 'ate_little_less'), ob('b', 'normal'), ob('c', 'ate_much_less'), ob('c', 'ate_more')]],
+  ['a gap between check-in dates', [ci('a', '2026-11-01'), ci('c', '2026-11-04')], [ob('c', 'lower')]],
+  ['no check-ins', [], []],
+];
+
+describe('app/server parity: per-day attribute states (Trends cards vs attributeDaySeries)', () => {
+  it.each(DAY_SERIES_CASES)('%s', (_name, checkIns, observations) => {
+    const app = appDaySeries(checkIns, observations).series;
+    expect(serverDaySeries(checkIns, observations)).toEqual(app);
+  });
+
+  it('gives the same series whatever the Vibe (spec 0012 v5)', () => {
+    const observations = [ob('a', 'ate_little_less'), ob('b', 'ate_much_less'), ob('b', 'ate_more')];
+    for (const status of ['great', 'off', 'tough', null]) {
+      const checkIns = [ci('a', '2026-11-01', status), ci('b', '2026-11-02', status)];
+      expect(appDaySeries(checkIns, observations).series).toEqual([
+        { date: '2026-11-01', state: 'observed', count: 1 },
+        { date: '2026-11-02', state: 'observed', count: 2 },
+      ]);
+      expect(serverDaySeries(checkIns, observations)).toEqual(appDaySeries(checkIns, observations).series);
+    }
+  });
+});
+
 describe('app/server parity: bloodwork fields', () => {
   it('has the same key, label and unit for every field, in order', () => {
     const app = APP_BLOODWORK.map(({ key, label, unit }) => ({ key, label, unit }));
@@ -96,7 +138,7 @@ describe('app/server parity: bloodwork fields', () => {
   });
 });
 
-describe('app/server parity: baseline option labels (formatBaselineForAI)', () => {
+describe("app/server parity: baseline option labels (onboarding options vs the server's AI baseline summary)", () => {
   it('has the same health status labels', () => {
     expect(SERVER_HEALTH_OPTIONS('Tribble')).toEqual(labelsOnly(APP_HEALTH_OPTIONS('Tribble')));
   });

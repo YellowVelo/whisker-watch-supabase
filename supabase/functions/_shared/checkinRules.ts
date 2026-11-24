@@ -5,10 +5,12 @@
 //   - COUNTED_ATTRIBUTES      = src/lib/checkin/config.js COUNTED_CATEGORIES
 //   - BASELINE_VALUES /
 //     NOT_OBSERVED_VALUES     = src/lib/checkin/checkinClient.js
-//   - attributeDaySeries()    = getObservationTrend's per-day rules in
-//                               src/lib/checkin/trendsClient.js
+//   - attributeDaySeries()    = observationDaySeries() in
+//                               src/lib/checkin/observationSeries.js (the
+//                               Trends cards' per-day rules)
 //   - dateStrInTimezone()     = src/lib/timezone.js
-// src/lib/aiServerParity.test.js fails if the lists drift apart.
+// src/lib/aiServerParity.test.js fails if the lists or the per-day rules
+// drift apart.
 // supabase/tests/checkin_rules.test.ts tests the counting and date code.
 //
 // No imports on purpose, so Vitest (under Node) can load this file too.

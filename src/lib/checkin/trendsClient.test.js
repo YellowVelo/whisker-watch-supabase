@@ -47,3 +47,22 @@ describe('getInsightSummary (spec 0080: trends_summary task)', () => {
     await expect(getInsightSummary(PET_ID, '30D')).rejects.toThrow('AI request failed');
   });
 });
+
+describe('observationDaySeries (spec 0080: the Trends cards per-day rule)', () => {
+  it('collects symptom labels per check-in, skipping baseline, not-observed and skipped-day answers', async () => {
+    const { observationDaySeries } = await import('./observationSeries');
+    const labels = { ate_little_less: 'Ate a little less', ate_more: 'Ate more' };
+    const { symptomLabelsByCheckIn } = observationDaySeries(
+      [{ id: 'a', check_in_date: '2026-11-01', status: 'off' }, { id: 's', check_in_date: '2026-11-02', status: 'skipped' }],
+      [
+        { daily_check_in_id: 'a', value: 'ate_little_less' },
+        { daily_check_in_id: 'a', value: 'ate_more' },
+        { daily_check_in_id: 'a', value: 'normal' },
+        { daily_check_in_id: 'a', value: 'not_observed' },
+        { daily_check_in_id: 's', value: 'ate_more' },
+      ],
+      (v) => labels[v] || v,
+    );
+    expect(symptomLabelsByCheckIn).toEqual({ a: ['Ate a little less', 'Ate more'] });
+  });
+});
