@@ -21,7 +21,9 @@
 // Files (spec 0071): the function never fetches a caller-supplied URL.
 // It only reads a file_path that is either in the caller's own folder
 // (a scan they just uploaded) or linked in pet_documents to a pet they
-// own, and downloads it with the service role. Size and type are checked
+// own, and downloads it with the caller's own access, so the storage rules
+// (migration 0054) also have to allow it (spec 0082). Only paths in the
+// shape the app's uploader creates are accepted. Size and type are checked
 // before anything is sent to Anthropic.
 //
 // TEMPORARY (spec 0071 Phase 1 only — delete in Phase 2): a `file_url`
@@ -81,6 +83,19 @@ function jsonResponse(body: unknown, status = 200) {
   });
 }
 
+// The only path shape the app's uploader creates: <folder>/<name>.<ext>
+// (src/api/storageClient.js: `${userId}/${Date.now()}-${rand}.${ext}`).
+// The extension is whatever followed the last dot in the person's file name,
+// lowercased, so it can hold spaces, dashes, underscores or accented letters
+// ("rabies cert", "jpg-large", "résumé"), but never a dot.
+// Why this can't step outside the folder: there are exactly two segments,
+// and the second always starts with the name part ([A-Za-z0-9_-]+), so it
+// can never be "." or "..". The extension excludes ".", "/", backslash, "%"
+// (no encoded tricks), "?" and "#" (no query or fragment), and control
+// characters (U+0000-U+001F, U+007F).
+// deno-lint-ignore no-control-regex
+const UPLOAD_PATH_SHAPE = /^[A-Za-z0-9_-]+\/[A-Za-z0-9_-]+\.[^./\\%?#\x00-\x1F\x7F]+$/;
+
 // Returns the storage path the caller asked for, or null if they sent an
 // unusable reference. Never returns anything outside the uploads bucket.
 function requestedPath(body: { file_path?: unknown; file_url?: unknown }): string | null {
@@ -93,7 +108,10 @@ function requestedPath(body: { file_path?: unknown; file_url?: unknown }): strin
     if (!body.file_url.startsWith(prefix)) return null;
     path = decodeURIComponent(body.file_url.slice(prefix.length));
   }
-  if (!path || path.startsWith('/') || path.split('/').some((seg) => seg === '..' || seg === '')) return null;
+  // Spec 0082: allow-list the exact shape the uploader creates
+  // (<folder>/<name>.<ext>). Rejects %, backslashes, ?, #, control
+  // characters, . and .. segments, extra folders and leading/trailing slashes.
+  if (!path || !UPLOAD_PATH_SHAPE.test(path)) return null;
   return path;
 }
 
@@ -184,7 +202,7 @@ Deno.serve(async (req) => {
         return jsonResponse({ error: 'You do not have access to that file', code: 'forbidden_file' }, 403);
       }
 
-      const { data: blob, error: downloadError } = await adminClient.storage.from('uploads').download(path);
+      const { data: blob, error: downloadError } = await supabaseClient.storage.from('uploads').download(path);
       if (downloadError || !blob) {
         return jsonResponse({ error: 'Could not read that file', code: 'file_not_found' }, 404);
       }

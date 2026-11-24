@@ -205,8 +205,10 @@ Deno.test('private uploads: the bucket refuses oversized and non-photo/PDF files
 
 Deno.test('ask-vet-assistant: refuses outside links and files the caller may not open', async () => {
   let h: Household | null = null;
+  let removed: ScratchUser | null = null;
   try {
     h = await buildHousehold('ai');
+    removed = await createScratchUser('ai-removed');
     const prompt = 'Test prompt that must never reach the AI.';
 
     const outside = await callFunction('ask-vet-assistant', h.stranger.accessToken, {
@@ -222,6 +224,44 @@ Deno.test('ask-vet-assistant: refuses outside links and files the caller may not
     });
     assertEquals(traversal.status, 400);
 
+    // Spec 0082 AC1: disguised traversal, odd segments and extra folders are
+    // refused before any lookup or download. Each starts in the stranger's
+    // own folder, so the old own-folder check would have let them through.
+    const badPaths = [
+      `${h.stranger.userId}/%2e%2e/${h.docPath}`,
+      `${h.stranger.userId}/..\\${h.docPath}`,
+      `${h.stranger.userId}/./x.pdf`,
+      `${h.stranger.userId}/%252e%252e/${h.docPath}`,
+      `${h.stranger.userId}/a/b.pdf`,
+      `${h.stranger.userId}/x.pdf/`,
+      `/${h.docPath}`,
+      `${h.stranger.userId}/x%20y.pdf`,
+      `${h.stranger.userId}/x.pdf?y`,
+      `${h.stranger.userId}/x.pdf#y`,
+      `${h.stranger.userId}/x.a\\b`,
+    ];
+    for (const badPath of badPaths) {
+      const res = await callFunction('ask-vet-assistant', h.stranger.accessToken, { prompt, file_path: badPath });
+      assertEquals(res.status, 400, `expected 400 for ${badPath}`);
+      assertEquals(res.json.code, 'invalid_file', `expected invalid_file for ${badPath}`);
+    }
+
+    // The uploader keeps whatever followed the last dot in the person's file
+    // name as the extension, so real paths can have spaces, dashes or
+    // accented letters there. These must pass the shape check. They sit in
+    // the owner's folder, so the stranger gets 403 forbidden_file (not 400
+    // invalid_file), which proves the shape was accepted without calling the AI.
+    const awkwardPaths = [
+      `${h.owner.userId}/1700000000000-abc123.rabies cert`,
+      `${h.owner.userId}/1700000000000-abc123.jpg-large`,
+      `${h.owner.userId}/1700000000000-abc123.résumé`,
+    ];
+    for (const awkwardPath of awkwardPaths) {
+      const res = await callFunction('ask-vet-assistant', h.stranger.accessToken, { prompt, file_path: awkwardPath });
+      assertEquals(res.status, 403, `expected 403 for ${awkwardPath}`);
+      assertEquals(res.json.code, 'forbidden_file', `expected forbidden_file for ${awkwardPath}`);
+    }
+
     const someoneElses = await callFunction('ask-vet-assistant', h.stranger.accessToken, {
       prompt,
       file_path: h.docPath,
@@ -232,6 +272,24 @@ Deno.test('ask-vet-assistant: refuses outside links and files the caller may not
     // Sitters can see the pet but not its documents, so not via the AI either.
     const sitter = await callFunction('ask-vet-assistant', h.sitter.accessToken, { prompt, file_path: h.docPath });
     assertEquals(sitter.status, 403);
+    assertEquals(sitter.json.code, 'forbidden_file');
+
+    // Spec 0082 AC2: a co-owner who was invited, claimed the invite, and was
+    // then removed knows the real path but is refused like a stranger.
+    const { data: invite, error: inviteError } = await h.owner.client
+      .from('pet_co_owners')
+      .insert({ pet_id: h.petId, owner_id: h.owner.userId, created_by: h.owner.userId, co_owner_email: removed.email })
+      .select('id')
+      .single();
+    if (inviteError || !invite) throw new Error(`co-owner invite failed: ${inviteError?.message}`);
+    const { error: claimError } = await removed.client.rpc('claim_pending_co_owner_invites');
+    if (claimError) throw new Error(`co-owner claim failed: ${claimError.message}`);
+    assert(await canOpen(removed, h.docPath), 'while a co-owner, they can open the document');
+    const { error: removeError } = await h.owner.client.from('pet_co_owners').delete().eq('id', invite.id);
+    if (removeError) throw new Error(`co-owner removal failed: ${removeError.message}`);
+    const removedCall = await callFunction('ask-vet-assistant', removed.accessToken, { prompt, file_path: h.docPath });
+    assertEquals(removedCall.status, 403);
+    assertEquals(removedCall.json.code, 'forbidden_file');
 
     // Phase 1 compatibility path: a public-style link into someone else's
     // folder is converted to a path and refused the same way.
@@ -241,6 +299,6 @@ Deno.test('ask-vet-assistant: refuses outside links and files the caller may not
     });
     assertEquals(compat.status, 403);
   } finally {
-    await cleanUp(h);
+    await cleanUp(h, removed ? [removed] : []);
   }
 });

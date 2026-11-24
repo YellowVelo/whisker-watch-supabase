@@ -9,6 +9,8 @@
 //    reports the detail to Sentry and answers with a plain message.
 // 3. serverError() itself answers 500, with the plain message and the
 //    caller's CORS headers.
+// 4. ask-vet-assistant never reads storage with the service-role client, so
+//    storage's own rules always decide who can scan a file (spec 0082).
 //
 // Run: deno test --allow-read --allow-env --node-modules-dir=none supabase/tests/function_hygiene.test.ts
 
@@ -82,6 +84,17 @@ Deno.test('every function reports unexpected errors to Sentry', async () => {
     if (!/\b(serverError|reportError)\(/.test(source)) missing.push(name);
   }
   assertEquals(missing, [], `Functions that never report to Sentry: ${missing.join(', ')}`);
+});
+
+Deno.test('ask-vet-assistant never reads storage with the service-role client', async () => {
+  const source = await Deno.readTextFile(new URL('ask-vet-assistant/index.ts', FUNCTIONS_DIR));
+  assert(!/adminClient\s*\.\s*storage/.test(source), "ask-vet-assistant must download files with the caller's client, not adminClient");
+  // Every storage call must go through the caller's own client, whatever the
+  // other client is named.
+  const storageOwners = [...source.matchAll(/(\w+)\s*\.\s*storage\b/g)].map((m) => m[1]);
+  const notCaller = storageOwners.filter((name) => name !== 'supabaseClient');
+  assertEquals(notCaller, [], `storage used on a client other than supabaseClient: ${notCaller.join(', ')}`);
+  assert(storageOwners.length > 0, 'expected ask-vet-assistant to read files through supabaseClient.storage');
 });
 
 Deno.test('serverError answers 500 with the plain message and CORS headers', async () => {
