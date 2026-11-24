@@ -145,9 +145,10 @@ A day with no rating at all counts under a separate "Not recorded" total, shown 
   - New `check_and_record_rate_limits_windowed(p_keys text[], p_limits integer[], p_windows integer[])`. It works all-or-nothing like the existing multi-key function, but each key has its own window. `security definer`, `set search_path = public`, execute revoked from `public, anon, authenticated` and granted to `service_role` only (0059's locked-by-default rule). Added to `function_permissions.test.ts`'s server-only list.
   - **Undo plan:** a follow-up migration that restores 0039's two function bodies and drops the new function. **Order:** migration before the function deploy, on each project. The old callers are unaffected either way.
 - **`ask-vet-assistant`:**
-  - Body becomes `{ task, pet_id?, file_path?, screen?, question?, history? }`. `prompt`, `response_json_schema` and `file_url` are refused.
+  - Body becomes `{ task, pet_id?, file_path?, screen?, range?, question?, history? }`. `range` is the Trends time range showing (24H/7D/30D/90D/1Y), used only by the Trends summary. `prompt`, `response_json_schema` and `file_url` are refused. Chat history: the server keeps the last 20 well-formed messages and drops any without text (e.g. the app's emergency and error bubbles), so long chats keep working.
   - `prompts.ts` holds the 8 prompt builders and their JSON response shapes, the disclaimer and urgent-flag sentences (moved from `src/lib/aiGuardrails.js`), and the emergency phrase list.
-  - Instructions go in Anthropic's `system` field. The owner's words go only in the user message.
+  - Instructions go in Anthropic's `system` field. The owner's words (their question and chat history) go only in the user message. Pet details (name, breed, conditions, medications, baseline) may appear in the fixed instruction sentences, as they do today. Scans and the Trends summary keep today's wording word for word (no added disclaimer); chats and Insights carry the disclaimer and urgent-flag sentences. Planning clarifications, 2026-11-23 (T3 review).
+  - The emergency phrase check treats curly apostrophes (’) like straight ones, in both the app and server copies, so "can’t breathe" typed on an iPhone is caught (found in T3 review; pre-existing gap, fixed here because FR5 makes this check server-enforced).
   - `context.ts` loads data with the **caller's** client, so the database's access rules decide what's visible:
     - the pet
     - active medications
