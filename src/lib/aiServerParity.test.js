@@ -8,7 +8,7 @@ import {
   ENERGY_OPTIONS as APP_ENERGY, getMobilityOptions as appMobility, getBathroomOptions as appBathroom,
 } from './onboardingConfig';
 import { PET_SCREEN_NAMES as APP_SCREENS, getPetContext } from './petScreenContext';
-import { RANGE_OPTIONS as APP_RANGES } from './checkin/trendsRanges';
+import { RANGE_OPTIONS as APP_RANGES, RANGE_DAYS as APP_RANGE_DAYS } from './checkin/trendsRanges';
 import {
   COUNTED_ATTRIBUTES, HEALTH_ATTRIBUTES as SERVER_HEALTH, WELLBEING_ATTRIBUTES as SERVER_WELLBEING,
   BASELINE_VALUES as SERVER_BASELINE, NOT_OBSERVED_VALUES as SERVER_NOT_OBSERVED,
@@ -21,6 +21,9 @@ import {
   PET_SCREEN_NAMES as SERVER_SCREENS,
 } from '../../supabase/functions/ask-vet-assistant/rules.ts';
 import { TRENDS_RANGES as SERVER_RANGES } from '../../supabase/functions/ask-vet-assistant/prompts.ts';
+// context.ts's only non-relative import is a type-only one (stripped when
+// Vitest compiles it), so it loads under Node too.
+import { RANGE_DAYS as SERVER_RANGE_DAYS } from '../../supabase/functions/ask-vet-assistant/context.ts';
 
 // Spec 0080, Before You Approve item 3: some rule lists exist both in the
 // app (instant feedback) and on the server (where they're enforced). Edge
@@ -124,5 +127,10 @@ describe('app/server parity: Ask Wysker screen names', () => {
 describe('app/server parity: Trends ranges', () => {
   it("has the same range options as the Trends screen's selector", () => {
     expect([...SERVER_RANGES]).toEqual(APP_RANGES);
+  });
+
+  it('has the same lookback days for every range (spec 0080)', () => {
+    expect({ ...SERVER_RANGE_DAYS }).toEqual(APP_RANGE_DAYS);
+    expect(Object.keys(SERVER_RANGE_DAYS)).toEqual([...SERVER_RANGES]);
   });
 });

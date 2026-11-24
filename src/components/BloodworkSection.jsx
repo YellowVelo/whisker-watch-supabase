@@ -63,23 +63,12 @@ export default function BloodworkSection({ petId }) {
 
       // The Edge Function reads the file from storage, detects whether it's
       // an image or a PDF, and builds the right Claude input block either
-      // way, so the same call works for both.
-      const fieldList = FIELDS.map(f => `${f.key} (${f.label}, ${f.unit})`).join(', ');
+      // way, so the same call works for both. Spec 0080: it also writes the
+      // instructions (including the bloodwork field list) itself.
       const result = await invokeAI({
-        prompt: `You are analyzing a veterinary bloodwork report (image or PDF). Extract all available values from this lab report. Return only a JSON object with these possible fields: date (YYYY-MM-DD), lab_name, vet_name, urine_specific_gravity, urine_protein (one of: Negative, Trace, 1+, 2+, 3+, 4+), notes, and numeric fields: ${fieldList}. Only include fields that are clearly visible in the document. Omit fields not present.`,
+        task: 'scan_bloodwork',
+        pet_id: petId,
         file_path: path,
-        response_json_schema: {
-          type: 'object',
-          properties: Object.fromEntries([
-            ...FIELDS.map(f => [f.key, { type: 'number' }]),
-            ['date', { type: 'string' }],
-            ['lab_name', { type: 'string' }],
-            ['vet_name', { type: 'string' }],
-            ['urine_specific_gravity', { type: 'string' }],
-            ['urine_protein', { type: 'string' }],
-            ['notes', { type: 'string' }],
-          ])
-        }
       });
       const extracted = result;
 

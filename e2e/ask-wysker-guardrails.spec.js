@@ -37,10 +37,12 @@ async function openAskWyskerFromWeightScreen(page) {
   await expect(page.getByRole('heading', { name: 'Ask Wysker' })).toBeVisible();
 }
 
+// Spec 0080: the app names a task and sends ids only. The server writes
+// the prompt, so this checks the request's fields instead of prompt text.
 test('screen name reaches the AI request', async ({ page }) => {
-  let capturedPrompt = null;
+  let capturedBody = null;
   await page.route(ASK_VET_ASSISTANT, async (route) => {
-    capturedPrompt = JSON.parse(route.request().postData()).prompt;
+    capturedBody = JSON.parse(route.request().postData());
     await route.fulfill({ json: { reply: 'Test reply', urgent: false } });
   });
 
@@ -49,9 +51,16 @@ test('screen name reaches the AI request', async ({ page }) => {
   await page.locator('textarea').fill('What should I watch for?');
   await page.locator('textarea').press('Enter');
 
-  await expect.poll(() => capturedPrompt).not.toBeNull();
-  expect(capturedPrompt).toContain(petName);
-  expect(capturedPrompt).toContain('Weight');
+  await expect.poll(() => capturedBody).not.toBeNull();
+  expect(capturedBody.task).toBe('pet_chat');
+  expect(capturedBody.pet_id).toBe(petId);
+  expect(capturedBody.screen).toBe('Weight');
+  expect(capturedBody.question).toBe('What should I watch for?');
+  expect(capturedBody).not.toHaveProperty('prompt');
+  expect(capturedBody).not.toHaveProperty('response_json_schema');
+  // History is the conversation before the question: just the greeting.
+  expect(capturedBody.history).toHaveLength(1);
+  expect(capturedBody.history[0]).toEqual({ role: 'assistant', content: expect.stringContaining(petName) });
 });
 
 test('fixed disclaimer banner is visible in pet-scoped and general mode', async ({ page }) => {
@@ -89,6 +98,8 @@ test('emergency keyword match blocks the AI call and shows a hard-stop redirect 
 
 test('AI-flagged urgent backstop discards the AI reply and shows only the redirect', async ({ page }) => {
   await page.route(ASK_VET_ASSISTANT, async (route) => {
+    // Spec 0080: the server drops the AI's text and sends only the flag;
+    // the app must still discard any text if one ever arrives.
     await route.fulfill({ json: { reply: 'this answer should never render', urgent: true } });
   });
 
@@ -126,7 +137,7 @@ test('hitting the rate limit shows a clear message instead of hanging', async ({
   await page.route(ASK_VET_ASSISTANT, async (route) => {
     await route.fulfill({
       status: 429,
-      json: { error: "You've reached the limit for AI requests. Please wait a few minutes and try again." },
+      json: { error: "You've reached the limit for AI requests. Please wait a few minutes and try again.", code: 'rate_limited' },
     });
   });
 
@@ -139,6 +150,41 @@ test('hitting the rate limit shows a clear message instead of hanging', async ({
   // Loading state cleared, not stuck spinning forever: the bouncing-dots
   // "thinking" indicator (shown only while loading) is gone.
   await expect(page.locator('.animate-bounce')).toHaveCount(0);
+});
+
+// Spec 0080 AC6 (the app side): over the 100-a-day cap, the server answers
+// 429 daily_limit with wording A, and the chat shows exactly that.
+const DAILY_LIMIT_MESSAGE = "You've reached today's limit for Ask Wysker and document scans. You can try again tomorrow.";
+
+test('hitting the daily limit shows the daily-limit message', async ({ page }) => {
+  await page.route(ASK_VET_ASSISTANT, async (route) => {
+    await route.fulfill({ status: 429, json: { error: DAILY_LIMIT_MESSAGE, code: 'daily_limit' } });
+  });
+
+  await openAskWyskerFromWeightScreen(page);
+  await page.getByRole('button', { name: 'Ask a Question' }).click();
+  await page.locator('textarea').fill('one more question today');
+  await page.locator('textarea').press('Enter');
+
+  await expect(page.getByRole('alert')).toHaveText(DAILY_LIMIT_MESSAGE);
+  await expect(page.locator('.animate-bounce')).toHaveCount(0);
+});
+
+// Spec 0080 wording C: Insights with too few check-ins. The server answers
+// { not_enough_data: true } without calling the AI.
+test('Insights with too few check-ins shows the not-enough-check-ins message', async ({ page }) => {
+  let capturedBody = null;
+  await page.route(ASK_VET_ASSISTANT, async (route) => {
+    capturedBody = JSON.parse(route.request().postData());
+    await route.fulfill({ json: { not_enough_data: true } });
+  });
+
+  await openAskWyskerFromWeightScreen(page);
+  await page.getByRole('button', { name: `Analyze ${petName}'s Records` }).click();
+
+  await expect(page.getByText('Not enough check-ins yet.')).toBeVisible();
+  await expect(page.getByText(`Insights look at ${petName}'s last 30 days of daily check-ins. Check in on at least 2 days and they'll be ready.`)).toBeVisible();
+  expect(capturedBody).toEqual({ task: 'pet_insights', pet_id: petId, screen: 'Weight' });
 });
 
 test('a non-rate-limit AI failure shows a clear error instead of hanging', async ({ page }) => {

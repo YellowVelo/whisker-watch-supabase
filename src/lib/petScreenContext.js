@@ -1,3 +1,4 @@
+/** @type {Array<[RegExp, string]>} */
 const SCREEN_PATTERNS = [
   [/\/trends(?:$|\?)/, 'Trends'],
   [/\/timeline(?:$|\?)/, 'Timeline'],

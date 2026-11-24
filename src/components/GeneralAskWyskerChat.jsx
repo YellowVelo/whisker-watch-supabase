@@ -1,23 +1,17 @@
 import { useState, useRef, useEffect } from 'react';
-import { invokeAI } from '@/api/aiClient';
+import { invokeAI, buildChatHistory } from '@/api/aiClient';
 import { Send, Stethoscope } from 'lucide-react';
-import { detectEmergencyKeywords, AI_DISCLAIMER_SENTENCE, URGENT_FLAG_INSTRUCTION, aiErrorText } from '@/lib/aiGuardrails';
+import { detectEmergencyKeywords, aiErrorText } from '@/lib/aiGuardrails';
 import AIEmergencyNotice from './AIEmergencyNotice';
 import AIErrorNotice from './AIErrorNotice';
 
 // General-mode Ask Wysker chat (spec 0023 step 5) — used when the sheet is
 // opened with no specific pet in context (e.g. from Home). A small,
 // additive sibling to PetAIChat.jsx rather than a modification of it: same
-// invokeAI()/Edge Function, just a household-wide system prompt instead of
-// a single hardcoded pet.
-const SYSTEM_CONTEXT = (pets) => {
-  const petList = pets?.length
-    ? pets.map((p) => `${p.name} (${p.species || 'pet'}${p.breed ? ', ' + p.breed : ''}${p.conditions?.length ? ', conditions: ' + p.conditions.join(', ') : ''})`).join('; ')
-    : 'no pets on file yet';
-  return `You are a compassionate, experienced veterinarian with 20+ years of clinical practice. You are assisting a pet owner whose household includes: ${petList}. The owner may ask about any one of these pets by name, or ask a general question. If it's unclear which pet a question concerns and the answer would differ by pet, ask them to clarify which pet they mean before answering. Answer questions clearly and practically. ${AI_DISCLAIMER_SENTENCE} ${URGENT_FLAG_INSTRUCTION}`;
-};
-
-export default function GeneralAskWyskerChat({ pets }) {
+// invokeAI()/Edge Function, just the household-wide task instead of a
+// single pet's. Spec 0080: the server looks up the household's pets itself
+// (owned and co-owned only, spec 0079), so no pet details are sent from here.
+export default function GeneralAskWyskerChat() {
   const [messages, setMessages] = useState([
     { role: 'assistant', content: "Hi! I'm here to help with questions about your pets. What would you like to know?" },
   ]);
@@ -46,18 +40,14 @@ export default function GeneralAskWyskerChat({ pets }) {
 
     setLoading(true);
 
-    const history = [...messages, userMsg].map((m) => `${m.role === 'user' ? 'Owner' : 'Vet Assistant'}: ${m.content}`).join('\n\n');
+    // The conversation before this question, without the question itself.
+    const history = buildChatHistory(messages);
 
     try {
       const result = await invokeAI({
-        prompt: `${SYSTEM_CONTEXT(pets)}\n\nConversation so far:\n${history}\n\nOwner's latest question: ${text}\n\nVet Assistant:`,
-        response_json_schema: {
-          type: 'object',
-          properties: {
-            reply: { type: 'string' },
-            urgent: { type: 'boolean' },
-          },
-        },
+        task: 'household_chat',
+        question: text,
+        history,
       });
 
       // Backstop: the AI flagged this as urgent even though the keyword list

@@ -116,34 +116,13 @@ export default function VaccinationSection({ petId, species, initialEditId }) {
         reportClientError(err, { feature: 'vaccinations' });
         allPets = [await entities.Pet.get(petId)];
       }
-      const multiPet = allPets.length > 1;
-      const petNameInstruction = multiPet
-        ? ` This account has these pets: ${allPets.map(p => p.name).filter(Boolean).join(', ')}. For each vaccination, also include a "pet_name" field naming which of these pets it belongs to, if the document makes that clear (e.g. it's grouped under a pet's name, or this is a multi-pet invoice). If you can't tell which pet a line belongs to, omit "pet_name" rather than guessing.`
-        : '';
-
+      // Spec 0080: the server looks up the same owned pets itself and
+      // writes the multi-pet instruction; the list above is only used to
+      // match each line's pet_name back to a pet here.
       const result = await invokeAI({
-        prompt: `You are analyzing a veterinary document (e.g. an invoice or vaccine record) that may cover one or more pets. Extract ONLY vaccination line items — ignore medications, exam fees, boarding, grooming, supplies, and any other charge or record type, even if they appear on the same document. For each vaccination return: vaccine_name, date_given (YYYY-MM-DD), next_due_date (YYYY-MM-DD), administered_by (vet/clinic name), lot_number, notes. Only include fields clearly visible.${petNameInstruction}`,
+        task: 'scan_vaccines',
+        pet_id: petId,
         file_path: path,
-        response_json_schema: {
-          type: 'object',
-          properties: {
-            vaccines: {
-              type: 'array',
-              items: {
-                type: 'object',
-                properties: {
-                  vaccine_name: { type: 'string' },
-                  date_given: { type: 'string' },
-                  next_due_date: { type: 'string' },
-                  administered_by: { type: 'string' },
-                  lot_number: { type: 'string' },
-                  notes: { type: 'string' },
-                  pet_name: { type: 'string' },
-                }
-              }
-            }
-          }
-        }
       });
 
       const scanned = (result?.vaccines || []).filter(v => v.vaccine_name);

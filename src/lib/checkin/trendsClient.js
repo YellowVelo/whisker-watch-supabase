@@ -165,37 +165,24 @@ export async function getWeightTrend(petId, range, timezone) {
   return { hasAnyData, series, currentLbs, deltaLbs };
 }
 
-// One-paragraph Insight Summary, built from the already-fetched trend data
-// for the other cards (no extra queries). Returns null when there isn't
-// enough underlying history to say anything meaningful. Throws on AI
-// failure so the card can show "Insights unavailable." while every other
-// card keeps working. No score of any kind is passed to the model — only
-// the same symptom-count/Not-Observed/Weight descriptions the cards show.
-export async function getInsightSummary(petId, petName, { appetite, waterIntake, energy, weight }) {
+// One-paragraph Insight Summary for the selected range. Spec 0080: the
+// server rebuilds the same Appetite / Water Intake / Energy / Weight
+// descriptions the cards show and writes the instructions itself; the app
+// sends only the pet's id and the range. Returns null when there isn't
+// enough underlying history to say anything meaningful (here, or when the
+// server answers { summary: null }). Throws on AI failure so the card can
+// show "Insights unavailable." while every other card keeps working. No
+// score of any kind is passed to the model.
+export async function getInsightSummary(petId, range) {
   // Require at least 2 *scorable* check-ins (not skipped) — two skipped
   // days shouldn't be enough to justify a live LLM call with nothing but
-  // "No Data" for every field.
+  // "No Data" for every field. The server applies the same gate; checking
+  // here too saves a request.
   const recentCheckIns = await entities.DailyCheckIn.filter({ pet_id: petId }, '-check_in_date', 10);
   const scorableCount = recentCheckIns.filter((c) => c.status !== 'skipped').length;
   if (scorableCount < 2) return null;
 
-  const describe = (label, obs) => `${label}: ${obs?.currentLabel || 'No Data'}${obs?.currentSubtitle ? ` (${obs.currentSubtitle})` : ''}`;
-  const context = [
-    `Pet: ${petName}`,
-    describe('Appetite', appetite),
-    describe('Water Intake', waterIntake),
-    describe('Energy', energy),
-    `Weight: ${weight?.currentLbs ?? 'No Data'} lbs${weight?.deltaLbs != null ? ` (${weight.deltaLbs > 0 ? '+' : ''}${weight.deltaLbs} lbs vs. previous entry)` : ''}`,
-  ].join('\n');
-
-  const result = await invokeAI({
-    prompt: `You are summarizing recorded pet health observations for an owner, not diagnosing anything. Based only on the data below, write exactly one short paragraph (2-3 sentences) describing what has changed recently for ${petName}. Never diagnose, recommend treatment, or create alarm — describe observations only.
-
-${context}
-
-Respond in JSON: { "summary": "..." }`,
-    response_json_schema: { type: 'object', properties: { summary: { type: 'string' } } },
-  });
+  const result = await invokeAI({ task: 'trends_summary', pet_id: petId, range });
 
   return result?.summary || null;
 }

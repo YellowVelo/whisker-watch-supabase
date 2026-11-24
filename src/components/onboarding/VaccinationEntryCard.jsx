@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label';
 import { entities } from '@/api/entities';
 import { uploadFile, UploadRejectedError } from '@/api/storageClient';
 import { usePendingScan, scanErrorText } from '@/lib/scannedDocuments';
-import { invokeAI } from '@/api/aiClient';
+import { invokeAI, isUuid } from '@/api/aiClient';
 import { getVaccines } from '@/lib/speciesConfig';
 import { reportClientError } from '@/lib/errorMonitoring';
 
@@ -17,7 +17,7 @@ const emptyEntry = (petId) => ({ pet_id: petId, vaccine_name: '', date_given: ''
 // vaccinations table (entities.Vaccination) rather than an onboarding-only
 // shape, so it shows up immediately in the Vaccinations tab.
 //
-// Scan reuses the same invokeAI + ask-vet-assistant prompt/schema
+// Scan reuses the same invokeAI + ask-vet-assistant path
 // VaccinationSection.jsx already proved out for a single vaccine record —
 // but unlike that component (which saves scan results immediately), this
 // only pre-fills the manual form below, so the owner reviews and taps
@@ -45,19 +45,12 @@ export default function VaccinationEntryCard({ petId, petName, species, onContin
     try {
       const { path } = await uploadFile({ file, purpose: 'scan' });
       pendingScan.hold(path);
+      // Spec 0080: the server writes the instructions; only the file (and
+      // the pet, once it exists) is sent.
       const result = await invokeAI({
-        prompt: 'You are analyzing a photo of a single vaccination record or certificate. Extract only the fields clearly visible: vaccine_name, date_given (YYYY-MM-DD), next_due_date (YYYY-MM-DD), administered_by (vet/clinic name), lot_number.',
+        task: 'scan_vaccine_single',
+        pet_id: isUuid(petId) ? petId : undefined,
         file_path: path,
-        response_json_schema: {
-          type: 'object',
-          properties: {
-            vaccine_name: { type: 'string' },
-            date_given: { type: 'string' },
-            next_due_date: { type: 'string' },
-            administered_by: { type: 'string' },
-            lot_number: { type: 'string' },
-          },
-        },
       });
       setForm((f) => ({
         ...f,
@@ -70,7 +63,9 @@ export default function VaccinationEntryCard({ petId, petName, species, onContin
     } catch (err) {
       reportClientError(err, { feature: 'onboarding_vaccination', note: 'Failed to scan vaccination record' });
       pendingScan.discard();
-      setError(err instanceof UploadRejectedError || err?.status === 413
+      // Spec 0080 (Lynn): over the daily AI limit, show the server's own
+      // message (wording A) instead; manual entry below stays available.
+      setError(err instanceof UploadRejectedError || err?.status === 413 || err?.code === 'daily_limit'
         ? scanErrorText(err)
         : "Couldn't read that record — you can still enter it manually below.");
     } finally {

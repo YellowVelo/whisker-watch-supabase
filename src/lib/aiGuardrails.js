@@ -113,15 +113,9 @@ export function detectEmergencyKeywords(text) {
   return null;
 }
 
-export const AI_DISCLAIMER_SENTENCE = 'Always recommend consulting a licensed veterinarian for diagnosis, prescriptions, or emergencies. Keep responses concise, calm, and friendly — never diagnose, prescribe, or state a condition as certain.';
-
-// Appended to every AI-facing prompt that requests a structured
-// { ..., urgent: boolean } response. Backstop for wording
-// EMERGENCY_KEYWORD_PATTERNS doesn't catch — the client fully discards the
-// AI's own answer and shows the same hard-stop redirect if this is true
-// (Product Principles #12/#14: AI must never diagnose or create
-// unnecessary urgency, and must respect emotional context).
-export const URGENT_FLAG_INSTRUCTION = 'Additionally include a boolean "urgent" field. Set "urgent": true only if this describes a real, time-sensitive veterinary emergency (e.g. suspected poisoning, difficulty breathing, collapse, seizure, uncontrolled bleeding, inability to urinate, or severe trauma) — not for routine or mild concerns. Never create unnecessary alarm.';
+// The disclaimer sentence and "urgent" flag instruction every AI prompt
+// carries now live only on the server, where the prompts are written
+// (supabase/functions/ask-vet-assistant/prompts.ts, spec 0080).
 
 // Fixed, non-AI-generated redirect shown for both the keyword hard-stop and
 // the AI-flagged urgent backstop. No bypass action is ever attached to this

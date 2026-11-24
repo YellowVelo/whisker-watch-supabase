@@ -277,7 +277,7 @@ export default function PetTrends() {
                   <ObservationCard petId={petId} range={debouncedRange} code="water_intake" label="Water Intake" icon={Droplets} timezone={timezone} />
                   <ObservationCard petId={petId} range={debouncedRange} code="energy" label="Energy" icon={Zap} timezone={timezone} />
                   <WeightCard petId={petId} range={debouncedRange} timezone={timezone} />
-                  <InsightSummaryCard petId={petId} petName={pet.name} range={debouncedRange} timezone={timezone} />
+                  <InsightSummaryCard petId={petId} range={debouncedRange} />
                 </div>
               )}
             </>

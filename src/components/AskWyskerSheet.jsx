@@ -1,8 +1,6 @@
 import { useEffect, useState } from 'react';
 import { X, Sparkles, MessageCircle } from 'lucide-react';
 import { entities } from '@/api/entities';
-import { loadOwnedPets } from '@/lib/petsClient';
-import { reportClientError } from '@/lib/errorMonitoring';
 import PetAIInsights from './PetAIInsights';
 import PetAIChat from './PetAIChat';
 import GeneralAskWyskerChat from './GeneralAskWyskerChat';
@@ -23,10 +21,6 @@ export default function AskWyskerSheet({ open, onOpenChange, context }) {
   const { petId, screen } = context || {};
 
   const [pet, setPet] = useState(null);
-  const [logs, setLogs] = useState([]);
-  const [medications, setMedications] = useState([]);
-  const [baseline, setBaseline] = useState(null);
-  const [allPets, setAllPets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [aiTab, setAiTab] = useState('insights');
 
@@ -36,29 +30,15 @@ export default function AskWyskerSheet({ open, onOpenChange, context }) {
     setAiTab('insights');
 
     if (petId) {
-      Promise.all([
-        entities.Pet.get(petId),
-        entities.SymptomLog.filter({ pet_id: petId }, '-date', 200),
-        entities.Medication.filter({ pet_id: petId }, '-start_date', 50),
-        entities.PetOnboarding.filter({ pet_id: petId }),
-      ])
-        .then(([petData, logData, medData, onboardingRows]) => {
-          setPet(petData);
-          setLogs(logData);
-          setMedications(medData);
-          setBaseline(onboardingRows[0] || null);
-        })
+      // Spec 0080: the server loads the pet's medications, baseline and
+      // check-ins itself for chat and Insights; only the pet is needed here.
+      entities.Pet.get(petId)
+        .then((petData) => setPet(petData))
         .finally(() => setLoading(false));
     } else {
-      // Owned and co-owned pets only (spec 0079, PA-61), so the general
-      // chat never describes a pet the person only sits for as theirs.
-      loadOwnedPets('-created_date', 'ask_wysker')
-        .then(({ pets }) => setAllPets(pets.filter((p) => !p.is_memorial)))
-        .catch((err) => {
-          setAllPets([]);
-          reportClientError(err, { feature: 'ask_wysker' });
-        })
-        .finally(() => setLoading(false));
+      // The general chat needs no pet list: the server loads the person's
+      // owned and co-owned pets itself (spec 0079, enforced by spec 0080).
+      setLoading(false);
     }
   }, [open, petId]);
 
@@ -108,12 +88,12 @@ export default function AskWyskerSheet({ open, onOpenChange, context }) {
               ><MessageCircle className="h-3.5 w-3.5 inline mr-1" /> Ask a Question</button>
             </div>
             {aiTab === 'insights'
-              ? <PetAIInsights pet={pet} logs={logs} medications={medications} baseline={baseline} screen={screen} />
-              : <PetAIChat pet={pet} medications={medications} baseline={baseline} screen={screen} />
+              ? <PetAIInsights pet={pet} screen={screen} />
+              : <PetAIChat pet={pet} screen={screen} />
             }
           </>
         ) : (
-          <GeneralAskWyskerChat pets={allPets} />
+          <GeneralAskWyskerChat />
         )}
       </div>
     </div>
