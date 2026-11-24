@@ -491,7 +491,7 @@ Deno.serve(async (req) => {
     for (const t of observationTypes ?? []) typeById.set(t.id, { code: t.code, label: t.label || humanizeCode(t.code) });
     const optionLabels = new Map<string, string>();
     for (const o of observationOptions ?? []) {
-      if (o.label) optionLabels.set(`${o.observation_type_id} ${o.value}`, o.label);
+      if (o.label) optionLabels.set(`${o.observation_type_id}\u0000${o.value}`, o.label);
     }
     const attributeLabels: Record<string, string> = {};
     for (const code of COUNTED_ATTRIBUTES) attributeLabels[code] = humanizeCode(code);
@@ -509,7 +509,7 @@ Deno.serve(async (req) => {
           attribute: type.code,
           value: o.value,
           // Always a readable label: the catalog's, else the value humanized.
-          label: o.value == null ? null : optionLabels.get(`${o.observation_type_id} ${o.value}`) || humanizeCode(o.value),
+          label: o.value == null ? null : optionLabels.get(`${o.observation_type_id}\u0000${o.value}`) || humanizeCode(o.value),
         });
       }
     }
