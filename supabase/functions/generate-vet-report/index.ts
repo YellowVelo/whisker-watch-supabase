@@ -4,10 +4,11 @@
 // Spec §5.1). Assembles a clinic-ready PDF health report for one pet and
 // returns it as a binary stream. The caller's own JWT is used to create
 // the Supabase client below, so every query is subject to normal RLS
-// (`is_pet_owner()`) — a user can only ever generate a report for a pet
-// they own or co-own. There is no separate "check the user owns this
-// pet" step because RLS makes that structurally true: a `pets` fetch for
-// a pet the caller doesn't own simply returns no row.
+// (`is_pet_owner()`, `is_pet_sitter()`), so a user can only generate a
+// report for a pet they can read: one they own or co-own, or (punch list
+// PA-72) one they're sitting for while the sit is open. There is no
+// separate "check the user owns this pet" step:
+// a `pets` fetch for a pet the caller can't read simply returns no row.
 //
 // Request body: { petId: string, format?: 'pdf' }
 //   - format is optional and currently only 'pdf' is supported (DOCX was
@@ -18,9 +19,13 @@
 //
 // Data sources and why (Data Model_V2.md is the source of truth here,
 // not the original spec's table names, some of which don't exist):
-//   - Wellness Overview uses `wellness_scores.health_score` (V2, 0-10,
-//     migrations 0021/0022) — the score the app itself surfaces today —
-//     not the legacy 0-100 `score` column the original spec described.
+//   - Wellness Overview (spec 0080, FR14-FR17) uses the last 30 days of
+//     `daily_check_ins` (ending today in the owner's `profiles.timezone`)
+//     and their `observations`, labelled from `observation_types` and
+//     `observation_options`. Per spec 0012 v5 the Vibe totals and the
+//     symptom counts are shown separately and never inform each other;
+//     ./wellness.ts shapes the data, ./wellnessText.ts holds the approved
+//     wording.
 //   - "owner_profile" in the spec maps to `profiles` (name + email only;
 //     there is no phone/emergency-contact column on profiles today).
 //   - Weight comes from `symptom_logs.weight_grams` — there is no
@@ -37,6 +42,26 @@
 import { createClient } from 'jsr:@supabase/supabase-js@2.119.2';
 import { PDFDocument, StandardFonts, rgb } from 'npm:pdf-lib@1.17.1';
 import { reportError } from '../_shared/errorReporting.ts';
+import { COUNTED_ATTRIBUTES, type CheckInRow } from '../_shared/checkinRules.ts';
+import { buildWellnessOverview, overviewWindow, type WellnessDay, type WellnessObservation } from './wellness.ts';
+import {
+  humanizeCode,
+  layoutRuns,
+  LEGEND_BLANK,
+  LEGEND_NORMAL,
+  LEGEND_ONE,
+  LEGEND_TWO_PLUS,
+  NO_CHECK_INS_TEXT,
+  NO_SYMPTOMS_TEXT,
+  OVERVIEW_HEADING,
+  SYMPTOMS_LABEL,
+  SYMPTOMS_NOTE,
+  symptomListText,
+  VIBE_LABEL,
+  VIBE_NOTE,
+  vibeTotalsParts,
+  windowText,
+} from './wellnessText.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
 const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY');
@@ -76,17 +101,29 @@ const PAGE_HEIGHT = 792;
 const MARGIN = 48;
 const CONTENT_WIDTH = PAGE_WIDTH - MARGIN * 2;
 
+// Wellness Overview bar colors: the app's PALETTE.gray / amber / red
+// (src/lib/toneColors.js -> --tone-neutral / --tone-warn / --tone-bad in
+// src/index.css), as PDF RGB, so the report matches the Trends cards.
+const BAR_NORMAL = rgb(169 / 255, 174 / 255, 181 / 255); // #A9AEB5
+const BAR_ONE_SYMPTOM = rgb(244 / 255, 199 / 255, 107 / 255); // #F4C76B
+const BAR_TWO_PLUS = rgb(229 / 255, 115 / 255, 115 / 255); // #E57373
+
+// `nowrap` keeps a segment on one line (e.g. "No check-in 0").
+type TextSegment = { text: string; font?: any; nowrap?: boolean };
+
 class ReportBuilder {
   doc: any;
   font: any;
   bold: any;
+  italic: any;
   page: any;
   y: number;
 
-  constructor(doc: any, font: any, bold: any) {
+  constructor(doc: any, font: any, bold: any, italic: any = font) {
     this.doc = doc;
     this.font = font;
     this.bold = bold;
+    this.italic = italic;
     this.page = doc.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
     this.y = PAGE_HEIGHT - MARGIN;
   }
@@ -140,6 +177,125 @@ class ReportBuilder {
       color: rgb(0.75, 0.75, 0.75),
     });
     this.y -= 10;
+  }
+
+  // A heading with a lighter note after it on the same line, e.g.
+  // "Wellness Overview — last 30 days (…)". Same spacing and rule as
+  // heading(); the note drops to its own line if both don't fit.
+  headingWithNote(title: string, note: string) {
+    this.ensureSpace(42);
+    this.y -= 10;
+    const size = 15;
+    const noteSize = 10;
+    const noteColor = rgb(0.4, 0.4, 0.4);
+    const titleWidth = this.bold.widthOfTextAtSize(title, size);
+    const noteText = ` — ${note}`;
+    const fits = titleWidth + this.font.widthOfTextAtSize(noteText, noteSize) <= CONTENT_WIDTH;
+    this.page.drawText(title, { x: MARGIN, y: this.y - size, size, font: this.bold, color: rgb(0.05, 0.05, 0.05) });
+    if (fits) {
+      this.page.drawText(noteText, { x: MARGIN + titleWidth, y: this.y - size, size: noteSize, font: this.font, color: noteColor });
+      this.y -= size + 4;
+    } else {
+      this.y -= size + 4;
+      this.page.drawText(note, { x: MARGIN, y: this.y - noteSize, size: noteSize, font: this.font, color: noteColor });
+      this.y -= noteSize + 4;
+    }
+    this.page.drawLine({
+      start: { x: MARGIN, y: this.y },
+      end: { x: PAGE_WIDTH - MARGIN, y: this.y },
+      thickness: 1,
+      color: rgb(0.75, 0.75, 0.75),
+    });
+    this.y -= 10;
+  }
+
+  // One paragraph made of differently styled runs (e.g. a bold label then
+  // regular text), wrapped word by word across the runs.
+  richParagraph(segments: TextSegment[], { size = 10, color = rgb(0.15, 0.15, 0.15), gap = 4 } = {}) {
+    const lines = layoutRuns(
+      segments.map((seg) => ({ text: seg.text, font: seg.font ?? this.font, nowrap: seg.nowrap })),
+      CONTENT_WIDTH,
+      (text, font: any) => font.widthOfTextAtSize(text, size),
+    );
+    for (const line of lines) {
+      this.ensureSpace(size + gap);
+      let x = MARGIN;
+      for (const run of line) {
+        this.page.drawText(run.text, { x, y: this.y - size, size, font: run.font, color });
+        x += run.font.widthOfTextAtSize(run.text, size);
+      }
+      this.y -= size + gap;
+    }
+  }
+
+  // 30-day bar chart for one attribute, oldest day on the left (spec 0080,
+  // FR16). Grey = Normal, amber = 1 symptom, red = 2+ symptoms, and no
+  // bar for a skipped day, a day with no check-in, or a "Not observed" day
+  // (Lynn, 2026-11-24). Bar color comes from the symptom count
+  // only, never the day's Vibe (FR17). First and last dates go under the
+  // axis; the legend is drawn when `legend` is true.
+  barChart(days: WellnessDay[], { height = 36, legend = false } = {}) {
+    if (days.length === 0) return;
+    const labelSize = 9;
+    const legendHeight = legend ? 30 : 0;
+    this.ensureSpace(height + 16 + legendHeight + 8);
+
+    const top = this.y;
+    const bottom = top - height;
+    const slot = CONTENT_WIDTH / days.length;
+    const barWidth = Math.max(2, slot * 0.7);
+    const grey = rgb(0.5, 0.5, 0.5);
+
+    days.forEach((d, i) => {
+      const x = MARGIN + i * slot + (slot - barWidth) / 2;
+      let color = null;
+      if (d.state === 'normal') color = BAR_NORMAL;
+      else if (d.state === 'observed') color = (d.count ?? 0) >= 2 ? BAR_TWO_PLUS : BAR_ONE_SYMPTOM;
+      if (color) this.page.drawRectangle({ x, y: bottom, width: barWidth, height, color });
+    });
+
+    this.page.drawLine({
+      start: { x: MARGIN, y: bottom },
+      end: { x: PAGE_WIDTH - MARGIN, y: bottom },
+      thickness: 0.5,
+      color: rgb(0.7, 0.7, 0.7),
+    });
+
+    const firstLabel = formatDate(days[0].date);
+    const lastLabel = formatDate(days[days.length - 1].date);
+    this.page.drawText(firstLabel, { x: MARGIN, y: bottom - 11, size: labelSize, font: this.font, color: grey });
+    this.page.drawText(lastLabel, {
+      x: PAGE_WIDTH - MARGIN - this.font.widthOfTextAtSize(lastLabel, labelSize), y: bottom - 11, size: labelSize, font: this.font, color: grey,
+    });
+    this.y = bottom - 16;
+
+    if (legend) {
+      const swatch = 8;
+      const items: { label: string; color: any }[] = [
+        { label: LEGEND_NORMAL, color: BAR_NORMAL },
+        { label: LEGEND_ONE, color: BAR_ONE_SYMPTOM },
+        { label: LEGEND_TWO_PLUS, color: BAR_TWO_PLUS },
+        { label: LEGEND_BLANK, color: null },
+      ];
+      let x = MARGIN;
+      let baseline = this.y - labelSize - 2;
+      for (const item of items) {
+        const textWidth = this.font.widthOfTextAtSize(item.label, labelSize);
+        const itemWidth = (item.color ? swatch + 4 : 0) + textWidth;
+        if (x + itemWidth > PAGE_WIDTH - MARGIN && x > MARGIN) {
+          x = MARGIN;
+          baseline -= labelSize + 5;
+        }
+        if (item.color) {
+          this.page.drawRectangle({ x, y: baseline, width: swatch, height: swatch, color: item.color });
+          x += swatch + 4;
+        }
+        this.page.drawText(item.label, { x, y: baseline, size: labelSize, font: this.font, color: rgb(0.35, 0.35, 0.35) });
+        x += textWidth + 14;
+      }
+      this.y = baseline - 8;
+    }
+    this.y -= 8;
   }
 
   // Simple left-aligned column table. `columns` is [{ header, width }],
@@ -285,21 +441,32 @@ Deno.serve(async (req) => {
 
     const sinceDate = new Date(Date.now() - DAYS_WINDOW * MS_PER_DAY).toISOString().slice(0, 10);
 
+    // The requesting user's own profile: name and email for the cover, and
+    // their time zone for the Wellness Overview's 30-day window (spec 0080,
+    // FR15). UTC if unset or invalid (dateStrInTimezone's fallback).
+    const { data: profile } = await supabaseClient.from('profiles').select('first_name, last_name, email, timezone')
+      .eq('id', userData.user.id).maybeSingle();
+    // One window for the check-in query and the chart (overviewWindow
+    // counts calendar days, so a daylight-saving change can't split them).
+    const { start: overviewStart, end: overviewEnd } = overviewWindow(profile?.timezone);
+
     const [
-      { data: profile },
-      { data: wellnessScores },
+      { data: checkInRows, error: checkInsError },
+      { data: observationOptions, error: optionsError },
       { data: baselines },
       { data: observations, count: observationsTotalCount },
-      { data: observationTypes },
+      { data: observationTypes, error: typesError },
       { data: medications },
       { data: vaccinations },
       { data: foodLogs, count: foodLogsTotalCount },
       { data: symptomLogs },
       { data: bloodwork },
     ] = await Promise.all([
-      supabaseClient.from('profiles').select('first_name, last_name, email').eq('id', userData.user.id).maybeSingle(),
-      supabaseClient.from('wellness_scores').select('check_in_date, health_score, health_score_version, score_reason_summary')
-        .eq('pet_id', petId).order('check_in_date', { ascending: false }).limit(90),
+      // Caller's client, so RLS decides which check-ins are visible.
+      supabaseClient.from('daily_check_ins').select('id, check_in_date, status, observations(observation_type_id, value)')
+        .eq('pet_id', petId).gte('check_in_date', overviewStart).lte('check_in_date', overviewEnd)
+        .order('check_in_date', { ascending: true }),
+      supabaseClient.from('observation_options').select('observation_type_id, value, label'),
       supabaseClient.from('pet_baselines').select('*').eq('pet_id', petId).is('effective_to', null),
       supabaseClient.from('observations').select('observed_at, observation_type_id, value, numeric_value, notes', { count: 'exact' })
         .eq('pet_id', petId).gte('observed_at', sinceDate).order('observed_at', { ascending: false }).limit(500),
@@ -311,13 +478,54 @@ Deno.serve(async (req) => {
       supabaseClient.from('bloodwork').select('*').eq('pet_id', petId).order('date', { ascending: false }),
     ]);
 
+    // The overview can't be drawn truthfully without these, so a failed
+    // lookup is an error, not an empty overview.
+    if (checkInsError) throw checkInsError;
+    if (optionsError) throw optionsError;
+    if (typesError) throw typesError;
+
     const typeLabelById = new Map((observationTypes || []).map((t: any) => [t.id, t.label]));
+
+    // ── Wellness Overview data (spec 0080, FR15-FR17) ─────────────────
+    const typeById = new Map<string, { code: string; label: string }>();
+    for (const t of observationTypes ?? []) typeById.set(t.id, { code: t.code, label: t.label || humanizeCode(t.code) });
+    const optionLabels = new Map<string, string>();
+    for (const o of observationOptions ?? []) {
+      if (o.label) optionLabels.set(`${o.observation_type_id}\u0000${o.value}`, o.label);
+    }
+    const attributeLabels: Record<string, string> = {};
+    for (const code of COUNTED_ATTRIBUTES) attributeLabels[code] = humanizeCode(code);
+    for (const t of typeById.values()) attributeLabels[t.code] = t.label;
+
+    const overviewCheckIns: CheckInRow[] = [];
+    const overviewObservations: WellnessObservation[] = [];
+    for (const row of (checkInRows ?? []) as any[]) {
+      overviewCheckIns.push({ id: row.id, check_in_date: row.check_in_date, status: row.status });
+      for (const o of row.observations ?? []) {
+        const type = typeById.get(o.observation_type_id);
+        if (!type) continue;
+        overviewObservations.push({
+          daily_check_in_id: row.id,
+          attribute: type.code,
+          value: o.value,
+          // Always a readable label: the catalog's, else the value humanized.
+          label: o.value == null ? null : optionLabels.get(`${o.observation_type_id}\u0000${o.value}`) || humanizeCode(o.value),
+        });
+      }
+    }
+    const overview = buildWellnessOverview({
+      endDate: overviewEnd,
+      checkIns: overviewCheckIns,
+      observations: overviewObservations,
+      attributeLabels,
+    });
 
     // ── Assemble PDF ──────────────────────────────────────────────────
     const doc = await PDFDocument.create();
     const font = await doc.embedFont(StandardFonts.Helvetica);
     const bold = await doc.embedFont(StandardFonts.HelveticaBold);
-    const r = new ReportBuilder(doc, font, bold);
+    const italic = await doc.embedFont(StandardFonts.HelveticaOblique);
+    const r = new ReportBuilder(doc, font, bold, italic);
 
     // Cover / header
     r.text(pet.name || 'Unnamed Pet', { size: 24, font: bold, gap: 6 });
@@ -335,17 +543,32 @@ Deno.serve(async (req) => {
     r.text(`Prepared for: ${ownerName}${profile?.email ? ` (${profile.email})` : ''}`, { size: 9, color: rgb(0.45, 0.45, 0.45) });
     r.text(`Report generated: ${formatDate(new Date().toISOString())}`, { size: 9, color: rgb(0.45, 0.45, 0.45), gap: 10 });
 
-    // Wellness Overview
-    r.heading('Wellness Overview');
-    const v2Scores = (wellnessScores || []).filter((w: any) => w.health_score_version === 'health_score_v2' && w.health_score != null);
-    if (v2Scores.length > 0) {
-      const latest = v2Scores[0];
-      r.text(`Current Health Score: ${latest.health_score} / 10 (as of ${formatDate(latest.check_in_date)})`, { size: 11, font: bold });
-      if (latest.score_reason_summary) r.paragraph(`Recent factors: ${latest.score_reason_summary}`, { size: 9, color: rgb(0.45, 0.45, 0.45) });
-      const chartPoints = [...v2Scores].reverse().map((w: any) => ({ label: formatDate(w.check_in_date), value: w.health_score }));
-      r.lineChart(chartPoints, { min: 0, max: 10 });
+    // Wellness Overview (spec 0080, wording B as approved). Vibe totals
+    // and symptom charts are separate (spec 0012 v5).
+    r.headingWithNote(OVERVIEW_HEADING, windowText(overview.startDate, overview.endDate));
+    if (overview.noCheckIns) {
+      r.paragraph(NO_CHECK_INS_TEXT, { color: rgb(0.5, 0.5, 0.5) });
     } else {
-      r.paragraph('No Health Score data has been recorded for this pet yet.', { color: rgb(0.5, 0.5, 0.5) });
+      r.richParagraph([
+        { text: VIBE_LABEL, font: bold },
+        { text: VIBE_NOTE },
+        // Breaks only after a " ·", never inside a "Label N" pair.
+        ...vibeTotalsParts(overview.vibe).flatMap((part, i, all) =>
+          i < all.length - 1 ? [{ text: `${part} ·`, nowrap: true }, { text: ' ' }] : [{ text: part, nowrap: true }]),
+      ]);
+      r.y -= 6;
+      if (overview.noSymptoms) {
+        r.paragraph(NO_SYMPTOMS_TEXT, { color: rgb(0.5, 0.5, 0.5) });
+      } else {
+        r.richParagraph([{ text: SYMPTOMS_LABEL, font: bold }, { text: SYMPTOMS_NOTE }]);
+        r.y -= 4;
+        overview.attributes.forEach((attr, index) => {
+          // Keep an attribute's label line with its chart.
+          r.ensureSpace(14 + 36 + 16 + (index === 0 ? 30 : 0) + 8);
+          r.richParagraph([{ text: attr.label, font: italic }, { text: ` — ${symptomListText(attr.symptoms)}` }]);
+          r.barChart(attr.days, { legend: index === 0 });
+        });
+      }
     }
 
     // Baselines & Deviations
@@ -353,7 +576,7 @@ Deno.serve(async (req) => {
     if ((baselines || []).length > 0) {
       r.table(
         [{ header: 'Metric', width: 150 }, { header: 'Baseline', width: 150 }, { header: 'Confidence', width: 100 }, { header: 'Source', width: 100 }],
-        baselines.map((b: any) => [
+        (baselines ?? []).map((b: any) => [
           typeLabelById.get(b.observation_type_id) || '—',
           b.baseline_value || (b.baseline_numeric_value != null ? String(b.baseline_numeric_value) : '—'),
           b.confidence_level || '—',
@@ -387,11 +610,11 @@ Deno.serve(async (req) => {
     // Weight Trend
     r.heading('Weight Trend');
     if ((symptomLogs || []).length > 0) {
-      const weightPoints = symptomLogs.map((s: any) => ({ label: formatDate(s.date), value: Math.round((s.weight_grams / 453.59237) * 10) / 10 }));
+      const weightPoints = (symptomLogs ?? []).map((s: any) => ({ label: formatDate(s.date), value: Math.round((s.weight_grams / 453.59237) * 10) / 10 }));
       r.lineChart(weightPoints);
       r.table(
         [{ header: 'Date', width: 150 }, { header: 'Weight (lbs)', width: 150 }],
-        [...symptomLogs].reverse().slice(0, 60).map((s: any) => [formatDate(s.date), `${(s.weight_grams / 453.59237).toFixed(1)}`]),
+        [...(symptomLogs ?? [])].reverse().slice(0, 60).map((s: any) => [formatDate(s.date), `${(s.weight_grams / 453.59237).toFixed(1)}`]),
       );
     } else {
       r.paragraph(`No weight entries recorded in the last ${DAYS_WINDOW} days.`, { color: rgb(0.5, 0.5, 0.5) });
@@ -402,7 +625,7 @@ Deno.serve(async (req) => {
     if ((medications || []).length > 0) {
       r.table(
         [{ header: 'Name', width: 110 }, { header: 'Dosage', width: 90 }, { header: 'Frequency', width: 90 }, { header: 'Prescribing Vet', width: 100 }, { header: 'Status', width: 90 }],
-        medications.map((m: any) => [m.name, m.dosage || '—', m.frequency || '—', m.prescribing_vet || '—', m.active ? 'Active' : 'Inactive']),
+        (medications ?? []).map((m: any) => [m.name, m.dosage || '—', m.frequency || '—', m.prescribing_vet || '—', m.active ? 'Active' : 'Inactive']),
       );
     } else {
       r.paragraph('No medications on file.', { color: rgb(0.5, 0.5, 0.5) });
@@ -413,7 +636,7 @@ Deno.serve(async (req) => {
     if ((vaccinations || []).length > 0) {
       r.table(
         [{ header: 'Vaccine', width: 130 }, { header: 'Date Given', width: 100 }, { header: 'Next Due', width: 100 }, { header: 'Notes', width: 150 }],
-        vaccinations.map((v: any) => [v.vaccine_name, formatDate(v.date_given), formatDate(v.next_due_date), v.notes || '—']),
+        (vaccinations ?? []).map((v: any) => [v.vaccine_name, formatDate(v.date_given), formatDate(v.next_due_date), v.notes || '—']),
       );
     } else {
       r.paragraph('No vaccination records on file.', { color: rgb(0.5, 0.5, 0.5) });
@@ -424,9 +647,9 @@ Deno.serve(async (req) => {
     if ((foodLogs || []).length > 0) {
       r.table(
         [{ header: 'Date', width: 80 }, { header: 'Food', width: 150 }, { header: 'Amount Eaten', width: 110 }, { header: 'Notes', width: 130 }],
-        foodLogs.slice(0, 150).map((f: any) => [formatDate(f.date), `${f.food_name}${f.brand ? ` (${f.brand})` : ''}`, f.amount_eaten || '—', f.notes || '—']),
+        (foodLogs ?? []).slice(0, 150).map((f: any) => [formatDate(f.date), `${f.food_name}${f.brand ? ` (${f.brand})` : ''}`, f.amount_eaten || '—', f.notes || '—']),
       );
-      if ((foodLogsTotalCount || 0) > foodLogs.length || foodLogs.length > 150) {
+      if ((foodLogsTotalCount || 0) > (foodLogs ?? []).length || (foodLogs ?? []).length > 150) {
         r.paragraph(`Showing food logs from the last ${DAYS_WINDOW} days (data truncated). Older records are not included in this report.`, { size: 8, color: rgb(0.55, 0.55, 0.55) });
       }
     } else {
@@ -442,7 +665,7 @@ Deno.serve(async (req) => {
         { title: 'Endocrine', fields: [['glucose', 'Glucose'], ['t4', 'T4']] },
         { title: 'Other', fields: [['phosphorus', 'Phosphorus'], ['potassium', 'Potassium'], ['sodium', 'Sodium'], ['calcium', 'Calcium'], ['hematocrit', 'Hematocrit'], ['hemoglobin', 'Hemoglobin'], ['total_protein', 'Total Protein'], ['albumin', 'Albumin']] },
       ];
-      for (const record of bloodwork) {
+      for (const record of bloodwork ?? []) {
         r.text(`${formatDate(record.date)}${record.lab_name ? ` · ${record.lab_name}` : ''}${record.vet_name ? ` · ${record.vet_name}` : ''}`, { size: 10, font: bold, gap: 6 });
         for (const panel of panels) {
           const present = panel.fields.filter(([key]) => record[key] != null);
@@ -460,7 +683,8 @@ Deno.serve(async (req) => {
     const pdfBytes = await doc.save();
 
     const filename = `${(pet.name || 'pet').replace(/[^a-z0-9]+/gi, '-')}-vet-report.pdf`;
-    return new Response(pdfBytes, {
+    // Copy into a plain ArrayBuffer-backed Uint8Array (a BodyInit type).
+    return new Response(new Uint8Array(pdfBytes), {
       status: 200,
       headers: {
         ...corsHeaders,
@@ -469,7 +693,8 @@ Deno.serve(async (req) => {
       },
     });
   } catch (err) {
-    console.error('generate-vet-report error:', err);
+    // Not serverError(): vetReportClient.js shows body.error.message, so
+    // this keeps the { error: { code, message } } shape.
     reportError(err, { function: 'generate-vet-report' });
     return jsonError('report_generation_failed', 'Something went wrong generating this report', 500);
   }

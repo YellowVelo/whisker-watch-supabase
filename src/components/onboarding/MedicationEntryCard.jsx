@@ -8,7 +8,7 @@ import SmartSelect from '@/components/SmartSelect';
 import { entities } from '@/api/entities';
 import { uploadFile, UploadRejectedError } from '@/api/storageClient';
 import { usePendingScan, scanErrorText } from '@/lib/scannedDocuments';
-import { invokeAI } from '@/api/aiClient';
+import { invokeAI, isUuid } from '@/api/aiClient';
 import { FREQUENCY_OPTIONS } from '@/lib/onboardingConfig';
 import { reportClientError } from '@/lib/errorMonitoring';
 
@@ -45,17 +45,12 @@ export default function MedicationEntryCard({ petId, petName, onContinue, onSkip
     try {
       const { path } = await uploadFile({ file, purpose: 'scan' });
       pendingScan.hold(path);
+      // Spec 0080: the server writes the instructions; only the file (and
+      // the pet, once it exists) is sent.
       const result = await invokeAI({
-        prompt: 'You are analyzing a photo of a medication label. Extract only the fields clearly visible: name (the medication name), dosage (strength + amount per dose, e.g. "5mg"), frequency (how often it is given, matched to one of: Once daily, Twice daily, Every other day, Weekly, Monthly, As needed, Other).',
+        task: 'scan_medication',
+        pet_id: isUuid(petId) ? petId : undefined,
         file_path: path,
-        response_json_schema: {
-          type: 'object',
-          properties: {
-            name: { type: 'string' },
-            dosage: { type: 'string' },
-            frequency: { type: 'string' },
-          },
-        },
       });
       setForm((f) => ({
         ...f,
@@ -66,7 +61,9 @@ export default function MedicationEntryCard({ petId, petName, onContinue, onSkip
     } catch (err) {
       reportClientError(err, { feature: 'onboarding_medication', note: 'Failed to scan medication label' });
       pendingScan.discard();
-      setError(err instanceof UploadRejectedError || err?.status === 413
+      // Spec 0080 (Lynn): over the daily AI limit, show the server's own
+      // message (wording A) instead; manual entry below stays available.
+      setError(err instanceof UploadRejectedError || err?.status === 413 || err?.code === 'daily_limit'
         ? scanErrorText(err)
         : "Couldn't read that label — you can still enter it manually below.");
     } finally {

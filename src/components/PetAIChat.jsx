@@ -1,22 +1,14 @@
 import { useState, useRef, useEffect } from 'react';
-import { invokeAI } from '@/api/aiClient';
+import { invokeAI, buildChatHistory, aiScreen, MAX_QUESTION_CHARS } from '@/api/aiClient';
 import { Send, Stethoscope } from 'lucide-react';
-import { formatBaselineForAI } from '@/lib/baselineContext';
-import { detectEmergencyKeywords, AI_DISCLAIMER_SENTENCE, URGENT_FLAG_INSTRUCTION, aiErrorText } from '@/lib/aiGuardrails';
+import { detectEmergencyKeywords, aiErrorText } from '@/lib/aiGuardrails';
 import AIEmergencyNotice from './AIEmergencyNotice';
 import AIErrorNotice from './AIErrorNotice';
 
-const SYSTEM_CONTEXT = (pet, medications, baseline, screen) => {
-  const conditions = pet.conditions?.join(', ') || 'None noted';
-  const activeMeds = medications?.filter(m => m.active).map(m => `${m.name} ${m.dosage || ''} ${m.frequency || ''}`).join(', ') || 'None';
-  const age = pet.birth_date ? Math.floor((new Date() - new Date(pet.birth_date)) / (365.25 * 24 * 60 * 60 * 1000)) : null;
-  const baselineSummary = formatBaselineForAI(baseline, pet.name, pet.species);
-  const baselineSentence = baselineSummary ? ` ${pet.name}'s established baseline (what's normal for them, as reported by the owner): ${baselineSummary}.` : '';
-  const screenSentence = screen ? ` The owner just came from ${pet.name}'s ${screen} screen, so lean toward that topic first if it's relevant, but answer whatever they actually ask.` : '';
-  return `You are a compassionate, experienced veterinarian with 20+ years of clinical practice. You are assisting the owner of a pet named ${pet.name}, a ${age ? age + '-year-old ' : ''}${pet.species || 'cat'} (${pet.breed || 'mixed breed'}) with the following known conditions: ${conditions}. Active medications: ${activeMeds}.${baselineSentence}${screenSentence} Answer questions clearly and practically. ${AI_DISCLAIMER_SENTENCE} ${URGENT_FLAG_INSTRUCTION}`;
-};
-
-export default function PetAIChat({ pet, medications, baseline, screen }) {
+// Spec 0080: the server writes the instructions and looks up the pet's
+// profile, medications and baseline itself; the app sends only the pet's
+// id, the screen, the new question and the conversation so far.
+export default function PetAIChat({ pet, screen }) {
   const [messages, setMessages] = useState([
     { role: 'assistant', content: `Hi! I'm here to help with questions about ${pet.name}. I have their profile on file — what would you like to know?` }
   ]);
@@ -45,19 +37,16 @@ export default function PetAIChat({ pet, medications, baseline, screen }) {
 
     setLoading(true);
 
-    // Build conversation history for context
-    const history = [...messages, userMsg].map(m => `${m.role === 'user' ? 'Owner' : 'Vet Assistant'}: ${m.content}`).join('\n\n');
+    // The conversation before this question, without the question itself.
+    const history = buildChatHistory(messages);
 
     try {
       const result = await invokeAI({
-        prompt: `${SYSTEM_CONTEXT(pet, medications, baseline, screen)}\n\nConversation so far:\n${history}\n\nOwner's latest question: ${text}\n\nVet Assistant:`,
-        response_json_schema: {
-          type: 'object',
-          properties: {
-            reply: { type: 'string' },
-            urgent: { type: 'boolean' },
-          },
-        },
+        task: 'pet_chat',
+        pet_id: pet.id,
+        screen: aiScreen(screen),
+        question: text,
+        history,
       });
 
       // Backstop: the AI flagged this as urgent even though the keyword list
@@ -128,6 +117,7 @@ export default function PetAIChat({ pet, medications, baseline, screen }) {
           onKeyDown={handleKey}
           placeholder={`Ask about ${pet.name}…`}
           rows={1}
+          maxLength={MAX_QUESTION_CHARS}
           className="flex-1 resize-none rounded-xl border border-input bg-background px-3 py-2.5 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring placeholder:text-muted-foreground min-h-[42px] max-h-24"
           style={{ WebkitUserSelect: 'text', userSelect: 'text' }}
         />

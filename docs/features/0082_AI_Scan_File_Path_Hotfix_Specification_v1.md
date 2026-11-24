@@ -1,6 +1,6 @@
 # 0082_AI_Scan_File_Path_Hotfix_Specification_v1
 
-**Status:** Approved by Lynn 2026-11-24. Lynn chose "hotfix now" on 2026-11-24, separate from spec 0080. Amended 2026-11-24 after review (Lynn approved): the part after the last dot uses a looser rule so real upload names (e.g. "Rabies cert", "scan.jpg-large") keep working. AC3 confirmed on dev with a real AI scan. The separate `pets.photo_path` hole found in review is punch-list item PA-73 (P0), out of scope here by Lynn's decision.
+**Status:** Shipped 2026-11-24 (PR #56, merged); `ask-vet-assistant` live on dev, staging and prod, all functions started on each. Spec 0080 carries the same fix in its rewrite. Approved by Lynn 2026-11-24. Lynn chose "hotfix now" on 2026-11-24, separate from spec 0080. Amended 2026-11-24 after review (Lynn approved): the part after the last dot uses a looser rule so real upload names (e.g. "Rabies cert", "scan.jpg-large") keep working. AC3 confirmed on dev with a real AI scan. The separate `pets.photo_path` hole found in review is punch-list item PA-73 (P0), out of scope here by Lynn's decision.
 **Date:** 2026-11-24
 **Branch:** `claude/hotfix-0082-ai-file-path` (off `main`)
 **Migration:** none

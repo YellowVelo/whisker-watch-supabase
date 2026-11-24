@@ -108,6 +108,10 @@ Must branch on file type (image vs PDF)
 
 Must never expose API keys to the client
 
+Accepts only the 8 named tasks (spec 0080); never a prompt, schema or file link from the browser. The server writes the instructions and loads pet data with the caller's own access.
+
+Limits: 20 requests per 10 minutes plus 100 per person per day (migration 0060). Replies answered without the AI don't count, except scan files found missing, the wrong type or too large after the limit check. One Sentry warning per person per day at the cap.
+
 Error Handling
 
 Return structured JSON errors
@@ -277,6 +281,8 @@ from pg_default_acl where defaclrole = 'postgres'::regrole and defaclobjtype = '
 Domains: prod is the bare `https://wyskerwatch.com` plus `https://www.wyskerwatch.com`; dev is `http://localhost:5173`; staging uses its own address. Prod lists no `localhost` and no broad wildcards (spec 0069). **Rule:** any new `redirectTo` in code is added to this table and to all three dashboards in the same change. `supabase/tests/password_reset_redirect.test.ts` checks `/reset-password` on dev in CI; run it by hand against staging/prod with that project's keys and `RESET_REDIRECT_BASE`.
 
 **Auth emails go through Supabase's custom SMTP, not `sendEmail.ts`** (added 2026-11-21, spec 0074). Password-reset emails are sent by Supabase Auth itself, through Resend's SMTP (`smtp.resend.com`, sender `Wysker Watch <no-reply@wyskerwatch.com>`, one Resend API key per project), on all three projects. Before 2026-11-21, prod used Supabase's built-in mailer, which only delivers to Supabase team members. The Reset Password template in each dashboard is a rendered copy of `supabase/functions/_shared/email/templates/password-reset.ts` (via `layout.ts`, link `{{ .ConfirmationURL }}`); change both together. The app's test-account email suppression doesn't apply to these emails.
+
+**Spec 0080 deploy order and type check (added 2026-11-24).** Migration `0060` must be on a project before `ask-vet-assistant` is deployed there, or every AI request is refused (503). CI now runs `deno check --node-modules-dir=none` on every function and test; keep it at 0 errors.
 
 **Per-function deploy settings live in `supabase/config.toml`** (added 2026-10-19, spec 0066). Today that's only resend-webhook's `verify_jwt = false`. Always pass `--project-ref` explicitly rather than relying on the linked project. Spec 0066 found the CLI linked to prod during routine work.
 

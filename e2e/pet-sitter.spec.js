@@ -309,11 +309,17 @@ test('AC2: a sitter with no pets of their own sees the welcome screen and a Pet 
   await expect(page).toHaveURL('/pet-sitter');
 });
 
+// Spec 0080: the server now builds the household pet list itself (owned
+// and co-owned only, proven by supabase/tests/ai_tasks.test.ts), so the
+// app-side check is that the general chat request carries no pet details
+// at all: no pet names and no pet ids.
 test('AC3: Ask Wysker\'s general chat does not tell the AI about a sat pet', async ({ page }) => {
-  let capturedPrompt = null;
+  let capturedBody = null;
+  let capturedRaw = null;
   await page.route('**/functions/v1/ask-vet-assistant', async (route) => {
     if (route.request().method() === 'OPTIONS') return route.fulfill({ status: 200, body: 'ok' });
-    capturedPrompt = JSON.parse(route.request().postData()).prompt;
+    capturedRaw = route.request().postData();
+    capturedBody = JSON.parse(capturedRaw);
     await route.fulfill({ json: { reply: 'E2E canned reply', urgent: false } });
   });
 
@@ -324,9 +330,16 @@ test('AC3: Ask Wysker\'s general chat does not tell the AI about a sat pet', asy
   await page.getByPlaceholder('Ask about any of your pets…').fill('What should I feed them?');
   await page.getByPlaceholder('Ask about any of your pets…').press('Enter');
 
-  await expect.poll(() => capturedPrompt, { timeout: 15000 }).not.toBeNull();
+  await expect.poll(() => capturedBody, { timeout: 15000 }).not.toBeNull();
   await expect(page.getByText('E2E canned reply')).toBeVisible();
+  expect(capturedBody.task).toBe('household_chat');
+  expect(capturedBody).not.toHaveProperty('pet_id');
+  expect(capturedBody).not.toHaveProperty('pets');
+  expect(capturedBody).not.toHaveProperty('prompt');
   for (const name of SAT_PET_NAMES) {
-    expect(capturedPrompt).not.toContain(name);
+    expect(capturedRaw).not.toContain(name);
+  }
+  for (const id of [petWithCheckinId, petNoCheckinId]) {
+    expect(capturedRaw).not.toContain(id);
   }
 });

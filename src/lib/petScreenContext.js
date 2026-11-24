@@ -1,3 +1,4 @@
+/** @type {Array<[RegExp, string]>} */
 const SCREEN_PATTERNS = [
   [/\/trends(?:$|\?)/, 'Trends'],
   [/\/timeline(?:$|\?)/, 'Timeline'],
@@ -6,6 +7,11 @@ const SCREEN_PATTERNS = [
   [/\/export(?:$|\?)/, 'Vet Export'],
   [/\/profile/, 'Profile'],
 ];
+
+// Every screen name getPetContext() can return. The server keeps its own
+// copy (supabase/functions/ask-vet-assistant/rules.ts) to check the
+// `screen` it's sent; src/lib/aiServerParity.test.js keeps the two in step.
+export const PET_SCREEN_NAMES = ['Overview', ...SCREEN_PATTERNS.map(([, name]) => name)];
 
 // Derives { petId, screen } from the current URL rather than useParams() —
 // AppHeader renders as a shell sibling of the routed content, not a

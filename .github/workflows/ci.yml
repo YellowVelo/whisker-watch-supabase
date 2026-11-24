@@ -46,6 +46,21 @@ jobs:
         with:
           deno-version: v2.x
 
+      # Type-check every Edge Function (spec 0080, PA-65). Each index.ts
+      # pulls in its own helpers and _shared/ files through its imports, so
+      # those are checked too; the test files are included as well.
+      # --node-modules-dir=none keeps Deno from reading the app's
+      # node_modules folder. This uses the Deno version installed above,
+      # which is newer than Supabase's runtime (Deno 2.1.4), so it catches
+      # typing mistakes only. The hourly "do all functions start" check
+      # (function-health.yml) stays the runtime safety net.
+      - name: Type-check Edge Functions (deno check)
+        run: |
+          deno check --node-modules-dir=none \
+            supabase/functions/*/index.ts \
+            supabase/functions/*/*.test.ts \
+            supabase/tests/*.ts
+
       - name: Run delete-pet / delete-account integration tests
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_DEV_URL }}
@@ -62,7 +77,7 @@ jobs:
             supabase/functions/delete-pet/index.test.ts \
             supabase/functions/delete-account/index.test.ts
 
-      - name: Run save_daily_check_ins + private uploads (spec 0071) + co-owner access (spec 0072) + sitter access (spec 0073) + reset-link redirect (spec 0074) + account deletion functions (spec 0075) + function permissions and invite emails (spec 0077) integration tests
+      - name: Run save_daily_check_ins + private uploads (spec 0071) + co-owner access (spec 0072) + sitter access (spec 0073) + reset-link redirect (spec 0074) + account deletion functions (spec 0075) + function permissions and invite emails (spec 0077) + rate-limit windows, AI context loaders and AI task requests (spec 0080) integration tests
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_DEV_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.sb_publishable }}
@@ -76,12 +91,25 @@ jobs:
             supabase/tests/password_reset_redirect.test.ts \
             supabase/tests/account_deletion.test.ts \
             supabase/tests/function_permissions.test.ts \
-            supabase/tests/invite_emails.test.ts
+            supabase/tests/invite_emails.test.ts \
+            supabase/tests/rate_limits.test.ts \
+            supabase/tests/ai_context.test.ts \
+            supabase/tests/ai_tasks.test.ts \
+            supabase/tests/vet_report_pdf.test.ts
 
       - name: Run Edge Function code checks (spec 0078 - exact library versions, no raw error messages)
         run: |
           deno test --allow-read --allow-env --node-modules-dir=none \
             supabase/tests/function_hygiene.test.ts
+
+      # Pure unit tests, no secrets: no network, file or env permission.
+      - name: Run check-in counting rules, AI prompt, Vet Report overview and pet photo unit tests (spec 0080)
+        run: |
+          deno test --node-modules-dir=none \
+            supabase/tests/checkin_rules.test.ts \
+            supabase/tests/ai_prompts.test.ts \
+            supabase/tests/vet_report_wellness.test.ts \
+            supabase/tests/pet_photo.test.ts
 
       - name: Run resend-webhook integration tests
         env:

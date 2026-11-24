@@ -14,12 +14,14 @@
 import { supabase } from '@/api/supabaseClient';
 import { entities } from '@/api/entities';
 import { invokeAI } from '@/api/aiClient';
-import { loadObservationCatalog, BASELINE_VALUES, NOT_OBSERVED_VALUES } from './checkinClient';
+import { loadObservationCatalog } from './checkinClient';
+import { observationDaySeries } from './observationSeries';
 import { PALETTE } from '@/lib/toneColors';
 import { dateStrInTimezone } from '@/lib/timezone';
 
-export const RANGE_DAYS = { '24H': 5, '7D': 7, '30D': 30, '90D': 90, '1Y': 365 };
-export const RANGE_OPTIONS = ['24H', '7D', '30D', '90D', '1Y'];
+import { RANGE_DAYS, RANGE_OPTIONS } from './trendsRanges';
+
+export { RANGE_DAYS, RANGE_OPTIONS };
 
 // `timezone` is threaded through from the caller (PetTrends.jsx, via the
 // signed-in user's stored timezone) so "today"/"yesterday" here agree with
@@ -72,9 +74,7 @@ export async function getObservationTrend(petId, code, range, timezone) {
   }
 
   const scorableIds = inRange.filter((c) => c.status !== 'skipped').map((c) => c.id);
-  const countsByCheckIn = {};
-  const notObservedByCheckIn = {};
-  const symptomLabelsByCheckIn = {};
+  let observations = [];
   if (scorableIds.length > 0) {
     const { data, error } = await supabase
       .from('observations')
@@ -82,21 +82,16 @@ export async function getObservationTrend(petId, code, range, timezone) {
       .in('daily_check_in_id', scorableIds)
       .eq('observation_type_id', entry.type.id);
     if (error) throw error;
-    for (const obs of data) {
-      if (obs.value == null) continue;
-      if (NOT_OBSERVED_VALUES.has(obs.value)) { notObservedByCheckIn[obs.daily_check_in_id] = true; continue; }
-      if (BASELINE_VALUES.has(obs.value)) continue;
-      countsByCheckIn[obs.daily_check_in_id] = (countsByCheckIn[obs.daily_check_in_id] || 0) + 1;
-      (symptomLabelsByCheckIn[obs.daily_check_in_id] ||= []).push(entry.optionsByValue[obs.value]?.label || obs.value);
-    }
+    observations = data;
   }
 
-  const series = inRange.map((c) => {
-    if (c.status === 'skipped') return { date: c.check_in_date, state: 'skipped', count: null };
-    if (notObservedByCheckIn[c.id]) return { date: c.check_in_date, state: 'not_observed', count: null };
-    const count = countsByCheckIn[c.id] || 0;
-    return { date: c.check_in_date, state: count > 0 ? 'observed' : 'normal', count };
-  });
+  // Per-day rules live in observationSeries.js (spec 0080), shared with
+  // the parity test against the server's attributeDaySeries.
+  const { series, symptomLabelsByCheckIn } = observationDaySeries(
+    inRange,
+    observations,
+    (value) => entry.optionsByValue[value]?.label || value,
+  );
 
   // A stale in-range point must never be presented as today's current
   // state — same rule everywhere on this screen.
@@ -164,37 +159,24 @@ export async function getWeightTrend(petId, range, timezone) {
   return { hasAnyData, series, currentLbs, deltaLbs };
 }
 
-// One-paragraph Insight Summary, built from the already-fetched trend data
-// for the other cards (no extra queries). Returns null when there isn't
-// enough underlying history to say anything meaningful. Throws on AI
-// failure so the card can show "Insights unavailable." while every other
-// card keeps working. No score of any kind is passed to the model — only
-// the same symptom-count/Not-Observed/Weight descriptions the cards show.
-export async function getInsightSummary(petId, petName, { appetite, waterIntake, energy, weight }) {
+// One-paragraph Insight Summary for the selected range. Spec 0080: the
+// server rebuilds the same Appetite / Water Intake / Energy / Weight
+// descriptions the cards show and writes the instructions itself; the app
+// sends only the pet's id and the range. Returns null when there isn't
+// enough underlying history to say anything meaningful (here, or when the
+// server answers { summary: null }). Throws on AI failure so the card can
+// show "Insights unavailable." while every other card keeps working. No
+// score of any kind is passed to the model.
+export async function getInsightSummary(petId, range) {
   // Require at least 2 *scorable* check-ins (not skipped) — two skipped
   // days shouldn't be enough to justify a live LLM call with nothing but
-  // "No Data" for every field.
+  // "No Data" for every field. The server applies the same gate; checking
+  // here too saves a request.
   const recentCheckIns = await entities.DailyCheckIn.filter({ pet_id: petId }, '-check_in_date', 10);
   const scorableCount = recentCheckIns.filter((c) => c.status !== 'skipped').length;
   if (scorableCount < 2) return null;
 
-  const describe = (label, obs) => `${label}: ${obs?.currentLabel || 'No Data'}${obs?.currentSubtitle ? ` (${obs.currentSubtitle})` : ''}`;
-  const context = [
-    `Pet: ${petName}`,
-    describe('Appetite', appetite),
-    describe('Water Intake', waterIntake),
-    describe('Energy', energy),
-    `Weight: ${weight?.currentLbs ?? 'No Data'} lbs${weight?.deltaLbs != null ? ` (${weight.deltaLbs > 0 ? '+' : ''}${weight.deltaLbs} lbs vs. previous entry)` : ''}`,
-  ].join('\n');
-
-  const result = await invokeAI({
-    prompt: `You are summarizing recorded pet health observations for an owner, not diagnosing anything. Based only on the data below, write exactly one short paragraph (2-3 sentences) describing what has changed recently for ${petName}. Never diagnose, recommend treatment, or create alarm — describe observations only.
-
-${context}
-
-Respond in JSON: { "summary": "..." }`,
-    response_json_schema: { type: 'object', properties: { summary: { type: 'string' } } },
-  });
+  const result = await invokeAI({ task: 'trends_summary', pet_id: petId, range });
 
   return result?.summary || null;
 }

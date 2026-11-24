@@ -1,6 +1,6 @@
 # 0050_AskVetAssistant_RateLimiting_Specification_v1
 
-**Status:** Implemented and verified 2026-08-09 — deployed to dev, staging, and production
+**Status:** Implemented and verified 2026-08-09 — deployed to dev, staging, and production. **Updated by spec 0080 (2026-11-24, migration 0060):** a daily cap of 100 per person now applies on top of the 20 per 10 minutes, checked in one call (`check_and_record_rate_limits_windowed`). 0060 also fixed a bug where every AI request deleted other features' rate-limit history older than 10 minutes.
 **Date:** 2026-08-09
 **Related files:** `supabase/functions/ask-vet-assistant/index.ts`, `supabase/migrations/0039_signup_rate_limits.sql`, `src/api/aiClient.js`, `src/components/PetAIChat.jsx`, `src/components/GeneralAskWyskerChat.jsx`, `src/components/PetAIInsights.jsx`, `src/components/VaccinationSection.jsx`, `src/components/BloodworkSection.jsx`, `src/components/ui/use-toast.jsx`, `docs/launch-punch-list.md`, `docs/features/0041_AskWysker_AI_Guardrails_And_Screen_Context_Specification_v1.md`
 

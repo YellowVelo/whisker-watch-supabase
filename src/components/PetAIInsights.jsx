@@ -1,88 +1,43 @@
 import { useState } from 'react';
-import { invokeAI } from '@/api/aiClient';
+import { invokeAI, aiScreen } from '@/api/aiClient';
 import { Sparkles, RefreshCw, AlertTriangle, CircleCheck, Lightbulb } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { PALETTE, PALETTE_SOFT } from '@/lib/toneColors';
-import { formatBaselineForAI } from '@/lib/baselineContext';
-import { AI_DISCLAIMER_SENTENCE, URGENT_FLAG_INSTRUCTION, aiErrorText } from '@/lib/aiGuardrails';
+import { aiErrorText } from '@/lib/aiGuardrails';
 import AIEmergencyNotice from './AIEmergencyNotice';
 import AIErrorNotice from './AIErrorNotice';
 
-export default function PetAIInsights({ pet, logs, medications, bloodwork, baseline, screen }) {
+// Spec 0080 FR8: the server reads the pet's last 30 days of daily
+// check-ins (Vibe and symptoms, kept separate), medications, baseline and
+// weight itself; the app sends only the pet's id and the screen. With fewer
+// than 2 non-skipped check-ins it answers { not_enough_data: true } without
+// calling the AI.
+export default function PetAIInsights({ pet, screen }) {
   const [insights, setInsights] = useState(null);
   const [urgent, setUrgent] = useState(false);
+  const [notEnoughData, setNotEnoughData] = useState(false);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
   const [generated, setGenerated] = useState(false);
-
-  const buildContext = () => {
-    const recentLogs = logs.slice(0, 30);
-    const logSummary = recentLogs.map(l =>
-      `Date: ${l.date}, Appetite: ${l.appetite || 'N/A'}, Energy: ${l.energy_level || 'N/A'}, Vomiting: ${l.vomiting ?? 0}, Stool: ${l.stool_quality || 'N/A'}, Weight: ${l.weight_grams ? (l.weight_grams / 453.6).toFixed(2) + ' lbs' : 'N/A'}${l.notes ? ', Notes: ' + l.notes : ''}`
-    ).join('\n');
-
-    const activeMeds = medications?.filter(m => m.active).map(m => `${m.name} ${m.dosage || ''} ${m.frequency || ''}`).join(', ') || 'None';
-    const conditions = pet.conditions?.join(', ') || 'None noted';
-    const species = pet.species || 'Cat';
-    const age = pet.birth_date ? Math.floor((new Date() - new Date(pet.birth_date)) / (365.25 * 24 * 60 * 60 * 1000)) : null;
-    const baselineSummary = formatBaselineForAI(baseline, pet.name, pet.species);
-
-    return `
-Pet Name: ${pet.name}
-Species: ${species}
-${age ? `Age: ${age} years` : ''}
-Breed: ${pet.breed || 'Unknown'}
-Known Conditions: ${conditions}
-Active Medications: ${activeMeds}
-${baselineSummary ? `Established Baseline (owner-reported normal): ${baselineSummary}` : ''}
-${screen ? `The owner just came from ${pet.name}'s ${screen} screen, so lean toward that topic first if it's relevant.` : ''}
-
-Recent Health Logs (most recent first):
-${logSummary || 'No recent logs.'}
-    `.trim();
-  };
 
   const generateInsights = async () => {
     setLoading(true);
     setGenerated(true);
     setUrgent(false);
     setError(null);
-    const context = buildContext();
+    setNotEnoughData(false);
     try {
       const result = await invokeAI({
-        prompt: `You are a compassionate, experienced veterinarian with 20+ years of clinical practice reviewing a pet's health record. Analyze the following medical data and provide 3-5 specific, actionable observations or concerns. Focus on trends, anomalies, or patterns in the data. Be concise and practical. ${AI_DISCLAIMER_SENTENCE} ${URGENT_FLAG_INSTRUCTION}
-
-${context}
-
-Respond in JSON with this structure:
-{
-  "summary": "1-2 sentence overall health summary",
-  "insights": [
-    { "type": "warning|info|positive", "title": "Short title", "detail": "1-2 sentences" }
-  ],
-  "disclaimer": "brief disclaimer",
-  "urgent": false
-}`,
-        response_json_schema: {
-          type: "object",
-          properties: {
-            summary: { type: "string" },
-            insights: {
-              type: "array",
-              items: {
-                type: "object",
-                properties: {
-                  type: { type: "string" },
-                  title: { type: "string" },
-                  detail: { type: "string" }
-                }
-              }
-            },
-            disclaimer: { type: "string" },
-            urgent: { type: "boolean" }
-          }
-        }
+        task: 'pet_insights',
+        pet_id: pet.id,
+        screen: aiScreen(screen),
       });
+
+      if (result?.not_enough_data) {
+        setNotEnoughData(true);
+        setInsights(null);
+        return;
+      }
 
       // Backstop: discard the generated analysis entirely and show only the
       // hard-stop redirect if the AI flagged this as urgent — same principle
@@ -135,6 +90,13 @@ Respond in JSON with this structure:
       )}
 
       {urgent && !loading && <AIEmergencyNotice petName={pet.name} />}
+
+      {notEnoughData && !loading && (
+        <p className="text-base text-muted-foreground bg-muted/50 rounded-xl px-4 py-3 leading-relaxed">
+          <strong className="font-semibold text-foreground">Not enough check-ins yet.</strong>{' '}
+          Insights look at {pet.name}'s last 30 days of daily check-ins. Check in on at least 2 days and they'll be ready.
+        </p>
+      )}
 
       {error && !loading && (
         <div className="space-y-3">

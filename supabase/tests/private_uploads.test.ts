@@ -209,24 +209,32 @@ Deno.test('ask-vet-assistant: refuses outside links and files the caller may not
   try {
     h = await buildHousehold('ai');
     removed = await createScratchUser('ai-removed');
-    const prompt = 'Test prompt that must never reach the AI.';
+    // Spec 0080: requests name a task; every check below is refused before
+    // the rate check and the AI call (bad fields when the request is parsed,
+    // file access as the caller right after), so none of them counts
+    // against any limit. The file is only downloaded after the rate check.
+    const scan = (filePath: string) => ({ task: 'scan_vaccines', pet_id: h!.petId, file_path: filePath });
 
+    // Spec 0080 AC8: the old file_url field is refused outright, whatever
+    // it points at (spec 0071's Phase 1 link support is gone).
     const outside = await callFunction('ask-vet-assistant', h.stranger.accessToken, {
-      prompt,
+      task: 'scan_vaccine_single',
       file_url: 'https://example.com/invoice.png',
     });
     assertEquals(outside.status, 400);
     assertEquals(outside.json.code, 'invalid_file');
 
     const traversal = await callFunction('ask-vet-assistant', h.stranger.accessToken, {
-      prompt,
+      task: 'scan_vaccine_single',
       file_path: `${h.stranger.userId}/../${h.docPath}`,
     });
     assertEquals(traversal.status, 400);
+    assertEquals(traversal.json.code, 'invalid_file');
 
     // Spec 0082 AC1: disguised traversal, odd segments and extra folders are
     // refused before any lookup or download. Each starts in the stranger's
     // own folder, so the old own-folder check would have let them through.
+    // Refused before the rate check, so none counts against the limit.
     const badPaths = [
       `${h.stranger.userId}/%2e%2e/${h.docPath}`,
       `${h.stranger.userId}/..\\${h.docPath}`,
@@ -241,7 +249,7 @@ Deno.test('ask-vet-assistant: refuses outside links and files the caller may not
       `${h.stranger.userId}/x.a\\b`,
     ];
     for (const badPath of badPaths) {
-      const res = await callFunction('ask-vet-assistant', h.stranger.accessToken, { prompt, file_path: badPath });
+      const res = await callFunction('ask-vet-assistant', h.stranger.accessToken, scan(badPath));
       assertEquals(res.status, 400, `expected 400 for ${badPath}`);
       assertEquals(res.json.code, 'invalid_file', `expected invalid_file for ${badPath}`);
     }
@@ -250,32 +258,34 @@ Deno.test('ask-vet-assistant: refuses outside links and files the caller may not
     // name as the extension, so real paths can have spaces, dashes or
     // accented letters there. These must pass the shape check. They sit in
     // the owner's folder, so the stranger gets 403 forbidden_file (not 400
-    // invalid_file), which proves the shape was accepted without calling the AI.
+    // invalid_file), which proves the shape was accepted without calling the
+    // AI or using up the rate limit.
     const awkwardPaths = [
       `${h.owner.userId}/1700000000000-abc123.rabies cert`,
       `${h.owner.userId}/1700000000000-abc123.jpg-large`,
       `${h.owner.userId}/1700000000000-abc123.résumé`,
     ];
     for (const awkwardPath of awkwardPaths) {
-      const res = await callFunction('ask-vet-assistant', h.stranger.accessToken, { prompt, file_path: awkwardPath });
+      const res = await callFunction('ask-vet-assistant', h.stranger.accessToken, scan(awkwardPath));
       assertEquals(res.status, 403, `expected 403 for ${awkwardPath}`);
       assertEquals(res.json.code, 'forbidden_file', `expected forbidden_file for ${awkwardPath}`);
     }
 
     const someoneElses = await callFunction('ask-vet-assistant', h.stranger.accessToken, {
-      prompt,
+      task: 'scan_vaccine_single',
       file_path: h.docPath,
     });
     assertEquals(someoneElses.status, 403);
     assertEquals(someoneElses.json.code, 'forbidden_file');
 
     // Sitters can see the pet but not its documents, so not via the AI either.
-    const sitter = await callFunction('ask-vet-assistant', h.sitter.accessToken, { prompt, file_path: h.docPath });
+    const sitter = await callFunction('ask-vet-assistant', h.sitter.accessToken, scan(h.docPath));
     assertEquals(sitter.status, 403);
     assertEquals(sitter.json.code, 'forbidden_file');
 
     // Spec 0082 AC2: a co-owner who was invited, claimed the invite, and was
-    // then removed knows the real path but is refused like a stranger.
+    // then removed knows the real path but is refused like a stranger
+    // (by the pet_documents lookup, before the rate check).
     const { data: invite, error: inviteError } = await h.owner.client
       .from('pet_co_owners')
       .insert({ pet_id: h.petId, owner_id: h.owner.userId, created_by: h.owner.userId, co_owner_email: removed.email })
@@ -287,17 +297,19 @@ Deno.test('ask-vet-assistant: refuses outside links and files the caller may not
     assert(await canOpen(removed, h.docPath), 'while a co-owner, they can open the document');
     const { error: removeError } = await h.owner.client.from('pet_co_owners').delete().eq('id', invite.id);
     if (removeError) throw new Error(`co-owner removal failed: ${removeError.message}`);
-    const removedCall = await callFunction('ask-vet-assistant', removed.accessToken, { prompt, file_path: h.docPath });
+    const removedCall = await callFunction('ask-vet-assistant', removed.accessToken, scan(h.docPath));
     assertEquals(removedCall.status, 403);
     assertEquals(removedCall.json.code, 'forbidden_file');
 
-    // Phase 1 compatibility path: a public-style link into someone else's
-    // folder is converted to a path and refused the same way.
+    // A public-style link into someone else's folder, sent as file_url, is
+    // refused before any path conversion (Phase 1 compatibility removed).
     const compat = await callFunction('ask-vet-assistant', h.stranger.accessToken, {
-      prompt,
+      task: 'scan_vaccines',
+      pet_id: h.petId,
       file_url: `${requireEnv('SUPABASE_URL')}/storage/v1/object/public/uploads/${h.docPath}`,
     });
-    assertEquals(compat.status, 403);
+    assertEquals(compat.status, 400);
+    assertEquals(compat.json.code, 'invalid_file');
   } finally {
     await cleanUp(h, removed ? [removed] : []);
   }

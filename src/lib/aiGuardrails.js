@@ -97,25 +97,25 @@ export const EMERGENCY_KEYWORD_PATTERNS = [
   },
 ];
 
+// Curly apostrophes (iPhone Smart Punctuation, U+2019 / U+2018, and the
+// look-alike U+02BC) are turned into a straight ' first, so "can’t breathe"
+// matches the same as "can't breathe".
+const CURLY_APOSTROPHES = /[\u2018\u2019\u02BC]/g;
+
 // Returns the matched category name, or null if nothing matches. Pure
 // function, unit-testable directly — same precedent as petScreenContext.js.
 export function detectEmergencyKeywords(text) {
   if (!text) return null;
+  const normalized = text.replace(CURLY_APOSTROPHES, "'");
   for (const { category, patterns } of EMERGENCY_KEYWORD_PATTERNS) {
-    if (patterns.some((re) => re.test(text))) return category;
+    if (patterns.some((re) => re.test(normalized))) return category;
   }
   return null;
 }
 
-export const AI_DISCLAIMER_SENTENCE = 'Always recommend consulting a licensed veterinarian for diagnosis, prescriptions, or emergencies. Keep responses concise, calm, and friendly — never diagnose, prescribe, or state a condition as certain.';
-
-// Appended to every AI-facing prompt that requests a structured
-// { ..., urgent: boolean } response. Backstop for wording
-// EMERGENCY_KEYWORD_PATTERNS doesn't catch — the client fully discards the
-// AI's own answer and shows the same hard-stop redirect if this is true
-// (Product Principles #12/#14: AI must never diagnose or create
-// unnecessary urgency, and must respect emotional context).
-export const URGENT_FLAG_INSTRUCTION = 'Additionally include a boolean "urgent" field. Set "urgent": true only if this describes a real, time-sensitive veterinary emergency (e.g. suspected poisoning, difficulty breathing, collapse, seizure, uncontrolled bleeding, inability to urinate, or severe trauma) — not for routine or mild concerns. Never create unnecessary alarm.';
+// The disclaimer sentence and "urgent" flag instruction every AI prompt
+// carries now live only on the server, where the prompts are written
+// (supabase/functions/ask-vet-assistant/prompts.ts, spec 0080).
 
 // Fixed, non-AI-generated redirect shown for both the keyword hard-stop and
 // the AI-flagged urgent backstop. No bypass action is ever attached to this
