@@ -39,6 +39,7 @@ const SERVER_ONLY: Record<string, Record<string, unknown>> = {
   classify_account_type: { p_email: 'x@example.com' },
   check_and_record_rate_limit: { p_key: 'spec0077-probe', p_limit: 1, p_window_seconds: 1 },
   check_and_record_rate_limits: { p_keys: ['spec0077-probe'], p_limits: [1], p_window_seconds: 1 },
+  check_and_record_rate_limits_windowed: { p_keys: ['spec0080-probe'], p_limits: [1], p_windows: [1] },
   get_auth_user_confirmation_state: { p_email: 'x@example.com' },
   prepare_account_deletion: { p_user_id: ZERO, p_folder_paths: [] },
   transfer_pet_ownership: { p_pet_id: ZERO, p_from_user: ZERO, p_reason: 'x', p_handle_sits: false },
