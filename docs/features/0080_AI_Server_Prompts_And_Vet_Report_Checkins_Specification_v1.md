@@ -1,6 +1,6 @@
 # 0080_AI_Server_Prompts_And_Vet_Report_Checkins_Specification_v1
 
-**Status:** Reviewed by Lynn 2026-11-23. Wording A and B approved. Switchover: option (a), deploy and promote back to back. Anthropic monthly spend limit set. Her one change (Before You Approve item 5, Base44 wording) is made. Waiting for her final "approved". No code written yet.
+**Status:** Approved by Lynn 2026-11-23. Wording A and B approved. Switchover: option (a), deploy and promote back to back. Anthropic monthly spend limit set. Her one change (Before You Approve item 5, Base44 wording) is made. Base44 cleanup (PA-71, PA-50, PA-51) is the next bundle (spec 0081), not part of this one.
 **Date:** 2026-11-23
 **Branch:** `claude/ai-vet-report`
 **Migration:** `0060` (reserved): fixes the shared rate limiter and adds a version that checks two time windows at once.
@@ -22,7 +22,7 @@
 
 ## Lynn — what I need from you
 
-1. **Give the final "approved"** now that item 5 is corrected. This blocks the build. (Wording, switchover choice and the Anthropic spend limit are done, 2026-11-23.)
+1. ~~Final approval~~ Done 2026-11-23.
 2. **Later, before merge:** OK the PROTECTED merge after review passes (0011 rule).
 3. **Later, at rollout:** promote the frontend build in Cloudflare right after I deploy the server function (branch `main`, commit message starting "Spec 0080"). I'll tell you the moment.
 
