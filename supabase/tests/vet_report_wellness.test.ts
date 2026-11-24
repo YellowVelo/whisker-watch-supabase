@@ -1,5 +1,6 @@
 // Unit tests for the Vet Report Wellness Overview data (spec 0080, FR15-FR17,
-// AC10 data, AC11): supabase/functions/generate-vet-report/wellness.ts.
+// AC10 data, AC11): supabase/functions/generate-vet-report/wellness.ts, and
+// the approved wording B in wellnessText.ts.
 // Pure: no network, no logins, no file access.
 //
 // Run: deno test --node-modules-dir=none supabase/tests/vet_report_wellness.test.ts
@@ -12,6 +13,24 @@ import {
   WINDOW_DAYS,
   type WellnessObservation,
 } from '../functions/generate-vet-report/wellness.ts';
+import {
+  humanizeCode,
+  LEGEND_BLANK,
+  LEGEND_NORMAL,
+  LEGEND_NOT_OBSERVED,
+  LEGEND_ONE,
+  LEGEND_TWO_PLUS,
+  NO_CHECK_INS_TEXT,
+  NO_SYMPTOMS_TEXT,
+  OVERVIEW_HEADING,
+  SYMPTOMS_LABEL,
+  SYMPTOMS_NOTE,
+  symptomListText,
+  VIBE_LABEL,
+  VIBE_NOTE,
+  vibeTotalsText,
+  windowText,
+} from '../functions/generate-vet-report/wellnessText.ts';
 
 const END = '2026-11-23';
 const LABELS: Record<string, string> = {
@@ -255,4 +274,58 @@ Deno.test('only outside-window check-ins: counts as no check-ins', () => {
   const o = build([day('old', '2026-10-24'), day('next', '2026-11-24')], [obs('old', 'appetite', 'ate_more', 'Ate more')]);
   assertEquals(o.noCheckIns, true);
   assertEquals(o.attributes, []);
+});
+
+// ── Approved wording B (spec 0080), wellnessText.ts ─────────────────────
+
+Deno.test('wording B: window text uses the report dates as given', () => {
+  assertEquals(windowText('Oct 25, 2026', 'Nov 23, 2026'), 'last 30 days (Oct 25, 2026 – Nov 23, 2026)');
+});
+
+Deno.test('wording B: Vibe totals line, with Not recorded only when > 0', () => {
+  const v = { great: 21, off: 6, tough: 2, skipped: 1, noCheckIn: 0, notRecorded: 0 };
+  assertEquals(vibeTotalsText(v), 'Great Day 21 · Off Day 6 · Tough Day 2 · Skipped 1 · No check-in 0');
+  assertEquals(
+    vibeTotalsText({ ...v, notRecorded: 2 }),
+    'Great Day 21 · Off Day 6 · Tough Day 2 · Skipped 1 · No check-in 0 · Not recorded 2',
+  );
+  assertEquals(VIBE_LABEL + VIBE_NOTE, "How the days went (the owner's own daily rating): ");
+  assertEquals(SYMPTOMS_LABEL + SYMPTOMS_NOTE, 'Symptoms logged (counted separately from the daily rating):');
+  assertEquals(OVERVIEW_HEADING, 'Wellness Overview');
+});
+
+Deno.test('wording B: symptom list says "1 day" for one and "N days" otherwise', () => {
+  assertEquals(symptomListText([{ label: 'Ate a little less', days: 18 }]), 'Ate a little less (18 days)');
+  assertEquals(
+    symptomListText([{ label: 'Ate a little less', days: 18 }, { label: 'Ate much less', days: 1 }]),
+    'Ate a little less (18 days), Ate much less (1 day)',
+  );
+});
+
+Deno.test('wording B: Tribble example end to end (vibe line, Appetite listed, Water not)', () => {
+  const { checkIns, observations } = tribble();
+  const overview = build(checkIns, observations);
+  assertEquals(vibeTotalsText(overview.vibe), 'Great Day 30 · Off Day 0 · Tough Day 0 · Skipped 0 · No check-in 0');
+  assertEquals(overview.attributes.map((a) => `${a.label} — ${symptomListText(a.symptoms)}`), [
+    'Appetite — Ate a little less (18 days), Ate much less (2 days)',
+  ]);
+});
+
+Deno.test('wording B: empty-state messages', () => {
+  assertEquals(NO_CHECK_INS_TEXT, 'No daily check-ins were recorded in the last 30 days.');
+  assertEquals(NO_SYMPTOMS_TEXT, 'No symptoms were logged in the last 30 days.');
+});
+
+Deno.test('legend wording', () => {
+  assertEquals(
+    [LEGEND_NORMAL, LEGEND_ONE, LEGEND_TWO_PLUS, LEGEND_NOT_OBSERVED, LEGEND_BLANK],
+    ['Normal', '1 symptom', '2+ symptoms', 'Not observed', 'Blank = skipped or no check-in'],
+  );
+});
+
+Deno.test('humanizeCode: underscores to spaces, first letter capitalized', () => {
+  assertEquals(humanizeCode('ate_little_less'), 'Ate little less');
+  assertEquals(humanizeCode('water_intake'), 'Water intake');
+  assertEquals(humanizeCode('picky'), 'Picky');
+  assertEquals(humanizeCode('__odd__value_'), 'Odd value');
 });

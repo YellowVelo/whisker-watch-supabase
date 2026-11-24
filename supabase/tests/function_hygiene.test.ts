@@ -11,6 +11,8 @@
 //    caller's CORS headers.
 // 4. ask-vet-assistant never reads storage with the service-role client, so
 //    storage's own rules always decide who can scan a file (spec 0082).
+// 5. generate-vet-report no longer reads the retired wellness_scores table
+//    or shows a Health Score (spec 0080).
 //
 // Run: deno test --allow-read --allow-env --node-modules-dir=none supabase/tests/function_hygiene.test.ts
 
@@ -113,4 +115,10 @@ Deno.test('serverError answers 500 with the plain message and CORS headers', asy
   } finally {
     console.error = originalError;
   }
+});
+
+Deno.test('generate-vet-report no longer reads wellness_scores or shows a Health Score (spec 0080, FR14/AC10)', async () => {
+  const source = await Deno.readTextFile(new URL('generate-vet-report/index.ts', FUNCTIONS_DIR));
+  assert(!/wellness_scores/.test(source), 'generate-vet-report/index.ts still mentions wellness_scores');
+  assert(!/health[ _]score/i.test(source), 'generate-vet-report/index.ts still mentions Health Score');
 });
