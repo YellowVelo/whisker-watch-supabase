@@ -19,6 +19,12 @@
 //     migration 0057) and a removed co-owner get 403 forbidden_pet.
 //   - A stranger's multi-pet scan naming someone else's pet gets 403
 //     forbidden_pet.
+//   - Allowed access (QA, spec 0080 review "Unverified"): a sitter inside
+//     the sit window and a current co-owner get past forbidden_pet. For a
+//     pet with no check-ins, Pet Insights answers { not_enough_data: true }
+//     and a Trends summary { summary: null } (no AI call, nothing counted).
+//     The same sitter is still refused a second pet of the same owner that
+//     isn't in the sit.
 //   - FR10: for a pet with no check-ins, Pet Insights answers
 //     { not_enough_data: true } and a Trends summary { summary: null }, and
 //     neither leaves a rate_limit_hits row (no-AI replies don't count).
@@ -70,7 +76,7 @@ function utcDate(offsetDays = 0): string {
 }
 
 Deno.test('ask-vet-assistant task requests (spec 0080)', async (t) => {
-  const [owner, sitter, stranger, oldSitter, exCoOwner, rateUser, bothUser] = await Promise.all([
+  const [owner, sitter, stranger, oldSitter, exCoOwner, rateUser, bothUser, coOwner] = await Promise.all([
     createScratchUser('aitask-owner'),
     createScratchUser('aitask-sitter'),
     createScratchUser('aitask-stranger'),
@@ -78,8 +84,9 @@ Deno.test('ask-vet-assistant task requests (spec 0080)', async (t) => {
     createScratchUser('aitask-excoowner'),
     createScratchUser('aitask-rate10'),
     createScratchUser('aitask-ratefull'),
+    createScratchUser('aitask-coowner'),
   ]);
-  const allUsers = [owner, sitter, stranger, oldSitter, exCoOwner, rateUser, bothUser];
+  const allUsers = [owner, sitter, stranger, oldSitter, exCoOwner, rateUser, bothUser, coOwner];
   const admin = adminClient();
   let petId: string | null = null;
   const extraPetIds: string[] = [];
@@ -179,6 +186,41 @@ Deno.test('ask-vet-assistant task requests (spec 0080)', async (t) => {
     assertEquals(seenAsCoOwner?.length, 1, 'the co-owner should see the pet before removal');
     const { error: removeError } = await owner.client.from('pet_co_owners').delete().eq('id', coRow.id);
     if (removeError) throw new Error(`co-owner removal failed: ${removeError.message}`);
+
+    // A current co-owner, linked the legitimate way (invite, then claim).
+    const { error: curCoError } = await owner.client
+      .from('pet_co_owners')
+      .insert({ pet_id: petId, owner_id: owner.userId, created_by: owner.userId, co_owner_email: coOwner.email });
+    if (curCoError) throw new Error(`current co-owner invite failed: ${curCoError.message}`);
+    const { error: curCoClaimError } = await coOwner.client.rpc('claim_pending_co_owner_invites');
+    if (curCoClaimError) throw new Error(`current co-owner claim failed: ${curCoClaimError.message}`);
+
+    await t.step('allowed: a sitter inside the sit window and a current co-owner get past forbidden_pet', async () => {
+      const callers = [['sitter in window', sitter], ['current co-owner', coOwner]] as const;
+      for (const [who, caller] of callers) {
+        const { data: visible } = await caller.client.from('pets').select('id').eq('id', petId);
+        assertEquals(visible?.length, 1, `${who} should see the pet through the database rules`);
+
+        const insights = await callFunction(FN, caller.accessToken, { task: 'pet_insights', pet_id: petId });
+        assertEquals(insights.status, 200, `${who} pet_insights: expected 200, got ${JSON.stringify(insights.json)}`);
+        assertEquals(insights.json, { not_enough_data: true }, `${who} pet_insights`);
+
+        const summary = await callFunction(FN, caller.accessToken, { task: 'trends_summary', pet_id: petId, range: '30D' });
+        assertEquals(summary.status, 200, `${who} trends_summary: expected 200, got ${JSON.stringify(summary.json)}`);
+        assertEquals(summary.json, { summary: null }, `${who} trends_summary`);
+
+        assertEquals(await countRows(rateKey(caller.userId)), 0, `${who}: no-AI replies must not count (10-minute key)`);
+        assertEquals(await countRows(dailyKey(caller.userId)), 0, `${who}: no-AI replies must not count (daily key)`);
+      }
+    });
+
+    await t.step("a sitter is refused the owner's other pet that isn't in the sit (403 forbidden_pet)", async () => {
+      const otherPetId = await ownPet(owner, 'Ai Tasks Not Sat Pet');
+      const res = await callFunction(FN, sitter.accessToken, { task: 'pet_insights', pet_id: otherPetId });
+      assertEquals(res.status, 403);
+      assertEquals(res.json.code, 'forbidden_pet');
+      assert(!JSON.stringify(res.json).includes('Not Sat Pet'), 'refusal leaked pet details');
+    });
 
     await t.step('AC1: own instructions or an unknown task are refused with 400 unknown_task', async () => {
       const bodies: Record<string, unknown>[] = [
