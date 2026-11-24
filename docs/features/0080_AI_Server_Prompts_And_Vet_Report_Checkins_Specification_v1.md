@@ -217,5 +217,9 @@ A day with no rating at all counts under a separate "Not recorded" total, shown 
 ## Open Questions
 
 1. **Switchover — resolved (Lynn, 2026-11-23): option (a).** Deploy the new function and promote the frontend back to back, accepting a few minutes of AI features showing "Something went wrong" (anyone with the app open reloads once). No two-step compatibility path. Staging auto-promotes on push, so it follows the same pattern.
-2. **Sitter pet chat:** keep today's behavior (a sitter can ask about a pet they're sitting during the sit), or make pet chat and Insights owners-only? The draft keeps today's behavior.
+2. **Sitter pet chat — resolved (Lynn, 2026-11-23): keep today's behavior.** A sitter can ask about a pet they're sitting, during the sit only.
+4. **Planning answers (Lynn, 2026-11-23):**
+   - **Onboarding scans:** when the daily limit is hit, the new-pet setup scan buttons show wording A instead of "Couldn't read that record…". Manual entry stays available.
+   - **Staging:** sync staging to `main` in the same rollout, right after the backend goes on staging.
+   - **Vet Report and sitters:** the server would build a Vet Report for a sitter during a sit if asked directly (only the screen stops them). Logged as PA-72, fixed separately, not in this spec.
 3. **Proving "the AI wasn't called" in the emergency integration test (technical, no decision needed from Lynn):** the integration tests call the deployed dev function, whose AI key we shouldn't change for a test. So the unit test on `prompts.ts` proves the stop happens before any AI call, and the integration test checks the response is the urgent flag with no AI text. The planner can propose a stronger check if one exists without test-only switches in production code.
