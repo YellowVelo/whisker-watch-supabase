@@ -85,10 +85,11 @@ jobs:
             supabase/tests/function_hygiene.test.ts
 
       # Pure unit tests, no secrets: no network, file or env permission.
-      - name: Run check-in counting rules unit tests (spec 0080)
+      - name: Run check-in counting rules and AI prompt unit tests (spec 0080)
         run: |
           deno test --node-modules-dir=none \
-            supabase/tests/checkin_rules.test.ts
+            supabase/tests/checkin_rules.test.ts \
+            supabase/tests/ai_prompts.test.ts
 
       - name: Run resend-webhook integration tests
         env:
