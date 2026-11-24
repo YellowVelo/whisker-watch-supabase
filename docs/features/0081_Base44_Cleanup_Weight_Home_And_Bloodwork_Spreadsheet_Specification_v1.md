@@ -1,6 +1,6 @@
 # 0081_Base44_Cleanup_Weight_Home_And_Bloodwork_Spreadsheet_Specification_v1
 
-**Status:** Approved by Lynn 2026-11-23: spec, wording A–H and the FR9 translation table. Follow-up decisions, same day, from her IDEXX PDF sample and her spreadsheet template: photo/PDF scans use the same review as spreadsheets (FR35), and spreadsheet weights can go into weight history (FR36). Wording I–K approved too. Fully approved. **Amendment 1 approved by Lynn 2026-11-24** (see "Amendments"): no new date column for weight.
+**Status:** Approved by Lynn 2026-11-23: spec, wording A–H and the FR9 translation table. Follow-up decisions, same day, from her IDEXX PDF sample and her spreadsheet template: photo/PDF scans use the same review as spreadsheets (FR35), and spreadsheet weights can go into weight history (FR36). Wording I–K approved too. Fully approved. **Amendments 1–2 approved by Lynn 2026-11-24** (see "Amendments"): no new date column for weight; old tables deleted without moving records.
 **Date:** 2026-11-23
 **Branch:** `claude/base44-cleanup`
 **Migration:** `0061` (reserved by the first session). It gives weight its new home, moves the old records, and deletes the three Base44-era tables.
@@ -295,3 +295,11 @@ Planning found that the new `observations.observed_on` column would have made th
 2. Standalone weights never create a check-in, so Home's daily prompt, Catch-Up's missed days and Trends' symptom counts are unchanged.
 3. Migration 0061 stays a single migration. It no longer adds a column, check rule or index. It still gates on the marker, adds the spreadsheet file types to the bucket, moves old records and drops the three tables.
 4. Rollout gap (Before You Approve item 3) is now as described: until 0061 runs, Weight cards show only weights already in check-ins (or "Record Weight"). Spreadsheet uploads are refused by the bucket until 0061 adds the file types, a few minutes at most.
+
+### Amendment 2 — delete the old tables without moving anything (Lynn, 2026-11-24)
+
+FR11 counts (2026-11-24): dev 3 old symptom logs (all on days with a check-in, no weights); staging 0; prod 16 (11 known Base44 days, 5 others; 3 with a weight, 4 with notes, 4 with medication given, all 14 answered rows on days that already have a check-in; 83 wellness scores, 1 food log). Lynn: "we migrated everything from those tables" (migration 0027) and chose to delete without copying.
+
+1. FR7–FR10 (moving weights, answers, notes, pain and medication) are dropped. Migration 0061 has no move step and no `migrate_symptom_log_row` function; after its gate it adds the spreadsheet file types and drops `symptom_logs`, `wellness_scores` and `food_logs`.
+2. AC6–AC8 are dropped. AC9 (the tables are gone, `/symptoms` redirects) stays.
+3. The nightly database backup keeps a copy of the dropped tables for 30 days; that is the only undo.
