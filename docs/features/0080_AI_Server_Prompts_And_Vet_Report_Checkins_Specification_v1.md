@@ -1,6 +1,6 @@
 # 0080_AI_Server_Prompts_And_Vet_Report_Checkins_Specification_v1
 
-**Status:** Draft, waiting for Lynn's review. No code written yet.
+**Status:** Reviewed by Lynn 2026-11-23. Wording A and B approved. Switchover: option (a), deploy and promote back to back. Anthropic monthly spend limit set. Her one change (Before You Approve item 5, Base44 wording) is made. Waiting for her final "approved". No code written yet.
 **Date:** 2026-11-23
 **Branch:** `claude/ai-vet-report`
 **Migration:** `0060` (reserved): fixes the shared rate limiter and adds a version that checks two time windows at once.
@@ -22,11 +22,9 @@
 
 ## Lynn — what I need from you
 
-1. **Review this spec and say "approved" (or tell me what to change).** This blocks the build.
-2. **Approve the wording in "Wording for your approval" below**: the daily-limit message and the new Vet Report text. Also blocks the build.
-3. **Answer the switchover question** (Open Question 1): a short planned outage of AI features while the new server and app go live, or a two-step rollout. Blocks the rollout, not the build.
-4. **Set a monthly spend limit in the Anthropic console** (console.anthropic.com → Settings → Limits). This is part of PA-11 but doesn't block anything I do.
-5. **Later:** promote the frontend build in Cloudflare when I ask (branch `main`, commit message starting "Spec 0080"), at the same time I deploy the server function (see Open Question 1).
+1. **Give the final "approved"** now that item 5 is corrected. This blocks the build. (Wording, switchover choice and the Anthropic spend limit are done, 2026-11-23.)
+2. **Later, before merge:** OK the PROTECTED merge after review passes (0011 rule).
+3. **Later, at rollout:** promote the frontend build in Cloudflare right after I deploy the server function (branch `main`, commit message starting "Spec 0080"). I'll tell you the moment.
 
 ## Before You Approve This
 
@@ -34,7 +32,7 @@
 2. **This is a bigger change than PA-11 first looked.** You chose the version where the server gathers pet details itself, so I'll rebuild on the server how the 8 AI features describe a pet: profile, active medications, baseline, recent check-ins, weight. Today that's done in the app. The app's screens and the answers' format don't change. What changes is who writes the instructions and who looks up the data.
 3. **Some rules will exist in two places, on purpose.** The emergency-word list, the "which answers count as normal" lists, and the bloodwork field list are needed both in the app (for instant feedback) and on the server (where they're now enforced). Server functions can't read the app's files, so each list gets a second copy, and a new automatic test fails if the two copies ever differ. That's small new upkeep, and the test stops it drifting.
 4. **A rate-limiter bug affecting sign-up and invites gets fixed as part of this.** It wasn't on the punch list. Each AI request was wiping the shared counter's history older than 10 minutes, for every feature at once. So while anyone was using Ask Wysker, the "10 invite emails an hour" and "20 sign-ups an hour" limits acted like "per 10 minutes". It has to be fixed here, because otherwise the new daily cap would reset every 10 minutes.
-5. **Pet Insights' answers will read differently.** They'll be based on daily check-ins (Vibe and logged symptoms, kept separate) instead of the old symptom logs. Pets with only Base44-era history and no check-ins will get "not enough recent check-ins" instead of insights from old data.
+5. **Pet Insights' answers will read differently.** They'll be based on daily check-ins (Vibe and logged symptoms, kept separate) instead of the old `symptom_logs` table. No history is lost: the only Base44 records ever imported (11 days for Tribble and Auggie, May–June 2026) were already moved into daily check-ins by migration `0027`. After this spec, no AI feature and no part of the Vet Report reads Base44-era tables or logic, except weight (still stored only in `symptom_logs`, PA-71). Lynn, 2026-11-23: "We should have no Base44-era anything." Retiring what's left (PA-71, PA-50) is tracked separately; see Non-Goals.
 6. **Sitters keep today's Ask Wysker access.** A sitter who opens Ask Wysker from a pet they're sitting can still ask about that pet during the sit, as today; the server allows anyone the database lets see the pet. The general "my pets" chat only includes pets the person owns or co-owns (spec 0079's rule, now enforced on the server too). Say so if you'd rather sitters couldn't use pet chat at all.
 7. **The Vet Report's other sections are unchanged.** The 180-day "Daily Observations" table stays as it is, even though it now overlaps a bit with the new charts. Weight still comes from the old symptom logs (PA-71).
 8. **There are 19 type errors today, not 22.** Spec 0078 fixed some since PA-65 was written. Locally, the type check only works with the app's `node_modules` folder turned off, so the CI step does the same. The check also uses whatever Deno version CI installs, which may differ from Supabase's (the 0075 Sentry crash was a version gap like this). This check catches typing mistakes only; the hourly "do all functions start" check stays the real safety net.
@@ -63,7 +61,7 @@ Empty states:
 
 > No daily check-ins were recorded in the last 30 days.
 
-Days from before daily check-ins existed (migrated Base44 history, no rating) count under a separate "Not recorded" total, shown only when there are any.
+A day with no rating at all counts under a separate "Not recorded" total, shown only when there are any. In practice this never appears: the only unrated days are the 11 imported in migration `0027` (May–June 2026), always outside the 30-day window. The code still handles it so an unrated day can never break the report.
 
 ## Functional Requirements
 
@@ -218,10 +216,6 @@ Days from before daily check-ins existed (migrated Base44 history, no rating) co
 
 ## Open Questions
 
-1. **Switchover (needs Lynn):**
-   - **(a, recommended)** Deploy the new function and promote the frontend back to back, accepting a few minutes of AI features showing "Something went wrong" (anyone with the app open reloads once).
-   - **(b)** Two steps: the server accepts both old and new requests until the new frontend is live everywhere, then a follow-up removes the old path. That's the spec 0071 pattern, but it keeps the open AI proxy open until step two.
-
-   Staging auto-promotes on push, so (a) is natural there too.
+1. **Switchover — resolved (Lynn, 2026-11-23): option (a).** Deploy the new function and promote the frontend back to back, accepting a few minutes of AI features showing "Something went wrong" (anyone with the app open reloads once). No two-step compatibility path. Staging auto-promotes on push, so it follows the same pattern.
 2. **Sitter pet chat:** keep today's behavior (a sitter can ask about a pet they're sitting during the sit), or make pet chat and Insights owners-only? The draft keeps today's behavior.
 3. **Proving "the AI wasn't called" in the emergency integration test (technical, no decision needed from Lynn):** the integration tests call the deployed dev function, whose AI key we shouldn't change for a test. So the unit test on `prompts.ts` proves the stop happens before any AI call, and the integration test checks the response is the urgent flag with no AI text. The planner can propose a stronger check if one exists without test-only switches in production code.
