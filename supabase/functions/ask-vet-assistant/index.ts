@@ -50,10 +50,12 @@
 //   - Files (spec 0071): the function never fetches a caller-supplied URL.
 //     It only reads a file_path in the caller's own folder (a scan they
 //     just uploaded) or linked in pet_documents to a pet they own, and
-//     downloads it with the service role, only after the rate check. Size
-//     and type are checked before anything is sent to Anthropic.
-//   - The service role is used only for the rate-limit calls and the file
-//     download.
+//     downloads it with the caller's own access, only after the rate
+//     check, so the storage rules (migration 0054) also have to allow it
+//     (spec 0082). Only paths in the shape the app's uploader creates are
+//     accepted. Size and type are checked before anything is sent to
+//     Anthropic.
+//   - The service role is used only for the rate-limit calls.
 //
 // Safety (spec 0041, enforced here by spec 0080 FR5): a chat question with
 // an emergency phrase gets { urgent: true } before any rate check or AI
@@ -145,10 +147,26 @@ function jsonResponse(body: unknown, status = 200) {
   });
 }
 
+// The only path shape the app's uploader creates: <folder>/<name>.<ext>
+// (src/api/storageClient.js: `${userId}/${Date.now()}-${rand}.${ext}`).
+// The extension is whatever followed the last dot in the person's file name,
+// lowercased, so it can hold spaces, dashes, underscores or accented letters
+// ("rabies cert", "jpg-large", "résumé"), but never a dot.
+// Why this can't step outside the folder: there are exactly two segments,
+// and the second always starts with the name part ([A-Za-z0-9_-]+), so it
+// can never be "." or "..". The extension excludes ".", "/", backslash, "%"
+// (no encoded tricks), "?" and "#" (no query or fragment), and control
+// characters (U+0000-U+001F, U+007F).
+// deno-lint-ignore no-control-regex
+const UPLOAD_PATH_SHAPE = /^[A-Za-z0-9_-]+\/[A-Za-z0-9_-]+\.[^./\\%?#\x00-\x1F\x7F]+$/;
+
 // The storage path if it's safe to look up, or null. Never anything
-// outside the uploads bucket: no leading slash, no empty or ".." parts.
+// outside the uploads bucket.
 function safePath(path: string): string | null {
-  if (!path || path.startsWith('/') || path.split('/').some((seg) => seg === '..' || seg === '')) return null;
+  // Spec 0082: allow-list the exact shape the uploader creates
+  // (<folder>/<name>.<ext>). Rejects %, backslashes, ?, #, control
+  // characters, . and .. segments, extra folders and leading/trailing slashes.
+  if (!path || !UPLOAD_PATH_SHAPE.test(path)) return null;
   return path;
 }
 
@@ -198,13 +216,15 @@ async function checkScanFileAccess(
 }
 
 // Spec 0071 download and type/size checks, after the rate check, on a path
-// checkScanFileAccess allowed. Returns the file as an Anthropic content
-// block, or the refusal to send back.
+// checkScanFileAccess allowed. Downloads with the caller's own client, never
+// the service role, so the storage rules decide too (spec 0082); a denied
+// download is answered like a missing file. Returns the file as an Anthropic
+// content block, or the refusal to send back.
 async function downloadScanFile(
   safe: string,
-  adminClient: SupabaseClient,
+  supabaseClient: SupabaseClient,
 ): Promise<{ block: FileBlock } | { refusal: Response }> {
-  const { data: blob, error: downloadError } = await adminClient.storage.from('uploads').download(safe);
+  const { data: blob, error: downloadError } = await supabaseClient.storage.from('uploads').download(safe);
   if (downloadError || !blob) {
     return { refusal: jsonResponse({ error: 'Could not read that file', code: 'file_not_found' }, 404) };
   }
@@ -396,7 +416,7 @@ Deno.serve(async (req) => {
     // Scans: download the file and check its type and size.
     let fileBlock: FileBlock | null = null;
     if (scanPath) {
-      const file = await downloadScanFile(scanPath, adminClient);
+      const file = await downloadScanFile(scanPath, supabaseClient);
       if ('refusal' in file) return file.refusal;
       fileBlock = file.block;
     }
