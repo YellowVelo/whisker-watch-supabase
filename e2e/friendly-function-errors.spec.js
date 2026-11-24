@@ -8,7 +8,7 @@
 // real delete-account also refuses test accounts, a second safety net.)
 // The Delete Pet test makes and removes its own pet.
 
-import { test, expect } from './fixtures.js';
+import { test, expect, deleteTestPet } from './fixtures.js';
 import { createClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
 
@@ -69,7 +69,7 @@ test.describe('Friendly errors from Edge Function failures', () => {
     });
 
     test.afterEach(async () => {
-      if (petId) await owner.client.from('pets').delete().eq('id', petId);
+      await deleteTestPet(owner.client, petId);
     });
 
     test("shows the server's reason, not the library's wording (AC8)", async ({ page }) => {

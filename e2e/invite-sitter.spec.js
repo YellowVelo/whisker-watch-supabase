@@ -8,7 +8,7 @@
 // and an email-only invite), so no privileged access is needed. Each test
 // makes and deletes its own pet and sit; the invite cascades with the sit.
 
-import { test, expect } from './fixtures.js';
+import { test, expect, deleteTestPet } from './fixtures.js';
 import { createClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
 
@@ -54,7 +54,7 @@ test.describe('Share with Sitter dialog', () => {
   // Delete Pet goes through delete-pet, which removes the pet from its sits.)
   test.afterEach(async () => {
     if (sitId) await owner.client.from('pet_sits').delete().eq('id', sitId);
-    if (petId) await owner.client.from('pets').delete().eq('id', petId);
+    await deleteTestPet(owner.client, petId);
   });
 
   async function openShareDialog(page) {
