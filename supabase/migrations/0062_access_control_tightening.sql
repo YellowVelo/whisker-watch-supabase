@@ -19,8 +19,9 @@
 -- Fix:
 --   1. protect_pet_photo_path(): before insert/update on pets. For signed-in
 --      users (auth.role() = 'authenticated') a NEW or CHANGED photo_path must
---      be null, start with 'shared/', or be exactly one file in the caller's
---      own folder ('<auth.uid()>/<name>', no further '/', not '.' or '..').
+--      be null, or be exactly one file in the shared demo-photo folder
+--      ('shared/<name>') or in the caller's own folder ('<auth.uid()>/<name>');
+--      in both cases <name> is non-empty, has no '/', and isn't '.' or '..'.
 --      Leaving photo_path unchanged on update is always allowed (so a
 --      co-owner can edit a pet whose photo another owner uploaded).
 --   2. protect_record_creator(): before update on pets and pet_sits. Nobody
@@ -88,18 +89,23 @@
 create or replace function public.protect_pet_photo_path()
 returns trigger as $$
 declare
-  v_uid text;
+  v_folder text;
   v_name text;
 begin
   if auth.role() = 'authenticated'
      and (tg_op = 'INSERT' or new.photo_path is distinct from old.photo_path)
      and new.photo_path is not null
-     and left(new.photo_path, 7) <> 'shared/'
   then
-    v_uid := auth.uid()::text;
-    v_name := substr(new.photo_path, length(v_uid) + 2);
-    if v_uid is null
-       or left(new.photo_path, length(v_uid) + 1) <> v_uid || '/'
+    -- The folder is either the shared demo-photo folder or the caller's own;
+    -- either way the rest must be exactly one file name.
+    if left(new.photo_path, 7) = 'shared/' then
+      v_folder := 'shared';
+    else
+      v_folder := auth.uid()::text;
+    end if;
+    v_name := substr(new.photo_path, length(v_folder) + 2);
+    if v_folder is null
+       or left(new.photo_path, length(v_folder) + 1) <> v_folder || '/'
        or v_name = ''
        or v_name in ('.', '..')
        or position('/' in v_name) > 0
@@ -183,6 +189,25 @@ $$;
 
 -- ── 4. No direct pet deletion by signed-in users (FR7) ─────────────────────
 drop policy if exists "pets_delete_owner" on public.pets;
+
+-- The drop above does nothing if a project's delete rule has another name, or
+-- if it has an extra one (projects have drifted from migration history
+-- before; see 0052). Fail the migration rather than leave one in place.
+do $$
+declare
+  leftover text;
+begin
+  select string_agg(policyname || ' (' || cmd || ')', ', ')
+    into leftover
+  from pg_policies
+  where schemaname = 'public'
+    and tablename = 'pets'
+    and cmd in ('DELETE', 'ALL');
+  if leftover is not null then
+    raise exception 'spec 0083: public.pets still has delete-capable policies: %', leftover;
+  end if;
+end
+$$;
 
 -- ── 5. Lock the new functions (0059 rules) ─────────────────────────────────
 revoke execute on function public.protect_pet_photo_path() from public, anon, authenticated;
