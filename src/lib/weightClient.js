@@ -49,10 +49,14 @@ export const weightDate = {
 
   // An `observations` row (with its embedded `daily_check_ins`) -> the
   // weight's calendar date. A check-in weight takes its check-in's date;
-  // a standalone weight takes the UTC date of `observed_at`.
+  // a standalone weight takes the UTC date of `observed_at`. A row that
+  // has a check-in but whose check-in date didn't come back (the embed
+  // was missing or unreadable) has no date (null, so it's skipped): its
+  // `observed_at` is when the check-in was saved, not the day it's for.
   fromRow(row) {
     const checkInDate = row?.daily_check_ins?.check_in_date;
     if (checkInDate) return checkInDate;
+    if (row?.daily_check_in_id != null) return null;
     if (!row?.observed_at) return null;
     const instant = new Date(row.observed_at);
     if (Number.isNaN(instant.getTime())) return null;
@@ -84,6 +88,35 @@ export function validateWeightInput({ lbs, date }, timezone) {
   return roundLbs(n);
 }
 
+// What the Log weight sheet shows for a failed save, edit or delete.
+// Wording B is the approved out-of-range line (spec 0081); the others
+// are the sheet's plain fallbacks. `action` is 'save' or 'delete'.
+// PostgREST's PGRST116 ("no row") from an update means the row is gone
+// or the caller can't change it, the same as weight_not_found.
+export const WEIGHT_MESSAGES = {
+  weight_out_of_range: 'Enter a weight between 0.1 and 300 lbs.',
+  weight_date_invalid: 'Choose a date.',
+  weight_date_in_future: 'Choose today or an earlier date.',
+  weight_date_locked: "This weight came from a daily check-in, so its date can't be changed.",
+  weight_not_found: 'This weight has already been deleted.',
+  save_failed: "We couldn't save this weight. Please try again.",
+  delete_failed: "We couldn't delete this weight. Please try again.",
+  load_failed: 'Unable to load recent weights.',
+};
+
+// Codes the owner can fix by changing what they typed; anything else is
+// unexpected and worth reporting.
+export const WEIGHT_INPUT_ERROR_CODES = new Set(['weight_out_of_range', 'weight_date_invalid', 'weight_date_in_future', 'weight_date_locked']);
+
+/** @param {any} err @param {'save' | 'delete'} action */
+export function weightErrorText(err, action) {
+  const code = err?.code === 'PGRST116' ? 'weight_not_found' : err?.code;
+  if (code && Object.prototype.hasOwnProperty.call(WEIGHT_MESSAGES, code) && code.startsWith('weight_')) {
+    return WEIGHT_MESSAGES[code];
+  }
+  return action === 'delete' ? WEIGHT_MESSAGES.delete_failed : WEIGHT_MESSAGES.save_failed;
+}
+
 async function weightTypeId() {
   const catalog = await loadObservationCatalog();
   const id = catalog.weight?.type?.id;
@@ -92,6 +125,15 @@ async function weightTypeId() {
 }
 
 const SELECT_COLUMNS = 'id, pet_id, numeric_value, observed_at, updated_at, daily_check_in_id, daily_check_ins(check_in_date)';
+
+// A saved value the app would refuse today (the old check-in Weight box
+// didn't check its range) is not a weight: summaries and charts never
+// show it. The Log weight sheet still lists it, flagged `outOfRange`, so
+// the owner can fix or delete it.
+const isShowableLbs = (value) => {
+  const n = Number(value);
+  return Number.isFinite(n) && roundLbs(n) >= WEIGHT_MIN_LBS && roundLbs(n) <= WEIGHT_MAX_LBS;
+};
 
 // Row -> entry shape every screen uses.
 function toEntry(row) {
@@ -103,6 +145,7 @@ function toEntry(row) {
     fromCheckIn: row.daily_check_in_id != null,
     checkInId: row.daily_check_in_id ?? null,
     updatedAt: row.updated_at ?? null,
+    outOfRange: !isShowableLbs(row.numeric_value),
   };
 }
 
@@ -159,15 +202,10 @@ async function fetchAllWeightRows(petIds, typeId) {
   return rows;
 }
 
-// A saved value the app would refuse today (the old check-in Weight box
-// didn't check its range) is not a weight and is never shown.
-const isShowableLbs = (value) => {
-  const n = Number(value);
-  return Number.isFinite(n) && roundLbs(n) >= WEIGHT_MIN_LBS && roundLbs(n) <= WEIGHT_MAX_LBS;
-};
-
 // Any number of pets, paged as above. Returns { [petId]: entries newest-first }.
-async function fetchWeightEntriesForPets(petIds) {
+// Out-of-range values are left out unless `includeOutOfRange` (the sheet's
+// list only).
+async function fetchWeightEntriesForPets(petIds, { includeOutOfRange = false } = {}) {
   const byPet = {};
   for (const petId of petIds) byPet[petId] = [];
   if (petIds.length === 0) return byPet;
@@ -176,8 +214,8 @@ async function fetchWeightEntriesForPets(petIds) {
   const data = await fetchAllWeightRows(petIds, typeId);
 
   for (const row of data) {
-    if (!isShowableLbs(row.numeric_value)) continue;
     const entry = toEntry(row);
+    if (entry.outOfRange && !includeOutOfRange) continue;
     if (!entry.date || !byPet[entry.petId]) continue;
     byPet[entry.petId].push(entry);
   }
@@ -206,10 +244,12 @@ function summarize(entries, days) {
   return { currentLbs, deltaLbs, sparkline };
 }
 
-// The pet's most recent weights, newest first, both kinds merged. Same-day
-// weights are all listed (FR6).
+// The pet's most recent weights, newest first, both kinds merged, for the
+// Log weight sheet. Same-day weights are all listed (FR6). Out-of-range
+// values are included, flagged `outOfRange`, so they can be edited or
+// deleted; nothing else shows them.
 export async function listWeights(petId, limit = 10) {
-  const byPet = await fetchWeightEntriesForPets([petId]);
+  const byPet = await fetchWeightEntriesForPets([petId], { includeOutOfRange: true });
   return byPet[petId].slice(0, limit);
 }
 
@@ -230,6 +270,7 @@ export async function addWeight(petId, { date, lbs }, timezone) {
 
 // `entry` is one item from listWeights. A check-in weight's date belongs to
 // its check-in and can't change (FR3); only its value is updated.
+/** @param {any} entry @param {{ date?: string, lbs: any }} change @param {string} [timezone] */
 export async function updateWeight(entry, { date, lbs }, timezone) {
   if (entry.fromCheckIn) {
     if (date !== undefined && date !== entry.date) {
@@ -254,10 +295,16 @@ export async function updateWeight(entry, { date, lbs }, timezone) {
 }
 
 // Removes one weight row. For a check-in weight this clears that day's
-// Weight answer and leaves the check-in itself in place.
+// Weight answer and leaves the check-in itself in place, after moving the
+// check-in's updated_at (as updateWeight does) so spec 0043's conflict
+// check sees the change when a co-owner next saves that day.
 // Throws code 'weight_not_found' if no row was deleted (already gone, or
 // the caller isn't allowed to delete it: RLS makes both look the same).
 export async function deleteWeight(entry) {
+  if (entry.fromCheckIn) {
+    if (!entry.checkInId) throw new Error('deleteWeight: check-in weight has no checkInId');
+    await entities.DailyCheckIn.update(entry.checkInId, { updated_at: new Date().toISOString() });
+  }
   const { data, error } = await supabase
     .from('observations')
     .delete()

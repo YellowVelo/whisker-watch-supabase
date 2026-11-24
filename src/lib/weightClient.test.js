@@ -65,7 +65,7 @@ vi.mock('@/lib/checkin/checkinClient', () => ({
 const {
   weightDate, listWeights, addWeight, updateWeight, deleteWeight,
   getWeightSummary, getWeightSummariesForPets, getWeightTrend, validateWeightInput,
-  compareWeightsNewestFirst,
+  compareWeightsNewestFirst, weightErrorText, WEIGHT_MESSAGES, WEIGHT_INPUT_ERROR_CODES,
 } = await import('./weightClient');
 const { dateStrForInstant, dateStrInTimezone } = await import('./timezone');
 
@@ -109,6 +109,15 @@ describe('weightDate: the one dating rule, both directions', () => {
     // Saved 1am UTC Nov 21 (evening of Nov 20 in New York) for Nov 19's check-in.
     expect(weightDate.fromRow({ observed_at: '2026-11-21T01:00:00+00:00', daily_check_ins: { check_in_date: '2026-11-19' } }))
       .toBe('2026-11-19');
+  });
+
+  it('gives no date (row skipped) to a check-in weight whose check-in date is missing', () => {
+    // observed_at is when the check-in was saved, not the day it's for, so
+    // it must never stand in for the check-in's date.
+    const base = { daily_check_in_id: 'ci-1', observed_at: '2026-11-21T01:00:00+00:00' };
+    expect(weightDate.fromRow({ ...base, daily_check_ins: null })).toBeNull();
+    expect(weightDate.fromRow({ ...base, daily_check_ins: {} })).toBeNull();
+    expect(weightDate.fromRow({ ...base })).toBeNull();
   });
 
   it('rejects anything that is not a YYYY-MM-DD date', () => {
@@ -255,7 +264,54 @@ describe('reads are complete whatever the server row cap', () => {
   });
 });
 
-describe('weights outside 0.1–300 lbs are never shown', () => {
+describe('reads skip check-in weights with no check-in date', () => {
+  it('leaves the row out of the list and the summary', async () => {
+    state.rows = [
+      standalone('s1', PET_A, '2026-11-18', 10.0),
+      { ...fromCheckIn('orphan', PET_A, '2026-11-25', 99, '2026-11-25T12:00:00+00:00'), daily_check_ins: null },
+    ];
+    const list = await listWeights(PET_A);
+    expect(list.map((e) => e.id)).toEqual(['s1']);
+    expect((await getWeightSummary(PET_A)).currentLbs).toBe(10);
+  });
+});
+
+describe('weights outside 0.1–300 lbs stay out of summaries and charts', () => {
+  const outOfRangeRows = () => [
+    standalone('ok-low', PET_A, '2026-11-10', 0.1),
+    standalone('ok-high', PET_A, '2026-11-11', 300),
+    fromCheckIn('zero', PET_A, '2026-11-12', 0, '2026-11-12T12:00:00+00:00'),
+    fromCheckIn('neg', PET_A, '2026-11-13', -4, '2026-11-13T12:00:00+00:00'),
+    fromCheckIn('huge', PET_A, '2026-11-14', 300.1, '2026-11-14T12:00:00+00:00'),
+    fromCheckIn('tiny', PET_A, '2026-11-15', 0.04, '2026-11-15T12:00:00+00:00'),
+  ];
+
+  it('listWeights still returns them, flagged, so the sheet can edit or delete them', async () => {
+    state.rows = outOfRangeRows();
+    const list = await listWeights(PET_A);
+    expect(list.map((e) => [e.id, e.outOfRange])).toEqual([
+      ['tiny', true], ['huge', true], ['neg', true], ['zero', true], ['ok-high', false], ['ok-low', false],
+    ]);
+  });
+
+  it("summaries, Home's batch and the trend never include them", async () => {
+    const tz = 'UTC';
+    state.rows = outOfRangeRows();
+    const summary = await getWeightSummary(PET_A);
+    expect(summary.currentLbs).toBe(300);
+    expect(summary.sparkline.map((p) => p.lbs)).toEqual([0.1, 300]);
+    const batch = await getWeightSummariesForPets([PET_A]);
+    expect(batch[PET_A].currentLbs).toBe(300);
+
+    state.rows = [
+      standalone('ok', PET_A, dateStrInTimezone(tz, -2), 12),
+      fromCheckIn('bad', PET_A, dateStrInTimezone(tz, -1), 0, `${dateStrInTimezone(tz, -1)}T12:00:00+00:00`),
+    ];
+    const trend = await getWeightTrend(PET_A, '7D', tz);
+    expect(trend.series).toEqual([{ date: dateStrInTimezone(tz, -2), value: 12 }]);
+    expect(trend.currentLbs).toBe(12);
+  });
+
   it('skips 0, negative and over-300 values saved through the old check-in box', async () => {
     state.rows = [
       standalone('ok-low', PET_A, '2026-11-10', 0.1),
@@ -265,10 +321,9 @@ describe('weights outside 0.1–300 lbs are never shown', () => {
       fromCheckIn('huge', PET_A, '2026-11-14', 300.1, '2026-11-14T12:00:00+00:00'),
       fromCheckIn('tiny', PET_A, '2026-11-15', 0.04, '2026-11-15T12:00:00+00:00'),
     ];
-    const list = await listWeights(PET_A);
-    expect(list.map((e) => e.id)).toEqual(['ok-high', 'ok-low']);
     const summary = await getWeightSummary(PET_A);
     expect(summary.currentLbs).toBe(300);
+    expect(summary.sparkline).toHaveLength(2);
   });
 });
 
@@ -414,10 +469,41 @@ describe('writes go through entities.Observation', () => {
 
   it('deleteWeight deletes the one observation row', async () => {
     state.rows = [fromCheckIn('c1', PET_A, '2026-11-18', 10, '2026-11-18T12:00:00+00:00')];
-    await expect(deleteWeight({ id: 'c1', fromCheckIn: true })).resolves.toBe(true);
+    await expect(deleteWeight({ id: 'c1', fromCheckIn: true, checkInId: 'ci-c1' })).resolves.toBe(true);
     const q = state.queries.find((x) => x.calls.some((c) => c[0] === 'delete'));
     expect(q.table).toBe('observations');
     expect(q.calls).toContainEqual(['eq', 'id', 'c1']);
+    expect(state.rows).toHaveLength(0);
+  });
+
+  it("deleteWeight on a check-in weight moves that check-in's updated_at before deleting (spec 0043)", async () => {
+    state.rows = [fromCheckIn('c1', PET_A, '2026-11-18', 10, '2026-11-18T12:00:00+00:00')];
+    // When the check-in update runs, the weight row must still be there.
+    let rowsAtCheckInUpdate = null;
+    checkInUpdate.mockImplementation(async (id, patch) => {
+      rowsAtCheckInUpdate = state.rows.map((r) => r.id);
+      return { id, ...patch };
+    });
+    await deleteWeight({ id: 'c1', fromCheckIn: true, checkInId: 'ci-c1' });
+    expect(checkInUpdate).toHaveBeenCalledTimes(1);
+    expect(checkInUpdate.mock.calls[0][0]).toBe('ci-c1');
+    expect(Object.keys(checkInUpdate.mock.calls[0][1])).toEqual(['updated_at']);
+    expect(rowsAtCheckInUpdate).toEqual(['c1']);
+    expect(state.rows).toHaveLength(0);
+  });
+
+  it("deleteWeight leaves the weight in place if the check-in can't be touched", async () => {
+    state.rows = [fromCheckIn('c1', PET_A, '2026-11-18', 10, '2026-11-18T12:00:00+00:00')];
+    checkInUpdate.mockRejectedValueOnce(new Error('no row'));
+    await expect(deleteWeight({ id: 'c1', fromCheckIn: true, checkInId: 'ci-c1' })).rejects.toThrow('no row');
+    expect(state.queries.some((x) => x.calls.some((c) => c[0] === 'delete'))).toBe(false);
+    expect(state.rows).toHaveLength(1);
+  });
+
+  it('deleteWeight on a standalone weight does not touch any check-in', async () => {
+    state.rows = [standalone('s1', PET_A, '2026-11-18', 10)];
+    await deleteWeight({ id: 's1', fromCheckIn: false, checkInId: null });
+    expect(checkInUpdate).not.toHaveBeenCalled();
     expect(state.rows).toHaveLength(0);
   });
 
@@ -426,5 +512,46 @@ describe('writes go through entities.Observation', () => {
     state.deletableIds = [];
     await expect(deleteWeight({ id: 's1', fromCheckIn: false })).rejects.toMatchObject({ code: 'weight_not_found' });
     await expect(deleteWeight({ id: 'missing', fromCheckIn: false })).rejects.toMatchObject({ code: 'weight_not_found' });
+  });
+});
+
+describe('weightErrorText: what the Log weight sheet shows', () => {
+  it('uses approved wording B for an out-of-range weight (AC4)', () => {
+    expect(weightErrorText({ code: 'weight_out_of_range' }, 'save')).toBe('Enter a weight between 0.1 and 300 lbs.');
+  });
+
+  it('every weightClient error code has its own message', () => {
+    for (const code of ['weight_out_of_range', 'weight_date_invalid', 'weight_date_in_future', 'weight_date_locked', 'weight_not_found']) {
+      expect(weightErrorText({ code }, 'save')).toBe(WEIGHT_MESSAGES[code]);
+      expect(WEIGHT_MESSAGES[code]).toBeTruthy();
+    }
+  });
+
+  it('maps an update that matched no row (PGRST116) to the not-found message', () => {
+    expect(weightErrorText({ code: 'PGRST116' }, 'save')).toBe(WEIGHT_MESSAGES.weight_not_found);
+  });
+
+  it('never shows a raw error message; falls back by action', () => {
+    const raw = { code: '42501', message: 'new row violates row-level security policy' };
+    expect(weightErrorText(raw, 'save')).toBe(WEIGHT_MESSAGES.save_failed);
+    expect(weightErrorText(raw, 'delete')).toBe(WEIGHT_MESSAGES.delete_failed);
+    expect(weightErrorText(new Error('network'), 'save')).toBe(WEIGHT_MESSAGES.save_failed);
+    expect(weightErrorText({ code: 'save_failed' }, 'delete')).toBe(WEIGHT_MESSAGES.delete_failed);
+  });
+
+  it('validation errors from addWeight map straight to a message, with nothing saved', async () => {
+    const tz = 'America/New_York';
+    for (const [input, code] of [
+      [{ date: dateStrInTimezone(tz, 0), lbs: 0 }, 'weight_out_of_range'],
+      [{ date: dateStrInTimezone(tz, 0), lbs: 301 }, 'weight_out_of_range'],
+      [{ date: dateStrInTimezone(tz, 1), lbs: 10 }, 'weight_date_in_future'],
+      [{ date: '', lbs: 10 }, 'weight_date_invalid'],
+    ]) {
+      const err = await addWeight(PET_A, input, tz).catch((e) => e);
+      expect(err.code).toBe(code);
+      expect(WEIGHT_INPUT_ERROR_CODES.has(err.code)).toBe(true);
+      expect(weightErrorText(err, 'save')).toBe(WEIGHT_MESSAGES[code]);
+    }
+    expect(create).not.toHaveBeenCalled();
   });
 });

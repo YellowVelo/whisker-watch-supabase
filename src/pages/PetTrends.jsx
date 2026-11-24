@@ -17,6 +17,8 @@ import { PALETTE } from '@/lib/toneColors';
 import { useAuth } from '@/lib/AuthContext';
 import { detectTimezone } from '@/lib/timezone';
 import PetPhoto from '@/components/PetPhoto';
+import { getSitterOnlyPetIds } from '@/lib/petsClient';
+import { reportClientError } from '@/lib/errorMonitoring';
 
 // Trends sub-tab: every Health/Wellbeing attribute gets its own chart here
 // (unlike Overview, which only covers Appetite/Water/Energy/Weight/Insight
@@ -96,6 +98,25 @@ export default function PetTrends() {
 
   useEffect(() => { if (petId) loadPet(); }, [petId, loadPet]);
 
+  // Sitters reach this screen too (Pets I Sit) and can read weight but
+  // never write it, so the Weight card's "Log weight" button is hidden for
+  // a pet the person only sits for (spec 0081). Hidden until the lookup
+  // answers. If the lookup fails it's reported and the button shows, the
+  // same fallback as loadOwnedPets (spec 0079); the database still refuses
+  // a sitter's write.
+  const [sitterOnly, setSitterOnly] = useState(/** @type {boolean | null} */ (null));
+  useEffect(() => {
+    let cancelled = false;
+    setSitterOnly(null);
+    getSitterOnlyPetIds()
+      .then((ids) => { if (!cancelled) setSitterOnly(ids.has(petId)); })
+      .catch((err) => {
+        reportClientError(err, { feature: 'trends', note: 'sitter-only pet lookup failed' });
+        if (!cancelled) setSitterOnly(false);
+      });
+    return () => { cancelled = true; };
+  }, [petId]);
+
   useEffect(() => { if (pet) track('trends_viewed', { pet_id: pet.id }); }, [pet]);
 
   const setSection = (key) => {
@@ -159,6 +180,8 @@ export default function PetTrends() {
       </div>
     );
   }
+
+  const canLogWeight = sitterOnly === false && !pet.is_memorial;
 
   return (
     <PageTransition>
@@ -266,7 +289,7 @@ export default function PetTrends() {
                     )}
                     {GROUPS[activeGroup].includesWeight && (
                       <div ref={(el) => { cardRefs.current.weight = el; }} className="rounded-2xl transition-shadow" style={highlightedMetric === 'weight' ? { boxShadow: `0 0 0 2px ${PALETTE.sky}` } : undefined}>
-                        <WeightCard petId={petId} range={debouncedRange} timezone={timezone} />
+                        <WeightCard petId={petId} range={debouncedRange} timezone={timezone} canLogWeight={canLogWeight} />
                       </div>
                     )}
                   </div>
@@ -276,7 +299,7 @@ export default function PetTrends() {
                   <ObservationCard petId={petId} range={debouncedRange} code="appetite" label="Appetite" icon={UtensilsCrossed} timezone={timezone} />
                   <ObservationCard petId={petId} range={debouncedRange} code="water_intake" label="Water Intake" icon={Droplets} timezone={timezone} />
                   <ObservationCard petId={petId} range={debouncedRange} code="energy" label="Energy" icon={Zap} timezone={timezone} />
-                  <WeightCard petId={petId} range={debouncedRange} timezone={timezone} />
+                  <WeightCard petId={petId} range={debouncedRange} timezone={timezone} canLogWeight={canLogWeight} />
                   <InsightSummaryCard petId={petId} range={debouncedRange} />
                 </div>
               )}

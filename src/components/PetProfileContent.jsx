@@ -13,6 +13,7 @@ import ListRow from './ListRow';
 import ConfirmDeleteDialog from './ConfirmDeleteDialog';
 import DailyCheckInModal from './DailyCheckInModal';
 import CheckInHistoryCalendar from './catchup/CheckInHistoryCalendar';
+import WeightLogSheet from './WeightLogSheet';
 import { track } from '@/lib/analytics';
 import {
   getObservationValuesForCheckIns, getCheckIn, getWellbeingDirections,
@@ -23,6 +24,7 @@ import {
   getVaccinationSummary, getTimelineEvents, getHealthRecordsCount,
 } from '@/lib/checkin/petProfileClient';
 import { getWeightSummary } from '@/lib/weightClient';
+import { getSitterOnlyPetIds } from '@/lib/petsClient';
 import { getPetLabel } from '@/lib/speciesConfig';
 import { computeDetailedAge } from '@/lib/lifeStage';
 import { PALETTE, RING_COLOR, PALETTE_SOFT, tint } from '@/lib/toneColors';
@@ -152,6 +154,12 @@ export default function PetProfileContent({ petId, onReload = undefined, expande
 
   const [checkInOpen, setCheckInOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [weightLogOpen, setWeightLogOpen] = useState(false);
+  // Pets lists only owned/co-owned pets here, but if its sitter lookup
+  // failed a sitter-only pet can land here too. Sitters can't write
+  // weight, so the Weight card opens the Log weight sheet only once this
+  // card's own lookup says the pet isn't sitter-only (spec 0081).
+  const [sitterOnly, setSitterOnly] = useState(/** @type {boolean | null} */ (null));
   const [memorialOpen, setMemorialOpen] = useState(false);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [deletePetStep, setDeletePetStep] = useState(0);
@@ -237,6 +245,14 @@ export default function PetProfileContent({ petId, onReload = undefined, expande
     setFullDetailsLoading(true);
 
     entities.PetCoOwner.filter({ pet_id: petId }).then(setPetCoOwners).catch(() => setPetCoOwners([]));
+    getSitterOnlyPetIds()
+      .then((ids) => setSitterOnly(ids.has(petId)))
+      .catch((err) => {
+        // Same fallback as loadOwnedPets (spec 0079): report and treat the
+        // pet as owned; the database still refuses a sitter's write.
+        reportClientError(err, { feature: 'pet_profile', note: 'sitter-only pet lookup failed' });
+        setSitterOnly(false);
+      });
 
     const results = await Promise.allSettled([
       entities.Medication.filter({ pet_id: petId, active: true }, '-start_date', 50),
@@ -291,6 +307,18 @@ export default function PetProfileContent({ petId, onReload = undefined, expande
     setFullDetailsLoading(false);
     setFullDetailsLoaded(true);
   }, [petId, timezone]);
+
+  // Refreshes only the Weight card after the Log weight sheet saves, edits
+  // or deletes, without re-showing the whole details skeleton.
+  const reloadWeight = useCallback(async () => {
+    try {
+      setWeightSummary(await getWeightSummary(petId));
+      setErrors((prev) => ({ ...prev, weight: false }));
+    } catch (err) {
+      reportClientError(err, { feature: 'pet_profile', note: 'weight reload' });
+      setErrors((prev) => ({ ...prev, weight: true }));
+    }
+  }, [petId]);
 
   // Reloads whatever this instance currently has loaded — used for pull-
   // to-refresh and after a save (check-in/edit/memorial/weight) so an
@@ -395,6 +423,7 @@ export default function PetProfileContent({ petId, onReload = undefined, expande
   const vaxSummary = getVaccinationSummary(vaccinations);
   const weightValLbs = weightSummary?.currentLbs != null ? weightSummary.currentLbs.toFixed(1) : null;
   const weightDeltaLbs = weightSummary?.deltaLbs;
+  const canLogWeight = sitterOnly === false;
 
   const baselineState = onboarding?.completed_at ? 'complete' : onboarding ? 'in_progress' : 'not_started';
   const baselineSubtitle = {
@@ -565,8 +594,8 @@ export default function PetProfileContent({ petId, onReload = undefined, expande
               subtitle={weightValLbs
                 ? `${weightValLbs} lbs${weightDeltaLbs != null ? ` · ${weightDeltaLbs < 0 ? 'Down' : weightDeltaLbs > 0 ? 'Up' : 'Steady at'} ${Math.abs(weightDeltaLbs).toFixed(1)} lbs` : ''}`
                 : 'No weight history.'}
-              value={weightValLbs ? null : 'Record Weight'} valueColor={PALETTE.sky}
-              to={`/pet/${petId}/symptoms`} error={errors.weight}
+              value={weightValLbs || !canLogWeight ? null : 'Record Weight'} valueColor={PALETTE.sky}
+              onClick={canLogWeight ? () => setWeightLogOpen(true) : undefined} error={errors.weight}
             >
               <div className="flex justify-end mt-1">
                 {weightSummary?.sparkline?.length >= 2 ? <Sparkline points={weightSummary.sparkline} /> : <WeightPlaceholderChart />}
@@ -672,6 +701,15 @@ export default function PetProfileContent({ petId, onReload = undefined, expande
           pet={pet}
           onClose={() => setHistoryOpen(false)}
           onProgress={reloadAll}
+        />
+      )}
+
+      {weightLogOpen && (
+        <WeightLogSheet
+          petId={petId}
+          timezone={timezone}
+          onClose={() => setWeightLogOpen(false)}
+          onChanged={reloadWeight}
         />
       )}
 
