@@ -1,6 +1,6 @@
 # 0082_AI_Scan_File_Path_Hotfix_Specification_v1
 
-**Status:** Approved by Lynn 2026-11-24. Lynn chose "hotfix now" on 2026-11-24, separate from spec 0080.
+**Status:** Approved by Lynn 2026-11-24. Lynn chose "hotfix now" on 2026-11-24, separate from spec 0080. Amended 2026-11-24 after review (Lynn approved): the part after the last dot uses a looser rule so real upload names (e.g. "Rabies cert", "scan.jpg-large") keep working. AC3 confirmed on dev with a real AI scan. The separate `pets.photo_path` hole found in review is punch-list item PA-73 (P0), out of scope here by Lynn's decision.
 **Date:** 2026-11-24
 **Branch:** `claude/hotfix-0082-ai-file-path` (off `main`)
 **Migration:** none
@@ -25,7 +25,7 @@
 
 ## Functional Requirements
 
-1. The scan feature only accepts a file path in the shape the app's uploader creates: a folder name, a slash, then a file name made only of letters, numbers, `-`, `_` and one `.` before the extension. Anything else gets the existing "Invalid file reference" refusal. That includes `%`, a backslash, `.` or `..` segments, extra folders, and leading or trailing slashes.
+1. The scan feature only accepts a file path in the shape the app's uploader creates: a folder name, a slash, then a file name of letters, numbers, `-` and `_`, one `.`, and an extension. The extension (the text after the last dot of the picked file's name, as the uploader makes it) may contain spaces, punctuation and accented letters, but never `.`, `/`, `\`, `%`, `?`, `#` or control characters. Anything else gets the existing "Invalid file reference" refusal. That includes `%`, a backslash, `.` or `..` segments, extra folders, and leading or trailing slashes. (Amended 2026-11-24, Lynn approved: the original letters-and-numbers-only extension refused real uploads such as "Rabies cert".)
 2. The existing access rule stays: your own folder, or a document linked to a pet you own or co-own.
 3. The file is downloaded with the person's own access, never the server's master key, so storage's own rules (migration 0054) also have to allow it.
 4. Everything else in the function is unchanged, including the temporary `file_url` path from spec 0071. That's removed separately in spec 0080.
@@ -47,7 +47,7 @@
 ## Technical Spec
 
 - **`ask-vet-assistant/index.ts`:**
-  - `requestedPath()` keeps its current inputs. Its final check becomes an allow-list: `/^[A-Za-z0-9_-]+\/[A-Za-z0-9_-]+(\.[A-Za-z0-9]+)?$/`, applied to the path exactly as received (no decoding, except for the existing `file_url` branch's one `decodeURIComponent`, whose result must also pass the allow-list).
+  - `requestedPath()` keeps its current inputs. Its final check becomes an allow-list: `/^[A-Za-z0-9_-]+\/[A-Za-z0-9_-]+\.[^./\\%?#\x00-\x1F\x7F]+$/` (amended 2026-11-24; the second segment always starts with the name part, so it can never be `.` or `..`), applied to the path exactly as received (no decoding, except for the existing `file_url` branch's one `decodeURIComponent`, whose result must also pass the allow-list).
   - The download uses `supabaseClient` (the caller's client), not `adminClient`. The service-role client stays only for the rate-limit call.
 - **Tests:** `private_uploads.test.ts`, `function_hygiene.test.ts`.
 - **Deploy:** `ask-vet-assistant` to dev, then CI, then staging and prod, then `scripts/check-functions-start.sh` on each.
