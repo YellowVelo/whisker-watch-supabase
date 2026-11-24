@@ -1,6 +1,6 @@
 # 0082_AI_Scan_File_Path_Hotfix_Specification_v1
 
-**Status:** Draft, waiting for Lynn's review. No code written yet. Lynn chose "hotfix now" on 2026-11-24, separate from spec 0080.
+**Status:** Approved by Lynn 2026-11-24. Lynn chose "hotfix now" on 2026-11-24, separate from spec 0080.
 **Date:** 2026-11-24
 **Branch:** `claude/hotfix-0082-ai-file-path` (off `main`)
 **Migration:** none
@@ -10,7 +10,7 @@
 
 ## Lynn — what I need from you
 
-1. **Review this spec and say "approved" (or tell me what to change).** This blocks the fix.
+1. ~~Review~~ Approved 2026-11-24.
 2. **Later, before merge:** OK the PROTECTED merge after review passes.
 3. Nothing to promote in Cloudflare: this is a backend-only fix. I deploy the function to dev, staging and prod myself.
 
