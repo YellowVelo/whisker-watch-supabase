@@ -83,8 +83,18 @@ function jsonResponse(body: unknown, status = 200) {
   });
 }
 
-// The only path shape the app's uploader creates: <folder>/<name>.<ext>.
-const UPLOAD_PATH_SHAPE = /^[A-Za-z0-9_-]+\/[A-Za-z0-9_-]+(\.[A-Za-z0-9]+)?$/;
+// The only path shape the app's uploader creates: <folder>/<name>.<ext>
+// (src/api/storageClient.js: `${userId}/${Date.now()}-${rand}.${ext}`).
+// The extension is whatever followed the last dot in the person's file name,
+// lowercased, so it can hold spaces, dashes, underscores or accented letters
+// ("rabies cert", "jpg-large", "résumé"), but never a dot.
+// Why this can't step outside the folder: there are exactly two segments,
+// and the second always starts with the name part ([A-Za-z0-9_-]+), so it
+// can never be "." or "..". The extension excludes ".", "/", backslash, "%"
+// (no encoded tricks), "?" and "#" (no query or fragment), and control
+// characters (U+0000-U+001F, U+007F).
+// deno-lint-ignore no-control-regex
+const UPLOAD_PATH_SHAPE = /^[A-Za-z0-9_-]+\/[A-Za-z0-9_-]+\.[^./\\%?#\x00-\x1F\x7F]+$/;
 
 // Returns the storage path the caller asked for, or null if they sent an
 // unusable reference. Never returns anything outside the uploads bucket.
@@ -99,8 +109,8 @@ function requestedPath(body: { file_path?: unknown; file_url?: unknown }): strin
     path = decodeURIComponent(body.file_url.slice(prefix.length));
   }
   // Spec 0082: allow-list the exact shape the uploader creates
-  // (<folder>/<name>.<ext>). Rejects %, backslashes, . and .. segments,
-  // extra folders and leading/trailing slashes.
+  // (<folder>/<name>.<ext>). Rejects %, backslashes, ?, #, control
+  // characters, . and .. segments, extra folders and leading/trailing slashes.
   if (!path || !UPLOAD_PATH_SHAPE.test(path)) return null;
   return path;
 }

@@ -236,11 +236,30 @@ Deno.test('ask-vet-assistant: refuses outside links and files the caller may not
       `${h.stranger.userId}/x.pdf/`,
       `/${h.docPath}`,
       `${h.stranger.userId}/x%20y.pdf`,
+      `${h.stranger.userId}/x.pdf?y`,
+      `${h.stranger.userId}/x.pdf#y`,
+      `${h.stranger.userId}/x.a\\b`,
     ];
     for (const badPath of badPaths) {
       const res = await callFunction('ask-vet-assistant', h.stranger.accessToken, { prompt, file_path: badPath });
       assertEquals(res.status, 400, `expected 400 for ${badPath}`);
       assertEquals(res.json.code, 'invalid_file', `expected invalid_file for ${badPath}`);
+    }
+
+    // The uploader keeps whatever followed the last dot in the person's file
+    // name as the extension, so real paths can have spaces, dashes or
+    // accented letters there. These must pass the shape check. They sit in
+    // the owner's folder, so the stranger gets 403 forbidden_file (not 400
+    // invalid_file), which proves the shape was accepted without calling the AI.
+    const awkwardPaths = [
+      `${h.owner.userId}/1700000000000-abc123.rabies cert`,
+      `${h.owner.userId}/1700000000000-abc123.jpg-large`,
+      `${h.owner.userId}/1700000000000-abc123.résumé`,
+    ];
+    for (const awkwardPath of awkwardPaths) {
+      const res = await callFunction('ask-vet-assistant', h.stranger.accessToken, { prompt, file_path: awkwardPath });
+      assertEquals(res.status, 403, `expected 403 for ${awkwardPath}`);
+      assertEquals(res.json.code, 'forbidden_file', `expected forbidden_file for ${awkwardPath}`);
     }
 
     const someoneElses = await callFunction('ask-vet-assistant', h.stranger.accessToken, {
