@@ -62,7 +62,7 @@ jobs:
             supabase/functions/delete-pet/index.test.ts \
             supabase/functions/delete-account/index.test.ts
 
-      - name: Run save_daily_check_ins + private uploads (spec 0071) + co-owner access (spec 0072) + sitter access (spec 0073) + reset-link redirect (spec 0074) + account deletion functions (spec 0075) + function permissions and invite emails (spec 0077) + rate-limit windows and AI context loaders (spec 0080) integration tests
+      - name: Run save_daily_check_ins + private uploads (spec 0071) + co-owner access (spec 0072) + sitter access (spec 0073) + reset-link redirect (spec 0074) + account deletion functions (spec 0075) + function permissions and invite emails (spec 0077) + rate-limit windows, AI context loaders and AI task requests (spec 0080) integration tests
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_DEV_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.sb_publishable }}
@@ -78,7 +78,8 @@ jobs:
             supabase/tests/function_permissions.test.ts \
             supabase/tests/invite_emails.test.ts \
             supabase/tests/rate_limits.test.ts \
-            supabase/tests/ai_context.test.ts
+            supabase/tests/ai_context.test.ts \
+            supabase/tests/ai_tasks.test.ts
 
       - name: Run Edge Function code checks (spec 0078 - exact library versions, no raw error messages)
         run: |

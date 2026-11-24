@@ -207,39 +207,48 @@ Deno.test('ask-vet-assistant: refuses outside links and files the caller may not
   let h: Household | null = null;
   try {
     h = await buildHousehold('ai');
-    const prompt = 'Test prompt that must never reach the AI.';
+    // Spec 0080: requests name a task; every check below is refused before
+    // the AI is called. The rate check runs first, so each call here counts
+    // against the scratch user's own limits only.
+    const scan = (filePath: string) => ({ task: 'scan_vaccines', pet_id: h!.petId, file_path: filePath });
 
+    // Spec 0080 AC8: the old file_url field is refused outright, whatever
+    // it points at (spec 0071's Phase 1 link support is gone).
     const outside = await callFunction('ask-vet-assistant', h.stranger.accessToken, {
-      prompt,
+      task: 'scan_vaccine_single',
       file_url: 'https://example.com/invoice.png',
     });
     assertEquals(outside.status, 400);
     assertEquals(outside.json.code, 'invalid_file');
 
     const traversal = await callFunction('ask-vet-assistant', h.stranger.accessToken, {
-      prompt,
+      task: 'scan_vaccine_single',
       file_path: `${h.stranger.userId}/../${h.docPath}`,
     });
     assertEquals(traversal.status, 400);
+    assertEquals(traversal.json.code, 'invalid_file');
 
     const someoneElses = await callFunction('ask-vet-assistant', h.stranger.accessToken, {
-      prompt,
+      task: 'scan_vaccine_single',
       file_path: h.docPath,
     });
     assertEquals(someoneElses.status, 403);
     assertEquals(someoneElses.json.code, 'forbidden_file');
 
     // Sitters can see the pet but not its documents, so not via the AI either.
-    const sitter = await callFunction('ask-vet-assistant', h.sitter.accessToken, { prompt, file_path: h.docPath });
+    const sitter = await callFunction('ask-vet-assistant', h.sitter.accessToken, scan(h.docPath));
     assertEquals(sitter.status, 403);
+    assertEquals(sitter.json.code, 'forbidden_file');
 
-    // Phase 1 compatibility path: a public-style link into someone else's
-    // folder is converted to a path and refused the same way.
+    // A public-style link into someone else's folder, sent as file_url, is
+    // refused before any path conversion (Phase 1 compatibility removed).
     const compat = await callFunction('ask-vet-assistant', h.stranger.accessToken, {
-      prompt,
+      task: 'scan_vaccines',
+      pet_id: h.petId,
       file_url: `${requireEnv('SUPABASE_URL')}/storage/v1/object/public/uploads/${h.docPath}`,
     });
-    assertEquals(compat.status, 403);
+    assertEquals(compat.status, 400);
+    assertEquals(compat.json.code, 'invalid_file');
   } finally {
     await cleanUp(h);
   }

@@ -53,9 +53,16 @@ const FLUSH_TIMEOUT_MS = 2000;
 
 type EdgeRuntimeGlobal = { waitUntil?: (promise: Promise<unknown>) => void };
 
-export function reportError(err: unknown, tags: Record<string, string> = {}) {
+// `level` (spec 0080) marks a report as a warning rather than an error, for
+// something worth watching that isn't a failure (e.g. a person hitting
+// ask-vet-assistant's daily AI cap). Defaults to 'error', so existing
+// callers are unchanged.
+export type ReportLevel = 'error' | 'warning';
+
+export function reportError(err: unknown, tags: Record<string, string> = {}, level: ReportLevel = 'error') {
   if (!sentryEnabled) return;
   Sentry.withScope((scope) => {
+    scope.setLevel(level);
     for (const [key, value] of Object.entries(tags)) {
       scope.setTag(key, value);
     }
