@@ -22,6 +22,11 @@ describe('detectEmergencyKeywords', () => {
     ["my cat can't urinate", 'Inability to urinate'],
     ['straining to pee for an hour', 'Inability to urinate'],
     ['my dog was hit by a car', 'Severe trauma'],
+    // Curly apostrophes (iPhone Smart Punctuation) must match too.
+    ['My cat can\u2019t breathe', 'Difficulty breathing'],
+    ['he won\u2019t wake up', 'Collapse'],
+    ['she can\u2019t pee', 'Inability to urinate'],
+    ['he can\u2018t urinate', 'Inability to urinate'],
   ])('flags "%s" as an emergency (%s)', (text) => {
     expect(detectEmergencyKeywords(text)).not.toBeNull();
   });

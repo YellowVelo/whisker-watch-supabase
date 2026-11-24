@@ -18,8 +18,9 @@ import { loadObservationCatalog, BASELINE_VALUES, NOT_OBSERVED_VALUES } from './
 import { PALETTE } from '@/lib/toneColors';
 import { dateStrInTimezone } from '@/lib/timezone';
 
-export const RANGE_DAYS = { '24H': 5, '7D': 7, '30D': 30, '90D': 90, '1Y': 365 };
-export const RANGE_OPTIONS = ['24H', '7D', '30D', '90D', '1Y'];
+import { RANGE_DAYS, RANGE_OPTIONS } from './trendsRanges';
+
+export { RANGE_DAYS, RANGE_OPTIONS };
 
 // `timezone` is threaded through from the caller (PetTrends.jsx, via the
 // signed-in user's stored timezone) so "today"/"yesterday" here agree with

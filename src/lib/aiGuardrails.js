@@ -97,12 +97,18 @@ export const EMERGENCY_KEYWORD_PATTERNS = [
   },
 ];
 
+// Curly apostrophes (iPhone Smart Punctuation, U+2019 / U+2018, and the
+// look-alike U+02BC) are turned into a straight ' first, so "can’t breathe"
+// matches the same as "can't breathe".
+const CURLY_APOSTROPHES = /[\u2018\u2019\u02BC]/g;
+
 // Returns the matched category name, or null if nothing matches. Pure
 // function, unit-testable directly — same precedent as petScreenContext.js.
 export function detectEmergencyKeywords(text) {
   if (!text) return null;
+  const normalized = text.replace(CURLY_APOSTROPHES, "'");
   for (const { category, patterns } of EMERGENCY_KEYWORD_PATTERNS) {
-    if (patterns.some((re) => re.test(text))) return category;
+    if (patterns.some((re) => re.test(normalized))) return category;
   }
   return null;
 }

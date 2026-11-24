@@ -8,6 +8,7 @@ import {
   ENERGY_OPTIONS as APP_ENERGY, getMobilityOptions as appMobility, getBathroomOptions as appBathroom,
 } from './onboardingConfig';
 import { PET_SCREEN_NAMES as APP_SCREENS, getPetContext } from './petScreenContext';
+import { RANGE_OPTIONS as APP_RANGES } from './checkin/trendsRanges';
 import {
   COUNTED_ATTRIBUTES, HEALTH_ATTRIBUTES as SERVER_HEALTH, WELLBEING_ATTRIBUTES as SERVER_WELLBEING,
   BASELINE_VALUES as SERVER_BASELINE, NOT_OBSERVED_VALUES as SERVER_NOT_OBSERVED,
@@ -19,6 +20,7 @@ import {
   getMobilityOptions as serverMobility, getBathroomOptions as serverBathroom,
   PET_SCREEN_NAMES as SERVER_SCREENS,
 } from '../../supabase/functions/ask-vet-assistant/rules.ts';
+import { TRENDS_RANGES as SERVER_RANGES } from '../../supabase/functions/ask-vet-assistant/prompts.ts';
 
 // Spec 0080, Before You Approve item 3: some rule lists exist both in the
 // app (instant feedback) and on the server (where they're enforced). Edge
@@ -46,9 +48,23 @@ describe('app/server parity: emergency keyword stop (spec 0041)', () => {
       'she ate chocolate an hour ago',
       'he has been straining to pee all day',
       'just a little less hungry today',
+      'My cat can\u2019t breathe',
+      'he won\u2019t wake up',
+      'she can\u2019t pee',
+      'he can\u2018t urinate',
+      'she won\u02BCt stop bleeding',
       '',
     ];
     for (const text of samples) expect(serverDetect(text)).toBe(appDetect(text));
+  });
+
+  it.each([
+    ['My cat can\u2019t breathe', 'Difficulty breathing'],
+    ['he won\u2019t wake up', 'Collapse'],
+    ['she can\u2019t pee', 'Inability to urinate'],
+  ])('both detectors catch curly apostrophes: %s', (text, category) => {
+    expect(appDetect(text)).toBe(category);
+    expect(serverDetect(text)).toBe(category);
   });
 });
 
@@ -102,5 +118,11 @@ describe('app/server parity: Ask Wysker screen names', () => {
     const paths = ['/pet/p1', '/pet/p1/trends', '/pet/p1/timeline', '/pet/p1/symptoms', '/pet/p1/food', '/pet/p1/export', '/pet/p1/profile'];
     const returned = paths.map((p) => getPetContext(p).screen);
     expect([...new Set(returned)].sort()).toEqual([...APP_SCREENS].sort());
+  });
+});
+
+describe('app/server parity: Trends ranges', () => {
+  it("has the same range options as the Trends screen's selector", () => {
+    expect([...SERVER_RANGES]).toEqual(APP_RANGES);
   });
 });

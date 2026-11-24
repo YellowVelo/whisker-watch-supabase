@@ -34,7 +34,7 @@ import {
   PET_SCREEN_NAMES,
   type OptionLabel,
 } from './rules.ts';
-import { isCountableSymptom } from '../_shared/checkinRules.ts';
+import { COUNTED_ATTRIBUTES, isCountableSymptom } from '../_shared/checkinRules.ts';
 
 // ---------------------------------------------------------------------------
 // Safety sentences (moved from src/lib/aiGuardrails.js, spec 0041).
@@ -64,12 +64,17 @@ export const TASK_NAMES = [
 
 export type TaskName = typeof TASK_NAMES[number];
 
-export const SCAN_TASKS: readonly TaskName[] = ['scan_vaccines', 'scan_vaccine_single', 'scan_medication', 'scan_bloodwork'];
-
 export const TRENDS_RANGES: readonly string[] = ['24H', '7D', '30D', '90D', '1Y'];
 
 export const MAX_QUESTION_CHARS = 2000;
+// FR4: the chats send the AI only the last 20 messages. Longer chats keep
+// working (older messages are dropped), but a history of more than
+// MAX_INCOMING_HISTORY_ENTRIES entries is refused outright so a huge body
+// never gets processed.
 export const MAX_HISTORY_ENTRIES = 20;
+export const MAX_INCOMING_HISTORY_ENTRIES = 200;
+// Longer messages are cut to these lengths rather than refused, so a long
+// earlier AI answer never breaks the rest of the chat.
 export const MAX_OWNER_MESSAGE_CHARS = 2000;
 export const MAX_ASSISTANT_MESSAGE_CHARS = 8000;
 
@@ -119,9 +124,11 @@ export interface BaselineInfo {
 }
 
 // One logged answer on a daily check-in. `value` is the raw observation
-// value (so baseline / "Not observed" answers can be told apart);
-// `attribute` and `label` are the observation_types / option labels.
+// value (so baseline / "Not observed" answers can be told apart); `code` is
+// the observation_types code (e.g. 'appetite'); `attribute` and `label` are
+// the display names of the attribute and the chosen option.
 export interface CheckInSymptom {
+  code: string;
   attribute: string;
   value: string | null;
   label: string;
@@ -329,14 +336,15 @@ export function hasEnoughCheckIns(checkIns: readonly { status: string | null }[]
 // Spec 0012 v5: the Vibe (owner's rating) and the symptoms logged are two
 // separate signals. They're listed in two separate sections and never
 // combined, and no score is ever given. Symptoms on a skipped day are
-// ignored, and baseline / "Not observed" answers aren't symptoms.
+// ignored, baseline / "Not observed" answers aren't symptoms, and only the
+// 11 counted attributes (COUNTED_ATTRIBUTES) are listed.
 export function describeCheckIns(checkIns: readonly CheckInDay[]): { vibes: string; symptoms: string } {
   const days = byDateDesc(checkIns);
   const vibes = days.map((d) => `${d.date}: ${d.status ? (VIBE_LABELS[d.status] || d.status) : 'Not recorded'}`).join('\n');
   const symptoms = days
     .filter((d) => d.status !== 'skipped')
     .map((d) => {
-      const logged = d.symptoms.filter((s) => isCountableSymptom(s.value));
+      const logged = d.symptoms.filter((s) => COUNTED_ATTRIBUTES.includes(s.code) && isCountableSymptom(s.value));
       return logged.length ? `${d.date}: ${logged.map((s) => `${s.attribute}: ${s.label}`).join('; ')}` : null;
     })
     .filter((line): line is string => line !== null)
@@ -545,23 +553,27 @@ function parseQuestion(body: Record<string, unknown>): string | TaskRequestError
   return q;
 }
 
+// FR4: history is optional. Entries that aren't { role: 'user' |
+// 'assistant', content: non-empty string } are dropped (the app keeps
+// emergency and error bubbles in the chat with no content), each message
+// is cut to its length limit, and only the last MAX_HISTORY_ENTRIES are
+// kept. Only a non-array or an oversized array is refused.
 function parseHistory(body: Record<string, unknown>): ChatMessage[] | TaskRequestError {
   const h = body.history;
   if (h === undefined || h === null) return [];
   if (!Array.isArray(h)) return refuse('invalid_history', 'history must be an array');
-  if (h.length > MAX_HISTORY_ENTRIES) return refuse('invalid_history', `history may have at most ${MAX_HISTORY_ENTRIES} messages`);
+  if (h.length > MAX_INCOMING_HISTORY_ENTRIES) {
+    return refuse('invalid_history', `history may have at most ${MAX_INCOMING_HISTORY_ENTRIES} messages`);
+  }
   const out: ChatMessage[] = [];
   for (const entry of h) {
-    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return refuse('invalid_history', 'history entries must be objects');
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue;
     const { role, content } = entry as Record<string, unknown>;
-    if ((role !== 'user' && role !== 'assistant') || typeof content !== 'string') {
-      return refuse('invalid_history', "history entries must be { role: 'user' | 'assistant', content: string }");
-    }
+    if ((role !== 'user' && role !== 'assistant') || typeof content !== 'string' || content.trim() === '') continue;
     const max = role === 'user' ? MAX_OWNER_MESSAGE_CHARS : MAX_ASSISTANT_MESSAGE_CHARS;
-    if (content.length > max) return refuse('invalid_history', `history ${role} messages must be ${max} characters or fewer`);
-    out.push({ role, content });
+    out.push({ role, content: content.slice(0, max) });
   }
-  return out;
+  return out.slice(-MAX_HISTORY_ENTRIES);
 }
 
 function parsePetId(body: Record<string, unknown>, required: boolean): string | null | TaskRequestError {
@@ -671,9 +683,10 @@ export function emergencyStop(question: string | null | undefined): string | nul
 }
 
 // If the AI flagged its answer as urgent, drop everything it wrote so the
-// app can only show the fixed "contact your vet" message.
+// app can only show the fixed "contact your vet" message. Any truthy
+// `urgent` counts, matching the app's own `if (result?.urgent)` check.
 export function stripUrgent<T>(result: T): T | { urgent: true } {
-  if (result && typeof result === 'object' && (result as Record<string, unknown>).urgent === true) {
+  if (result && typeof result === 'object' && (result as Record<string, unknown>).urgent) {
     return { urgent: true };
   }
   return result;
