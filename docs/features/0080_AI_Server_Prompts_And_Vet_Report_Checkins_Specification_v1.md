@@ -56,7 +56,10 @@ The existing 10-minute message stays: "You've reached the limit for AI requests.
 > *Appetite* — Ate a little less (18 days)
 > [30-day bar chart: grey = Normal, yellow = 1 symptom, red = 2+ symptoms, blank = skipped or no check-in]
 
-Empty states:
+**C. Pet Insights, not enough check-ins** (approved by Lynn 2026-11-23; shown on the Insights card when the pet has fewer than 2 non-skipped check-ins in the last 30 days, and the AI isn't called):
+> **Not enough check-ins yet.** Insights look at {Pet}'s last 30 days of daily check-ins. Check in on at least 2 days and they'll be ready.
+
+Vet Report empty states:
 > No symptoms were logged in the last 30 days.
 
 > No daily check-ins were recorded in the last 30 days.
