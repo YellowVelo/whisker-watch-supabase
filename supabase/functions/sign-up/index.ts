@@ -41,6 +41,7 @@
 //                          never conditioned on whether the email exists.
 
 import { createClient } from 'jsr:@supabase/supabase-js@2.119.2';
+import type { SupabaseClient } from 'jsr:@supabase/supabase-js@2.119.2';
 import { sendEmail } from '../_shared/email/sendEmail.ts';
 import { EmailServiceError } from '../_shared/email/types.ts';
 import { isValidEmail, normalizeEmail } from '../_shared/email/utils.ts';
@@ -141,6 +142,12 @@ async function isPasswordPwned(password: string): Promise<boolean> {
   }
 }
 
+// Row shape returned by the get_auth_user_confirmation_state() RPC.
+interface ConfirmationStateRow {
+  user_id: string;
+  email_confirmed: boolean;
+}
+
 interface ResendResult {
   tokenHash: string;
   tokenType: 'recovery';
@@ -155,7 +162,7 @@ interface ResendResult {
 // with the generic success shape", never as an error, to preserve
 // enumeration safety.
 async function resolveConfirmationResend(
-  adminClient: ReturnType<typeof createClient>,
+  adminClient: SupabaseClient,
   cleanEmail: string,
   verifyPageUrl: string,
 ): Promise<ResendResult | null> {
@@ -166,7 +173,7 @@ async function resolveConfirmationResend(
     console.error('get_auth_user_confirmation_state error:', stateError);
     return null;
   }
-  const state = Array.isArray(stateRows) ? stateRows[0] : stateRows;
+  const state = (Array.isArray(stateRows) ? stateRows[0] : stateRows) as ConfirmationStateRow | null | undefined;
   if (!state || state.email_confirmed) {
     return null;
   }

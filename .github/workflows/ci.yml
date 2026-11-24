@@ -46,6 +46,21 @@ jobs:
         with:
           deno-version: v2.x
 
+      # Type-check every Edge Function (spec 0080, PA-65). Each index.ts
+      # pulls in its own helpers and _shared/ files through its imports, so
+      # those are checked too; the test files are included as well.
+      # --node-modules-dir=none keeps Deno from reading the app's
+      # node_modules folder. This uses the Deno version installed above,
+      # which is newer than Supabase's runtime (Deno 2.1.4), so it catches
+      # typing mistakes only. The hourly "do all functions start" check
+      # (function-health.yml) stays the runtime safety net.
+      - name: Type-check Edge Functions (deno check)
+        run: |
+          deno check --node-modules-dir=none \
+            supabase/functions/*/index.ts \
+            supabase/functions/*/*.test.ts \
+            supabase/tests/*.ts
+
       - name: Run delete-pet / delete-account integration tests
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_DEV_URL }}
