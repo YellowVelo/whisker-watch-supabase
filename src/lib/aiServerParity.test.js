@@ -20,7 +20,8 @@ import {
   getMobilityOptions as serverMobility, getBathroomOptions as serverBathroom,
   PET_SCREEN_NAMES as SERVER_SCREENS,
 } from '../../supabase/functions/ask-vet-assistant/rules.ts';
-import { TRENDS_RANGES as SERVER_RANGES } from '../../supabase/functions/ask-vet-assistant/prompts.ts';
+import { TRENDS_RANGES as SERVER_RANGES, MAX_QUESTION_CHARS as SERVER_MAX_QUESTION_CHARS } from '../../supabase/functions/ask-vet-assistant/prompts.ts';
+import { MAX_QUESTION_CHARS as APP_MAX_QUESTION_CHARS } from '../api/aiClient';
 // context.ts's only non-relative import is a type-only one (stripped when
 // Vitest compiles it), so it loads under Node too.
 import { RANGE_DAYS as SERVER_RANGE_DAYS } from '../../supabase/functions/ask-vet-assistant/context.ts';
@@ -132,5 +133,12 @@ describe('app/server parity: Trends ranges', () => {
   it('has the same lookback days for every range (spec 0080)', () => {
     expect({ ...SERVER_RANGE_DAYS }).toEqual(APP_RANGE_DAYS);
     expect(Object.keys(SERVER_RANGE_DAYS)).toEqual([...SERVER_RANGES]);
+  });
+});
+
+describe('app/server parity: chat question length', () => {
+  it("caps the chat boxes at the server's question limit", () => {
+    expect(APP_MAX_QUESTION_CHARS).toBe(SERVER_MAX_QUESTION_CHARS);
+    expect(APP_MAX_QUESTION_CHARS).toBe(2000);
   });
 });

@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { invokeAI, buildChatHistory, aiScreen } from '@/api/aiClient';
+import { invokeAI, buildChatHistory, aiScreen, MAX_QUESTION_CHARS } from '@/api/aiClient';
 import { Send, Stethoscope } from 'lucide-react';
 import { detectEmergencyKeywords, aiErrorText } from '@/lib/aiGuardrails';
 import AIEmergencyNotice from './AIEmergencyNotice';
@@ -117,6 +117,7 @@ export default function PetAIChat({ pet, screen }) {
           onKeyDown={handleKey}
           placeholder={`Ask about ${pet.name}…`}
           rows={1}
+          maxLength={MAX_QUESTION_CHARS}
           className="flex-1 resize-none rounded-xl border border-input bg-background px-3 py-2.5 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring placeholder:text-muted-foreground min-h-[42px] max-h-24"
           style={{ WebkitUserSelect: 'text', userSelect: 'text' }}
         />

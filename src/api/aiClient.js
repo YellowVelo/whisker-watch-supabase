@@ -6,6 +6,11 @@ import { PET_SCREEN_NAMES } from '@/lib/petScreenContext';
 // supabase/functions/ask-vet-assistant/prompts.ts).
 export const MAX_CHAT_HISTORY = 20;
 
+// Longest chat question the server accepts (MAX_QUESTION_CHARS in
+// supabase/functions/ask-vet-assistant/prompts.ts); the chat boxes cap
+// typing at this so a long question is never refused with a 400.
+export const MAX_QUESTION_CHARS = 2000;
+
 /**
  * Turns a chat screen's messages into the `history` the server accepts:
  * only `{ role, content }`, only user/assistant messages with non-empty
