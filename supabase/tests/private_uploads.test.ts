@@ -208,8 +208,9 @@ Deno.test('ask-vet-assistant: refuses outside links and files the caller may not
   try {
     h = await buildHousehold('ai');
     // Spec 0080: requests name a task; every check below is refused before
-    // the AI is called. The rate check runs first, so each call here counts
-    // against the scratch user's own limits only.
+    // the rate check and the AI call (bad fields when the request is parsed,
+    // file access as the caller right after), so none of them counts
+    // against any limit. The file is only downloaded after the rate check.
     const scan = (filePath: string) => ({ task: 'scan_vaccines', pet_id: h!.petId, file_path: filePath });
 
     // Spec 0080 AC8: the old file_url field is refused outright, whatever

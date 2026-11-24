@@ -17,11 +17,18 @@
 //     forbidden_file), the same rule as opening them directly.
 //   - A sitter whose sit has ended (outside pet_sit_is_open()'s window,
 //     migration 0057) and a removed co-owner get 403 forbidden_pet.
+//   - A stranger's multi-pet scan naming someone else's pet gets 403
+//     forbidden_pet.
+//   - FR10: for a pet with no check-ins, Pet Insights answers
+//     { not_enough_data: true } and a Trends summary { summary: null }, and
+//     neither leaves a rate_limit_hits row (no-AI replies don't count).
 //   - FR9/FR10: over the 100-a-day cap, pet chat gets 429 daily_limit with
 //     wording A every time, and only one Sentry warning is recorded (one row
-//     on the daily-warned key). The cap is reached by seeding
-//     rate_limit_hits with the service role; the request is refused at the
-//     rate check, before the AI.
+//     on the daily-warned key). Over the 10-minute limit only, it gets 429
+//     rate_limited with today's wording; over both, daily_limit. Limits are
+//     reached by seeding rate_limit_hits with the service role, each on its
+//     own user, so no step's rows affect another; the request is refused at
+//     the rate check, before the AI.
 //
 // Same shape as ai_context.test.ts: users are created and signed in once
 // for the whole file (Supabase Auth limits sign-ins per IP). The service
@@ -49,6 +56,12 @@ const PET_NAME = 'Ai Tasks Secret Pet';
 const FN = 'ask-vet-assistant';
 // Wording A (spec 0080).
 const DAILY_LIMIT_MESSAGE = "You've reached today's limit for Ask Wysker and document scans. You can try again tomorrow.";
+// Today's 10-minute wording (spec 0050), unchanged.
+const RATE_LIMITED_MESSAGE = "You've reached the limit for AI requests. Please wait a few minutes and try again.";
+
+const rateKey = (userId: string) => `ask-vet-assistant:user:${userId}`;
+const dailyKey = (userId: string) => `ask-vet-assistant:daily:user:${userId}`;
+const warnedKey = (userId: string) => `ask-vet-assistant:daily-warned:user:${userId}`;
 
 function utcDate(offsetDays = 0): string {
   const d = new Date();
@@ -57,15 +70,49 @@ function utcDate(offsetDays = 0): string {
 }
 
 Deno.test('ask-vet-assistant task requests (spec 0080)', async (t) => {
-  const [owner, sitter, stranger, oldSitter, exCoOwner] = await Promise.all([
+  const [owner, sitter, stranger, oldSitter, exCoOwner, rateUser, bothUser] = await Promise.all([
     createScratchUser('aitask-owner'),
     createScratchUser('aitask-sitter'),
     createScratchUser('aitask-stranger'),
     createScratchUser('aitask-oldsitter'),
     createScratchUser('aitask-excoowner'),
+    createScratchUser('aitask-rate10'),
+    createScratchUser('aitask-ratefull'),
   ]);
+  const allUsers = [owner, sitter, stranger, oldSitter, exCoOwner, rateUser, bothUser];
   const admin = adminClient();
   let petId: string | null = null;
+  const extraPetIds: string[] = [];
+
+  // A pet the given user owns, so a request from them passes every gate.
+  const ownPet = async (user: typeof owner, name: string): Promise<string> => {
+    const { data, error } = await user.client
+      .from('pets')
+      .insert({ name, created_by: user.userId, species: 'Dog' })
+      .select('id')
+      .single();
+    if (error || !data) throw new Error(`pet insert failed: ${error?.message}`);
+    extraPetIds.push(data.id as string);
+    return data.id as string;
+  };
+
+  const countRows = async (key: string): Promise<number> => {
+    const { count, error } = await admin
+      .from('rate_limit_hits')
+      .select('id', { count: 'exact', head: true })
+      .eq('rate_key', key);
+    if (error) throw new Error(`rate_limit_hits count failed: ${error.message}`);
+    return count ?? 0;
+  };
+
+  const seedRows = async (key: string, n: number) => {
+    const now = new Date().toISOString();
+    const { error } = await admin
+      .from('rate_limit_hits')
+      .insert(Array.from({ length: n }, () => ({ rate_key: key, created_at: now })));
+    if (error) throw new Error(`rate_limit_hits seed failed: ${error.message}`);
+  };
+
   try {
     const { data: pet, error: petError } = await owner.client
       .from('pets')
@@ -227,12 +274,66 @@ Deno.test('ask-vet-assistant task requests (spec 0080)', async (t) => {
       assertEquals(res.status, 403);
       assertEquals(res.json.code, 'forbidden_file');
     });
+
+    await t.step("a stranger's multi-pet scan naming someone else's pet gets 403 forbidden_pet", async () => {
+      // A path in the stranger's own folder passes the file access check
+      // (nothing is downloaded before the rate check), so the pet check is
+      // what refuses it.
+      const res = await callFunction(FN, stranger.accessToken, {
+        task: 'scan_vaccines',
+        pet_id: petId,
+        file_path: `${stranger.userId}/aitask-not-uploaded.png`,
+      });
+      assertEquals(res.status, 403);
+      assertEquals(res.json.code, 'forbidden_pet');
+      assert(!JSON.stringify(res.json).includes(PET_NAME), 'scan refusal leaked pet details');
+      assertEquals(await countRows(rateKey(stranger.userId)), 0, 'a refused scan must not count');
+      assertEquals(await countRows(dailyKey(stranger.userId)), 0, 'a refused scan must not count');
+    });
+
+    await t.step('FR10: no-AI replies for a pet with no check-ins, and they do not count', async () => {
+      // Runs before the daily-cap step, which seeds the owner's daily key.
+      const insights = await callFunction(FN, owner.accessToken, { task: 'pet_insights', pet_id: petId });
+      assertEquals(insights.status, 200);
+      assertEquals(insights.json, { not_enough_data: true });
+
+      const summary = await callFunction(FN, owner.accessToken, { task: 'trends_summary', pet_id: petId, range: '7D' });
+      assertEquals(summary.status, 200);
+      assertEquals(summary.json, { summary: null });
+
+      assertEquals(await countRows(rateKey(owner.userId)), 0, 'no-AI replies must not count (10-minute key)');
+      assertEquals(await countRows(dailyKey(owner.userId)), 0, 'no-AI replies must not count (daily key)');
+    });
+
+    await t.step('FR9: over the 10-minute limit only, 429 rate_limited with today\'s wording', async () => {
+      const ratePetId = await ownPet(rateUser, 'Ai Tasks Rate Pet');
+      await seedRows(rateKey(rateUser.userId), 20);
+      const res = await callFunction(FN, rateUser.accessToken, {
+        task: 'pet_chat', pet_id: ratePetId, question: 'How is he doing?',
+      });
+      assertEquals(res.status, 429);
+      assertEquals(res.json.code, 'rate_limited');
+      assertEquals(res.json.error, RATE_LIMITED_MESSAGE);
+      // All-or-nothing: the refused request recorded nothing on either key.
+      assertEquals(await countRows(rateKey(rateUser.userId)), 20);
+      assertEquals(await countRows(dailyKey(rateUser.userId)), 0);
+      assertEquals(await countRows(warnedKey(rateUser.userId)), 0, 'no daily-cap warning for the 10-minute limit');
+    });
+
+    await t.step('FR9: over both limits, 429 daily_limit with wording A', async () => {
+      const bothPetId = await ownPet(bothUser, 'Ai Tasks Full Pet');
+      await seedRows(rateKey(bothUser.userId), 20);
+      await seedRows(dailyKey(bothUser.userId), 100);
+      const res = await callFunction(FN, bothUser.accessToken, {
+        task: 'pet_chat', pet_id: bothPetId, question: 'How is he doing?',
+      });
+      assertEquals(res.status, 429);
+      assertEquals(res.json.code, 'daily_limit');
+      assertEquals(res.json.error, DAILY_LIMIT_MESSAGE);
+    });
+
     await t.step('FR9/FR10: over the daily cap, 429 daily_limit with wording A, and one warning', async () => {
-      const now = new Date().toISOString();
-      const { error: seedError } = await admin
-        .from('rate_limit_hits')
-        .insert(Array.from({ length: 100 }, () => ({ rate_key: `ask-vet-assistant:daily:user:${owner.userId}`, created_at: now })));
-      if (seedError) throw new Error(`daily cap seed failed: ${seedError.message}`);
+      await seedRows(dailyKey(owner.userId), 100);
 
       // A visible pet, so the request passes every gate and is refused at
       // the rate check, before the AI.
@@ -243,23 +344,18 @@ Deno.test('ask-vet-assistant task requests (spec 0080)', async (t) => {
         assertEquals(res.json.code, 'daily_limit', `call ${i}: expected daily_limit`);
         assertEquals(res.json.error, DAILY_LIMIT_MESSAGE, `call ${i}: expected wording A`);
       }
-      const { count, error: countError } = await admin
-        .from('rate_limit_hits')
-        .select('id', { count: 'exact', head: true })
-        .eq('rate_key', `ask-vet-assistant:daily-warned:user:${owner.userId}`);
-      if (countError) throw new Error(`warned-key count failed: ${countError.message}`);
-      assertEquals(count, 1, 'expected exactly one daily-cap warning');
+      assertEquals(await countRows(warnedKey(owner.userId)), 1, 'expected exactly one daily-cap warning');
     });
   } finally {
     // Sits, invites, co-owner rows and document links cascade with the pet
     // or the user. Rate-limit rows don't, so they're removed by key.
-    if (petId) await admin.from('pets').delete().eq('id', petId);
+    const petIds = [...(petId ? [petId] : []), ...extraPetIds];
+    if (petIds.length) await admin.from('pets').delete().in('id', petIds);
     await admin.storage.from('uploads').remove([`${owner.userId}/aitask-scan.png`]);
-    await admin.from('rate_limit_hits').delete().in('rate_key', [
-      `ask-vet-assistant:user:${owner.userId}`,
-      `ask-vet-assistant:daily:user:${owner.userId}`,
-      `ask-vet-assistant:daily-warned:user:${owner.userId}`,
-    ]);
-    for (const user of [owner, sitter, stranger, oldSitter, exCoOwner]) await deleteScratchUser(user.userId);
+    await admin.from('rate_limit_hits').delete().in(
+      'rate_key',
+      allUsers.flatMap((u) => [rateKey(u.userId), dailyKey(u.userId), warnedKey(u.userId)]),
+    );
+    for (const user of allUsers) await deleteScratchUser(user.userId);
   }
 });

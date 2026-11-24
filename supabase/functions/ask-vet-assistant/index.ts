@@ -32,9 +32,13 @@
 //   - { not_enough_data: true } Pet Insights with too few check-ins
 //
 // Order of checks (spec 0080): auth -> parse -> emergency stop (chats) ->
-// file checks (scans) -> pet data and gates, read as the caller -> rate
-// check -> Anthropic. Every reply that doesn't call the AI comes before the
-// rate check, so it doesn't use up the person's allowance (FR10).
+// file access checks (scans: safe path, then the caller's own folder or a
+// pet_documents link, read as the caller) -> pet data and gates, read as
+// the caller -> rate check -> file download and type/size checks (scans)
+// -> Anthropic. Every no-AI reply in FR10's list comes before the rate
+// check, so it doesn't use up the person's allowance. The download comes
+// after it, so a refused caller can't make the function fetch files; the
+// rare 404/415/413 file replies after it do count.
 //
 // Who may do what:
 //   - The caller must be a signed-in Supabase user (401 otherwise).
@@ -46,8 +50,8 @@
 //   - Files (spec 0071): the function never fetches a caller-supplied URL.
 //     It only reads a file_path in the caller's own folder (a scan they
 //     just uploaded) or linked in pet_documents to a pet they own, and
-//     downloads it with the service role. Size and type are checked before
-//     anything is sent to Anthropic.
+//     downloads it with the service role, only after the rate check. Size
+//     and type are checked before anything is sent to Anthropic.
 //   - The service role is used only for the rate-limit calls and the file
 //     download.
 //
@@ -59,8 +63,9 @@
 //
 // Rate limits (specs 0050 and 0080): one all-or-nothing call to
 // check_and_record_rate_limits_windowed (migration 0060) checks two limits
-// per user: 20 requests per 10 minutes (429 rate_limited) and 100 per 24
-// hours (429 daily_limit). Only requests that are about to call the AI are
+// per user: 100 per 24 hours (429 daily_limit) and 20 requests per 10
+// minutes (429 rate_limited). The daily key is listed first, so someone
+// over both sees the daily wording (FR9). Only requests that are about to call the AI are
 // counted. A failed rate check refuses the request (503) rather than risk a
 // paid AI call. The daily-limit Sentry warning goes out at most once per
 // person per 24 hours (FR10), gated by check_and_record_rate_limit on the
@@ -162,14 +167,13 @@ type FileBlock =
   | { type: 'document'; source: { type: 'base64'; media_type: string; data: string } }
   | { type: 'image'; source: { type: 'base64'; media_type: string; data: string } };
 
-// Spec 0071 file checks. Returns the file as an Anthropic content block, or
-// the refusal to send back.
-async function loadScanFile(
+// Spec 0071 file access checks, cheap and before the rate check: a safe
+// path the caller may read. Returns the path, or the refusal to send back.
+async function checkScanFileAccess(
   path: string,
   userId: string,
   callerClient: SupabaseClient,
-  adminClient: SupabaseClient,
-): Promise<{ block: FileBlock } | { refusal: Response }> {
+): Promise<{ path: string } | { refusal: Response }> {
   const safe = safePath(path);
   if (!safe) {
     return { refusal: jsonResponse({ error: 'Invalid file reference', code: 'invalid_file' }, 400) };
@@ -190,7 +194,16 @@ async function loadScanFile(
   if (!allowed) {
     return { refusal: jsonResponse({ error: 'You do not have access to that file', code: 'forbidden_file' }, 403) };
   }
+  return { path: safe };
+}
 
+// Spec 0071 download and type/size checks, after the rate check, on a path
+// checkScanFileAccess allowed. Returns the file as an Anthropic content
+// block, or the refusal to send back.
+async function downloadScanFile(
+  safe: string,
+  adminClient: SupabaseClient,
+): Promise<{ block: FileBlock } | { refusal: Response }> {
   const { data: blob, error: downloadError } = await adminClient.storage.from('uploads').download(safe);
   if (downloadError || !blob) {
     return { refusal: jsonResponse({ error: 'Could not read that file', code: 'file_not_found' }, 404) };
@@ -259,6 +272,10 @@ async function buildPrompt(
       return { prompt: buildTrendsSummary({ petName: pet.name, ...inputs }) };
     }
     case 'scan_vaccines': {
+      // pet_id is required here (the pet whose page the scan came from), so
+      // it must be one the caller can see, as for the other pet tasks.
+      const pet = await loadVisiblePet(client, req.pet_id);
+      if (!pet) return { reply: jsonResponse(FORBIDDEN_PET, 403) };
       const ownedPets = await loadOwnedPetNames(client, userId);
       return { prompt: buildScanVaccines({ ownedPets }) };
     }
@@ -315,12 +332,13 @@ Deno.serve(async (req) => {
 
     const adminClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-    // Scans: check and read the file before anything else.
-    let fileBlock: FileBlock | null = null;
+    // Scans: the cheap access checks only. The file itself is downloaded
+    // after the rate check, so a refused caller can't trigger downloads.
+    let scanPath: string | null = null;
     if ('file_path' in task) {
-      const file = await loadScanFile(task.file_path, userId, supabaseClient, adminClient);
-      if ('refusal' in file) return file.refusal;
-      fileBlock = file.block;
+      const access = await checkScanFileAccess(task.file_path, userId, supabaseClient);
+      if ('refusal' in access) return access.refusal;
+      scanPath = access.path;
     }
 
     // Pet data and the no-AI replies (forbidden_pet, not_enough_data,
@@ -329,12 +347,14 @@ Deno.serve(async (req) => {
     if ('reply' in built) return built.reply;
     const { system, user } = built.prompt;
 
-    // Rate limits, right before the AI, so a rejected request never
-    // reaches Anthropic. Keyed per user: every caller has a real session.
+    // Rate limits, right before the file download and the AI, so a rejected
+    // request never reaches Anthropic. Keyed per user: every caller has a
+    // real session. Daily key first: the function returns the 1-based index
+    // of the first key over its limit, so someone over both sees wording A.
     const { data: overLimit, error: rateError } = await adminClient.rpc('check_and_record_rate_limits_windowed', {
-      p_keys: [`ask-vet-assistant:user:${userId}`, `ask-vet-assistant:daily:user:${userId}`],
-      p_limits: [RATE_LIMIT, DAILY_LIMIT],
-      p_windows: [RATE_WINDOW_SECONDS, DAILY_WINDOW_SECONDS],
+      p_keys: [`ask-vet-assistant:daily:user:${userId}`, `ask-vet-assistant:user:${userId}`],
+      p_limits: [DAILY_LIMIT, RATE_LIMIT],
+      p_windows: [DAILY_WINDOW_SECONDS, RATE_WINDOW_SECONDS],
     });
     if (rateError || typeof overLimit !== 'number') {
       // Fail closed, as sign-up does: no paid API call if the limiter
@@ -346,9 +366,6 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: 'Unable to process this request right now' }, 503);
     }
     if (overLimit === 1) {
-      return jsonResponse({ error: RATE_LIMITED_MESSAGE, code: 'rate_limited' }, 429);
-    }
-    if (overLimit === 2) {
       // FR10: so Lynn can see whether 100 a day is too low, at most once
       // per person per 24 hours.
       const { data: firstToday, error: warnGateError } = await adminClient.rpc('check_and_record_rate_limit', {
@@ -365,12 +382,23 @@ Deno.serve(async (req) => {
       }
       return jsonResponse({ error: DAILY_LIMIT_MESSAGE, code: 'daily_limit' }, 429);
     }
+    if (overLimit === 2) {
+      return jsonResponse({ error: RATE_LIMITED_MESSAGE, code: 'rate_limited' }, 429);
+    }
     if (overLimit !== 0) {
       reportError(new Error(`rate limit check returned ${overLimit}`), {
         function: 'ask-vet-assistant',
         feature: 'rate_limit',
       });
       return jsonResponse({ error: 'Unable to process this request right now' }, 503);
+    }
+
+    // Scans: download the file and check its type and size.
+    let fileBlock: FileBlock | null = null;
+    if (scanPath) {
+      const file = await downloadScanFile(scanPath, adminClient);
+      if ('refusal' in file) return file.refusal;
+      fileBlock = file.block;
     }
 
     // Never send an empty text block: the scans' whole user message is the file.
