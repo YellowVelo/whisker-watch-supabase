@@ -94,7 +94,8 @@ jobs:
             supabase/tests/invite_emails.test.ts \
             supabase/tests/rate_limits.test.ts \
             supabase/tests/ai_context.test.ts \
-            supabase/tests/ai_tasks.test.ts \n            supabase/tests/vet_report_pdf.test.ts
+            supabase/tests/ai_tasks.test.ts \
+            supabase/tests/vet_report_pdf.test.ts
 
       - name: Run Edge Function code checks (spec 0078 - exact library versions, no raw error messages)
         run: |
