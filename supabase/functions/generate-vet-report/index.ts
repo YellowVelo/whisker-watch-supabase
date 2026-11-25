@@ -432,9 +432,9 @@ Deno.serve(async (req) => {
       return jsonError('unsupported_format', 'Only "pdf" is supported at this time', 400);
     }
 
-    // RLS (is_pet_owner()) means this returns no row if the caller
-    // doesn't own/co-own the pet — treated as 403 rather than 404 so we
-    // don't reveal whether the id exists at all.
+    // RLS returns no row unless the caller owns, co-owns or (during an
+    // open sit) sits for the pet. No row is treated as 403 rather than 404
+    // so we don't reveal whether the id exists at all.
     const { data: pet, error: petError } = await supabaseClient.from('pets').select('*').eq('id', petId).maybeSingle();
     if (petError) throw petError;
     if (!pet) return jsonError('forbidden', 'You do not have access to this pet', 403);

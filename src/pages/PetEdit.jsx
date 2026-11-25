@@ -11,7 +11,8 @@ import { useToast } from '@/components/ui/use-toast';
 import IconButton from '@/components/IconButton';
 import PageTransition from '@/components/PageTransition';
 import PetIdentityFields from '@/components/onboarding/fields/PetIdentityFields';
-import { resolveDate, decomposeDateParts } from '@/components/onboarding/fields/DateInfoFields';
+import { decomposeDateParts } from '@/components/onboarding/fields/DateInfoFields';
+import { buildPetUpdatePayload } from '@/lib/petEditPayload';
 import InviteCoOwnerDialog from '@/components/InviteCoOwnerDialog';
 import { useAuth } from '@/lib/AuthContext';
 import { getSitterOnlyPetIds } from '@/lib/petsClient';
@@ -123,30 +124,8 @@ export default function PetEdit() {
     setSaving(true);
     setError(null);
 
-    const isDog = pet.species === 'Dog';
-    const birthParts = { exact: form.birthDate, monthYear: form.birthMonthYear, year: form.birthYear };
-    const gotchaParts = { exact: form.gotchaDate, monthYear: form.gotchaMonthYear, year: form.gotchaYear };
-
-    const payload = {
-      name: form.name.trim(),
-      breed: form.breed.trim() || null,
-      photo_path: form.photo_path || null,
-      color_markings: form.color_markings.trim() || null,
-      sex: form.sex || null,
-      altered_status: form.altered_status || null,
-      birth_date: form.birthPrecision ? resolveDate(form.birthPrecision, birthParts) : null,
-      birth_date_precision: form.birthPrecision || 'UNKNOWN',
-      gotcha_date: form.gotchaPrecision ? resolveDate(form.gotchaPrecision, gotchaParts) : null,
-      gotcha_date_precision: form.gotchaPrecision || null,
-      microchip_number: form.microchip_number.trim() || null,
-      akc_registered: isDog ? form.akc_registered : false,
-      akc_registered_name: isDog && form.akc_registered ? (form.akc_registered_name.trim() || null) : null,
-      akc_registration_number: isDog && form.akc_registered ? (form.akc_registration_number.trim() || null) : null,
-      breeder: isDog && form.akc_registered ? (form.breeder.trim() || null) : null,
-      notes: form.notes.trim() || null,
-      nicknames: form.nicknames,
-      favorite_activities: form.favorite_activities,
-    };
+    // `pet` is the row as loaded, so its photo_path is what the form started with.
+    const payload = buildPetUpdatePayload(form, pet, pet.photo_path);
 
     try {
       await entities.Pet.update(pet.id, payload);

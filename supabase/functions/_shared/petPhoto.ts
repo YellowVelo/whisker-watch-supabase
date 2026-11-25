@@ -17,17 +17,11 @@ export function deletablePetPhotoPath(pet: { photo_path?: string | null }): stri
   return path;
 }
 
+// The caller passes its own reportError (from errorReporting.ts) in.
+// This file doesn't import errorReporting.ts itself, because that reads
+// Sentry's env vars when it loads, and the pure unit tests
+// (supabase/tests/pet_photo.test.ts) run without env permission.
 export type PhotoLookupReporter = (err: unknown, tags: Record<string, string>) => void;
-
-// errorReporting.ts reads Sentry's env vars when it loads, so it's only
-// loaded when there's actually an error to report. That keeps this file
-// importable by the pure unit tests (supabase/tests/pet_photo.test.ts),
-// which run without env permission.
-const defaultReporter: PhotoLookupReporter = (err, tags) => {
-  import('./errorReporting.ts')
-    .then(({ reportError }) => reportError(err, tags))
-    .catch(() => {});
-};
 
 // Paths per lookup, so the in(...) filter stays well under PostgREST's URL
 // length limit however many files a folder holds.
@@ -48,7 +42,7 @@ export async function pathsStillInUse(
   admin: SupabaseClient,
   paths: string[],
   excludingPetIds: string[],
-  report: PhotoLookupReporter = defaultReporter,
+  report: PhotoLookupReporter,
 ): Promise<Set<string>> {
   const unique = [...new Set(paths)];
   const excluded = new Set(excludingPetIds);
@@ -88,7 +82,7 @@ export async function deletableFilePaths(
   admin: SupabaseClient,
   paths: (string | null | undefined)[],
   excludingPetIds: string[],
-  report: PhotoLookupReporter = defaultReporter,
+  report: PhotoLookupReporter,
 ): Promise<string[]> {
   const candidates = [...new Set(paths.filter((p): p is string => !!p && !p.startsWith('shared/')))];
   if (candidates.length === 0) return [];

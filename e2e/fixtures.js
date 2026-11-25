@@ -66,8 +66,11 @@ export async function deleteTestPet(client, petId) {
   try {
     const { error: coOwnerError } = await client.from('pet_co_owners').delete().eq('pet_id', petId);
     if (coOwnerError) console.warn(`cleanup: could not remove co-owners of pet ${petId}: ${coOwnerError.message}`);
-    const { error } = await client.functions.invoke('delete-pet', { body: { pet_id: petId } });
+    const { data, error } = await client.functions.invoke('delete-pet', { body: { pet_id: petId } });
     if (error) console.warn(`cleanup: delete-pet failed for pet ${petId}: ${error.message}`);
+    else if (data?.mode !== 'deleted') {
+      console.warn(`cleanup: delete-pet did not delete pet ${petId} (mode: ${data?.mode ?? 'none'}); it may have been handed to a co-owner`);
+    }
   } catch (err) {
     console.warn(`cleanup: could not delete pet ${petId}: ${err?.message ?? err}`);
   }

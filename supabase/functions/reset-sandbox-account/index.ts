@@ -18,7 +18,7 @@
 // Request body: none — always acts on the caller's own account.
 
 import { createClient } from 'jsr:@supabase/supabase-js@2.119.2';
-import { serverError } from '../_shared/errorReporting.ts';
+import { reportError, serverError } from '../_shared/errorReporting.ts';
 import { deletableFilePaths, deletablePetPhotoPath } from '../_shared/petPhoto.ts';
 import { listFolderPaths, removePaths } from '../_shared/storageFiles.ts';
 
@@ -141,7 +141,7 @@ Deno.serve(async (req) => {
       console.warn('Storage list error (continuing):', (err as Error).message);
     }
     try {
-      const filesToDelete = await deletableFilePaths(admin, [...wipedPhotoPaths, ...folderPaths], wipedPetIds);
+      const filesToDelete = await deletableFilePaths(admin, [...wipedPhotoPaths, ...folderPaths], wipedPetIds, reportError);
       const removeError = await removePaths(admin, filesToDelete);
       if (removeError) console.warn('Storage cleanup error (continuing):', removeError);
     } catch (err) {

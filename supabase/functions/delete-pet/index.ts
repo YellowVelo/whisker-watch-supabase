@@ -237,6 +237,7 @@ Deno.serve(async (req) => {
       admin,
       [deletablePetPhotoPath(pet), ...(docs ?? []).map((d) => d.storage_path as string)],
       [petId],
+      reportError,
     );
 
     const { error: deleteError } = await admin
