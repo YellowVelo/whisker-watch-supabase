@@ -13,6 +13,11 @@
 //     not its owner-only medications.
 //   - Check-ins come only from the 30-day window ending today on the
 //     caller's calendar, with only the 11 counted attributes.
+//   - Weight (spec 0081) comes from weight observations of both kinds
+//     (check-in and standalone), one per day, picked like the app: a
+//     standalone weight beats a check-in weight, then the later save, and
+//     values outside 0.1–300 lbs are skipped. A sitter sees a sat pet's
+//     weights during the sit; a stranger and a logged-out caller don't.
 //
 // Same shape as co_owner_access.test.ts: users are created and signed in
 // once for the whole file (Supabase Auth limits sign-ins per IP). The
@@ -37,6 +42,7 @@ import {
   loadPet,
   loadRecentCheckIns,
   loadTrendsSummaryInputs,
+  loadWeights,
 } from '../functions/ask-vet-assistant/context.ts';
 
 // UTC+14: "today" here is a day ahead of UTC for most of the UTC day, so a
@@ -68,8 +74,8 @@ async function seedCheckIn(
   petId: string,
   date: string,
   status: string,
-  observations: { typeId: string; value: string }[] = [],
-) {
+  observations: { typeId: string; value?: string | null; numeric_value?: number }[] = [],
+): Promise<string> {
   const admin = adminClient();
   const { data, error } = await admin
     .from('daily_check_ins')
@@ -84,20 +90,28 @@ async function seedCheckIn(
         created_by: owner.userId,
         daily_check_in_id: data.id,
         observation_type_id: o.typeId,
-        value: o.value,
+        value: o.value ?? null,
+        numeric_value: o.numeric_value ?? null,
       })),
     );
     if (obsError) throw new Error(`observation seed failed: ${obsError.message}`);
   }
+  return data.id;
 }
 
-// Same check as co_owner_access.test.ts: a real read with the admin client,
-// so a dropped table shows up as missing rather than an error.
-async function tableExists(table: string): Promise<boolean> {
-  const { error, status } = await adminClient().from(table).select('id').limit(1);
-  if (!error) return true;
-  if (error.code === 'PGRST205' || error.code === '42P01' || status === 404) return false;
-  throw new Error(`checking ${table} failed: ${error.message}`);
+// A standalone weight (no check-in), saved as the owner the way the app's
+// Log weight sheet does: observed_at is noon UTC of the chosen date. Saved
+// one at a time, so each later call has a later updated_at.
+async function logWeight(owner: ScratchUser, petId: string, typeId: string, date: string, lbs: number) {
+  const { error } = await owner.client.from('observations').insert({
+    pet_id: petId,
+    created_by: owner.userId,
+    daily_check_in_id: null,
+    observation_type_id: typeId,
+    numeric_value: lbs,
+    observed_at: `${date}T12:00:00.000Z`,
+  });
+  if (error) throw new Error(`weight insert failed: ${error.message}`);
 }
 
 Deno.test('ask-vet-assistant context loaders (spec 0080)', async (t) => {
@@ -143,7 +157,7 @@ Deno.test('ask-vet-assistant context loaders (spec 0080)', async (t) => {
     ]);
     if (medError) throw new Error(`medication insert failed: ${medError.message}`);
 
-    const types = await typeIds(['appetite', 'energy', 'other']);
+    const types = await typeIds(['appetite', 'energy', 'other', 'weight']);
 
     await t.step('owner household includes the shared pet, not the memorial pet (AC3)', async () => {
       const names = (await loadHouseholdPets(owner.client, owner.userId)).map((p) => p.name);
@@ -225,29 +239,64 @@ Deno.test('ask-vet-assistant context loaders (spec 0080)', async (t) => {
       assertEquals(await loadTrendsSummaryInputs(owner.client, petId, '7D', OWNER_ZONE), null, 'one check-in is not enough');
       await seedCheckIn(owner, petId, today(-1), 'skipped');
       assertEquals(await loadTrendsSummaryInputs(owner.client, petId, '7D', OWNER_ZONE), null, 'skipped days do not count');
-      await seedCheckIn(owner, petId, today(-2), 'great');
+      // A check-in weight typed in today(-2)'s check-in.
+      await seedCheckIn(owner, petId, today(-2), 'great', [{ typeId: types.weight, numeric_value: 10.8 }]);
 
-      // Migration 0061 (spec 0081) drops symptom_logs and moves weight to
-      // observations. Once the gate passes, this loader reads weight from
-      // symptom_logs and throws if the table is gone, so the rest of this
-      // step only runs where the table still exists.
-      if (!(await tableExists('symptom_logs'))) {
-        console.log('  symptom_logs does not exist on this project (spec 0081 moves weight to observations); skipped the weight seed and the unlocked-summary checks');
-        return;
-      }
-
-      const { error: weightError } = await owner.client.from('symptom_logs').insert([
-        { pet_id: petId, created_by: owner.userId, date: today(-3), weight_grams: 4536 },
-        { pet_id: petId, created_by: owner.userId, date: today(-1), weight_grams: 4990 },
-      ]);
-      if (weightError) throw new Error(`weight insert failed: ${weightError.message}`);
+      // Weights of both kinds, one per day after the pick:
+      //   today(-8)  9.0   outside the 7D range (cutoff today(-7))
+      //   today(-3)  10.0  standalone
+      //   today(-2)  11.0  standalone beats the check-in's 10.8
+      //   today(-1)  11.6  the later of two standalone saves (11.4 first)
+      //   today(0)   400   out of range: skipped, so today has no weight
+      await logWeight(owner, petId, types.weight, today(-8), 9.0);
+      await logWeight(owner, petId, types.weight, today(-3), 10.0);
+      await logWeight(owner, petId, types.weight, today(-2), 11.0);
+      await logWeight(owner, petId, types.weight, today(-1), 11.4);
+      await logWeight(owner, petId, types.weight, today(-1), 11.6);
+      await logWeight(owner, petId, types.weight, today(0), 400);
 
       const inputs = await loadTrendsSummaryInputs(owner.client, petId, '7D', OWNER_ZONE);
       assert(inputs, 'two non-skipped check-ins unlock the summary');
       assertEquals(inputs.appetite, { currentLabel: '1 Symptom', currentSubtitle: 'Ate a little less' });
       assertEquals(inputs.energy, { currentLabel: 'Normal', currentSubtitle: 'No change from usual' });
-      assertEquals(inputs.weight?.currentLbs, 11);
-      assertEquals(Math.round((inputs.weight?.deltaLbs ?? 0) * 10) / 10, 1);
+      assertEquals(inputs.weight, { currentLbs: 11.6, deltaLbs: 0.6 });
+
+      // Insights gets every day's weight, one per day, newest first.
+      assertEquals(await loadWeights(owner.client, petId), [
+        { date: today(-1), lbs: 11.6 },
+        { date: today(-2), lbs: 11 },
+        { date: today(-3), lbs: 10 },
+        { date: today(-8), lbs: 9 },
+      ]);
+    });
+
+    await t.step('weights: a check-in weight counts when it is the only one that day', async () => {
+      const petId = await makePet(owner, 'Ctx Check-In Weight Pet');
+      await seedCheckIn(owner, petId, today(-1), 'great', [{ typeId: types.weight, numeric_value: 8.44 }]);
+      await seedCheckIn(owner, petId, today(0), 'off', [{ typeId: types.weight, numeric_value: 8.66 }]);
+      assertEquals(await loadWeights(owner.client, petId), [
+        { date: today(0), lbs: 8.7 },
+        { date: today(-1), lbs: 8.4 },
+      ]);
+      const inputs = await loadTrendsSummaryInputs(owner.client, petId, '7D', OWNER_ZONE);
+      assertEquals(inputs?.weight, { currentLbs: 8.7, deltaLbs: 0.3 });
+    });
+
+    await t.step('weights: owner, co-owner and sitter (during the sit) see them; a stranger and logged-out caller do not', async () => {
+      await seedCheckIn(owner, sharedPet, today(0), 'great', [{ typeId: types.weight, numeric_value: 20.4 }]);
+      await logWeight(owner, sharedPet, types.weight, today(-1), 20.2);
+      const expected = [{ date: today(0), lbs: 20.4 }, { date: today(-1), lbs: 20.2 }];
+      for (const user of [owner, coOwner, sitter]) {
+        assertEquals(await loadWeights(user.client, sharedPet), expected, `${user.email} should see the weights`);
+      }
+      assertEquals(await loadWeights(stranger.client, sharedPet), []);
+      // As for loadPet: the anon role is refused outright or sees nothing.
+      const anon = await loadWeights(loggedOut, sharedPet).then(
+        (weights) => ({ weights, error: null as string | null }),
+        (err: Error) => ({ weights: [], error: err.message }),
+      );
+      assertEquals(anon.weights, [], 'logged-out caller gets no weights');
+      if (anon.error) assert(anon.error.includes('permission denied'), `unexpected error: ${anon.error}`);
     });
   } finally {
     const admin = adminClient();

@@ -13,6 +13,8 @@
 //    storage's own rules always decide who can scan a file (spec 0082).
 // 5. generate-vet-report no longer reads the retired wellness_scores table
 //    or shows a Health Score (spec 0080).
+// 6. ask-vet-assistant and generate-vet-report no longer mention the
+//    retired symptom_logs or food_logs tables (spec 0081).
 //
 // Run: deno test --allow-read --allow-env --node-modules-dir=none supabase/tests/function_hygiene.test.ts
 
@@ -121,4 +123,21 @@ Deno.test('generate-vet-report no longer reads wellness_scores or shows a Health
   const source = await Deno.readTextFile(new URL('generate-vet-report/index.ts', FUNCTIONS_DIR));
   assert(!/wellness_scores/.test(source), 'generate-vet-report/index.ts still mentions wellness_scores');
   assert(!/health[ _]score/i.test(source), 'generate-vet-report/index.ts still mentions Health Score');
+});
+
+Deno.test('ask-vet-assistant and generate-vet-report never read symptom_logs or food_logs (spec 0081, FR5/FR16)', async () => {
+  const offenders: string[] = [];
+  const files = [
+    ...(await listTsFiles(new URL('ask-vet-assistant/', FUNCTIONS_DIR))),
+    ...(await listTsFiles(new URL('generate-vet-report/', FUNCTIONS_DIR))),
+    new URL('_shared/weight.ts', FUNCTIONS_DIR),
+  ];
+  assert(files.length >= 3, 'expected to find the two functions\' source files');
+  for (const file of files) {
+    const source = await Deno.readTextFile(file);
+    for (const table of ['symptom_logs', 'food_logs']) {
+      if (source.includes(table)) offenders.push(`${file.pathname.split('/supabase/')[1]}: ${table}`);
+    }
+  }
+  assertEquals(offenders, [], `Retired tables still mentioned:\n${offenders.join('\n')}`);
 });

@@ -66,7 +66,7 @@ function allBuilt(): Record<string, BuiltPrompt> {
   return {
     pet_chat: buildPetChat({ pet, medications: meds, baseline, screen: 'Trends', history: HISTORY, question: QUESTION, nowMs: NOW }),
     household_chat: buildHouseholdChat({ pets: [pet, { name: 'Auggie', species: 'Dog' }], history: HISTORY, question: QUESTION }),
-    pet_insights: buildPetInsights({ pet, medications: meds, baseline, screen: 'Timeline', checkIns, weights: [{ date: '2026-11-20', grams: 4536 }], nowMs: NOW }),
+    pet_insights: buildPetInsights({ pet, medications: meds, baseline, screen: 'Timeline', checkIns, weights: [{ date: '2026-11-20', lbs: 10 }], nowMs: NOW }),
     trends_summary: buildTrendsSummary({ petName: 'Tribble', appetite: { currentLabel: '1 Symptom', currentSubtitle: 'Ate a little less' }, waterIntake: null, energy: { currentLabel: 'Normal' }, weight: { currentLbs: 10.2, deltaLbs: -0.3 } }),
     scan_vaccines: buildScanVaccines({ ownedPets: [{ name: 'Tribble' }, { name: 'Auggie' }] }),
     scan_vaccine_single: buildScanVaccineSingle(),
@@ -158,7 +158,7 @@ Deno.test('pet insights: keeps the response shape and wording of PetAIInsights.j
   assertStringIncludes(b.user, 'Pet Name: Tribble\nSpecies: Cat\nAge: 8 years\nBreed: Tabby\nKnown Conditions: CKD\nActive Medications: Benazepril 2.5mg Once daily');
   assertStringIncludes(b.user, 'Established Baseline (owner-reported normal): Tribble has one or more ongoing health conditions');
   assertStringIncludes(b.user, "The owner just came from Tribble's Timeline screen, so lean toward that topic first if it's relevant.");
-  assertStringIncludes(b.user, 'Weight (most recent first):\n2026-11-20: 10.00 lbs');
+  assertStringIncludes(b.user, 'Weight (most recent first):\n2026-11-20: 10.0 lbs');
   assert(!b.user.includes('Recent Health Logs'), 'still reads old symptom logs');
 });
 

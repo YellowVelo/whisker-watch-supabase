@@ -142,9 +142,11 @@ export interface CheckInDay {
   symptoms: CheckInSymptom[];
 }
 
+// One weight per day (the day's weight, _shared/weight.ts), in lbs rounded
+// to one decimal (spec 0081).
 export interface WeightEntry {
   date: string; // YYYY-MM-DD
-  grams: number;
+  lbs: number;
 }
 
 // What a Trends card shows as "now" for one attribute (getObservationTrend's
@@ -363,7 +365,7 @@ export function buildPetInsights(ctx: PetInsightsContext): BuiltPrompt {
   const baselineSummary = formatBaselineForAI(baseline, pet.name, pet.species);
   const { vibes, symptoms } = describeCheckIns(ctx.checkIns);
   const weightText = byDateDesc(ctx.weights)
-    .map((w) => `${w.date}: ${(w.grams / 453.6).toFixed(2)} lbs`)
+    .map((w) => `${w.date}: ${w.lbs.toFixed(1)} lbs`)
     .join('\n');
 
   const profile = [
