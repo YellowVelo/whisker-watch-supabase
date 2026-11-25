@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 
 // Shown by Sentry's ErrorBoundary (see App.jsx) when a render error is
 // caught, instead of the blank white screen a crash produced before spec
-// 0052. Modeled on PageNotFound.jsx's layout for a consistent "something's
+// 0052. Modeled on src/pages/PageNotFound.jsx's layout for a consistent "something's
 // wrong, here's a clear way back" pattern.
 export default function CrashFallback() {
   return (

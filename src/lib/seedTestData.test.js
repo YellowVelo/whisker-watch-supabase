@@ -60,6 +60,16 @@ vi.mock('@/lib/weightClient', () => ({
   }),
 }));
 
+// The device's zone, as detectTimezone() reports it. Pinned to a non-UTC
+// zone so the fallback tests can tell "used the device zone" apart from a
+// hard-coded UTC, whatever zone the machine running the tests is in.
+const DEVICE_ZONE = 'Asia/Tokyo';
+let deviceZone = DEVICE_ZONE;
+vi.mock('@/lib/timezone', async (importOriginal) => {
+  const actual = await importOriginal();
+  return { ...actual, detectTimezone: () => deviceZone };
+});
+
 const { SEED_SCENARIOS, gramsToLbs, GRAMS_PER_LB, makeDaysAgo } = await import('./seedTestData');
 
 const scenario = (key) => SEED_SCENARIOS.find((s) => s.key === key);
@@ -72,6 +82,7 @@ beforeEach(() => {
   nextId = 0;
   profile = { timezone: 'UTC' };
   profileError = null;
+  deviceZone = DEVICE_ZONE;
   reportClientError.mockClear();
 });
 
@@ -205,20 +216,30 @@ describe("seeded dates use the owner's time zone", () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(US_EVENING);
     profile = { timezone: null };
-    const device = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
     await scenario('healthy_dog').run();
-    for (const w of weights) expect(w.timezone).toBe(device);
+    expect(weights).toHaveLength(3);
+    for (const w of weights) expect(w.timezone).toBe(DEVICE_ZONE);
+    // 5am UTC on 25 Nov is 2pm on 25 Nov in Tokyo.
+    expect(weights.map((w) => w.date)).toEqual(['2026-11-23', '2026-11-24', '2026-11-25']);
     expect(reportClientError).not.toHaveBeenCalled();
+  });
+
+  it('falls back to UTC when neither the profile nor the device has a zone', async () => {
+    profile = { timezone: null };
+    deviceZone = null;
+
+    await scenario('healthy_dog').run();
+    expect(weights).toHaveLength(3);
+    for (const w of weights) expect(w.timezone).toBe('UTC');
   });
 
   it('reports a failed profile lookup and still seeds, using the device time zone', async () => {
     profileError = new Error('profile read failed');
-    const device = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
     await scenario('healthy_dog').run();
     expect(weights).toHaveLength(3);
-    for (const w of weights) expect(w.timezone).toBe(device);
+    for (const w of weights) expect(w.timezone).toBe(DEVICE_ZONE);
     expect(reportClientError).toHaveBeenCalledWith(profileError, expect.objectContaining({ feature: 'sandbox_seed' }));
   });
 

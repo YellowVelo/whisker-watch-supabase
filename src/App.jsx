@@ -3,10 +3,8 @@ import { useEffect } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import { Sentry } from '@/lib/errorMonitoring';
 import CrashFallback from '@/components/CrashFallback';
-import { QueryClientProvider } from '@tanstack/react-query'
-import { queryClientInstance } from '@/lib/query-client'
 import { BrowserRouter as Router, Route, Routes, useLocation, useParams, Navigate, Outlet } from 'react-router-dom';
-import PageNotFound from './lib/PageNotFound';
+import PageNotFound from './pages/PageNotFound';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import AccountTypeBanner from './components/AccountTypeBanner';
@@ -161,14 +159,12 @@ function App() {
   return (
     <Sentry.ErrorBoundary fallback={<CrashFallback />}>
       <AuthProvider>
-        <QueryClientProvider client={queryClientInstance}>
-          <InstallPromptProvider>
-            <Router>
-              <AuthenticatedApp />
-            </Router>
-            <Toaster />
-          </InstallPromptProvider>
-        </QueryClientProvider>
+        <InstallPromptProvider>
+          <Router>
+            <AuthenticatedApp />
+          </Router>
+          <Toaster />
+        </InstallPromptProvider>
       </AuthProvider>
     </Sentry.ErrorBoundary>
   )

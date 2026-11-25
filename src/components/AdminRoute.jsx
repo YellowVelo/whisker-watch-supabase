@@ -9,10 +9,8 @@ const DefaultFallback = () => (
 );
 
 // Admin-only route gate (spec 0053) — modeled on ProtectedRoute.jsx, with
-// an added role==='admin' check. This is the first fully admin-gated
-// route in the app; every existing "admin" check before this was a
-// single small UI conditional (PageNotFound.jsx's Admin Note), not a
-// route boundary. Logged-out visitors go to /login same as any other
+// an added role==='admin' check. It is the app's only admin-gated route
+// boundary. Logged-out visitors go to /login same as any other
 // protected route; logged-in non-admins are redirected to / rather than
 // shown any error that would confirm the route exists.
 export default function AdminRoute() {
