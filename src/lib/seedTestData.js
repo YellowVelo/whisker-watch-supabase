@@ -1,5 +1,6 @@
 import { entities } from '@/api/entities';
 import { markGreatDay, markSkipped, markOffTough } from '@/lib/checkin/checkinClient';
+import { addWeight } from '@/lib/weightClient';
 
 // Test-account seed scenarios. Each function creates realistic sample
 // data via the normal entity API (so it goes through the same RLS
@@ -12,6 +13,18 @@ function daysAgo(n) {
   const d = new Date();
   d.setDate(d.getDate() - n);
   return d.toISOString().slice(0, 10);
+}
+
+// daysAgo() gives UTC calendar dates, so seeded weights are checked
+// against today in UTC too (addWeight refuses a future date).
+const SEED_TIMEZONE = 'UTC';
+
+// Seeded weights used to be stored in grams on the old symptom logs; they
+// now go to weight observations in lbs, rounded to one decimal
+// (29500 g -> 65.0 lbs), as weightClient stores them.
+export const GRAMS_PER_LB = 453.59237;
+export function gramsToLbs(grams) {
+  return Math.round((grams / GRAMS_PER_LB) * 10) / 10;
 }
 
 // ── Daily Check-In history backfill (for testing Trends charts) ──
@@ -129,25 +142,22 @@ async function seedHealthyDog() {
     administered_by: 'Dr. Sample, DVM',
   });
 
-  await entities.FoodLog.create({
+  // The old meal-log row, now a current-diet entry (same day as before).
+  await entities.PetFood.create({
     pet_id: pet.id,
-    date: daysAgo(1),
-    food_name: 'Adult Dog Formula',
+    name: 'Adult Dog Formula',
     food_type: 'Dry food',
-    amount_eaten: 'All',
-    reaction: 'Good',
+    start_date: daysAgo(1),
+    active: true,
   });
 
-  for (let i = 0; i < 3; i++) {
-    await entities.SymptomLog.create({
-      pet_id: pet.id,
-      date: daysAgo(i),
-      appetite: 'Ate all',
-      energy_level: 'Playful',
-      stool_quality: 'Normal',
-      water_intake: 'Normal',
-      weight_grams: 29500,
-    });
+  // Three Great Day check-ins (oldest first, as a real owner would check
+  // in), each day with one weight. addWeight keeps one weight per pet per
+  // day: a re-run on the same day updates that day's weight.
+  for (let i = 2; i >= 0; i--) {
+    const date = daysAgo(i);
+    await markGreatDay(pet.id, date, 'app');
+    await addWeight(pet.id, { date, lbs: gramsToLbs(29500) }, SEED_TIMEZONE);
   }
 
   return [pet];
@@ -188,14 +198,7 @@ async function seedMultiPetHousehold() {
   });
 
   for (const pet of [dog, cat, kitten]) {
-    await entities.SymptomLog.create({
-      pet_id: pet.id,
-      date: daysAgo(0),
-      appetite: 'Ate all',
-      energy_level: 'Normal',
-      stool_quality: 'Normal',
-      water_intake: 'Normal',
-    });
+    await markGreatDay(pet.id, daysAgo(0), 'app');
   }
 
   return [dog, cat, kitten];
@@ -203,7 +206,7 @@ async function seedMultiPetHousehold() {
 
 // Demo account showcase: a senior cat trending down and a healthy dog
 // staying stable, so the Home/Insights screens have something worth
-// looking at, plus a few medication/food/vaccination records for
+// looking at, plus a few medication/current-diet/vaccination records for
 // variety. Reuses the same seedCheckInHistory/plan helpers as the
 // Insights Trends test scenario above — same scoring, same code path.
 // Fixed, permanent images uploaded to a path outside any user's own
@@ -258,14 +261,13 @@ async function seedDemoShowcase() {
       next_due_date: daysAgo(-245),
       administered_by: 'Dr. Kim, DVM',
     }),
-    entities.FoodLog.create({
-      pet_id: dog.id,
-      date: daysAgo(1),
-      food_name: 'Adult Formula',
+    ...[cat, dog].map((pet) => entities.PetFood.create({
+      pet_id: pet.id,
+      name: 'Adult Formula',
       food_type: 'Dry food',
-      amount_eaten: 'All',
-      reaction: 'Good',
-    }),
+      start_date: daysAgo(1),
+      active: true,
+    })),
   ]);
 
   // Independent pets, so their histories can seed in parallel; each
