@@ -1,8 +1,9 @@
 import * as Sentry from '@sentry/react';
 
 // Production error/crash monitoring (spec 0052). Sentry.init() is skipped
-// entirely when VITE_SENTRY_DSN is unset (e.g. local dev without a DSN
-// configured) so this is a silent no-op rather than an error — monitoring
+// entirely when VITE_SENTRY_DSN is unset, or when VITE_SENTRY_ENVIRONMENT
+// isn't exactly 'production' (spec 0084: dev, staging, local and CI send
+// nothing), so this is a silent no-op rather than an error — monitoring
 // must never be able to break the app itself.
 const dsn = import.meta.env.VITE_SENTRY_DSN;
 const environment = import.meta.env.VITE_SENTRY_ENVIRONMENT || 'development';
@@ -11,7 +12,8 @@ const environment = import.meta.env.VITE_SENTRY_ENVIRONMENT || 'development';
 // shared demo login (demo). Everyone else reports, including Lynn's own
 // 'owner' account (spec 0078, PA-15; before that, only 'production' did),
 // and errors from before sign-in, when account_type isn't known yet.
-// Edge Functions don't filter at all (_shared/errorReporting.ts).
+// Edge Functions also report only from production, but don't filter by
+// account type (_shared/errorReporting.ts).
 const EXCLUDED_ACCOUNT_TYPES = new Set(['test', 'demo']);
 
 // Network drops (spec 0084, FR5): the person's connection failed, not the
