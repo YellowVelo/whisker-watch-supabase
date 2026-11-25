@@ -10,11 +10,14 @@ vi.mock('@sentry/react', () => ({
 }));
 
 // errorMonitoring.js reads VITE_SENTRY_DSN once, when it's first imported,
-// so each test imports a fresh copy with the DSN it needs.
-async function loadModule({ dsn } = {}) {
+// so each test imports a fresh copy with the DSN it needs. The environment
+// defaults to 'production' when a DSN is given (spec 0084: only production
+// reports), so the reportClientError tests below exercise the sending path.
+async function loadModule({ dsn, environment } = {}) {
   vi.resetModules();
-  // Always set it: vitest loads the local .env, which may have a real DSN.
+  // Always set both: vitest loads the local .env, which may have real values.
   vi.stubEnv('VITE_SENTRY_DSN', dsn ?? '');
+  vi.stubEnv('VITE_SENTRY_ENVIRONMENT', environment ?? (dsn ? 'production' : ''));
   return import('./errorMonitoring.js');
 }
 
@@ -41,6 +44,72 @@ describe('shouldSendEvent (spec 0078, PA-15)', () => {
     const { shouldSendEvent } = await loadModule();
     expect(shouldSendEvent({ tags: { account_type: 'test' } })).toBe(false);
     expect(shouldSendEvent({ tags: { account_type: 'demo' } })).toBe(false);
+  });
+});
+
+describe('shouldSendEvent network drops (spec 0084, AC3)', () => {
+  const errorEvent = (value, type = 'TypeError', tags = {}) => ({
+    tags,
+    exception: { values: [{ type, value }] },
+  });
+
+  it.each(['Failed to fetch', 'Load failed', 'NetworkError when attempting to fetch resource.'])(
+    'drops "%s"',
+    async (message) => {
+      const { shouldSendEvent } = await loadModule();
+      expect(shouldSendEvent(errorEvent(message))).toBe(false);
+      expect(shouldSendEvent(errorEvent(`TypeError: ${message}`, 'Error', { account_type: 'production' }))).toBe(false);
+    },
+  );
+
+  it("drops Supabase's AuthRetryableFetchError", async () => {
+    const { shouldSendEvent } = await loadModule();
+    expect(shouldSendEvent(errorEvent('{}', 'AuthRetryableFetchError'))).toBe(false);
+  });
+
+  it('drops when any exception in the chain is a network drop', async () => {
+    const { shouldSendEvent } = await loadModule();
+    const event = { exception: { values: [{ type: 'Error', value: 'wrapper' }, { type: 'TypeError', value: 'Load failed' }] } };
+    expect(shouldSendEvent(event)).toBe(false);
+  });
+
+  it('keeps "Failed to fetch dynamically imported module" (a broken deploy, not a drop)', async () => {
+    const { shouldSendEvent } = await loadModule();
+    expect(
+      shouldSendEvent(errorEvent('Failed to fetch dynamically imported module: https://wyskerwatch.com/assets/Home-abc.js')),
+    ).toBe(true);
+  });
+
+  it('keeps ordinary errors', async () => {
+    const { shouldSendEvent } = await loadModule();
+    expect(shouldSendEvent(errorEvent('permission denied for table pets', 'Error'))).toBe(true);
+    expect(shouldSendEvent({ exception: {} })).toBe(true);
+  });
+});
+
+describe('only production reports (spec 0084, AC1)', () => {
+  const DSN = 'https://key@example.test/1';
+
+  it.each(['development', 'staging', ''])('sends nothing when the environment is "%s"', async (environment) => {
+    const { reportClientError, sentryEnabled } = await loadModule({ dsn: DSN, environment });
+    reportClientError(new Error('x'), { feature: 'home' });
+    expect(sentryEnabled).toBe(false);
+    expect(console.error).toHaveBeenCalled();
+    expect(captureException).not.toHaveBeenCalled();
+  });
+
+  it('sends when the environment is production and a DSN is set', async () => {
+    const { reportClientError, sentryEnabled } = await loadModule({ dsn: DSN, environment: 'production' });
+    reportClientError(new Error('x'), { feature: 'home' });
+    expect(sentryEnabled).toBe(true);
+    expect(captureException).toHaveBeenCalledTimes(1);
+  });
+
+  it('sends nothing in production without a DSN', async () => {
+    const { reportClientError, sentryEnabled } = await loadModule({ environment: 'production' });
+    reportClientError(new Error('x'), { feature: 'home' });
+    expect(sentryEnabled).toBe(false);
+    expect(captureException).not.toHaveBeenCalled();
   });
 });
 
