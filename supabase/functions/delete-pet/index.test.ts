@@ -255,6 +255,52 @@ Deno.test("delete-pet: keeps a photo another pet still uses as its photo or a sc
   }
 });
 
+Deno.test('delete-pet: keeps a scan file another pet uses as its photo (spec 0083 FR3)', async () => {
+  const owner = await createScratchUser('scan-photo-owner');
+  const other = await createScratchUser('scan-photo-other');
+  const admin = adminClient();
+  // A valid 1x1 PNG.
+  const png = Uint8Array.from(
+    atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII='),
+    (c) => c.charCodeAt(0),
+  );
+  const scanUsedAsPhoto = `${owner.userId}/scan-used-as-photo.png`;
+  const scanUnused = `${owner.userId}/scan-unused.png`;
+  try {
+    for (const path of [scanUsedAsPhoto, scanUnused]) {
+      const { error } = await owner.client.storage.from('uploads').upload(path, png, { contentType: 'image/png' });
+      if (error) throw new Error(`upload failed: ${error.message}`);
+    }
+
+    const petId = await createPet(owner, 'Scratch Scan Photo Pet');
+    const { error: docError } = await admin.from('pet_documents').insert([
+      { pet_id: petId, storage_path: scanUsedAsPhoto, kind: 'vaccination' },
+      { pet_id: petId, storage_path: scanUnused, kind: 'vaccination' },
+    ]);
+    if (docError) throw new Error(`document link failed: ${docError.message}`);
+
+    // Someone else's pet using the scan file as its photo. Seeded with the
+    // admin client, because migration 0062 refuses this as a user.
+    const { error: otherError } = await admin.from('pets')
+      .insert({ name: 'Scratch Other Scan Photo Pet', created_by: other.userId, photo_path: scanUsedAsPhoto });
+    if (otherError) throw new Error(`other pet insert failed: ${otherError.message}`);
+
+    const { status, json } = await callFunction('delete-pet', owner.accessToken, { pet_id: petId });
+    assertEquals(status, 200);
+    assertEquals(json.mode, 'deleted');
+
+    const { data: files } = await admin.storage.from('uploads').list(owner.userId);
+    const names = (files ?? []).map((f: { name: string }) => f.name);
+    assertEquals(names.includes('scan-used-as-photo.png'), true, 'a scan another pet uses as its photo is kept');
+    assertEquals(names.includes('scan-unused.png'), false, 'a scan nobody else uses is deleted');
+  } finally {
+    const { data: files } = await admin.storage.from('uploads').list(owner.userId);
+    if (files?.length) await admin.storage.from('uploads').remove(files.map((f: { name: string }) => `${owner.userId}/${f.name}`));
+    await deleteScratchUser(owner.userId);
+    await deleteScratchUser(other.userId);
+  }
+});
+
 Deno.test('delete-pet: transfer keeps every other co-owner and passes the pet sit on (spec 0075)', async () => {
   const owner = await createScratchUser('transfer3-owner');
   const first = await createScratchUser('transfer3-first');

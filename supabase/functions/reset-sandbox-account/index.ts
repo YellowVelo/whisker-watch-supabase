@@ -19,7 +19,7 @@
 
 import { createClient } from 'jsr:@supabase/supabase-js@2.119.2';
 import { serverError } from '../_shared/errorReporting.ts';
-import { deletablePetPhotoPath, photoPathStillInUse } from '../_shared/petPhoto.ts';
+import { deletableFilePaths, deletablePetPhotoPath } from '../_shared/petPhoto.ts';
 import { listFolderPaths, removePaths } from '../_shared/storageFiles.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
@@ -80,17 +80,11 @@ Deno.serve(async (req) => {
       return json({ error: 'Failed to look up pets' }, 500);
     }
 
-    // A photo is kept if a pet outside this wipe still uses its path, as a
-    // photo or a scanned document (spec 0083 FR3). Every pet being wiped is
-    // excluded, so they don't count against each other.
+    // Remembered before the delete: the wiped pets' ids (excluded from the
+    // in-use check below) and their photo paths (a photo can sit outside
+    // this user's folder, e.g. one a co-owner uploaded).
     const wipedPetIds = (ownedPets ?? []).map((p) => p.id as string);
-    for (const pet of ownedPets ?? []) {
-      const path = deletablePetPhotoPath(pet);
-      if (path && !(await photoPathStillInUse(admin, path, wipedPetIds))) {
-        const { error: removeError } = await admin.storage.from('uploads').remove([path]);
-        if (removeError) console.warn('Storage removal error (continuing):', removeError.message);
-      }
-    }
+    const wipedPhotoPaths = (ownedPets ?? []).map((p) => deletablePetPhotoPath(p));
 
     const { error: deleteOwnedError } = await admin
       .from('pets')
@@ -131,14 +125,27 @@ Deno.serve(async (req) => {
       return json({ error: 'Failed to delete pet sits' }, 500);
     }
 
-    // ── Clean up any remaining Storage objects under this user's folder ─
-    // Every page, not just the first 100 (shared helpers, spec 0075).
+    // ── Delete the wiped pets' photos and this user's folder ────────────
+    // Every page of the folder, not just the first 100 (shared helpers,
+    // spec 0075). Every file, folder or photo, goes through the same rule
+    // as account deletion (migration 0058 step (e), spec 0083 FR3): it's
+    // kept if a pet outside this wipe still uses it as its photo or a
+    // scanned document, e.g. a photo this account uploaded for someone
+    // else's pet it co-owns. The wiped pets are excluded so they don't
+    // count against each other. Looked up in batches, not one query per
+    // file. On a lookup error every file is kept and the error reported.
+    let folderPaths: string[] = [];
     try {
-      const paths = await listFolderPaths(admin, userId);
-      const removeError = await removePaths(admin, paths);
-      if (removeError) console.warn('Storage cleanup error (continuing):', removeError);
+      folderPaths = await listFolderPaths(admin, userId);
     } catch (err) {
       console.warn('Storage list error (continuing):', (err as Error).message);
+    }
+    try {
+      const filesToDelete = await deletableFilePaths(admin, [...wipedPhotoPaths, ...folderPaths], wipedPetIds);
+      const removeError = await removePaths(admin, filesToDelete);
+      if (removeError) console.warn('Storage cleanup error (continuing):', removeError);
+    } catch (err) {
+      console.warn('Storage cleanup error (continuing):', (err as Error).message);
     }
 
     return json({ success: true });
