@@ -113,6 +113,115 @@ describe('only production reports (spec 0084, AC1)', () => {
   });
 });
 
+// QA additions for spec 0084: malformed events, real-world message
+// variants, and the two filters (account type, network drop) together.
+describe('shouldSendEvent edge cases (spec 0084 QA)', () => {
+  const errorEvent = (value, type = 'TypeError', tags = {}) => ({
+    tags,
+    exception: { values: [{ type, value }] },
+  });
+
+  it('never throws on malformed events, and keeps them', async () => {
+    const { shouldSendEvent } = await loadModule();
+    for (const event of [
+      null,
+      undefined,
+      {},
+      { exception: null },
+      { exception: { values: null } },
+      { exception: { values: {} } },
+      { exception: { values: 'Failed to fetch' } },
+      { exception: { values: [] } },
+      { exception: { values: [null, undefined] } },
+      { exception: { values: [{ type: 'TypeError' }] } },
+      { exception: { values: [{ type: 'TypeError', value: 42 }] } },
+      { exception: { values: [{ type: 'TypeError', value: { message: 'Failed to fetch' } }] } },
+    ]) {
+      expect(() => shouldSendEvent(event)).not.toThrow();
+      expect(shouldSendEvent(event)).toBe(true);
+    }
+  });
+
+  it("drops Chrome's newer \"Failed to fetch (host)\" wording", async () => {
+    const { shouldSendEvent } = await loadModule();
+    expect(shouldSendEvent(errorEvent('Failed to fetch (abc.supabase.co)'))).toBe(false);
+  });
+
+  it('drops AuthRetryableFetchError whatever its message', async () => {
+    const { shouldSendEvent } = await loadModule();
+    expect(shouldSendEvent(errorEvent('Load failed', 'AuthRetryableFetchError'))).toBe(false);
+    expect(shouldSendEvent(errorEvent(undefined, 'AuthRetryableFetchError'))).toBe(false);
+  });
+
+  it('keeps other browsers\' "old copy after a deploy" errors', async () => {
+    const { shouldSendEvent } = await loadModule();
+    // Firefox and Safari word a failed dynamic import differently from Chrome.
+    expect(shouldSendEvent(errorEvent('error loading dynamically imported module: https://x/assets/a.js'))).toBe(true);
+    expect(shouldSendEvent(errorEvent('Importing a module script failed.'))).toBe(true);
+  });
+
+  it('keeps a network-looking message that only appears outside the exception', async () => {
+    const { shouldSendEvent } = await loadModule();
+    // Only exception values are checked; a plain message event is kept.
+    expect(shouldSendEvent({ message: 'Failed to fetch' })).toBe(true);
+  });
+
+  it('both filters together: test/demo always dropped, real deploy errors kept for real users', async () => {
+    const { shouldSendEvent } = await loadModule();
+    const dynamicImport = 'Failed to fetch dynamically imported module: https://x/assets/a.js';
+    expect(shouldSendEvent(errorEvent(dynamicImport, 'TypeError', { account_type: 'production' }))).toBe(true);
+    expect(shouldSendEvent(errorEvent(dynamicImport, 'TypeError', { account_type: 'owner' }))).toBe(true);
+    expect(shouldSendEvent(errorEvent(dynamicImport, 'TypeError', { account_type: 'test' }))).toBe(false);
+    expect(shouldSendEvent(errorEvent('Failed to fetch', 'TypeError', { account_type: 'owner' }))).toBe(false);
+    expect(shouldSendEvent(errorEvent('boom', 'Error', { account_type: 'demo' }))).toBe(false);
+  });
+});
+
+describe('production-only setup (spec 0084 QA, AC1)', () => {
+  const DSN = 'https://key@example.test/1';
+  // The mocked @sentry/react functions are shared across module reloads.
+  beforeEach(() => vi.clearAllMocks());
+
+  it.each(['Production', 'PRODUCTION', ' production', 'production ', 'prod', 'preview'])(
+    'treats "%s" as not production',
+    async (environment) => {
+      const { reportClientError, sentryEnabled, Sentry } = await loadModule({ dsn: DSN, environment });
+      reportClientError(new Error('x'), { feature: 'home' });
+      expect(sentryEnabled).toBe(false);
+      expect(Sentry.init).not.toHaveBeenCalled();
+      expect(captureException).not.toHaveBeenCalled();
+    },
+  );
+
+  it('outside production, account-type tagging is a no-op (logout/login does nothing)', async () => {
+    const { setSentryAccountType, clearSentryAccountType, Sentry } = await loadModule({ dsn: DSN, environment: 'staging' });
+    setSentryAccountType('production');
+    clearSentryAccountType();
+    expect(Sentry.setTag).not.toHaveBeenCalled();
+  });
+
+  it('in production, account-type tagging still works', async () => {
+    const { setSentryAccountType, clearSentryAccountType, Sentry } = await loadModule({ dsn: DSN, environment: 'production' });
+    setSentryAccountType('owner');
+    clearSentryAccountType();
+    expect(Sentry.setTag).toHaveBeenNthCalledWith(1, 'account_type', 'owner');
+    expect(Sentry.setTag).toHaveBeenNthCalledWith(2, 'account_type', undefined);
+  });
+
+  it("in production, Sentry.init gets the 'production' tag and a beforeSend that applies both filters", async () => {
+    const { Sentry } = await loadModule({ dsn: DSN, environment: 'production' });
+    expect(Sentry.init).toHaveBeenCalledTimes(1);
+    const options = Sentry.init.mock.calls[0][0];
+    expect(options.dsn).toBe(DSN);
+    expect(options.environment).toBe('production');
+    expect(options.tracesSampleRate).toBe(0);
+    const real = { exception: { values: [{ type: 'Error', value: 'boom' }] } };
+    expect(options.beforeSend(real)).toBe(real);
+    expect(options.beforeSend({ exception: { values: [{ type: 'TypeError', value: 'Load failed' }] } })).toBeNull();
+    expect(options.beforeSend({ ...real, tags: { account_type: 'test' } })).toBeNull();
+  });
+});
+
 describe('reportClientError (spec 0078, PA-15)', () => {
   it('logs and reports with the feature tag and note', async () => {
     const { reportClientError } = await loadModule({ dsn: 'https://key@example.test/1' });
