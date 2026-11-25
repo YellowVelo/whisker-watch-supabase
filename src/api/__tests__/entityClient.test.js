@@ -42,7 +42,7 @@ describe('entityClient (spec 0081 FR18)', () => {
     expect(calls).toContainEqual(['limit', 5]);
   });
 
-  it('passes filter, create and update field names through unchanged (no Base44-era renames)', async () => {
+  it('passes filter, create and update field names through unchanged (no old-name renames)', async () => {
     const client = createEntityClient('pets');
     await client.filter({ cat_id: 'a', created_date: 'b' }, '-created_date');
     expect(calls).toContainEqual(['eq', 'cat_id', 'a']);

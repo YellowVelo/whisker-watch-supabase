@@ -342,8 +342,8 @@ interface OwnedPetRow {
 
 // Pets the caller created plus pets they co-own (pet_co_owners linked to
 // their account). The same set as the app's listOwnedPets(): sitter-only
-// pets are never included. Newest first, like AskWyskerSheet's
-// '-created_date' order.
+// pets are never included. Newest first (by created_at), like Home's
+// '-created_at' order.
 async function loadOwnedPetRows(client: SupabaseClient, userId: string): Promise<OwnedPetRow[]> {
   const fields = 'id, name, species, breed, conditions, is_memorial, created_at';
   const [createdR, coOwnedR] = await Promise.all([

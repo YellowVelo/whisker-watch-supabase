@@ -35,16 +35,9 @@ const GROUPS = {
   wellness: { label: 'Wellness', codes: WELLBEING_ATTRIBUTES, includesVomitingNausea: false, includesWeight: false },
 };
 
-// "Trends" used to be a legacy sub-tab charting symptom_logs directly
-// (previously PetProfileTabs' own "Trends" tab). That table stopped
-// accumulating appetite/energy/stool/vomiting entries once Daily Check-In
-// became the primary logging flow (Data Model_V2.md §7 — symptom_logs is
-// now written to only for Weight), so that sub-tab was permanently stuck
-// on "Need at least 2 logs to show trends" for any pet tracked purely
-// through Daily Check-In, even when Overview (reading observations) had
-// real trended data for the same pet. Fixed by rendering the same real,
-// observations-backed cards for both "Overview" and "Trends" rather than
-// maintaining a second, disconnected data path.
+// "Overview" and "Trends" render the same observations-backed cards (the
+// daily check-in's record of answers), so both always show the same data
+// for a pet; there is no second, separate data path behind "Trends".
 const SECTIONS = [
   { key: 'overview', label: 'Overview' },
   { key: 'trends', label: 'Trends' },

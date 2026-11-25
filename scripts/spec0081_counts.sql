@@ -1,16 +1,17 @@
 -- Spec 0081 FR11: counts only, read-only. Returns no names, notes or IDs.
+-- known_imported: the original app's 11 imported days (one owner, two pets).
 with s as (
   select sl.*,
          exists (select 1 from public.daily_check_ins c
                  where c.pet_id = sl.pet_id and c.check_in_date = sl.date) as has_check_in,
          (sl.pet_id in ('67c4d8f8-057e-4169-b540-aa4bdf16ad6b','6bd06bf6-d00c-4b6a-8786-cd3fbfcf542d')
-          and sl.created_by = 'fa875b03-2788-47cf-b0a7-75bc86783a21') as known_base44
+          and sl.created_by = 'fa875b03-2788-47cf-b0a7-75bc86783a21') as known_imported
   from public.symptom_logs sl
 )
 select json_build_object(
   'symptom_logs_total', (select count(*) from s),
-  'known_base44_rows', (select count(*) from s where known_base44),
-  'other_rows', (select count(*) from s where not known_base44),
+  'known_imported_rows', (select count(*) from s where known_imported),
+  'other_rows', (select count(*) from s where not known_imported),
   'with_weight', (select count(*) from s where weight_grams is not null),
   'weight_out_of_range', (select count(*) from s where weight_grams is not null
                             and (weight_grams / 453.59237 < 0.1 or weight_grams / 453.59237 > 300)),

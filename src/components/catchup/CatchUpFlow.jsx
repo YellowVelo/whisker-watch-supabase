@@ -217,8 +217,7 @@ export default function CatchUpFlow({ pets, missedDaysByPet, onClose, onPetProgr
   // again, matching what every other full-screen overlay in this app
   // assumes. (DailyCheckInSheet/DailyCheckInModal were checked — both
   // render through BottomSheet, which is portaled the same way, so they
-  // don't have this bug. Spec 0059 found and fixed one real remaining
-  // instance: PetSymptoms.jsx's "Log Symptoms" overlay.)
+  // don't have this bug.)
   return createPortal((
     // Z.overlay (spec 0059's shared layering scale, src/lib/zIndex.js) sits
     // above chrome (AppHeader/BottomTabBar) so this isn't silently covered

@@ -6,11 +6,9 @@
 // extended here to mean "never scatter check-in persistence logic across
 // components").
 //
-// This replaces every prior scoring system. There is no wellness_scores
-// write path left in this module at all — Vibe (daily_check_ins.status)
-// and Symptom Count (daily_check_ins.symptom_count) are the only two
-// signals persisted per day, and they never inform each other (spec Core
-// Model III).
+// Vibe (daily_check_ins.status) and Symptom Count
+// (daily_check_ins.symptom_count) are the only two signals persisted per
+// day, and they never inform each other (spec Core Model III).
 //
 // Two multi-pet reads (getCheckInsForPets) use the Supabase client
 // directly rather than entities.*, because entityClient's generic filter
