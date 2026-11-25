@@ -25,6 +25,7 @@ import { resolveDailyAttributeCount, computeAttributeDirection, computeSymptomCo
 import { CATEGORIES, getCategory, HEALTH_ATTRIBUTES, WELLBEING_ATTRIBUTES, COUNTED_CATEGORIES } from './config';
 import { todayInTimezone, yesterdayInTimezone, dateStrInTimezone, dateStrForInstant } from '@/lib/timezone';
 import { reportClientError } from '@/lib/errorMonitoring';
+import { isValidWeight } from '@/lib/weightClient';
 
 // Answer values that represent "no change from normal" across every
 // enum category — these are never worth surfacing as an observation
@@ -386,8 +387,10 @@ const latestSavedFirst = (a, b) => {
 // one-item array, keyed by check_in_date. Dates with no check-in or no
 // weight are absent. If older data has several weight rows on one day,
 // only one is kept: the latest saved with a value (ties: larger id).
-// Throws on a read failure so the caller doesn't save (and lose the
-// weight) blind.
+// A value outside 0.1–300 lbs (saved by the old, unchecked Weight box) is
+// never re-sent: no screen counts it as a weight (weightClient.js), so
+// re-sending it could only push out the day's real weight. Throws on a
+// read failure so the caller doesn't save (and lose the weight) blind.
 export async function loadCheckInWeightRows(petId, dates) {
   const catalog = await loadObservationCatalog();
   const typeId = catalog[WEIGHT_CODE]?.type?.id;
@@ -409,8 +412,13 @@ export async function loadCheckInWeightRows(petId, dates) {
   }
   for (const date of Object.keys(byDate)) {
     const rows = byDate[date];
-    const withValue = rows.filter((row) => row.numeric_value != null);
-    const [kept] = [...(withValue.length ? withValue : rows)].sort(latestSavedFirst);
+    const withValue = rows.filter((row) => row.numeric_value != null && isValidWeight(row.numeric_value));
+    const withoutValue = rows.filter((row) => row.numeric_value == null);
+    const [kept] = [...(withValue.length ? withValue : withoutValue)].sort(latestSavedFirst);
+    if (!kept) {
+      delete byDate[date];
+      continue;
+    }
     byDate[date] = [{
       observation_type_id: kept.observation_type_id,
       value: kept.value ?? null,
@@ -419,13 +427,6 @@ export async function loadCheckInWeightRows(petId, dates) {
     }];
   }
   return byDate;
-}
-
-// The day's saved check-in weight (lbs), or null. Used to preload the
-// check-in's Weight box.
-export async function getCheckInWeightLbs(petId, date) {
-  const [row] = (await loadCheckInWeightRows(petId, [date]))[date] || [];
-  return row?.numeric_value != null ? Number(row.numeric_value) : null;
 }
 
 // One day's observation payload with its weight kept: unchanged when the

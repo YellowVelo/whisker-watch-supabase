@@ -673,10 +673,40 @@ describe("every check-in save keeps the day's weight", () => {
     expect(weightsIn(rpcMock.mock.calls[1][1].payloads[1])).toEqual([expect.objectContaining({ numeric_value: 20 })]);
   });
 
-  it("getCheckInWeightLbs returns the day's last-saved check-in weight, or null", async () => {
-    setup({ weightRows: [weightRow('2026-07-01', 12.9, '2026-07-01T12:00:00Z'), weightRow('2026-07-01', 12.4, '2026-07-01T08:00:00Z')] });
-    const { getCheckInWeightLbs } = await import('./checkinClient');
-    expect(await getCheckInWeightLbs('pet-1', '2026-07-01')).toBe(12.9);
+  // The old check-in Weight box didn't check its range, and no screen counts
+  // a value outside 0.1–300 lbs as a weight (weightClient.js). Re-sending
+  // one could only push out the day's real weight.
+  it('never re-sends an out-of-range value: a newer 500 lbs row does not push out the in-range weight', async () => {
+    const { rpcMock } = setup({ weightRows: [
+      weightRow('2026-07-01', 12.4, '2026-07-01T08:00:00Z'),
+      weightRow('2026-07-01', 500, '2026-07-01T12:00:00Z'),
+      weightRow('2026-07-02', 0, '2026-07-02T12:00:00Z'),
+      weightRow('2026-07-02', 8.5, '2026-07-02T08:00:00Z'),
+    ] });
+    const { markGreatDay, markGreatDaysBulk } = await import('./checkinClient');
+    await markGreatDay('pet-1', '2026-07-01');
+    expect(weightsIn(rpcMock.mock.calls[0][1].payloads[0]).map((o) => o.numeric_value)).toEqual([12.4]);
+
+    await markGreatDaysBulk('pet-1', ['2026-07-01', '2026-07-02']);
+    expect(rpcMock.mock.calls[1][1].payloads.map((p) => weightsIn(p).map((o) => o.numeric_value))).toEqual([[12.4], [8.5]]);
+  });
+
+  it('a day whose only check-in weight is out of range re-sends no weight row (the day had no weight, and still has none)', async () => {
+    const { rpcMock } = setup({ weightRows: [weightRow('2026-07-01', 301), weightRow('2026-07-01', -2, '2026-07-01T11:00:00Z')] });
+    const { markOffTough } = await import('./checkinClient');
+    await markOffTough('pet-1', '2026-07-01', 'off', [{ code: 'appetite', values: ['ate_much_less'] }]);
+    expect(weightsIn(rpcMock.mock.calls[0][1].payloads[0])).toEqual([]);
+  });
+
+  it('the range check uses the same rounding as every screen: 0.05 rounds to 0.1 and is kept, 300.04 is kept, 300.06 is not', async () => {
+    const { rpcMock } = setup({ weightRows: [
+      weightRow('2026-07-01', 0.05),
+      weightRow('2026-07-02', 300.04),
+      weightRow('2026-07-03', 300.06),
+    ] });
+    const { markGreatDaysBulk } = await import('./checkinClient');
+    await markGreatDaysBulk('pet-1', ['2026-07-01', '2026-07-02', '2026-07-03']);
+    expect(rpcMock.mock.calls[0][1].payloads.map((p) => weightsIn(p).map((o) => o.numeric_value))).toEqual([[0.05], [300.04], []]);
   });
 });
 

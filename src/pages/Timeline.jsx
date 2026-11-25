@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Clock, Pill, ShieldCheck, ClipboardList } from 'lucide-react';
+import { ArrowLeft, Clock, Pill, ShieldCheck } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import IconButton from '../components/IconButton';
 import PageTransition from '@/components/PageTransition';
@@ -14,8 +14,9 @@ import { reportClientError } from '@/lib/errorMonitoring';
 // "contains all historical health events"), with check-in days rendered as
 // their full set of per-attribute chips (vet visits need the granular
 // answers, not a one-line "Daily check-in — Off Day" rollup) and
-// medication/vaccination/weight events as compact rows alongside them.
-const EVENT_ICON = { medication: Pill, vaccination: ShieldCheck, symptom_log: ClipboardList };
+// medication/vaccination events as compact rows alongside them. Old
+// symptom-log rows are retired (spec 0081 FR14).
+const EVENT_ICON = { medication: Pill, vaccination: ShieldCheck };
 
 function ChipPill({ label, tone }) {
   const danger = tone === 'warn';

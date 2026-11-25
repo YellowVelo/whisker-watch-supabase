@@ -222,7 +222,6 @@ export const PET_SCREEN_NAMES: readonly string[] = [
   'Overview',
   'Trends',
   'Timeline',
-  'Weight',
   'Food',
   'Vet Export',
   'Profile',

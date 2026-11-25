@@ -284,6 +284,17 @@ async function weightsOnDate(petId, date) {
   return byPet[petId].filter((e) => e.date === date);
 }
 
+// The day's weight (lbs) for one pet and date, or null: the same weight
+// every screen shows for that day (compareWeightsNewestFirst), whichever
+// kind it is (check-in or standalone). Out-of-range values are skipped, as
+// on every screen except the sheet's list. The check-in's Weight box
+// preloads it, so the owner sees the weight that typing or clearing would
+// replace.
+export async function getDayWeightLbs(petId, date) {
+  const [dayWeight] = (await weightsOnDate(petId, date)).filter((e) => !e.outOfRange);
+  return dayWeight ? dayWeight.lbs : null;
+}
+
 // Logs a weight for a day. One weight per pet per day: if the pet already
 // has a weight on that date (from a check-in or logged here), that weight
 // is updated to the new value instead of a second one being added. For a

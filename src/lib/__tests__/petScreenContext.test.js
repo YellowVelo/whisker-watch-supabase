@@ -14,7 +14,9 @@ describe('getPetContext', () => {
     ['/pet/abc123', { petId: 'abc123', screen: 'Overview' }],
     ['/pet/abc123/trends', { petId: 'abc123', screen: 'Trends' }],
     ['/pet/abc123/timeline', { petId: 'abc123', screen: 'Timeline' }],
-    ['/pet/abc123/symptoms', { petId: 'abc123', screen: 'Weight' }],
+    // The Symptoms page is retired (spec 0081); its route only redirects to
+    // the pet's profile, so it has no screen of its own.
+    ['/pet/abc123/symptoms', { petId: 'abc123', screen: 'Overview' }],
     ['/pet/abc123/food', { petId: 'abc123', screen: 'Food' }],
     ['/pet/abc123/export', { petId: 'abc123', screen: 'Vet Export' }],
     ['/pet/abc123/profile', { petId: 'abc123', screen: 'Profile' }],

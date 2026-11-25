@@ -161,9 +161,14 @@ describe('app/server parity: Ask Wysker screen names', () => {
   });
 
   it("the app's list covers every screen getPetContext can return", () => {
-    const paths = ['/pet/p1', '/pet/p1/trends', '/pet/p1/timeline', '/pet/p1/symptoms', '/pet/p1/food', '/pet/p1/export', '/pet/p1/profile'];
+    const paths = ['/pet/p1', '/pet/p1/trends', '/pet/p1/timeline', '/pet/p1/food', '/pet/p1/export', '/pet/p1/profile'];
     const returned = paths.map((p) => getPetContext(p).screen);
     expect([...new Set(returned)].sort()).toEqual([...APP_SCREENS].sort());
+  });
+
+  it('no longer has a Weight screen: the Symptoms page is retired (spec 0081)', () => {
+    expect(APP_SCREENS).not.toContain('Weight');
+    expect([...SERVER_SCREENS]).not.toContain('Weight');
   });
 });
 

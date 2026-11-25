@@ -46,31 +46,13 @@ export function getVaccinationSummary(vaccinations) {
 // There is no dedicated timeline/event table (Nav & IA: Timeline was a
 // placeholder); this assembles real events from the tables that already
 // represent discrete moments in the pet's history, most-recent first.
-// Compact one-line summary of a symptom_log row's notable fields — the
-// detail PetProfileTabs' retiring "History" tab (LogHistory.jsx) used to
-// show on its own screen, now folded directly into the Timeline event row
-// instead of living in a second place (spec 0023 step 10). Deliberately a
-// condensed summary, not a full replica of the richer chip UI PetSymptoms.jsx
-// (the "Weight" card's full symptom-log history) already provides for this
-// same data — that screen stays the place for full per-log detail.
-function summarizeSymptomLog(log) {
-  const parts = [];
-  if (log.appetite) parts.push(`Appetite: ${log.appetite}`);
-  if (log.energy_level) parts.push(`Energy: ${log.energy_level}`);
-  if (log.vomiting > 0) parts.push(`Vomiting ×${log.vomiting}`);
-  if (log.stool_quality && log.stool_quality !== 'None') parts.push(`Stool: ${log.stool_quality}`);
-  if (log.pain_signs) parts.push('Pain signs');
-  if (log.medication_given) parts.push('Meds given');
-  if (log.weight_grams != null) parts.push(`${(log.weight_grams / 453.592).toFixed(1)} lbs`);
-  return parts.length ? `Symptom log — ${parts.join(', ')}` : 'Symptom log recorded';
-}
-
+// Old symptom logs (the retired Symptoms page's records, spec 0081 FR14)
+// aren't listed: their content now lives in check-ins, shown below.
 export async function getTimelineEvents(petId, limit = 200) {
-  const [checkIns, medications, vaccinations, symptomLogs] = await Promise.all([
+  const [checkIns, medications, vaccinations] = await Promise.all([
     entities.DailyCheckIn.filter({ pet_id: petId }, '-check_in_date', limit),
     entities.Medication.filter({ pet_id: petId }, '-start_date', limit),
     entities.Vaccination.filter({ pet_id: petId }, '-date_given', limit),
-    entities.SymptomLog.filter({ pet_id: petId }, '-date', limit),
   ]);
 
   const events = [
@@ -88,9 +70,6 @@ export async function getTimelineEvents(petId, limit = 200) {
     })),
     ...vaccinations.filter((v) => v.date_given).map((v) => ({
       id: `vax-${v.id}`, date: v.date_given, type: 'vaccination', title: `${v.vaccine_name} administered`,
-    })),
-    ...symptomLogs.map((s) => ({
-      id: `log-${s.id}`, date: s.date, type: 'symptom_log', title: summarizeSymptomLog(s),
     })),
   ];
 

@@ -79,7 +79,7 @@ vi.mock('@/lib/checkin/checkinClient', () => ({
 const {
   weightDate, listWeights, addWeight, updateWeight, deleteWeight,
   getWeightSummary, getWeightSummariesForPets, getWeightTrend, validateWeightInput, isValidWeight,
-  compareWeightsNewestFirst, weightErrorText, WEIGHT_MESSAGES, WEIGHT_INPUT_ERROR_CODES,
+  compareWeightsNewestFirst, weightErrorText, WEIGHT_MESSAGES, WEIGHT_INPUT_ERROR_CODES, getDayWeightLbs,
 } = await import('./weightClient');
 const { dateStrForInstant, dateStrInTimezone } = await import('./timezone');
 
@@ -689,5 +689,44 @@ describe('weightErrorText: what the Log weight sheet shows', () => {
       expect(weightErrorText(err, 'save')).toBe(WEIGHT_MESSAGES[code]);
     }
     expect(create).not.toHaveBeenCalled();
+  });
+});
+
+// The check-in's Weight box preloads the day's weight, whichever kind it
+// is, so the owner sees what typing or clearing would replace.
+describe("getDayWeightLbs: the day's weight for the check-in's Weight box", () => {
+  const day = '2026-07-01';
+
+  it('returns a standalone weight logged in the sheet when the day has no check-in weight', async () => {
+    state.rows = [standalone('s1', PET_A, day, 11.2), standalone('s0', PET_A, '2026-06-30', 10.0)];
+    expect(await getDayWeightLbs(PET_A, day)).toBe(11.2);
+  });
+
+  it('returns the check-in weight when that is the only weight that day', async () => {
+    state.rows = [fromCheckIn('c1', PET_A, day, 12.9, '2026-07-02T03:00:00+00:00')];
+    expect(await getDayWeightLbs(PET_A, day)).toBe(12.9);
+  });
+
+  it('picks with the same rule as every screen when a day has both: the standalone one, even if the check-in row looks newer', async () => {
+    state.rows = [
+      fromCheckIn('c1', PET_A, day, 12.9, '2026-07-01T20:00:00+00:00'),
+      standalone('s1', PET_A, day, 11.2, '2026-07-01T13:00:00+00:00'),
+    ];
+    const [shown] = (await listWeights(PET_A)).filter((e) => e.date === day).sort(compareWeightsNewestFirst);
+    expect(await getDayWeightLbs(PET_A, day)).toBe(shown.lbs);
+    expect(await getDayWeightLbs(PET_A, day)).toBe(11.2);
+  });
+
+  it('skips out-of-range values, like every screen, and returns null for a day with no weight', async () => {
+    state.rows = [standalone('s-bad', PET_A, day, 500), fromCheckIn('c1', PET_A, day, 12.0, `${day}T10:00:00+00:00`)];
+    expect(await getDayWeightLbs(PET_A, day)).toBe(12);
+    expect(await getDayWeightLbs(PET_A, '2026-07-05')).toBeNull();
+    state.rows = [standalone('s-bad', PET_A, day, 0)];
+    expect(await getDayWeightLbs(PET_A, day)).toBeNull();
+  });
+
+  it("reads only that pet's weights", async () => {
+    state.rows = [standalone('s-b', PET_B, day, 40.0)];
+    expect(await getDayWeightLbs(PET_A, day)).toBeNull();
   });
 });

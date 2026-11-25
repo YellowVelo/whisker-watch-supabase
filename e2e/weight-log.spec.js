@@ -460,6 +460,9 @@ test("one weight per day: typing a weight in a check-in removes that day's stand
   await revealDay(calendar, dayButton);
   await dayButton.click();
   const details = await startOffDayWithWeight(page);
+  // The box preloads the day's weight, even though it was logged outside
+  // the check-in, so the owner sees what typing would replace.
+  await expect(details.getByLabel('Weight in lbs')).toHaveValue('12', { timeout: 10000 });
   await details.getByLabel('Weight in lbs').fill('13.5');
   await details.getByRole('button', { name: 'Save check-in' }).click();
   await confirmPastDaySave(page);
@@ -472,4 +475,19 @@ test("one weight per day: typing a weight in a check-in removes that day's stand
     .toEqual([[13.5, true]]);
   const card2 = await openPetCard(page, name);
   await expect(weightRow(card2)).toContainText('13.5 lbs', { timeout: 10000 });
+});
+
+// Spec 0081 AC9 (FR13): the Symptoms page is retired. An old link or
+// bookmark to it opens the pet's profile instead.
+test("AC9: an old Symptoms link opens the pet's profile", async ({ page }) => {
+  const { petId, name } = await createPet();
+  await page.goto(`/pet/${petId}/symptoms`);
+  // Same redirect as the retired /pet/:id/profile: Pets, with this pet's
+  // profile card open (its Weight row only shows once the card is open).
+  await expect(page).toHaveURL(/\/pets$/, { timeout: 10000 });
+  const card = page.locator('div.rounded-2xl.px-4.py-4:not(.bg-card)')
+    .filter({ has: page.getByRole('heading', { name, exact: true }) });
+  await expect(card).toBeVisible({ timeout: 10000 });
+  await expect(weightRow(card)).toBeVisible({ timeout: 10000 });
+  await expect(page.getByRole('button', { name: 'Log symptoms' })).toHaveCount(0);
 });

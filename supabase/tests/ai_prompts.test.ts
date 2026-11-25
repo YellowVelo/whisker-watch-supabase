@@ -66,7 +66,7 @@ function allBuilt(): Record<string, BuiltPrompt> {
   return {
     pet_chat: buildPetChat({ pet, medications: meds, baseline, screen: 'Trends', history: HISTORY, question: QUESTION, nowMs: NOW }),
     household_chat: buildHouseholdChat({ pets: [pet, { name: 'Auggie', species: 'Dog' }], history: HISTORY, question: QUESTION }),
-    pet_insights: buildPetInsights({ pet, medications: meds, baseline, screen: 'Weight', checkIns, weights: [{ date: '2026-11-20', grams: 4536 }], nowMs: NOW }),
+    pet_insights: buildPetInsights({ pet, medications: meds, baseline, screen: 'Timeline', checkIns, weights: [{ date: '2026-11-20', grams: 4536 }], nowMs: NOW }),
     trends_summary: buildTrendsSummary({ petName: 'Tribble', appetite: { currentLabel: '1 Symptom', currentSubtitle: 'Ate a little less' }, waterIntake: null, energy: { currentLabel: 'Normal' }, weight: { currentLbs: 10.2, deltaLbs: -0.3 } }),
     scan_vaccines: buildScanVaccines({ ownedPets: [{ name: 'Tribble' }, { name: 'Auggie' }] }),
     scan_vaccine_single: buildScanVaccineSingle(),
@@ -157,7 +157,7 @@ Deno.test('pet insights: keeps the response shape and wording of PetAIInsights.j
   assertEquals(Object.keys(b.schema.properties as Record<string, unknown>), ['summary', 'insights', 'disclaimer', 'urgent']);
   assertStringIncludes(b.user, 'Pet Name: Tribble\nSpecies: Cat\nAge: 8 years\nBreed: Tabby\nKnown Conditions: CKD\nActive Medications: Benazepril 2.5mg Once daily');
   assertStringIncludes(b.user, 'Established Baseline (owner-reported normal): Tribble has one or more ongoing health conditions');
-  assertStringIncludes(b.user, "The owner just came from Tribble's Weight screen, so lean toward that topic first if it's relevant.");
+  assertStringIncludes(b.user, "The owner just came from Tribble's Timeline screen, so lean toward that topic first if it's relevant.");
   assertStringIncludes(b.user, 'Weight (most recent first):\n2026-11-20: 10.00 lbs');
   assert(!b.user.includes('Recent Health Logs'), 'still reads old symptom logs');
 });
@@ -380,6 +380,8 @@ Deno.test('history: over-long messages are cut to 2,000 (owner) / 8,000 (assista
 Deno.test('screen must be a known screen name when present', () => {
   assertEquals(refused(parseTaskRequest({ task: 'pet_insights', pet_id: PET_ID, screen: 'Admin' })).code, 'invalid_screen');
   assertEquals(refused(parseTaskRequest({ task: 'pet_chat', pet_id: PET_ID, question: 'Hi', screen: 3 })).code, 'invalid_screen');
+  // Spec 0081: the Symptoms page (the old "Weight" screen) is retired.
+  assertEquals(refused(parseTaskRequest({ task: 'pet_insights', pet_id: PET_ID, screen: 'Weight' })).code, 'invalid_screen');
   const ok = accepted(parseTaskRequest({ task: 'pet_insights', pet_id: PET_ID, screen: 'Vet Export' }));
   assertEquals(ok, { task: 'pet_insights', pet_id: PET_ID, screen: 'Vet Export' });
   assertEquals(accepted(parseTaskRequest({ task: 'pet_insights', pet_id: PET_ID, screen: null })), { task: 'pet_insights', pet_id: PET_ID, screen: null });

@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { CATEGORIES, getOptionsForSpecies, getCategory } from '@/lib/checkin/config';
-import { markGreatDay, markSkipped, markOffTough, loadObservationCatalog, describeObservation, getCheckInWeightLbs } from '@/lib/checkin/checkinClient';
-import { isValidWeight, WEIGHT_MESSAGES } from '@/lib/weightClient';
+import { markGreatDay, markSkipped, markOffTough, loadObservationCatalog, describeObservation } from '@/lib/checkin/checkinClient';
+import { isValidWeight, WEIGHT_MESSAGES, getDayWeightLbs } from '@/lib/weightClient';
 import { entities } from '@/api/entities';
 import { track } from '@/lib/analytics';
 import { Textarea } from '@/components/ui/textarea';
@@ -100,15 +100,18 @@ export default function DailyCheckInSheet({ pet, date, onClose, onSaved, isCatch
 
   const setAnswer = (code, patch) => setAnswers((a) => ({ ...a, [code]: { ...a[code], ...patch } }));
 
-  // Spec 0081: preload this day's saved check-in weight into the Weight
-  // box, so re-saving shows (and keeps) it. Only the owner typing in the
-  // box (`touched`) counts as changing or clearing it; an untouched box
-  // leaves the weight to checkinClient, which re-reads and keeps the day's
-  // saved weight at save time. A preload that arrives after the owner has
-  // typed never overwrites what they typed.
+  // Spec 0081: preload the day's weight into the Weight box, whichever
+  // kind it is (from a check-in or logged in the Log weight sheet), the
+  // same weight every screen shows for the day. The owner sees what typing
+  // or clearing would replace (one weight per pet per day). Only the owner
+  // typing in the box (`touched`) counts as changing or clearing it; an
+  // untouched box leaves the weight to checkinClient, which re-reads and
+  // keeps the day's saved check-in weight at save time, and never removes
+  // a standalone one. A preload that arrives after the owner has typed
+  // never overwrites what they typed.
   useEffect(() => {
     let cancelled = false;
-    getCheckInWeightLbs(pet.id, date)
+    getDayWeightLbs(pet.id, date)
       .then((lbs) => {
         if (cancelled || lbs == null) return;
         setAnswers((a) => (a.weight?.touched ? a : { ...a, weight: { ...a.weight, numericValue: lbs } }));

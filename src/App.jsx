@@ -28,7 +28,6 @@ import PetMedications from './pages/PetMedications';
 import PetVaccinations from './pages/PetVaccinations';
 import PetHealthRecords from './pages/PetHealthRecords';
 import PetSitter from './pages/PetSitter';
-import PetSymptoms from './pages/PetSymptoms';
 import PetFood from './pages/PetFood';
 import About from './pages/About';
 import VetExport from './pages/VetExport';
@@ -53,7 +52,8 @@ import AdminRoute from '@/components/AdminRoute';
 import AdminBetaSignups from './pages/admin/BetaSignups';
 
 // PetProfileTabs.jsx (the old hero-header pet profile screen) is retired
-// (spec 0028) — old /pet/:petId/profile links land on Pets instead, with
+// (spec 0028), and so is PetSymptoms.jsx (spec 0081) — old
+// /pet/:petId/profile and /pet/:petId/symptoms links land on Pets instead, with
 // that pet's card scrolled into view and expanded, same pattern already
 // used for the retired /pet/:petId route.
 const PetProfileRedirect = () => {
@@ -133,7 +133,9 @@ const AuthenticatedApp = () => {
             <Route path="/pet/:petId/medications" element={<PetMedications />} />
             <Route path="/pet/:petId/vaccinations" element={<PetVaccinations />} />
             <Route path="/pet/:petId/health-records" element={<PetHealthRecords />} />
-            <Route path="/pet/:petId/symptoms" element={<PetSymptoms />} />
+            {/* PetSymptoms.jsx (the old Symptoms page) is retired (spec 0081
+                FR13): old links and bookmarks open the pet's profile. */}
+            <Route path="/pet/:petId/symptoms" element={<PetProfileRedirect />} />
             <Route path="/pet/:petId/food" element={<PetFood />} />
             <Route path="/pet/:petId/export" element={<VetExport />} />
             <Route path="/about" element={<About />} />
