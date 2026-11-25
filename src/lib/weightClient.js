@@ -126,10 +126,7 @@ const SELECT_COLUMNS = 'id, pet_id, numeric_value, observed_at, updated_at, dail
 // didn't check its range) is not a weight: summaries and charts never
 // show it. The Log weight sheet still lists it, flagged `outOfRange`, so
 // the owner can fix or delete it.
-const isShowableLbs = (value) => {
-  const n = Number(value);
-  return Number.isFinite(n) && roundLbs(n) >= WEIGHT_MIN_LBS && roundLbs(n) <= WEIGHT_MAX_LBS;
-};
+const isShowableLbs = isValidWeight;
 
 // Row -> entry shape every screen uses.
 function toEntry(row) {
