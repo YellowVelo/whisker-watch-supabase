@@ -92,10 +92,12 @@ function isoDay(offsetDays: number): string {
 // Spec 0081 may have dropped some of these, so a missing table is skipped,
 // the same way 0062 skips it (to_regclass). PostgREST reports a table it
 // doesn't know as PGRST205 (or 42P01 straight from Postgres).
+// This must be a real GET: a HEAD request has no body to carry the error,
+// so it comes back looking like success even for a dropped table.
 async function tableExists(table: string): Promise<boolean> {
-  const { error } = await adminClient().from(table).select('id', { head: true }).limit(1);
+  const { error, status } = await adminClient().from(table).select('id').limit(1);
   if (!error) return true;
-  if (error.code === 'PGRST205' || error.code === '42P01') return false;
+  if (error.code === 'PGRST205' || error.code === '42P01' || status === 404) return false;
   throw new Error(`checking ${table} failed: ${error.message}`);
 }
 
