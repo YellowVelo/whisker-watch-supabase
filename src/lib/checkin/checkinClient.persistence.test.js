@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest';
 
 // Daily Check-In, Vibe & Trends (spec v5) — persistence tests for the two
 // signals that replace every prior score: Vibe (status) and Symptom Count.
@@ -14,6 +14,19 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 // supabase.rpc and assert against the payload sent to it, rather than the
 // old separate-call sequence.
 describe('checkinClient persistence (Vibe & Symptom Count)', () => {
+  // Warm the import once, with a generous hook timeout. The first dynamic
+  // import after vi.resetModules() has to transform checkinClient.js and
+  // everything it imports, which on a cold, busy run could exceed the first
+  // test's own 5s timeout (the flake this fixes). vi.resetModules() clears
+  // only the module registry, not the transform cache, so every later
+  // import in the tests below is fast. Mocked here the same way the tests
+  // mock them, so warming never loads the real Supabase client.
+  beforeAll(async () => {
+    vi.doMock('@/api/entities', () => ({ entities: {} }));
+    vi.doMock('@/api/supabaseClient', () => ({ supabase: {} }));
+    await import('./checkinClient');
+  }, 30000);
+
   beforeEach(() => {
     vi.resetModules();
   });

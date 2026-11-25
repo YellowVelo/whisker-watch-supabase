@@ -23,9 +23,11 @@ import { entities } from '@/api/entities';
 import { loadObservationCatalog } from '@/lib/checkin/checkinClient';
 import { dateStrInTimezone } from '@/lib/timezone';
 import { RANGE_DAYS } from '@/lib/checkin/trendsRanges';
+import { WEIGHT_MIN_LBS, WEIGHT_MAX_LBS, roundLbs, checkWeightLbs, isValidWeight } from '@/lib/weightRange';
 
-export const WEIGHT_MIN_LBS = 0.1;
-export const WEIGHT_MAX_LBS = 300;
+// The value rule lives in weightRange.js (shared with checkinClient.js
+// without a circular import); re-exported so screens import from here.
+export { WEIGHT_MIN_LBS, WEIGHT_MAX_LBS, isValidWeight };
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -64,19 +66,13 @@ export const weightDate = {
   },
 };
 
-const roundLbs = (n) => Math.round(Number(n) * 10) / 10;
-
 // Throws an Error with a `code` the caller maps to approved wording
 // ('weight_out_of_range' -> wording B, 'weight_date_invalid',
 // 'weight_date_in_future'). `timezone` is the owner's profiles.timezone.
 // Leave `date` out to check only the value.
 /** @param {{ lbs: any, date?: string }} input @param {string} [timezone] */
 export function validateWeightInput({ lbs, date }, timezone) {
-  const n = Number(lbs);
-  if (lbs === null || lbs === undefined || lbs === '' || !Number.isFinite(n)
-    || roundLbs(n) < WEIGHT_MIN_LBS || roundLbs(n) > WEIGHT_MAX_LBS) {
-    throw Object.assign(new Error('weight out of range'), { code: 'weight_out_of_range' });
-  }
+  const value = checkWeightLbs(lbs);
   if (date !== undefined) {
     if (typeof date !== 'string' || !DATE_RE.test(date)) {
       throw Object.assign(new Error('weight date invalid'), { code: 'weight_date_invalid' });
@@ -85,19 +81,7 @@ export function validateWeightInput({ lbs, date }, timezone) {
       throw Object.assign(new Error('weight date in future'), { code: 'weight_date_in_future' });
     }
   }
-  return roundLbs(n);
-}
-
-// True when `lbs` passes the same 0.1–300 lbs rule validateWeightInput
-// applies (after rounding to one decimal), for forms that check as the
-// owner types (onboarding's starting weight, the check-in's Weight box).
-export function isValidWeight(lbs) {
-  try {
-    validateWeightInput({ lbs });
-    return true;
-  } catch {
-    return false;
-  }
+  return value;
 }
 
 // What the Log weight sheet shows for a failed save, edit or delete.

@@ -23,7 +23,7 @@ import { resolveDailyAttributeCount, computeAttributeDirection, computeSymptomCo
 import { CATEGORIES, getCategory, HEALTH_ATTRIBUTES, WELLBEING_ATTRIBUTES, COUNTED_CATEGORIES } from './config';
 import { todayInTimezone, yesterdayInTimezone, dateStrInTimezone, dateStrForInstant } from '@/lib/timezone';
 import { reportClientError } from '@/lib/errorMonitoring';
-import { isValidWeight } from '@/lib/weightClient';
+import { isValidWeight } from '@/lib/weightRange';
 
 // Answer values that represent "no change from normal" across every
 // enum category — these are never worth surfacing as an observation
