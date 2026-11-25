@@ -72,10 +72,15 @@ export default function BulkApplySheet({ pet, dates, onClose, onSaved }) {
           return { code, value: a.value ?? null, numericValue, notes: a.notes || null };
         })
         .filter((sel) => sel.values !== undefined || sel.value != null || sel.numericValue != null || sel.notes);
-      // Spec 0081: a weight typed here is saved to every one of these days.
-      // With the Weight box empty, no weight selection is sent, so each day
-      // keeps its own saved weight (checkinClient re-sends it). There is no
-      // single value to preload here, since each day can have its own.
+      // Spec 0081: an EMPTY Weight box here means "keep each day's own
+      // weight", never "clear it". The filter above drops a weight with no
+      // number, so no weight selection is sent and checkinClient re-sends
+      // each day's saved check-in weight. (This sheet has no way to clear
+      // weights; the single-day check-in or the Log weight sheet does that.)
+      // A weight typed here becomes every one of these days' only weight:
+      // it's saved in each check-in and any standalone weight on those days
+      // is removed (one weight per pet per day). There is no single value
+      // to preload, since each day can have its own.
 
       // One atomic call per chunk of 20 dates (spec 0016), sequential, not
       // parallel, so a partial failure is easy to reason about: dates in

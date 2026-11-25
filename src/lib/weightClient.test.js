@@ -9,7 +9,7 @@ const WEIGHT_TYPE_ID = 'type-weight';
 // `rowCap` plays Supabase's max_rows: no response returns more rows than
 // this, whatever limit the query asks for. `deletableIds` are the rows a
 // delete is allowed to match (RLS); anything else deletes 0 rows.
-const state = { rows: [], queries: [], rowCap: 1000, deletableIds: null };
+const state = { rows: [], queries: [], rowCap: 1000, deletableIds: null, deleteError: null };
 
 function makeQuery(table) {
   const q = { table, calls: [] };
@@ -24,6 +24,7 @@ function makeQuery(table) {
     delete() { q.calls.push(['delete']); return builder; },
     then(resolve, reject) {
       if (q.calls.some((c) => c[0] === 'delete')) {
+        if (state.deleteError) return Promise.resolve({ data: null, error: state.deleteError }).then(resolve, reject);
         const id = q.calls.find((c) => c[0] === 'eq' && c[1] === 'id')?.[2];
         const allowed = state.deletableIds ? state.deletableIds.includes(id) : state.rows.some((r) => r.id === id);
         state.rows = allowed ? state.rows.filter((r) => r.id !== id) : state.rows;
@@ -46,8 +47,21 @@ function makeQuery(table) {
   return builder;
 }
 
-const create = vi.fn(async (row) => ({ id: 'new', ...row }));
-const update = vi.fn(async (id, patch) => ({ id, ...patch }));
+// Writes change `state.rows` like the database would, so tests can check
+// the day's resulting weight, not just what was sent. `updated_at` moves
+// forward on every update (the set_updated_at trigger).
+let clock = 0;
+const nextStamp = () => `2099-01-01T00:00:${String(clock++).padStart(2, '0')}+00:00`;
+const create = vi.fn(async (row) => {
+  const saved = { id: `new-${state.rows.length}`, daily_check_ins: null, updated_at: nextStamp(), ...row };
+  state.rows.push(saved);
+  return saved;
+});
+const update = vi.fn(async (id, patch) => {
+  const row = state.rows.find((r) => r.id === id);
+  if (row) Object.assign(row, patch, { updated_at: nextStamp() });
+  return { id, ...patch };
+});
 const remove = vi.fn(async () => true);
 const checkInUpdate = vi.fn(async (id, patch) => ({ id, ...patch }));
 
@@ -89,6 +103,8 @@ beforeEach(() => {
   state.queries = [];
   state.rowCap = 1000;
   state.deletableIds = null;
+  state.deleteError = null;
+  clock = 0;
   create.mockClear();
   update.mockClear();
   remove.mockClear();
@@ -345,7 +361,7 @@ describe('ordering (FR6)', () => {
     expect(summary.sparkline.map((p) => p.date)).toEqual(['2026-11-10', '2026-11-20']);
   });
 
-  it('two weights on one day: the most recently saved is the day\'s weight', async () => {
+  it('older data with two standalone weights on one day: the later saved is the day\'s weight', async () => {
     state.rows = [
       standalone('early', PET_A, '2026-11-20', 11.0, '2026-11-20T08:00:00+00:00'),
       standalone('late', PET_A, '2026-11-20', 11.4, '2026-11-20T20:00:00+00:00'),
@@ -355,6 +371,27 @@ describe('ordering (FR6)', () => {
     expect(summary.sparkline).toEqual([{ date: '2026-11-19', lbs: 11.1 }, { date: '2026-11-20', lbs: 11.4 }]);
     expect(summary.currentLbs).toBe(11.4);
     expect(summary.deltaLbs).toBe(0.3);
+  });
+
+  it('older data with a check-in and a standalone weight on one day: the standalone one is the day\'s weight, even if the check-in row looks newer', async () => {
+    // The check-in was re-saved after the standalone weight was logged, so
+    // save_daily_check_ins re-inserted its weight row with a later time.
+    const day = dateStrInTimezone('UTC', -1);
+    const prev = dateStrInTimezone('UTC', -2);
+    state.rows = [
+      fromCheckIn('c20', PET_A, day, 11.0, `${day}T22:00:00+00:00`),
+      standalone('s20', PET_A, day, 12.0, `${day}T15:00:00+00:00`),
+      standalone('prev', PET_A, prev, 11.5),
+    ];
+    const summary = await getWeightSummary(PET_A);
+    expect(summary.currentLbs).toBe(12.0);
+    expect(summary.sparkline).toEqual([{ date: prev, lbs: 11.5 }, { date: day, lbs: 12.0 }]);
+    expect((await getWeightSummariesForPets([PET_A]))[PET_A].currentLbs).toBe(12.0);
+    const trend = await getWeightTrend(PET_A, '7D', 'UTC');
+    expect(trend.series).toEqual([{ date: prev, value: 11.5 }, { date: day, value: 12.0 }]);
+    expect(trend.currentLbs).toBe(12.0);
+    // The sheet lists both so either can be fixed, the day's weight first.
+    expect((await listWeights(PET_A)).map((e) => e.id)).toEqual(['s20', 'c20', 'prev']);
   });
 
   it('is deterministic when date and updated_at tie', () => {
@@ -438,9 +475,11 @@ describe('writes go through entities.Observation', () => {
   });
 
   it('updateWeight on a standalone weight can change date and value', async () => {
-    const entry = { id: 's1', date: '2026-11-18', lbs: 10, fromCheckIn: false };
+    state.rows = [standalone('s1', PET_A, '2026-11-18', 10)];
+    const entry = { id: 's1', petId: PET_A, date: '2026-11-18', lbs: 10, fromCheckIn: false };
     await updateWeight(entry, { date: '2026-11-17', lbs: 11.0 }, tz);
     expect(update).toHaveBeenCalledWith('s1', { numeric_value: 11, observed_at: '2026-11-17T12:00:00.000Z' });
+    expect((await listWeights(PET_A)).map((e) => [e.date, e.lbs])).toEqual([['2026-11-17', 11]]);
   });
 
   it('updateWeight on a check-in weight changes only the value; its date is locked (FR3)', async () => {
@@ -517,6 +556,98 @@ describe('writes go through entities.Observation', () => {
     state.deletableIds = [];
     await expect(deleteWeight({ id: 's1', fromCheckIn: false })).rejects.toMatchObject({ code: 'weight_not_found' });
     await expect(deleteWeight({ id: 'missing', fromCheckIn: false })).rejects.toMatchObject({ code: 'weight_not_found' });
+  });
+});
+
+describe('one weight per pet per day (Lynn, 2026-11-25)', () => {
+  const tz = 'UTC';
+  const day = dateStrInTimezone(tz, -3);
+  const other = dateStrInTimezone(tz, -5);
+  const weightsOn = async (date) => (await listWeights(PET_A)).filter((e) => e.date === date);
+
+  it('addWeight on a day that already has a standalone weight updates it instead of adding a second', async () => {
+    state.rows = [standalone('s1', PET_A, day, 11.0), standalone('s0', PET_A, other, 10.0)];
+    await addWeight(PET_A, { date: day, lbs: 12.04 }, tz);
+    expect(create).not.toHaveBeenCalled();
+    expect((await weightsOn(day)).map((e) => [e.id, e.lbs])).toEqual([['s1', 12]]);
+    expect((await getWeightSummary(PET_A)).currentLbs).toBe(12);
+    // Other days are untouched.
+    expect((await weightsOn(other)).map((e) => e.lbs)).toEqual([10]);
+  });
+
+  it("addWeight on a day with a check-in weight updates that weight (moving the check-in's updated_at first) instead of adding a standalone one", async () => {
+    state.rows = [fromCheckIn('c1', PET_A, day, 11.0, `${day}T20:00:00+00:00`)];
+    await addWeight(PET_A, { date: day, lbs: 12 }, tz);
+    expect(create).not.toHaveBeenCalled();
+    expect(checkInUpdate).toHaveBeenCalledTimes(1);
+    expect(checkInUpdate.mock.calls[0][0]).toBe('ci-c1');
+    expect(checkInUpdate.mock.invocationCallOrder[0]).toBeLessThan(update.mock.invocationCallOrder[0]);
+    const onDay = await weightsOn(day);
+    expect(onDay.map((e) => [e.id, e.lbs, e.fromCheckIn])).toEqual([['c1', 12, true]]);
+    expect((await getWeightSummary(PET_A)).currentLbs).toBe(12);
+  });
+
+  it('addWeight on a day with an out-of-range saved value replaces it', async () => {
+    state.rows = [standalone('bad', PET_A, day, 0)];
+    await addWeight(PET_A, { date: day, lbs: 9.5 }, tz);
+    expect(create).not.toHaveBeenCalled();
+    expect((await weightsOn(day)).map((e) => [e.id, e.lbs, e.outOfRange])).toEqual([['bad', 9.5, false]]);
+  });
+
+  it('addWeight on a day with no weight adds one standalone weight', async () => {
+    state.rows = [standalone('s0', PET_A, other, 10.0)];
+    await addWeight(PET_A, { date: day, lbs: 12 }, tz);
+    expect(create).toHaveBeenCalledTimes(1);
+    expect((await weightsOn(day)).map((e) => [e.lbs, e.fromCheckIn])).toEqual([[12, false]]);
+  });
+
+  it('moving a standalone weight onto a day with a standalone weight leaves that day one weight, with the moved value', async () => {
+    state.rows = [standalone('s-old', PET_A, other, 10.0), standalone('s-day', PET_A, day, 11.0)];
+    const [moving] = (await listWeights(PET_A)).filter((e) => e.id === 's-old');
+    await updateWeight(moving, { date: day, lbs: 10.4 }, tz);
+    expect((await weightsOn(day)).map((e) => e.lbs)).toEqual([10.4]);
+    expect(await weightsOn(other)).toEqual([]);
+    expect(state.rows).toHaveLength(1);
+  });
+
+  it("moving a standalone weight onto a check-in day sets the check-in's weight and removes the moved row", async () => {
+    state.rows = [standalone('s-old', PET_A, other, 10.0), fromCheckIn('c-day', PET_A, day, 11.0, `${day}T20:00:00+00:00`)];
+    const [moving] = (await listWeights(PET_A)).filter((e) => e.id === 's-old');
+    await updateWeight(moving, { date: day, lbs: 10.4 }, tz);
+    expect((await weightsOn(day)).map((e) => [e.id, e.lbs, e.fromCheckIn])).toEqual([['c-day', 10.4, true]]);
+    expect(checkInUpdate).toHaveBeenCalledWith('ci-c-day', expect.objectContaining({ updated_at: expect.any(String) }));
+    expect(await weightsOn(other)).toEqual([]);
+  });
+
+  it('if the moved row cannot be removed, the move fails, the new value is not lost and the target day still has one weight', async () => {
+    state.rows = [standalone('s-old', PET_A, other, 10.0), standalone('s-day', PET_A, day, 11.0)];
+    state.deleteError = { code: '08006', message: 'network' };
+    const [moving] = (await listWeights(PET_A)).filter((e) => e.id === 's-old');
+    await expect(updateWeight(moving, { date: day, lbs: 10.4 }, tz)).rejects.toMatchObject({ code: '08006' });
+    expect((await weightsOn(day)).map((e) => e.lbs)).toEqual([10.4]);
+    // The moved row is still on its old date, unchanged, for the owner to retry.
+    expect((await weightsOn(other)).map((e) => [e.id, e.lbs])).toEqual([['s-old', 10]]);
+  });
+
+  it('a moved row that is already gone counts as moved', async () => {
+    state.rows = [standalone('s-day', PET_A, day, 11.0)];
+    const moving = { id: 's-gone', petId: PET_A, date: other, lbs: 10, fromCheckIn: false };
+    await expect(updateWeight(moving, { date: day, lbs: 10.4 }, tz)).resolves.toBeTruthy();
+    expect((await weightsOn(day)).map((e) => e.lbs)).toEqual([10.4]);
+  });
+
+  it('moving a standalone weight to an empty day is a plain date change', async () => {
+    state.rows = [standalone('s-old', PET_A, other, 10.0)];
+    const [moving] = await listWeights(PET_A);
+    await updateWeight(moving, { date: day, lbs: 10.0 }, tz);
+    expect(update).toHaveBeenCalledWith('s-old', { numeric_value: 10, observed_at: `${day}T12:00:00.000Z` });
+    expect((await weightsOn(day)).map((e) => e.id)).toEqual(['s-old']);
+  });
+
+  it('moving needs the entry\'s petId, so it can never skip the one-weight check', async () => {
+    await expect(updateWeight({ id: 's1', date: other, lbs: 10, fromCheckIn: false }, { date: day, lbs: 10 }, tz))
+      .rejects.toThrow('petId');
+    expect(update).not.toHaveBeenCalled();
   });
 });
 

@@ -372,3 +372,104 @@ test('re-saving an existing check-in keeps its weight: Great Day, and Off Day wi
   await expect(entries(sheet)).toHaveCount(1, { timeout: 10000 });
   await expect(entries(sheet).first()).toContainText('From daily check-in');
 });
+
+// --- One weight per pet per day (Lynn, 2026-11-25) ---
+
+async function seedCheckIn(supabase, userId, petId, checkInDate, status, weightLbs) {
+  const { data: checkIn, error: ciError } = await supabase.from('daily_check_ins').insert({
+    pet_id: petId, created_by: userId, check_in_date: checkInDate, status,
+    symptom_count: 0, completed_at: new Date().toISOString(), source: 'app',
+  }).select('id').single();
+  if (ciError) throw ciError;
+  const { data: type, error: typeError } = await supabase.from('observation_types').select('id').eq('code', 'weight').single();
+  if (typeError) throw typeError;
+  if (weightLbs != null) {
+    const { error: obsError } = await supabase.from('observations').insert({
+      pet_id: petId, created_by: userId, daily_check_in_id: checkIn.id, observation_type_id: type.id, numeric_value: weightLbs,
+    });
+    if (obsError) throw obsError;
+  }
+  return { checkInId: checkIn.id, weightTypeId: type.id };
+}
+
+test('one weight per day: a check-in weight of 11.0, then the sheet logs 12.0 that day, then the check-in is re-saved as Great Day: 12.0 is the only weight, everywhere', async ({ page }) => {
+  const { supabase, userId, petId, name } = await createPet();
+  const checkInDate = isoDateDaysAgo(3);
+  await seedCheckIn(supabase, userId, petId, checkInDate, 'off', 11.0);
+  const dayStatus = async () => (await supabase.from('daily_check_ins').select('status')
+    .eq('pet_id', petId).eq('check_in_date', checkInDate).single()).data?.status;
+
+  // The sheet logs 12.0 for the same day: it updates that day's weight.
+  const card = await openPetCard(page, name);
+  let sheet = await openSheetFromCard(page, card);
+  await expect(entries(sheet)).toHaveCount(1, { timeout: 10000 });
+  await sheet.getByLabel('Date', { exact: true }).fill(checkInDate);
+  await logWeight(sheet, 12.0);
+  await expect(entries(sheet)).toHaveCount(1, { timeout: 10000 });
+  await expect(entries(sheet).first()).toContainText('12.0 lbs', { timeout: 10000 });
+  let rows = await savedWeights(supabase, petId);
+  expect(rows.map((r) => Number(r.numeric_value))).toEqual([12]);
+  await sheet.getByRole('button', { name: 'Close' }).click();
+  await expect(sheet).toBeHidden();
+
+  // Re-save the check-in as Great Day.
+  const calendar = await openHistory(page, card);
+  const dayButton = calendar.locator('button[aria-label$=", off"]').first();
+  await revealDay(calendar, dayButton);
+  await dayButton.click();
+  await expect(detailSheet(page)).toContainText('Already logged as Off Day', { timeout: 5000 });
+  await detailSheet(page).getByRole('button', { name: 'Great Day' }).click();
+  await confirmPastDaySave(page);
+  await expect.poll(dayStatus, { timeout: 10000 }).toBe('great');
+  await calendar.getByRole('button', { name: 'Close' }).click();
+  await expect(calendar).toBeHidden();
+
+  rows = await savedWeights(supabase, petId);
+  expect(rows.map((r) => Number(r.numeric_value))).toEqual([12]);
+
+  // Pet Profile, the sheet's list and Trends all show 12.0.
+  const card2 = await openPetCard(page, name);
+  await expect(weightRow(card2)).toContainText('12.0 lbs', { timeout: 10000 });
+  sheet = await openSheetFromCard(page, card2);
+  await expect(entries(sheet)).toHaveCount(1, { timeout: 10000 });
+  await expect(entries(sheet).first()).toContainText('12.0 lbs');
+  await sheet.getByRole('button', { name: 'Close' }).click();
+
+  await page.goto(`/pet/${petId}/trends`);
+  await page.getByRole('group', { name: 'Time range' }).getByRole('button', { name: '1Y' }).click();
+  const trendsWeight = page.locator('div.rounded-2xl').filter({ has: page.getByText('Weight', { exact: true }) }).last();
+  await expect(trendsWeight).toContainText('12', { timeout: 10000 });
+  await expect(trendsWeight).not.toContainText('11.0');
+});
+
+test("one weight per day: typing a weight in a check-in removes that day's standalone weight", async ({ page }) => {
+  const { supabase, userId, petId, name } = await createPet();
+  const checkInDate = isoDateDaysAgo(3);
+  const { weightTypeId } = await seedCheckIn(supabase, userId, petId, checkInDate, 'great', null);
+  const { error: saError } = await supabase.from('observations').insert({
+    pet_id: petId, created_by: userId, daily_check_in_id: null, observation_type_id: weightTypeId,
+    numeric_value: 12.0, observed_at: `${checkInDate}T12:00:00.000Z`,
+  });
+  if (saError) throw saError;
+  const dayStatus = async () => (await supabase.from('daily_check_ins').select('status')
+    .eq('pet_id', petId).eq('check_in_date', checkInDate).single()).data?.status;
+
+  const card = await openPetCard(page, name);
+  const calendar = await openHistory(page, card);
+  const dayButton = calendar.locator('button[aria-label$=", great"]').first();
+  await revealDay(calendar, dayButton);
+  await dayButton.click();
+  const details = await startOffDayWithWeight(page);
+  await details.getByLabel('Weight in lbs').fill('13.5');
+  await details.getByRole('button', { name: 'Save check-in' }).click();
+  await confirmPastDaySave(page);
+  await expect.poll(dayStatus, { timeout: 10000 }).toBe('off');
+  await calendar.getByRole('button', { name: 'Close' }).click();
+
+  // The check-in weight is the day's only weight.
+  await expect.poll(async () => (await savedWeights(supabase, petId))
+    .map((r) => [Number(r.numeric_value), r.daily_check_in_id != null]), { timeout: 10000 })
+    .toEqual([[13.5, true]]);
+  const card2 = await openPetCard(page, name);
+  await expect(weightRow(card2)).toContainText('13.5 lbs', { timeout: 10000 });
+});

@@ -161,17 +161,26 @@ function toEntry(row) {
   };
 }
 
-// Newest first. Primary key is the weight's date, never `created_at`:
-// `save_daily_check_ins` (0034) deletes and re-inserts a check-in's
-// observation rows on every re-save, so `created_at` on a check-in weight
-// is "when that check-in was last saved," which would let an edit to an
-// old day's check-in jump ahead of a newer weight. Within one day the
-// tiebreak is `updated_at` (the last time the owner saved that value: a
-// sheet edit, or a check-in save that wrote it again), which is FR6's
-// "most recently saved one is the day's weight." `id` makes the order
-// fully deterministic when two rows share both.
+// One weight per pet per day (Lynn, 2026-11-25). The app keeps it that way
+// on every write: the Log weight sheet updates the day's existing weight
+// instead of adding a second (addWeight, updateWeight), and a check-in save
+// where the owner typed or cleared a weight removes that day's standalone
+// weights (checkinClient.js).
+//
+// Newest first. Primary key is the weight's date, never `created_at`.
+// Older data (or a failed cleanup) can still leave more than one weight on
+// a day; the first one in this order is the day's weight, chosen like this:
+//   1. A standalone weight beats a check-in weight. `save_daily_check_ins`
+//      (0034/0046) deletes and re-inserts a check-in's observation rows on
+//      every re-save with `observed_at`/`updated_at` = now(), so a
+//      check-in weight's time says when the check-in was last saved, not
+//      when the owner last set that weight. It can't be compared with a
+//      standalone weight's time.
+//   2. Then the later `updated_at`.
+//   3. Then the larger `id`, so the order is fully deterministic.
 export function compareWeightsNewestFirst(a, b) {
   if (a.date !== b.date) return a.date < b.date ? 1 : -1;
+  if (!!a.fromCheckIn !== !!b.fromCheckIn) return a.fromCheckIn ? 1 : -1;
   const ua = a.updatedAt || '';
   const ub = b.updatedAt || '';
   if (ua !== ub) return ua < ub ? 1 : -1;
@@ -235,7 +244,8 @@ async function fetchWeightEntriesForPets(petIds, { includeOutOfRange = false } =
   return byPet;
 }
 
-// One point per calendar day (the day's weight per FR6), oldest first.
+// One point per calendar day (the day's weight, see
+// compareWeightsNewestFirst), oldest first.
 // `entries` must already be newest-first.
 function dailyPoints(entries) {
   const seen = new Set();
@@ -257,7 +267,8 @@ function summarize(entries, days) {
 }
 
 // The pet's most recent weights, newest first, both kinds merged, for the
-// Log weight sheet. Same-day weights are all listed (FR6). Out-of-range
+// Log weight sheet. If older data has two weights on one day, both are
+// listed, so the owner can fix or delete either. Out-of-range
 // values are included, flagged `outOfRange`, so they can be edited or
 // deleted; nothing else shows them.
 export async function listWeights(petId, limit = 10) {
@@ -265,10 +276,24 @@ export async function listWeights(petId, limit = 10) {
   return byPet[petId].slice(0, limit);
 }
 
-// Saves a standalone weight (no check-in). `timezone` is the owner's
-// profiles.timezone, used only to refuse a future date.
+// Every weight the pet has on one calendar date, the day's weight first
+// (compareWeightsNewestFirst). Out-of-range values are included so a new
+// value replaces them rather than sitting beside them.
+async function weightsOnDate(petId, date) {
+  const byPet = await fetchWeightEntriesForPets([petId], { includeOutOfRange: true });
+  return byPet[petId].filter((e) => e.date === date);
+}
+
+// Logs a weight for a day. One weight per pet per day: if the pet already
+// has a weight on that date (from a check-in or logged here), that weight
+// is updated to the new value instead of a second one being added. For a
+// check-in weight, updateWeight also moves the check-in's updated_at (spec
+// 0043). Otherwise a standalone weight (no check-in) is saved. `timezone`
+// is the owner's profiles.timezone, used only to refuse a future date.
 export async function addWeight(petId, { date, lbs }, timezone) {
   const value = validateWeightInput({ lbs, date }, timezone);
+  const [dayWeight] = await weightsOnDate(petId, date);
+  if (dayWeight) return updateWeight(dayWeight, { lbs: value }, timezone);
   const typeId = await weightTypeId();
   const row = await entities.Observation.create({
     pet_id: petId,
@@ -282,6 +307,12 @@ export async function addWeight(petId, { date, lbs }, timezone) {
 
 // `entry` is one item from listWeights. A check-in weight's date belongs to
 // its check-in and can't change (FR3); only its value is updated.
+//
+// Moving a standalone weight to a date that already has a weight replaces
+// that day's weight, so the day still has one: the day's existing weight
+// takes the new value (a check-in weight keeps its check-in), then the
+// moved row is deleted. Updating first means a failure partway never loses
+// the new value; at worst the moved row is still on its old date.
 /** @param {any} entry @param {{ date?: string, lbs: any }} change @param {string} [timezone] */
 export async function updateWeight(entry, { date, lbs }, timezone) {
   if (entry.fromCheckIn) {
@@ -300,6 +331,20 @@ export async function updateWeight(entry, { date, lbs }, timezone) {
   }
   const nextDate = date ?? entry.date;
   const value = validateWeightInput({ lbs, date: nextDate }, timezone);
+  if (nextDate !== entry.date) {
+    if (!entry.petId) throw new Error('updateWeight: moving a weight needs its petId');
+    const [dayWeight] = (await weightsOnDate(entry.petId, nextDate)).filter((e) => e.id !== entry.id);
+    if (dayWeight) {
+      const row = await updateWeight(dayWeight, { lbs: value }, timezone);
+      try {
+        await deleteWeight(entry);
+      } catch (err) {
+        // Already gone: the day still ends up with one weight.
+        if (err?.code !== 'weight_not_found') throw err;
+      }
+      return row;
+    }
+  }
   return entities.Observation.update(entry.id, {
     numeric_value: value,
     observed_at: weightDate.toObservedAt(nextDate),

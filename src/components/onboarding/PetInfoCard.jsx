@@ -13,7 +13,7 @@ import { PALETTE } from '@/lib/toneColors';
 import PetIdentityFields from './fields/PetIdentityFields';
 import { resolveDate, isDateInfoValid } from './fields/DateInfoFields';
 import { reportClientError } from '@/lib/errorMonitoring';
-import { addWeight, isValidWeight } from '@/lib/weightClient';
+import { addWeight, isValidWeight, WEIGHT_MESSAGES } from '@/lib/weightClient';
 import { useAuth } from '@/lib/AuthContext';
 import { detectTimezone, dateStrInTimezone } from '@/lib/timezone';
 
@@ -209,7 +209,7 @@ export default function PetInfoCard({ onCreated }) {
         <Label htmlFor="starting-weight">Starting Weight (lbs)</Label>
         <Input id="starting-weight" type="number" min="0.1" max="300" step="0.1" value={form.starting_weight_lbs} onChange={e => set('starting_weight_lbs', e.target.value)} placeholder="Optional" />
         {!weightValid && (
-          <p className="text-base" style={{ color: PALETTE.red }}>Please enter a valid weight.</p>
+          <p role="alert" className="text-base" style={{ color: PALETTE.red }}>{WEIGHT_MESSAGES.weight_out_of_range}</p>
         )}
         <p className="text-sm text-muted-foreground">Logs today's weight to {petLabelForWeightHint(species)} Trends — you can log again anytime.</p>
       </div>
