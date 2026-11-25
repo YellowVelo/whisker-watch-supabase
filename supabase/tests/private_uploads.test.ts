@@ -444,8 +444,19 @@ Deno.test('private uploads: the bucket refuses oversized and non-photo/PDF files
     const text = await upload(user, 'notes.txt', new TextEncoder().encode('hello'), 'text/plain');
     assertExists(text.error, 'a text file must be refused');
 
+    // Spec 0081 (migration 0061) allows CSV/spreadsheet files for import
+    // (PA-51). Projects without it still refuse them, so check the bucket.
+    const { data: bucket, error: bucketError } = await adminClient().storage.getBucket('uploads');
+    if (bucketError || !bucket) throw new Error(`reading the uploads bucket failed: ${bucketError?.message}`);
+    const csvAllowed = (bucket.allowed_mime_types ?? []).includes('text/csv');
     const csv = await upload(user, 'labs.csv', new TextEncoder().encode('bun,12'), 'text/csv');
-    assertExists(csv.error, 'a CSV must be refused (spreadsheet import is PA-51)');
+    if (csvAllowed) {
+      assertEquals(csv.error, null, 'a CSV must be accepted where migration 0061 allows it');
+      const { error: removeError } = await adminClient().storage.from('uploads').remove([csv.path]);
+      if (removeError) throw new Error(`removing the test CSV failed: ${removeError.message}`);
+    } else {
+      assertExists(csv.error, 'a CSV must be refused where migration 0061 has not run');
+    }
   } finally {
     await cleanUp(null, [user]);
   }
