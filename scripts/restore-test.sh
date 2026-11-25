@@ -46,8 +46,10 @@ echo "Restoring from: $BACKUP_KEY"
 ENCRYPTED_FILE=$(basename "$BACKUP_KEY")
 DUMP_FILE="${ENCRYPTED_FILE%.gpg}"
 
+RESTORE_LIST="${DUMP_FILE}.list"
+
 cleanup() {
-  rm -f "$ENCRYPTED_FILE" "$DUMP_FILE"
+  rm -f "$ENCRYPTED_FILE" "$DUMP_FILE" "$RESTORE_LIST" "$RESTORE_LIST.full"
 }
 trap cleanup EXIT
 
@@ -144,10 +146,30 @@ psql "$RESTORE_TEST_DB_URL" -v ON_ERROR_STOP=1 -q -c "
   \$\$ LANGUAGE plpgsql SECURITY DEFINER;
 "
 
+echo "== Building restore list =="
+# Migration 0061 (spec 0081) drops symptom_logs, wellness_scores and
+# food_logs, so the schema rebuilt above no longer has them. A backup taken
+# before 0061 ran on that project still holds their rows, and restoring
+# those into missing tables makes pg_restore exit non-zero. Leave just those
+# three TABLE DATA entries out of the restore list; everything else in the
+# backup is restored as before. A newer backup has no such entries, so the
+# filter then removes nothing. TOC lines look like
+#   "4012; 0 17021 TABLE DATA public food_logs postgres".
+# (grep exits 1 only if every line was filtered out, which can't happen
+# with a real backup; || true keeps set -e from treating that as fatal.)
+pg_restore -l "$DUMP_FILE" > "$RESTORE_LIST.full"
+grep -vE '^[0-9]+; [0-9]+ [0-9]+ TABLE DATA public (symptom_logs|wellness_scores|food_logs)( |$)' \
+  "$RESTORE_LIST.full" > "$RESTORE_LIST" || true
+SKIPPED=$(( $(wc -l < "$RESTORE_LIST.full") - $(wc -l < "$RESTORE_LIST") ))
+rm -f "$RESTORE_LIST.full"
+echo "Left out $SKIPPED retired-table data entries (migration 0061)"
+
 echo "== Restoring data into scratch project =="
 # --data-only: only public/auth data, matching how backup-db.sh dumps it.
 # --no-owner/--no-acl: source roles don't exist in the scratch project.
+# -L: restore only the entries in the list built above.
 pg_restore --data-only --no-owner --no-acl \
+  -L "$RESTORE_LIST" \
   -d "$RESTORE_TEST_DB_URL" "$DUMP_FILE"
 
 echo "== Reinstating handle_new_user =="

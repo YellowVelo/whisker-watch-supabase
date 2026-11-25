@@ -230,6 +230,29 @@ Deno.test('weight home access and retired tables (spec 0081)', async (t) => {
         .eq('observed_at', noonUtc(utcDay(-8)));
       assertEquals(sitterRows?.length ?? 0, 0, 'nothing was saved for the sitter');
 
+      // A check-in weight too: the sitter tries to attach a weight to the
+      // owner's existing check-in for this pet.
+      const { data: ownerWeight } = await adminClient()
+        .from('observations')
+        .select('daily_check_in_id')
+        .eq('id', checkInWeightId)
+        .single();
+      const checkInId = ownerWeight?.daily_check_in_id as string | undefined;
+      assert(checkInId, "the owner's check-in weight is linked to a check-in");
+      const { error: ciWeightError } = await hh.sitter.client.from('observations').insert({
+        pet_id: hh.petId,
+        created_by: hh.sitter.userId,
+        observation_type_id: hh.weightTypeId,
+        daily_check_in_id: checkInId,
+        numeric_value: 12.5,
+      });
+      assert(ciWeightError, 'sitter check-in weight insert must be refused');
+      const { data: ciRows } = await adminClient()
+        .from('observations')
+        .select('id')
+        .eq('daily_check_in_id', checkInId);
+      assertEquals(ciRows?.length ?? 0, 1, "only the owner's weight is on that check-in");
+
       for (const id of [standaloneId, checkInWeightId]) {
         assertEquals(await tryUpdate(hh.sitter.client, id, 99.9), 0, 'sitter update changes no rows');
         assertEquals(await tryDelete(hh.sitter.client, id), 0, 'sitter delete removes no rows');
@@ -310,6 +333,42 @@ Deno.test('weight home access and retired tables (spec 0081)', async (t) => {
         .select('id');
       assertEquals(moved?.length, 1, 'owner can move their own sit');
       assertEquals(await readableIds(hh.sitter.client, [standaloneId, checkInWeightId]), [], 'sitter reads nothing after the window');
+    });
+
+    // Runs after every step that needs the co-owner: removal is permanent
+    // for the rest of the file.
+    await t.step('a removed co-owner can no longer read or write weights (AC11)', async () => {
+      const { standaloneId, checkInWeightId } = await seedOwnerWeights(hh, -32);
+      const coOwnWeight = await addStandaloneWeight(hh, hh.coOwner, 10.6, -35);
+      assert(!coOwnWeight.error && coOwnWeight.data, `co-owner adds a weight before removal: ${coOwnWeight.error?.message}`);
+      const coOwnId = coOwnWeight.data.id as string;
+
+      // The primary owner removes the co-owner (0056: only they can).
+      const { data: removed } = await hh.owner.client
+        .from('pet_co_owners')
+        .delete()
+        .eq('pet_id', hh.petId)
+        .eq('co_owner_user_id', hh.coOwner.userId)
+        .select('id');
+      assertEquals(removed?.length, 1, 'owner removes the co-owner');
+
+      const ids = [standaloneId, checkInWeightId, coOwnId];
+      assertEquals(await readableIds(hh.coOwner.client, ids), [], 'removed co-owner reads nothing, not even their own weight');
+      const added = await addStandaloneWeight(hh, hh.coOwner, 12.0, -38);
+      assert(added.error, 'removed co-owner weight insert must be refused');
+      const { data: addedRows } = await adminClient()
+        .from('observations')
+        .select('id')
+        .eq('pet_id', hh.petId)
+        .eq('observed_at', noonUtc(utcDay(-38)));
+      assertEquals(addedRows?.length ?? 0, 0, 'nothing was saved for the removed co-owner');
+      for (const id of ids) {
+        assertEquals(await tryUpdate(hh.coOwner.client, id, 99.9), 0, 'removed co-owner update changes no rows');
+        assertEquals(await tryDelete(hh.coOwner.client, id), 0, 'removed co-owner delete removes no rows');
+      }
+      assertEquals(await storedLbs(standaloneId), 11.2);
+      assertEquals(await storedLbs(checkInWeightId), 11.4);
+      assertEquals(await storedLbs(coOwnId), 10.6);
     });
 
     await t.step('symptom_logs, wellness_scores and food_logs are gone after 0061 (AC9)', async () => {

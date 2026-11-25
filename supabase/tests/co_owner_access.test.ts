@@ -94,7 +94,9 @@ function isoDay(offsetDays: number): string {
 // PostgREST reports a table it doesn't know as PGRST205 (or 42P01 straight
 // from Postgres).
 async function tableExists(table: string): Promise<boolean> {
-  const { error } = await adminClient().from(table).select('id', { head: true }).limit(1);
+  // A plain GET, not head: a HEAD on a dropped table returns 204 with no
+  // error body, so it would look like the table exists.
+  const { error } = await adminClient().from(table).select('id').limit(1);
   if (!error) return true;
   if (error.code === 'PGRST205' || error.code === '42P01') return false;
   throw new Error(`checking ${table} failed: ${error.message}`);

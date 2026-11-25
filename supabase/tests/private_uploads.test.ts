@@ -435,8 +435,9 @@ Deno.test('private uploads: document links can only be made by an owner, for the
   }
 });
 
-Deno.test('private uploads: the bucket refuses oversized and non-photo/PDF files', async () => {
+Deno.test('private uploads: the bucket refuses oversized files and types outside photo/PDF/spreadsheet', async () => {
   const user = await createScratchUser('limits');
+  const uploaded: string[] = [];
   try {
     const big = await upload(user, 'big.pdf', new Uint8Array(10 * 1024 * 1024 + 1), 'application/pdf');
     assertExists(big.error, 'a file over 10 MB must be refused');
@@ -444,20 +445,24 @@ Deno.test('private uploads: the bucket refuses oversized and non-photo/PDF files
     const text = await upload(user, 'notes.txt', new TextEncoder().encode('hello'), 'text/plain');
     assertExists(text.error, 'a text file must be refused');
 
-    // Spec 0081 (migration 0061) allows CSV/spreadsheet files for import
-    // (PA-51). Projects without it still refuse them, so check the bucket.
-    const { data: bucket, error: bucketError } = await adminClient().storage.getBucket('uploads');
-    if (bucketError || !bucket) throw new Error(`reading the uploads bucket failed: ${bucketError?.message}`);
-    const csvAllowed = (bucket.allowed_mime_types ?? []).includes('text/csv');
-    const csv = await upload(user, 'labs.csv', new TextEncoder().encode('bun,12'), 'text/csv');
-    if (csvAllowed) {
-      assertEquals(csv.error, null, 'a CSV must be accepted where migration 0061 allows it');
-      const { error: removeError } = await adminClient().storage.from('uploads').remove([csv.path]);
-      if (removeError) throw new Error(`removing the test CSV failed: ${removeError.message}`);
-    } else {
-      assertExists(csv.error, 'a CSV must be refused where migration 0061 has not run');
+    const html = await upload(user, 'page.html', new TextEncoder().encode('<p>hi</p>'), 'text/html');
+    assertExists(html.error, 'an HTML file must be refused');
+
+    // Spec 0081 FR27 (migration 0061): the three spreadsheet types are allowed.
+    const spreadsheets: Array<[string, string]> = [
+      ['labs.csv', 'text/csv'],
+      ['labs-excel.csv', 'application/vnd.ms-excel'],
+      ['labs.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'],
+    ];
+    for (const [name, type] of spreadsheets) {
+      const res = await upload(user, name, new TextEncoder().encode('bun,12'), type);
+      if (!res.error) uploaded.push(res.path);
+      assertEquals(res.error, null, `a ${type} spreadsheet must be accepted`);
     }
   } finally {
+    // cleanUp also empties the user's folder; this removes the accepted
+    // spreadsheets by name first so none is left behind if that listing fails.
+    if (uploaded.length) await adminClient().storage.from('uploads').remove(uploaded);
     await cleanUp(null, [user]);
   }
 });

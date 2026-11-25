@@ -38,10 +38,23 @@
 -- UNDO: there is no code undo for dropped data. The nightly encrypted
 -- pg_dump in R2 (docs/features/requirements-database-backups.md) holds the
 -- three tables as they were the night before this ran, for 30 days. To
--- undo: recreate the tables from their original migrations (0001, 0014,
--- 0021, 0022, with 0058's created_by foreign keys) and restore their rows
--- from that dump with pg_restore --data-only -t <table>. The bucket change
--- is undone by setting allowed_mime_types back to 0054's list.
+-- undo, first recreate everything the drop took with it, in this order:
+--   a. the tables, from their original migrations (food_logs and
+--      symptom_logs from 0001, wellness_scores from 0014, plus 0021's and
+--      0022's added columns), with RLS enabled;
+--   b. their access rules: 0004's co-owner policies on food_logs and
+--      symptom_logs (food_logs_/symptom_logs_{select,insert,update,
+--      delete}_owner, all public.is_pet_owner(pet_id, auth.uid())) and
+--      0014's matching wellness_scores_*_owner policies, replacing 0001's
+--      *_own ones (0004 drops those);
+--   c. 0058's created_by foreign keys (on delete set null);
+--   d. 0062's stamp_record_author trigger on all three (before insert or
+--      update, for each row, execute public.stamp_record_author()).
+-- Then restore their rows from that dump with
+-- pg_restore --data-only -t <table>. Restoring rows before (b) leaves them
+-- readable only by the service role; before (d), rows written afterwards
+-- aren't stamped. The bucket change is undone by setting
+-- allowed_mime_types back to 0054's list.
 --
 -- SAFETY CHECK: this must run only after the spec-0081 frontend is live on
 -- that environment, because the old frontend still reads and writes these
@@ -58,11 +71,19 @@
 -- (The table is created there, not only below, because a blocked run of
 -- this file rolls back everything in it, including its own table.)
 --
+-- EDGE FUNCTIONS FIRST: on each project, the spec-0081 versions of
+-- ask-vet-assistant and generate-vet-report must be deployed BEFORE
+-- `supabase db push` runs this file. The older deployed versions still read
+-- symptom_logs / wellness_scores / food_logs, so once these tables are
+-- dropped they fail until the new versions are live. The marker check below
+-- does not check this; it only covers the frontend.
+--
 -- Rollout order on each project (AC10):
 --   1. Frontend promoted (Cloudflare, branch main, "Spec 0081 ...").
 --   2. Marker set (snippet above).
 --   3. Edge Functions deployed (ask-vet-assistant, generate-vet-report),
---      then scripts/check-functions-start.sh <project-url>.
+--      then scripts/check-functions-start.sh <project-url>. Must finish
+--      before step 4.
 --   4. `supabase db push --include-all` (this file is numbered 0061 but
 --      lands after 0062, so a plain push skips it).
 --
