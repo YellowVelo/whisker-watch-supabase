@@ -63,7 +63,16 @@ const SIGNED_IN_ONLY: Record<string, Record<string, unknown>> = {
   save_daily_check_ins: { payloads: [] },
 };
 
-const TRIGGERS = ['handle_new_user', 'set_updated_at', 'protect_privileged_profile_fields', 'validate_profile_timezone'];
+const TRIGGERS = [
+  'handle_new_user',
+  'set_updated_at',
+  'protect_privileged_profile_fields',
+  'validate_profile_timezone',
+  // spec 0083
+  'protect_pet_photo_path',
+  'protect_record_creator',
+  'stamp_record_author',
+];
 
 function anonClient() {
   return createClient(requireEnv('SUPABASE_URL'), requireEnv('SUPABASE_ANON_KEY'));

@@ -8,7 +8,7 @@
 // Setup uses test1@'s own signed-in client (same calls the app makes). Each
 // test makes and deletes its own pet (and sit).
 
-import { test, expect } from './fixtures.js';
+import { test, expect, deleteTestPet } from './fixtures.js';
 import { createClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
 
@@ -58,7 +58,7 @@ test.describe('Invite dialogs: replies from the invite functions', () => {
   // Sit first: only someone who owns every pet in a sit can delete it.
   test.afterEach(async () => {
     if (sitId) await owner.client.from('pet_sits').delete().eq('id', sitId);
-    if (petId) await owner.client.from('pets').delete().eq('id', petId);
+    await deleteTestPet(owner.client, petId);
   });
 
   async function openCoOwnerDialog(page) {

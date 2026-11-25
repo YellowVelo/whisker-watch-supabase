@@ -3,12 +3,12 @@
 // Client-callable (user JWT, not service-role — see Vet Export Feature
 // Spec §5.1). Assembles a clinic-ready PDF health report for one pet and
 // returns it as a binary stream. The caller's own JWT is used to create
-// the Supabase client below, so every query is subject to normal RLS
-// (`is_pet_owner()`, `is_pet_sitter()`), so a user can only generate a
-// report for a pet they can read: one they own or co-own, or (punch list
-// PA-72) one they're sitting for while the sit is open. There is no
-// separate "check the user owns this pet" step:
-// a `pets` fetch for a pet the caller can't read simply returns no row.
+// the Supabase client below, so every query is subject to normal RLS.
+// Only a pet's owner or co-owners may generate its report (punch list
+// PA-72, spec 0083 FR4). RLS alone isn't enough, because a sitter can read
+// the pet during an open sit, so after the `pets` read the function also
+// asks `is_pet_owner()` as the caller and refuses anyone else (sitters and
+// strangers alike) with the same 403, failing closed if that check errors.
 //
 // Request body: { petId: string, format?: 'pdf' }
 //   - format is optional and currently only 'pdf' is supported (DOCX was
@@ -432,12 +432,25 @@ Deno.serve(async (req) => {
       return jsonError('unsupported_format', 'Only "pdf" is supported at this time', 400);
     }
 
-    // RLS (is_pet_owner()) means this returns no row if the caller
-    // doesn't own/co-own the pet — treated as 403 rather than 404 so we
-    // don't reveal whether the id exists at all.
+    // RLS returns no row unless the caller owns, co-owns or (during an
+    // open sit) sits for the pet. No row is treated as 403 rather than 404
+    // so we don't reveal whether the id exists at all.
     const { data: pet, error: petError } = await supabaseClient.from('pets').select('*').eq('id', petId).maybeSingle();
     if (petError) throw petError;
     if (!pet) return jsonError('forbidden', 'You do not have access to this pet', 403);
+
+    // Owners and co-owners only (PA-72, spec 0083 FR4): a sitter can read
+    // the pet above during an open sit, but can't generate its report.
+    // Fails closed: an error from the check is reported and refused.
+    const { data: isOwner, error: ownerError } = await supabaseClient.rpc('is_pet_owner', {
+      p_pet_id: petId,
+      p_user_id: userData.user.id,
+    });
+    if (ownerError) {
+      reportError(ownerError, { function: 'generate-vet-report', step: 'is_pet_owner' });
+      return jsonError('forbidden', 'You do not have access to this pet', 403);
+    }
+    if (isOwner !== true) return jsonError('forbidden', 'You do not have access to this pet', 403);
 
     const sinceDate = new Date(Date.now() - DAYS_WINDOW * MS_PER_DAY).toISOString().slice(0, 10);
 

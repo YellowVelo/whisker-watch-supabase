@@ -160,6 +160,254 @@ Deno.test('private uploads: signed-out visitors get nothing, including old publi
   }
 });
 
+// Spec 0083 (PA-73, migration 0062): a pet's photo_path set by a signed-in
+// user must be null, a shared/ demo photo, or one file in the caller's own
+// folder. One household for the whole test (four sign-ins), one step per
+// check, each on its own pet or a freshly reset photo.
+Deno.test('pet photo path: only your own uploads or shared photos (spec 0083 AC1, AC2)', async (t) => {
+  let h: Household | null = null;
+  const strangerPetIds: string[] = [];
+  const admin = adminClient();
+  const storedPhoto = async (petId: string) => {
+    const { data } = await admin.from('pets').select('photo_path').eq('id', petId).single();
+    return data?.photo_path ?? null;
+  };
+  const resetPhoto = async (petId: string, path: string | null) => {
+    const { error } = await admin.from('pets').update({ photo_path: path }).eq('id', petId);
+    if (error) throw new Error(`photo reset failed: ${error.message}`);
+  };
+  try {
+    h = await buildHousehold('photo-path');
+    const hh = h;
+
+    // Whatever happens to the pet row, the stranger must still not be able
+    // to open or download the owner's document.
+    const assertStrangerLockedOut = async () => {
+      assert(!(await canOpen(hh.stranger, hh.docPath)), 'stranger must NOT get a signed link to the document');
+      const { data, error } = await hh.stranger.client.storage.from('uploads').download(hh.docPath);
+      assert(error || !data, 'stranger must NOT download the document');
+    };
+
+    await t.step('AC1: stranger cannot create a pet whose photo is the owner\'s document', async () => {
+      const { data, error } = await hh.stranger.client
+        .from('pets')
+        .insert({ name: 'Scratch Stranger Pet', created_by: hh.stranger.userId, photo_path: hh.docPath })
+        .select('id');
+      for (const row of data ?? []) strangerPetIds.push(row.id);
+      assertExists(error, 'pet create pointing at another user\'s document must be refused');
+      const { data: rows } = await admin.from('pets').select('id').eq('created_by', hh.stranger.userId).eq('photo_path', hh.docPath);
+      for (const row of rows ?? []) if (!strangerPetIds.includes(row.id)) strangerPetIds.push(row.id);
+      assertEquals(rows?.length ?? 0, 0, 'no pet row may be stored with that photo path');
+      await assertStrangerLockedOut();
+    });
+
+    await t.step('AC1: stranger cannot point their own pet\'s photo at the owner\'s document', async () => {
+      const { data: pet, error: createError } = await hh.stranger.client
+        .from('pets')
+        .insert({ name: 'Scratch Stranger Pet 2', created_by: hh.stranger.userId })
+        .select('id')
+        .single();
+      if (createError || !pet) throw new Error(`stranger pet insert failed: ${createError?.message}`);
+      strangerPetIds.push(pet.id);
+
+      const attempts = [
+        hh.docPath,
+        `${hh.stranger.userId}/../${hh.docPath}`,
+        `shared/../${hh.docPath}`,
+      ];
+      for (const path of attempts) {
+        const { error }: { error: unknown } = await hh.stranger.client
+          .from('pets')
+          .update({ photo_path: path })
+          .eq('id', pet.id);
+        assertExists(error, `pet update to ${path} must be refused`);
+        assertEquals(await storedPhoto(pet.id), null, `photo_path must be unchanged after trying ${path}`);
+        await resetPhoto(pet.id, null);
+      }
+      await assertStrangerLockedOut();
+    });
+
+    await t.step('AC2: co-owner can rename the pet while its photo is in the owner\'s folder', async () => {
+      await resetPhoto(hh.petId, hh.photoPath);
+      const { data, error } = await hh.coOwner.client
+        .from('pets')
+        .update({ name: 'Scratch Storage Pet Renamed' })
+        .eq('id', hh.petId)
+        .select('name, photo_path');
+      assertEquals(error, null, 'co-owner rename must succeed');
+      assertEquals(data?.length, 1, 'co-owner rename must update the pet');
+      assertEquals(data?.[0]?.name, 'Scratch Storage Pet Renamed');
+      assertEquals(await storedPhoto(hh.petId), hh.photoPath, 'photo left unchanged');
+    });
+
+    for (const role of ['owner', 'coOwner'] as const) {
+      await t.step(`AC2: ${role} can set an own-folder photo, a shared/ photo, and no photo`, async () => {
+        const actor = hh[role];
+        const paths = [`${actor.userId}/photo-${role}.png`, 'shared/maple.jpg', null];
+        for (const path of paths) {
+          await resetPhoto(hh.petId, hh.photoPath);
+          const { data, error } = await actor.client
+            .from('pets')
+            .update({ photo_path: path })
+            .eq('id', hh.petId)
+            .select('id');
+          assertEquals(error, null, `${role} setting photo_path to ${path} must succeed`);
+          assertEquals(data?.length, 1, `${role} setting photo_path to ${path} must update the pet`);
+          assertEquals(await storedPhoto(hh.petId), path);
+        }
+      });
+    }
+
+    await t.step('AC2: owner can create a pet with an own-folder or shared/ photo', async () => {
+      for (const path of [`${hh.owner.userId}/photo-new.png`, 'shared/maple.jpg']) {
+        const { data, error } = await hh.owner.client
+          .from('pets')
+          .insert({ name: 'Scratch Owner Pet', created_by: hh.owner.userId, photo_path: path })
+          .select('id')
+          .single();
+        assertEquals(error, null, `owner pet create with ${path} must succeed`);
+        if (data) await admin.from('pets').delete().eq('id', data.id);
+      }
+    });
+
+    // QA (spec 0083): malformed paths the trigger must refuse, for a
+    // stranger and for a co-owner pointing at a different file of the owner's.
+    await t.step('QA: malformed and wrong-folder photo paths are refused', async () => {
+      const { data: pet, error: createError } = await hh.stranger.client
+        .from('pets')
+        .insert({ name: 'Scratch Stranger Malformed Pet', created_by: hh.stranger.userId })
+        .select('id')
+        .single();
+      if (createError || !pet) throw new Error(`stranger pet insert failed: ${createError?.message}`);
+      strangerPetIds.push(pet.id);
+      const s = hh.stranger.userId;
+      const refused = [
+        '', // empty string is not "no photo"
+        `/${hh.docPath}`,
+        `/${s}/x.png`,
+        `${s}/`,
+        `${s}/.`,
+        `${s}/..`,
+        `${s}/sub/x.png`,
+        `${s}`,
+        `${s.toUpperCase()}/x.png`,
+        'shared/',
+        'shared',
+        'shared/a/b.jpg',
+        'shared/..',
+        `${hh.owner.userId}/photo.png`,
+        `${hh.owner.userId}/brand-new.png`,
+      ];
+      for (const path of refused) {
+        const { error }: { error: unknown } = await hh.stranger.client.from('pets').update({ photo_path: path }).eq('id', pet.id);
+        assertExists(error, `stranger photo_path ${JSON.stringify(path)} must be refused`);
+        assertEquals(await storedPhoto(pet.id), null, `photo_path unchanged after ${JSON.stringify(path)}`);
+        await resetPhoto(pet.id, null);
+      }
+
+      // A co-owner may keep the owner's photo, but not switch to another of
+      // the owner's files (FR1: only their own folder).
+      await resetPhoto(hh.petId, hh.photoPath);
+      const { error: coError }: { error: unknown } = await hh.coOwner.client.from('pets').update({ photo_path: hh.docPath }).eq('id', hh.petId);
+      assertExists(coError, "co-owner pointing the photo at the owner's document must be refused");
+      assertEquals(await storedPhoto(hh.petId), hh.photoPath);
+    });
+
+    // Reviewer Unverified item 1: a percent-encoded path has no literal '/',
+    // so the trigger lets it through. Confirm it still can't open or delete
+    // the owner's file: storage matches names literally, and delete-pet
+    // removes by literal name.
+    await t.step('QA: percent-encoded photo paths open and delete nothing of the owner\'s', async () => {
+      const s = hh.stranger.userId;
+      const [, docName] = hh.docPath.split('/');
+      const encoded = [
+        `${s}/..%2F${hh.owner.userId}%2F${docName}`,
+        `${s}/%2e%2e%2f${hh.owner.userId}%2f${docName}`,
+        `${s}/..%252F${hh.owner.userId}%252F${docName}`,
+        `${s}/..%5C${hh.owner.userId}%5C${docName}`,
+      ];
+      const ownerFileBytes = async () => {
+        const { data } = await admin.storage.from('uploads').download(hh.docPath);
+        return data ? new Uint8Array(await data.arrayBuffer()).length : 0;
+      };
+      const before = await ownerFileBytes();
+      assert(before > 0, 'owner document exists before the test');
+
+      for (const path of encoded) {
+        const { data: pet } = await hh.stranger.client
+          .from('pets')
+          .insert({ name: 'Scratch Stranger Encoded Pet', created_by: hh.stranger.userId, photo_path: path })
+          .select('id, photo_path')
+          .maybeSingle();
+        // Refused is also safe; saved (it was on dev, 2026-11-24) must still be harmless.
+        if (!pet) continue;
+        strangerPetIds.push(pet.id);
+        assertEquals(pet.photo_path, path, 'stored literally, not decoded');
+
+        const { data: signed, error: signError } = await hh.stranger.client.storage.from('uploads').createSignedUrl(path, 60);
+        if (signed?.signedUrl) {
+          const resp = await fetch(signed.signedUrl);
+          const body = await resp.arrayBuffer();
+          assert(!resp.ok || body.byteLength === 0, `signed link for ${path} must not serve a file (got ${resp.status}, ${body.byteLength} bytes)`);
+        } else {
+          assertExists(signError, `no signed link for ${path}`);
+        }
+        const { data: dl } = await hh.stranger.client.storage.from('uploads').download(path);
+        assert(!dl, `download of ${path} must fail`);
+        await assertStrangerLockedOut();
+
+        // The stranger deletes their pet the app's way; the server removes
+        // "its photo" with the master key.
+        const { status, json } = await callFunction('delete-pet', hh.stranger.accessToken, { pet_id: pet.id });
+        assertEquals(status, 200, JSON.stringify(json));
+        assertEquals(json.mode, 'deleted');
+        assertEquals(await ownerFileBytes(), before, `owner's document must survive deleting a pet whose photo is ${path}`);
+      }
+      const { data: listed } = await admin.storage.from('uploads').list(hh.owner.userId);
+      const names = (listed ?? []).map((f: { name: string }) => f.name);
+      assert(names.includes(docName), 'owner document still listed');
+      assert(names.includes(hh.photoPath.split('/')[1]), 'owner photo still listed');
+    });
+
+    // Reviewer Unverified item 4 at the database level: the primary owner
+    // changes the photo while a co-owner has Edit open. The co-owner's
+    // later save without photo_path (what petEditPayload.js now sends)
+    // succeeds and keeps the owner's new photo. The old payload, which
+    // re-sent the stale path, is refused, which is why the app change matters.
+    await t.step('QA: co-owner save after the owner changed the photo keeps the new photo', async () => {
+      await resetPhoto(hh.petId, hh.photoPath);
+      const loadedByCoOwner = hh.photoPath;
+      const newPhoto = `${hh.owner.userId}/photo-replaced.png`;
+      const { error: ownerError }: { error: unknown } = await hh.owner.client.from('pets').update({ photo_path: newPhoto }).eq('id', hh.petId);
+      assertEquals(ownerError, null, 'owner replaces the photo');
+
+      const { error: staleError }: { error: unknown } = await hh.coOwner.client
+        .from('pets')
+        .update({ name: 'Scratch Stale Save', photo_path: loadedByCoOwner })
+        .eq('id', hh.petId);
+      assertExists(staleError, 'old payload re-sending the stale photo path is refused');
+      assertEquals(await storedPhoto(hh.petId), newPhoto);
+
+      const { data, error } = await hh.coOwner.client
+        .from('pets')
+        .update({ name: 'Scratch Co-Owner Save', notes: 'co-owner edit' })
+        .eq('id', hh.petId)
+        .select('name, photo_path');
+      assertEquals(error, null, 'co-owner save without photo_path succeeds');
+      assertEquals(data?.[0]?.name, 'Scratch Co-Owner Save');
+      assertEquals(data?.[0]?.photo_path, newPhoto, "owner's new photo is kept");
+
+      // Re-sending the CURRENT path unchanged is also allowed.
+      const { error: sameError }: { error: unknown } = await hh.coOwner.client.from('pets').update({ photo_path: newPhoto }).eq('id', hh.petId);
+      assertEquals(sameError, null, 're-sending the unchanged photo path is allowed');
+    });
+  } finally {
+    if (strangerPetIds.length) await admin.from('pets').delete().in('id', strangerPetIds);
+    if (h) await admin.from('pets').delete().eq('id', h.petId);
+    await cleanUp(h);
+  }
+});
+
 Deno.test('private uploads: document links can only be made by an owner, for their own file', async () => {
   let h: Household | null = null;
   try {

@@ -12,7 +12,7 @@
 // app makes. Seeding through the dialog itself is avoided because Invite
 // also calls the invite-co-owner Edge Function, which creates a real auth
 // account for the invited address.
-import { test, expect } from './fixtures.js';
+import { test, expect, deleteTestPet } from './fixtures.js';
 import { createClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
 
@@ -42,10 +42,8 @@ async function addPendingCoOwner(owner, petId, email) {
   if (error) throw new Error(`could not add co-owner row: ${error.message}`);
 }
 
-// A direct delete (not delete-pet) so a linked co-owner is never handed the
-// pet: co-owner rows cascade away with it.
 async function deletePet(owner, petId) {
-  if (petId) await owner.client.from('pets').delete().eq('id', petId);
+  await deleteTestPet(owner.client, petId);
 }
 
 test.describe('as the primary owner', () => {

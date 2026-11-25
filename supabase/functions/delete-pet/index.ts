@@ -17,8 +17,9 @@
 // Behavior depends on the caller's relationship to the pet:
 //   - Sole owner (created_by, no linked co-owners):
 //       delete the `pets` row (every child table cascades on pet_id),
-//       then its photo and scanned documents from Storage, except a
-//       document also linked to another pet (spec 0075). -> mode: 'deleted'
+//       then its photo and scanned documents from Storage, except any
+//       file another pet still uses as its photo or a scanned document
+//       (spec 0075, 0083 FR3). -> mode: 'deleted'
 //   - Primary owner, pet has a linked co-owner:
 //       transfer_pet_ownership() (migration 0058, shared with
 //       delete-account) passes the pet to the oldest linked co-owner in
@@ -34,7 +35,7 @@
 
 import { createClient } from 'jsr:@supabase/supabase-js@2.119.2';
 import { reportError, serverError } from '../_shared/errorReporting.ts';
-import { deletablePetPhotoPath } from '../_shared/petPhoto.ts';
+import { deletableFilePaths, deletablePetPhotoPath } from '../_shared/petPhoto.ts';
 import { removePaths } from '../_shared/storageFiles.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
@@ -216,10 +217,14 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Files to delete once the pet is gone: its photo, and each scanned
-    // document not also linked to another pet (a scan can cover several
-    // pets, spec 0061/0071). Looked up now, because the pet_documents rows
-    // cascade away with the pet.
+    // Files to delete once the pet is gone: its photo and its scanned
+    // documents. Looked up now, because the pet_documents rows cascade
+    // away with the pet. Every one of them goes through the same rule as
+    // account deletion (migration 0058 step (e), spec 0083 FR3): a file is
+    // kept if another pet still uses it as its photo or a scanned document
+    // (a scan can cover several pets, spec 0061/0071). This pet's own rows
+    // are excluded, so its own scan row doesn't count. On a lookup error
+    // every file is kept and the error is reported.
     const { data: docs, error: docsError } = await admin
       .from('pet_documents')
       .select('storage_path')
@@ -228,20 +233,12 @@ Deno.serve(async (req) => {
       console.error('Error looking up pet documents:', docsError);
       return json({ error: 'Failed to look up documents for this pet' }, 500);
     }
-    const docPaths = [...new Set((docs ?? []).map((d) => d.storage_path as string))];
-    let sharedDocPaths = new Set<string>();
-    if (docPaths.length > 0) {
-      const { data: shared, error: sharedError } = await admin
-        .from('pet_documents')
-        .select('storage_path')
-        .in('storage_path', docPaths)
-        .neq('pet_id', petId);
-      if (sharedError) {
-        console.error('Error checking shared documents:', sharedError);
-        return json({ error: 'Failed to look up documents for this pet' }, 500);
-      }
-      sharedDocPaths = new Set((shared ?? []).map((d) => d.storage_path as string));
-    }
+    const filesToDelete = await deletableFilePaths(
+      admin,
+      [deletablePetPhotoPath(pet), ...(docs ?? []).map((d) => d.storage_path as string)],
+      [petId],
+      reportError,
+    );
 
     const { error: deleteError } = await admin
       .from('pets')
@@ -254,11 +251,6 @@ Deno.serve(async (req) => {
       return json({ error: 'Failed to delete pet' }, 500);
     }
 
-    const photoPath = deletablePetPhotoPath(pet);
-    const filesToDelete = [
-      ...(photoPath ? [photoPath] : []),
-      ...docPaths.filter((p) => !sharedDocPaths.has(p) && !p.startsWith('shared/')),
-    ];
     const removeError = await removePaths(admin, filesToDelete);
     if (removeError) {
       // Non-fatal: the pet is already gone and nobody can open these files

@@ -53,3 +53,25 @@ export async function dismissAnyOpenSheet(page) {
     await dialog.waitFor({ state: 'detached', timeout: 3000 }).catch(() => {});
   }
 }
+
+// Spec 0083: signed-in users can't delete a `pets` row directly (migration
+// 0062), so test cleanups delete a throwaway pet the way the app does. The
+// primary owner first removes the pet's co-owner rows (allowed by 0056), so
+// delete-pet sees a pet with no co-owners and deletes it for good (scenario
+// S3) instead of handing it to a co-owner. `client` must be the primary
+// owner's own signed-in client. Best-effort: a failed cleanup is logged,
+// never thrown, so it can't hide the test's own result.
+export async function deleteTestPet(client, petId) {
+  if (!petId) return;
+  try {
+    const { error: coOwnerError } = await client.from('pet_co_owners').delete().eq('pet_id', petId);
+    if (coOwnerError) console.warn(`cleanup: could not remove co-owners of pet ${petId}: ${coOwnerError.message}`);
+    const { data, error } = await client.functions.invoke('delete-pet', { body: { pet_id: petId } });
+    if (error) console.warn(`cleanup: delete-pet failed for pet ${petId}: ${error.message}`);
+    else if (data?.mode !== 'deleted') {
+      console.warn(`cleanup: delete-pet did not delete pet ${petId} (mode: ${data?.mode ?? 'none'}); it may have been handed to a co-owner`);
+    }
+  } catch (err) {
+    console.warn(`cleanup: could not delete pet ${petId}: ${err?.message ?? err}`);
+  }
+}
