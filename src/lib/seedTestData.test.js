@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // Spec 0081 FR17 / AC12: the test/demo seeder writes current tables only.
 // Every entity the seeder touches is recorded here, so the tests can check
@@ -8,6 +8,17 @@ const writes = [];
 let nextId = 0;
 
 const RETIRED = new Set(['SymptomLog', 'FoodLog', 'WellnessScore']);
+
+// The signed-in account's profile, as entities.Profile.get returns it.
+let profile = { timezone: 'UTC' };
+let profileError = null;
+
+vi.mock('@/api/supabaseClient', () => ({
+  supabase: { auth: { getUser: vi.fn(async () => ({ data: { user: { id: 'owner-1' } } })) } },
+}));
+
+const reportClientError = vi.fn();
+vi.mock('@/lib/errorMonitoring', () => ({ reportClientError: (...a) => reportClientError(...a) }));
 
 vi.mock('@/api/entities', () => {
   const entities = new Proxy({}, {
@@ -20,6 +31,11 @@ vi.mock('@/api/entities', () => {
         update: vi.fn(async (id, row) => {
           writes.push({ entity: String(name), op: 'update', id, row });
           return { id, ...row };
+        }),
+        get: vi.fn(async (id) => {
+          if (String(name) !== 'Profile') throw new Error(`unexpected get on ${String(name)}`);
+          if (profileError) throw profileError;
+          return { id, ...profile };
         }),
         filter: vi.fn(async () => []),
         list: vi.fn(async () => []),
@@ -44,7 +60,7 @@ vi.mock('@/lib/weightClient', () => ({
   }),
 }));
 
-const { SEED_SCENARIOS, gramsToLbs, GRAMS_PER_LB } = await import('./seedTestData');
+const { SEED_SCENARIOS, gramsToLbs, GRAMS_PER_LB, makeDaysAgo } = await import('./seedTestData');
 
 const scenario = (key) => SEED_SCENARIOS.find((s) => s.key === key);
 const petsCreated = () => writes.filter((w) => w.entity === 'Pet' && w.op === 'create');
@@ -54,6 +70,13 @@ beforeEach(() => {
   checkIns.length = 0;
   weights.length = 0;
   nextId = 0;
+  profile = { timezone: 'UTC' };
+  profileError = null;
+  reportClientError.mockClear();
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 describe('gramsToLbs', () => {
@@ -105,7 +128,7 @@ describe('seed scenarios (spec 0081 FR17)', () => {
     for (const w of weights) {
       expect(w.petId).toBe(buddy.id);
       expect(w.lbs).toBe(65.0);
-      expect(w.timezone).toBe('UTC');
+      expect(w.timezone).toBe(profile.timezone);
     }
     expect(weights.map((w) => w.date).sort()).toEqual([...days].sort());
   });
@@ -150,5 +173,76 @@ describe('seed scenarios (spec 0081 FR17)', () => {
     expect(await scenario('empty').run()).toEqual([]);
     expect(writes).toEqual([]);
     expect(petsCreated()).toEqual([]);
+  });
+});
+
+// Seeded days are calendar dates in the owner's profiles.timezone, not UTC.
+describe("seeded dates use the owner's time zone", () => {
+  // 9pm on 24 Nov in Los Angeles is already 25 Nov in UTC.
+  const US_EVENING = new Date('2026-11-25T05:00:00Z');
+
+  it("Healthy Dog on a US evening: check-ins and weights end on the owner's today, and addWeight gets the owner's zone", async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(US_EVENING);
+    profile = { timezone: 'America/Los_Angeles' };
+
+    await scenario('healthy_dog').run();
+    expect(checkIns.map((c) => c.date)).toEqual(['2026-11-22', '2026-11-23', '2026-11-24']);
+    expect(weights.map((w) => w.date)).toEqual(['2026-11-22', '2026-11-23', '2026-11-24']);
+    for (const w of weights) expect(w.timezone).toBe('America/Los_Angeles');
+  });
+
+  it("Multi-Pet Household on a US evening checks in on the owner's today, not tomorrow (UTC)", async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(US_EVENING);
+    profile = { timezone: 'America/Los_Angeles' };
+
+    await scenario('multi_pet').run();
+    expect(checkIns.map((c) => c.date)).toEqual(['2026-11-24', '2026-11-24', '2026-11-24']);
+  });
+
+  it('falls back to the device time zone when the profile has none', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(US_EVENING);
+    profile = { timezone: null };
+    const device = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+    await scenario('healthy_dog').run();
+    for (const w of weights) expect(w.timezone).toBe(device);
+    expect(reportClientError).not.toHaveBeenCalled();
+  });
+
+  it('reports a failed profile lookup and still seeds, using the device time zone', async () => {
+    profileError = new Error('profile read failed');
+    const device = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+    await scenario('healthy_dog').run();
+    expect(weights).toHaveLength(3);
+    for (const w of weights) expect(w.timezone).toBe(device);
+    expect(reportClientError).toHaveBeenCalledWith(profileError, expect.objectContaining({ feature: 'sandbox_seed' }));
+  });
+
+  it('30 days of history across a daylight-saving change has 30 different, consecutive days', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    // 11:30pm on 1 Nov 2026 in New York, the night clocks went back.
+    vi.setSystemTime(new Date('2026-11-02T04:30:00Z'));
+    profile = { timezone: 'America/New_York' };
+
+    const pets = await scenario('insights_trends').run();
+    const days = checkIns.filter((c) => c.petId === pets[0].id).map((c) => c.date);
+    expect(days).toHaveLength(30);
+    expect(new Set(days).size).toBe(30);
+    expect(days[29]).toBe('2026-11-01');
+    expect(days[0]).toBe('2026-10-03');
+  });
+
+  it('makeDaysAgo counts calendar days back (and forward) from today in the given zone', () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(US_EVENING);
+    const la = makeDaysAgo('America/Los_Angeles');
+    expect(la(0)).toBe('2026-11-24');
+    expect(la(1)).toBe('2026-11-23');
+    expect(la(-275)).toBe('2027-08-26');
+    expect(makeDaysAgo('UTC')(0)).toBe('2026-11-25');
   });
 });

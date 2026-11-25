@@ -147,7 +147,7 @@ export default function Home() {
     try {
       // Owned and co-owned pets only (spec 0079, PA-61): a pet the
       // person only sits for stays on the Pet Sitter page.
-      const { pets: petList, sitterOnlyCount: sitOnly } = await loadOwnedPets('-created_date', 'home');
+      const { pets: petList, sitterOnlyCount: sitOnly } = await loadOwnedPets('-created_at', 'home');
       if (isStale()) return;
       setPets(petList);
       setSitterOnlyCount(sitOnly);

@@ -1,6 +1,9 @@
+import { supabase } from '@/api/supabaseClient';
 import { entities } from '@/api/entities';
 import { markGreatDay, markSkipped, markOffTough } from '@/lib/checkin/checkinClient';
 import { addWeight } from '@/lib/weightClient';
+import { detectTimezone, isValidIanaTimezone, todayInTimezone } from '@/lib/timezone';
+import { reportClientError } from '@/lib/errorMonitoring';
 
 // Test-account seed scenarios. Each function creates realistic sample
 // data via the normal entity API (so it goes through the same RLS
@@ -9,15 +12,35 @@ import { addWeight } from '@/lib/weightClient';
 // CKD, Cat w/ IBD, Dog w/ Allergies, Pet w/ Medications, Pet w/
 // Vaccines, Pet w/ Logs) can be added the same way later.
 
-function daysAgo(n) {
-  const d = new Date();
-  d.setDate(d.getDate() - n);
-  return d.toISOString().slice(0, 10);
+// Seeded days are calendar dates in the account owner's time zone
+// (`profiles.timezone`), falling back to the device's zone and then UTC,
+// as Home does. So a run late on a US evening seeds today's check-in and
+// weight, not tomorrow's (UTC) one.
+export async function resolveSeedTimezone() {
+  try {
+    const { data } = await supabase.auth.getUser();
+    const userId = data?.user?.id;
+    if (userId) {
+      const profile = await entities.Profile.get(userId);
+      if (isValidIanaTimezone(profile?.timezone)) return profile.timezone;
+    }
+  } catch (err) {
+    reportClientError(err, { feature: 'sandbox_seed', note: 'Could not read the profile time zone; seeding with the device time zone' });
+  }
+  return detectTimezone() || 'UTC';
 }
 
-// daysAgo() gives UTC calendar dates, so seeded weights are checked
-// against today in UTC too (addWeight refuses a future date).
-const SEED_TIMEZONE = 'UTC';
+// Calendar arithmetic on the owner's "today" string, not on instants, so
+// a daylight-saving change never repeats or skips a seeded day.
+// daysAgo(0) is today in `timezone`; negative n is in the future.
+export function makeDaysAgo(timezone) {
+  const today = todayInTimezone(timezone);
+  return (n) => {
+    const d = new Date(`${today}T00:00:00Z`);
+    d.setUTCDate(d.getUTCDate() - n);
+    return d.toISOString().slice(0, 10);
+  };
+}
 
 // Seeded weights used to be stored in grams on the old symptom logs; they
 // now go to weight observations in lbs, rounded to one decimal
@@ -38,7 +61,7 @@ const HISTORY_DAYS = 30;
 // planFor(i, total) returns 'normal' | 'skip' | a selections array
 // (`{ code, values: [...] }[]`) for markOffTough. i counts down from
 // `total - 1` (oldest day) to 0 (today).
-async function seedCheckInHistory(pet, days, planFor) {
+async function seedCheckInHistory(pet, days, planFor, daysAgo) {
   // Oldest -> newest, one at a time: each day's symptom count is computed
   // from the history accumulated so far, same as it would be for a real
   // user checking in day by day. Do not parallelize this loop.
@@ -89,6 +112,7 @@ function improvingPlan(i, total) {
 }
 
 async function seedInsightsTrends() {
+  const daysAgo = makeDaysAgo(await resolveSeedTimezone());
   // Same names as the Insights mockup (Harper/Tribble/Auggie) so seeded
   // data is easy to recognize against the reference screenshots.
   const stable = await entities.Pet.create({
@@ -114,15 +138,17 @@ async function seedInsightsTrends() {
   // Independent across pets, so these three run in parallel; each pet's
   // own history is still written strictly oldest-to-newest internally.
   await Promise.all([
-    seedCheckInHistory(stable, HISTORY_DAYS, stablePlan),
-    seedCheckInHistory(declining, HISTORY_DAYS, decliningPlan),
-    seedCheckInHistory(improving, HISTORY_DAYS, improvingPlan),
+    seedCheckInHistory(stable, HISTORY_DAYS, stablePlan, daysAgo),
+    seedCheckInHistory(declining, HISTORY_DAYS, decliningPlan, daysAgo),
+    seedCheckInHistory(improving, HISTORY_DAYS, improvingPlan, daysAgo),
   ]);
 
   return [stable, declining, improving];
 }
 
 async function seedHealthyDog() {
+  const timezone = await resolveSeedTimezone();
+  const daysAgo = makeDaysAgo(timezone);
   const pet = await entities.Pet.create({
     species: 'Dog',
     name: 'Buddy',
@@ -152,18 +178,19 @@ async function seedHealthyDog() {
   });
 
   // Three Great Day check-ins (oldest first, as a real owner would check
-  // in), each day with one weight. addWeight keeps one weight per pet per
-  // day: a re-run on the same day updates that day's weight.
+  // in), each day with one weight. Every run starts from a wiped account,
+  // and addWeight itself keeps one weight per pet per day.
   for (let i = 2; i >= 0; i--) {
     const date = daysAgo(i);
     await markGreatDay(pet.id, date, 'app');
-    await addWeight(pet.id, { date, lbs: gramsToLbs(29500) }, SEED_TIMEZONE);
+    await addWeight(pet.id, { date, lbs: gramsToLbs(29500) }, timezone);
   }
 
   return [pet];
 }
 
 async function seedMultiPetHousehold() {
+  const daysAgo = makeDaysAgo(await resolveSeedTimezone());
   const dog = await entities.Pet.create({
     species: 'Dog',
     name: 'Scout',
@@ -220,6 +247,7 @@ const DEMO_CAT_PHOTO_PATH = 'shared/maple.jpg';
 const DEMO_DOG_PHOTO_PATH = 'shared/cooper.jpg';
 
 async function seedDemoShowcase() {
+  const daysAgo = makeDaysAgo(await resolveSeedTimezone());
   // Independent of each other, so both pets are created in parallel.
   const [cat, dog] = await Promise.all([
     entities.Pet.create({
@@ -273,8 +301,8 @@ async function seedDemoShowcase() {
   // Independent pets, so their histories can seed in parallel; each
   // pet's own history is still written strictly oldest-to-newest.
   await Promise.all([
-    seedCheckInHistory(cat, HISTORY_DAYS, decliningPlan),
-    seedCheckInHistory(dog, HISTORY_DAYS, stablePlan),
+    seedCheckInHistory(cat, HISTORY_DAYS, decliningPlan, daysAgo),
+    seedCheckInHistory(dog, HISTORY_DAYS, stablePlan, daysAgo),
   ]);
 
   return [cat, dog];

@@ -60,7 +60,7 @@ export default function Pets() {
   const loadData = useCallback(async () => {
     let petList;
     try {
-      petList = await entities.Pet.list('-created_date');
+      petList = await entities.Pet.list('-created_at');
       setLoadError(false);
     } catch (err) {
       reportClientError(err, { feature: 'pets' });
