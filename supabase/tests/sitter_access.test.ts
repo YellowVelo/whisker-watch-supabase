@@ -3,7 +3,8 @@
 // sitter, and for how long (migration 0057). Run against wysker-watch-dev.
 //
 // Same shape as co_owner_access.test.ts: one set of throwaway scratch users
-// (owner, sitter, stranger) is created and signed in once for the whole file
+// (owner, sitter, stranger, and a co-owner for the Vet Report check, spec
+// 0083 AC4) is created and signed in once for the whole file
 // (Supabase Auth limits sign-ins per IP; spec 0072 hit it), and each check
 // builds its own fresh pets and sits. "Refused" checks act through the user's
 // own signed-in client, the way someone going around the app would; the
@@ -21,6 +22,7 @@ import {
   adminClient,
   createScratchUser,
   deleteScratchUser,
+  functionsUrl,
   requireEnv,
   type ScratchUser,
 } from '../functions/_shared/testHelpers.ts';
@@ -130,14 +132,38 @@ async function whatSitterSees(sitter: ScratchUser, s: { petId: string; sitId: st
   };
 }
 
+// Calls generate-vet-report as the user and returns the status, content
+// type and, for a JSON refusal, its error code.
+async function requestVetReport(user: ScratchUser, petId: string) {
+  const res = await fetch(functionsUrl('generate-vet-report'), {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${user.accessToken}`,
+      apikey: requireEnv('SUPABASE_ANON_KEY'),
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ petId, format: 'pdf' }),
+  });
+  const contentType = res.headers.get('content-type') ?? '';
+  let code: string | null = null;
+  if (contentType.includes('application/json')) {
+    const json = await res.json().catch(() => ({}));
+    code = json?.error?.code ?? null;
+  } else {
+    await res.arrayBuffer();
+  }
+  return { status: res.status, contentType, code };
+}
+
 const ALL = { pet: true, sit: true, checklist: true, checkIns: true, observations: true, photo: true };
 const NONE = { pet: false, sit: false, checklist: false, checkIns: false, observations: false, photo: false };
 
 Deno.test('sitter lockdown (spec 0073)', async (t) => {
-  const [owner, sitter, stranger] = await Promise.all([
+  const [owner, sitter, stranger, coOwner] = await Promise.all([
     createScratchUser('sit-owner'),
     createScratchUser('sit-sitter'),
     createScratchUser('sit-stranger'),
+    createScratchUser('sit-coowner'),
   ]);
   const u: Users = { owner, sitter, stranger };
   try {
@@ -256,12 +282,36 @@ Deno.test('sitter lockdown (spec 0073)', async (t) => {
       const { data: anonAnswer } = await anon.rpc('is_pet_sitter', { p_pet_id: s.petId, p_user_id: sitter.userId });
       assert(anonAnswer !== true, 'logged-out caller never gets a yes');
     });
+
+    await t.step('only owners and co-owners can generate the Vet Report (spec 0083 AC4, PA-72)', async () => {
+      const s = await buildSit(u, 0, 1, 'UTC');
+      // The co-owner joins the legitimate way: invited by email, claimed on sign-in.
+      const { error: inviteError } = await owner.client.from('pet_co_owners').insert({
+        pet_id: s.petId, owner_id: owner.userId, created_by: owner.userId, co_owner_email: coOwner.email,
+      });
+      if (inviteError) throw new Error(`co-owner invite failed: ${inviteError.message}`);
+      const { error: claimError } = await coOwner.client.rpc('claim_pending_co_owner_invites');
+      if (claimError) throw new Error(`co-owner claim failed: ${claimError.message}`);
+
+      // The sit is open, so the sitter can read the pet: RLS alone would let them through.
+      assertEquals((await whatSitterSees(sitter, s)).pet, true, 'sit is open: sitter can read the pet');
+      const asSitter = await requestVetReport(sitter, s.petId);
+      assertEquals([asSitter.status, asSitter.code], [403, 'forbidden'], 'sitter during an open sit is refused');
+      const asStranger = await requestVetReport(stranger, s.petId);
+      assertEquals([asStranger.status, asStranger.code], [403, 'forbidden'], 'stranger is refused');
+
+      for (const [label, user] of [['owner', owner], ['co-owner', coOwner]] as const) {
+        const res = await requestVetReport(user, s.petId);
+        assertEquals(res.status, 200, `${label} gets the report`);
+        assert(res.contentType.includes('application/pdf'), `${label} gets a PDF (got ${res.contentType})`);
+      }
+    });
   } finally {
     const admin = adminClient();
     // Sits/logs/invites/check-ins cascade with the pet or the user.
     if (createdPetIds.length) await admin.from('pets').delete().in('id', createdPetIds);
     const { data: files } = await admin.storage.from('uploads').list(owner.userId, { limit: 100 });
     if (files?.length) await admin.storage.from('uploads').remove(files.map((f: { name: string }) => `${owner.userId}/${f.name}`));
-    for (const user of [owner, sitter, stranger]) await deleteScratchUser(user.userId);
+    for (const user of [owner, sitter, stranger, coOwner]) await deleteScratchUser(user.userId);
   }
 });
