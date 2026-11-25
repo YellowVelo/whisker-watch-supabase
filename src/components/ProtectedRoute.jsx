@@ -1,7 +1,6 @@
 import { useEffect } from 'react';
 import { Outlet } from 'react-router-dom';
 import { useAuth } from '@/lib/AuthContext';
-import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 import AppShell from '@/components/AppShell';
 
 const DefaultFallback = () => (
@@ -25,14 +24,9 @@ export default function ProtectedRoute({ fallback = <DefaultFallback />, unauthe
     return fallback;
   }
 
-  if (authError) {
-    if (authError.type === 'user_not_registered') {
-      return <UserNotRegisteredError />;
-    }
-    return unauthenticatedElement;
-  }
-
-  if (!isAuthenticated) {
+  // authError is only ever { type: 'unknown' } (the session check itself
+  // threw); treat it like being signed out.
+  if (authError || !isAuthenticated) {
     return unauthenticatedElement;
   }
 
