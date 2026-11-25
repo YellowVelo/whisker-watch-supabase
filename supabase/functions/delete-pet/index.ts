@@ -34,7 +34,7 @@
 
 import { createClient } from 'jsr:@supabase/supabase-js@2.119.2';
 import { reportError, serverError } from '../_shared/errorReporting.ts';
-import { deletablePetPhotoPath } from '../_shared/petPhoto.ts';
+import { deletablePetPhotoPath, photoPathStillInUse } from '../_shared/petPhoto.ts';
 import { removePaths } from '../_shared/storageFiles.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
@@ -243,6 +243,15 @@ Deno.serve(async (req) => {
       sharedDocPaths = new Set((shared ?? []).map((d) => d.storage_path as string));
     }
 
+    // The photo too is kept if another pet still uses its path, as a photo
+    // or a scanned document (spec 0083 FR3, same rule as account deletion).
+    // Checked now, before this pet's own rows cascade away; this pet's own
+    // rows are excluded, so its own scan row doesn't count.
+    const candidatePhoto = deletablePetPhotoPath(pet);
+    const photoPath = candidatePhoto && !(await photoPathStillInUse(admin, candidatePhoto, [petId]))
+      ? candidatePhoto
+      : null;
+
     const { error: deleteError } = await admin
       .from('pets')
       .delete()
@@ -254,7 +263,6 @@ Deno.serve(async (req) => {
       return json({ error: 'Failed to delete pet' }, 500);
     }
 
-    const photoPath = deletablePetPhotoPath(pet);
     const filesToDelete = [
       ...(photoPath ? [photoPath] : []),
       ...docPaths.filter((p) => !sharedDocPaths.has(p) && !p.startsWith('shared/')),

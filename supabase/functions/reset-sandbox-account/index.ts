@@ -19,7 +19,7 @@
 
 import { createClient } from 'jsr:@supabase/supabase-js@2.119.2';
 import { serverError } from '../_shared/errorReporting.ts';
-import { deletablePetPhotoPath } from '../_shared/petPhoto.ts';
+import { deletablePetPhotoPath, photoPathStillInUse } from '../_shared/petPhoto.ts';
 import { listFolderPaths, removePaths } from '../_shared/storageFiles.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
@@ -80,9 +80,13 @@ Deno.serve(async (req) => {
       return json({ error: 'Failed to look up pets' }, 500);
     }
 
+    // A photo is kept if a pet outside this wipe still uses its path, as a
+    // photo or a scanned document (spec 0083 FR3). Every pet being wiped is
+    // excluded, so they don't count against each other.
+    const wipedPetIds = (ownedPets ?? []).map((p) => p.id as string);
     for (const pet of ownedPets ?? []) {
       const path = deletablePetPhotoPath(pet);
-      if (path) {
+      if (path && !(await photoPathStillInUse(admin, path, wipedPetIds))) {
         const { error: removeError } = await admin.storage.from('uploads').remove([path]);
         if (removeError) console.warn('Storage removal error (continuing):', removeError.message);
       }

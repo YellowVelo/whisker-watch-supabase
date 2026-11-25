@@ -188,6 +188,73 @@ Deno.test('delete-pet: removes the photo and unshared scans; keeps a scan anothe
   }
 });
 
+Deno.test("delete-pet: keeps a photo another pet still uses as its photo or a scan (spec 0083 AC3)", async () => {
+  const owner = await createScratchUser('inuse-owner');
+  const other = await createScratchUser('inuse-other');
+  const admin = adminClient();
+  // A valid 1x1 PNG.
+  const png = Uint8Array.from(
+    atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII='),
+    (c) => c.charCodeAt(0),
+  );
+  const sharedAsPhoto = `${owner.userId}/photo-shared-as-photo.png`;
+  const sharedAsScan = `${owner.userId}/photo-shared-as-scan.png`;
+  const unshared = `${owner.userId}/photo-unshared.png`;
+  try {
+    for (const path of [sharedAsPhoto, sharedAsScan, unshared]) {
+      const { error } = await owner.client.storage.from('uploads').upload(path, png, { contentType: 'image/png' });
+      if (error) throw new Error(`upload failed: ${error.message}`);
+    }
+
+    // The owner's three sole-owner pets, each with its own photo file.
+    const ownerPet = async (name: string, photo_path: string): Promise<string> => {
+      const { data, error } = await owner.client.from('pets')
+        .insert({ name, created_by: owner.userId, photo_path }).select('id').single();
+      if (error || !data) throw new Error(`pet insert failed: ${error?.message}`);
+      return data.id as string;
+    };
+    const petA = await ownerPet('Scratch InUse Photo Pet', sharedAsPhoto);
+    const petB = await ownerPet('Scratch InUse Scan Pet', sharedAsScan);
+    const petC = await ownerPet('Scratch Unshared Pet', unshared);
+
+    // Someone else's pets pointing at the owner's files. Seeded with the
+    // admin client, because migration 0062 now refuses this as a user.
+    const { data: otherPet, error: otherError } = await admin.from('pets')
+      .insert({ name: 'Scratch Other Photo Pet', created_by: other.userId, photo_path: sharedAsPhoto })
+      .select('id').single();
+    if (otherError || !otherPet) throw new Error(`other pet insert failed: ${otherError?.message}`);
+    const { data: otherDocPet, error: otherDocError } = await admin.from('pets')
+      .insert({ name: 'Scratch Other Scan Pet', created_by: other.userId })
+      .select('id').single();
+    if (otherDocError || !otherDocPet) throw new Error(`other pet insert failed: ${otherDocError?.message}`);
+    // petB's own scan row with the same path, so the check must exclude it.
+    const { error: docError } = await admin.from('pet_documents').insert([
+      { pet_id: otherDocPet.id, storage_path: sharedAsScan, kind: 'vaccination' },
+      { pet_id: petB, storage_path: sharedAsScan, kind: 'vaccination' },
+    ]);
+    if (docError) throw new Error(`document link failed: ${docError.message}`);
+
+    for (const petId of [petA, petB, petC]) {
+      const { status, json } = await callFunction('delete-pet', owner.accessToken, { pet_id: petId });
+      assertEquals(status, 200);
+      assertEquals(json.mode, 'deleted');
+      const { data: petAfter } = await admin.from('pets').select('id').eq('id', petId).maybeSingle();
+      assertEquals(petAfter, null);
+    }
+
+    const { data: files } = await admin.storage.from('uploads').list(owner.userId);
+    const names = (files ?? []).map((f: { name: string }) => f.name);
+    assertEquals(names.includes('photo-shared-as-photo.png'), true, "a photo another pet uses as its photo is kept");
+    assertEquals(names.includes('photo-shared-as-scan.png'), true, "a photo another pet's scan record uses is kept");
+    assertEquals(names.includes('photo-unshared.png'), false, 'a photo nobody else uses is still deleted');
+  } finally {
+    const { data: files } = await admin.storage.from('uploads').list(owner.userId);
+    if (files?.length) await admin.storage.from('uploads').remove(files.map((f: { name: string }) => `${owner.userId}/${f.name}`));
+    await deleteScratchUser(owner.userId);
+    await deleteScratchUser(other.userId);
+  }
+});
+
 Deno.test('delete-pet: transfer keeps every other co-owner and passes the pet sit on (spec 0075)', async () => {
   const owner = await createScratchUser('transfer3-owner');
   const first = await createScratchUser('transfer3-first');
