@@ -1,6 +1,6 @@
 # 0083_Access_Control_Tightening_Specification_v1
 
-**Status:** Approved by Lynn 2026-11-24. Amended 2026-11-24 with Lynn's D4 (app-only control) and D5 (ownership scenarios): deleting a pet is now app-only.
+**Status:** Built 2026-11-24 (branch `claude/spec-0083-access-control`). Migration 0062 and `delete-pet`, `reset-sandbox-account` and `generate-vet-report` are live on dev; staging and prod wait for Lynn's merge OK. Approved by Lynn 2026-11-24. Amended 2026-11-24 with Lynn's D4 (app-only control) and D5 (ownership scenarios): deleting a pet is now app-only. Amended 2026-11-25 after the final review (Lynn approved): one small app change (Edit Pet photo save), the 0061 ordering note, and corrected test file names.
 **Date:** 2026-11-24
 **Branch:** `claude/spec-0083-access-control` (off `main` at `ddd3d81`)
 **Migration:** `0062_access_control_tightening.sql` (reserved). Spec 0081 is being built in parallel on migration 0061.
@@ -12,7 +12,7 @@
 
 1. ~~Review and approve this spec~~ Approved 2026-11-24.
 2. **Later, before merge:** OK the PROTECTED merge after the reviewer passes it. You'll get a plain "who can see/do what" summary.
-3. **Nothing to promote in Cloudflare.** This is database and server only, with no app changes. I deploy the migration and functions to dev myself, then to staging and prod after your merge OK.
+3. **After merge, promote branch `main`'s build in Cloudflare.** One small app change was added during review (Edit Pet, below). I deploy the migration and functions to dev myself, then to staging and prod after your merge OK. The old app keeps working with 0062 in the meantime.
 
 ## Decisions already made (Lynn, 2026-11-24)
 
@@ -24,8 +24,8 @@
 
 | # | Starting point | What happens | Result | Existing test |
 |---|---|---|---|---|
-| S1.1 | Owner1 and Co-Owner1 both own PetA | Co-Owner1 deletes their account | Owner1 still owns PetA; Co-Owner1's access is gone; Owner1 is notified | `account_deletion.test.ts` |
-| S1.2 | Owner1 and Co-Owner1 both own PetA | Owner1 deletes their account | PetA passes to Co-Owner1, with its records, photo and documents | `account_deletion.test.ts` |
+| S1.1 | Owner1 and Co-Owner1 both own PetA | Co-Owner1 deletes their account | Owner1 still owns PetA; Co-Owner1's access is gone; Owner1 is notified | `delete-account/index.test.ts` |
+| S1.2 | Owner1 and Co-Owner1 both own PetA | Owner1 deletes their account | PetA passes to Co-Owner1, with its records, photo and documents | `delete-account/index.test.ts` |
 | S2.1 | Owner2 and Co-Owner2 both own PetB | Co-Owner2 taps Delete on PetB | Only Co-Owner2's access is removed; Owner2 keeps PetB and is notified | `delete-pet/index.test.ts` |
 | S2.2 | Owner2 and Co-Owner2 both own PetB | Owner2 taps Delete on PetB | PetB passes to Co-Owner2, nothing is lost | `delete-pet/index.test.ts` |
 | S3 | Owner3 owns PetC alone | Owner3 taps Delete on PetC | PetC and its files are deleted for good | `delete-pet/index.test.ts` |
@@ -102,7 +102,8 @@ None. No screen changes.
   - `_shared/petPhoto.ts`: add `photoPathStillInUse(admin, path, excludingPetIds)`, which checks `pets.photo_path` on other pets and any `pet_documents.storage_path`. That's the same rule as `prepare_account_deletion()` step (e). `delete-pet` (sole-owner branch) and `reset-sandbox-account` call it before deleting a photo.
   - `generate-vet-report`: after reading the pet, call `rpc('is_pet_owner', { p_pet_id, p_user_id })` with the caller's own client (already granted to `authenticated` by 0059). If it's false, return the existing 403 `forbidden`. Correct the header comment (it says sitters may generate reports).
   - Deploy `delete-pet`, `reset-sandbox-account` and `generate-vet-report` to dev, then staging and prod after Lynn's OK, then `scripts/check-functions-start.sh` on each (§11).
-- **App: no change.** `src/api/entityClient.js` keeps sending `created_by`. On the FR5 tables the trigger overwrites it, and on `upsert` it keeps the original author. The tables whose insert rules check `created_by = auth.uid()` (`pets`, `pet_sits`, `pet_co_owners`, `pet_sitter_access`) still need the client to send it, so leaving the client alone is the safe choice.
+- **App: one small change (added in review, Lynn approved 2026-11-25).** Edit Pet (`src/pages/PetEdit.jsx`, via the new `src/lib/petEditPayload.js`) sends `photo_path` only when the photo was changed in that form. Otherwise a co-owner's save would re-send a photo the primary owner had since replaced, and FR1's trigger would refuse the whole save. Nothing on screen changes. Safe in either deploy order: with the old app, only that rare save fails, with the normal error message.
+- **`created_by` from the app: no change.** `src/api/entityClient.js` keeps sending `created_by`. On the FR5 tables the trigger overwrites it, and on `upsert` it keeps the original author. The tables whose insert rules check `created_by = auth.uid()` (`pets`, `pet_sits`, `pet_co_owners`, `pet_sitter_access`) still need the client to send it, so leaving the client alone is the safe choice.
 - **e2e cleanups:** `co-owner.spec.js`, `friendly-function-errors.spec.js`, `invite-email-responses.spec.js` and `invite-sitter.spec.js` delete pets directly, which will now silently do nothing and leave test pets behind. Switch each cleanup to the app's own path: the primary owner removes any `pet_co_owners` rows (allowed by 0056), then calls `delete-pet`, which deletes a pet with no co-owners for good (S3).
 - **Design System compliance:** no UI changes; nothing to check.
 - **Constraints from CLAUDE.md / locked decisions:** follows 0056's co-owner model (primary-owner-only management), 0057's service-role-exempt trigger pattern, 0058's hand-off and `SET NULL` authors, 0059's locked-by-default function permissions, and 0071's private bucket. The 0011 SDLC PROTECTED gate applies.
@@ -110,7 +111,7 @@ None. No screen changes.
 ## Rollout
 
 1. **Before pushing 0062 anywhere,** run this read-only check on staging and prod: pets whose `photo_path` isn't `shared/…` and isn't in the folder of the pet's creator or any linked co-owner. Report the count to Lynn. The migration changes no existing rows. A non-zero count is either a removed co-owner's old upload (harmless) or a sign of misuse, and Lynn decides what to do with it.
-2. `supabase migration list` on dev, to check for another session's unmerged migration (0081's 0061). Then push 0062 to dev and run the tests.
+2. `supabase migration list` on dev, to check for another session's unmerged migration (0081's 0061). Then push 0062 to dev and run the tests. If 0062 reaches a project before spec 0081's 0061, 0081's later push to that project needs `supabase db push --include-all` (agreed with the 0081 session 2026-11-24).
 3. After merge and Lynn's OK: push 0062 to staging and prod, deploy the three functions, and run the §11 function-permission check query and `check-functions-start.sh` on each project.
 
 ## Repo Findings & Risks
