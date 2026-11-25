@@ -1,5 +1,5 @@
 // Integration tests for spec 0081 (punch list PA-71, PA-50, PA-51; migration
-// 0061): who may see and change a pet's weights, and that the Base44-era
+// 0061): who may see and change a pet's weights, and that the retired
 // tables are gone. Run against wysker-watch-dev, after 0061.
 //
 // Weight lives in `observations` rows of type `weight` with numeric_value
@@ -190,7 +190,7 @@ async function tableExists(table: string): Promise<boolean> {
   throw new Error(`checking ${table} failed: ${error.message}`);
 }
 
-Deno.test('weight home access and Base44 tables (spec 0081)', async (t) => {
+Deno.test('weight home access and retired tables (spec 0081)', async (t) => {
   const [owner, coOwner, sitter, stranger] = await Promise.all([
     createScratchUser('wt-owner'),
     createScratchUser('wt-coowner'),
@@ -312,7 +312,7 @@ Deno.test('weight home access and Base44 tables (spec 0081)', async (t) => {
       assertEquals(await readableIds(hh.sitter.client, [standaloneId, checkInWeightId]), [], 'sitter reads nothing after the window');
     });
 
-    await t.step('Base44-era tables are gone after 0061 (AC9)', async () => {
+    await t.step('symptom_logs, wellness_scores and food_logs are gone after 0061 (AC9)', async () => {
       for (const table of ['symptom_logs', 'wellness_scores', 'food_logs']) {
         assertEquals(await tableExists(table), false, `${table} must no longer exist`);
       }
