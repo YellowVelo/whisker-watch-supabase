@@ -399,6 +399,31 @@ Deno.test('co-owner lockdown (specs 0072, 0083)', async (t) => {
           await admin.from('pet_sits').delete().eq('id', sitId);
         }
       }));
+
+    // QA (spec 0083): clearing the creator to "no one" is also a change, and
+    // so is clearing "entered by" on a record (only account deletion may).
+    await t.step('QA: created_by cannot be cleared to null, on pets, pet_sits or a record', () =>
+      withHousehold(u, async (h) => {
+        const sitId = await createSit(h);
+        try {
+          for (const [table, id] of [['pets', h.petId], ['pet_sits', sitId]] as const) {
+            for (const actor of [h.owner, h.coOwner]) {
+              const { error }: { error: unknown } = await actor.client.from(table).update({ created_by: null }).eq('id', id);
+              const stored = await storedCreator(table, id);
+              if (stored !== h.owner.userId) await admin.from(table).update({ created_by: h.owner.userId }).eq('id', id);
+              assertEquals(stored, h.owner.userId, `${table}: ${actor.email} clearing created_by must be refused`);
+              if (table === 'pets' || actor === h.owner) assert(error, `${table}: ${actor.email} gets an error, not a silent no-op`);
+            }
+          }
+          const { data: v, error: vError } = await h.coOwner.client.from('vaccinations')
+            .insert({ pet_id: h.petId, vaccine_name: 'Scratch Null Author' }).select('id').single();
+          if (vError || !v) throw new Error(`vaccination insert failed: ${vError?.message}`);
+          await h.owner.client.from('vaccinations').update({ created_by: null }).eq('id', v.id);
+          assertEquals(await storedCreator('vaccinations', v.id), h.coOwner.userId, 'record author survives an update to null');
+        } finally {
+          await admin.from('pet_sits').delete().eq('id', sitId);
+        }
+      }));
   } finally {
     for (const user of [owner, coOwner, stranger]) await deleteScratchUser(user.userId);
   }

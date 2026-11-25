@@ -306,6 +306,22 @@ Deno.test('sitter lockdown (spec 0073)', async (t) => {
         assert(res.contentType.includes('application/pdf'), `${label} gets a PDF (got ${res.contentType})`);
       }
     });
+
+    // QA (spec 0083 FR4 "during a sit or not"): a sitter whose sit ended
+    // days ago, and anyone asking about a pet ID that doesn't exist, get the
+    // same 403 (never a 404 that reveals whether the pet exists).
+    await t.step('QA: Vet Report refuses a sitter outside the sit window and an unknown pet', async () => {
+      const past = await buildSit(u, -10, -5, 'UTC');
+      assertEquals((await whatSitterSees(sitter, past)).pet, false, 'sit is closed: sitter cannot read the pet');
+      const asPastSitter = await requestVetReport(sitter, past.petId);
+      assertEquals([asPastSitter.status, asPastSitter.code], [403, 'forbidden'], 'sitter outside the window is refused');
+
+      const unknown = crypto.randomUUID();
+      for (const [label, user] of [['owner', owner], ['sitter', sitter]] as const) {
+        const res = await requestVetReport(user, unknown);
+        assertEquals([res.status, res.code], [403, 'forbidden'], `${label} asking about an unknown pet gets 403`);
+      }
+    });
   } finally {
     const admin = adminClient();
     // Sits/logs/invites/check-ins cascade with the pet or the user.
