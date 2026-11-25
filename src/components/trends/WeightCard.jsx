@@ -52,6 +52,7 @@ export default function WeightCard({ petId, range, timezone, canLogWeight = fals
         empty={empty}
         emptyMessage={hasHistory ? 'No data in this range.' : 'No weight history available.'}
         emptyAction={logButton}
+        errorAction={logButton}
       >
         {data && (
           <>

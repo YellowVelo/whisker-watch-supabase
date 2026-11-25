@@ -88,6 +88,18 @@ export function validateWeightInput({ lbs, date }, timezone) {
   return roundLbs(n);
 }
 
+// True when `lbs` passes the same 0.1–300 lbs rule validateWeightInput
+// applies (after rounding to one decimal), for forms that check as the
+// owner types (onboarding's starting weight, the check-in's Weight box).
+export function isValidWeight(lbs) {
+  try {
+    validateWeightInput({ lbs });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 // What the Log weight sheet shows for a failed save, edit or delete.
 // Wording B is the approved out-of-range line (spec 0081); the others
 // are the sheet's plain fallbacks. `action` is 'save' or 'delete'.

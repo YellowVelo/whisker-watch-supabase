@@ -14,6 +14,7 @@ import {
 } from '@/lib/weightClient';
 import { dateStrInTimezone } from '@/lib/timezone';
 import { reportClientError } from '@/lib/errorMonitoring';
+import { PALETTE_SOFT } from '@/lib/toneColors';
 
 // Log weight sheet (spec 0081 FR2/FR3, wording A–D). Logs a standalone
 // weight for a chosen day (default today in the owner's time zone, never
@@ -127,7 +128,8 @@ export default function WeightLogSheet({ petId, timezone, onClose, onChanged }) 
       await loadList();
       onChanged?.();
     } catch (err) {
-      if (err?.code === 'weight_not_found') {
+      // PGRST116 ("no row") means the same as weight_not_found, as in save.
+      if (err?.code === 'weight_not_found' || err?.code === 'PGRST116') {
         loadList();
       } else {
         reportClientError(err, { feature: 'weight_log', note: 'delete' });
@@ -191,7 +193,7 @@ export default function WeightLogSheet({ petId, timezone, onClose, onChanged }) 
           ) : entries === null ? (
             <div className="space-y-2" aria-busy="true">
               {[0, 1, 2].map((i) => (
-                <div key={i} className="h-16 rounded-2xl animate-pulse" style={{ background: 'rgba(255,255,255,0.05)' }} />
+                <div key={i} className="h-16 rounded-2xl animate-pulse" style={{ background: PALETTE_SOFT.gray }} />
               ))}
             </div>
           ) : entries.length === 0 ? (

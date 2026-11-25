@@ -465,3 +465,190 @@ describe('markOffToughBulk', () => {
     expect(checkIns).toHaveLength(22);
   });
 });
+
+// Spec 0081 "Check-in edit safety": save_daily_check_ins deletes and
+// re-inserts a check-in's observations, so every save path must re-send
+// the day's saved weight unless the owner changed or cleared it in the form.
+describe("every check-in save keeps the day's weight", () => {
+  const APPETITE = 'type-appetite';
+  const WEIGHT = 'type-weight';
+
+  // A chainable stand-in for supabase.from('observations')... that records
+  // every filter and resolves to `result`.
+  function makeObservationsQuery(result) {
+    const calls = [];
+    const query = {
+      calls,
+      select: (...args) => { calls.push(['select', ...args]); return query; },
+      eq: (...args) => { calls.push(['eq', ...args]); return query; },
+      in: (...args) => { calls.push(['in', ...args]); return query; },
+      then: (resolve, reject) => Promise.resolve(result).then(resolve, reject),
+    };
+    return query;
+  }
+
+  function weightRow(date, lbs, updatedAt = '2026-07-01T10:00:00Z', notes = null) {
+    return { observation_type_id: WEIGHT, value: null, numeric_value: lbs, notes, updated_at: updatedAt, daily_check_ins: { check_in_date: date } };
+  }
+
+  function setup({ weightRows = [], readError = null } = {}) {
+    const query = makeObservationsQuery({ data: readError ? null : weightRows, error: readError });
+    const fromMock = vi.fn(() => query);
+    const rpcMock = vi.fn().mockImplementation((_fn, { payloads }) => Promise.resolve({
+      data: payloads.map((p, i) => ({ conflict: false, check_in: { id: `ci-${i}`, updated_at: 'u', ...p } })),
+      error: null,
+    }));
+    vi.doMock('@/api/supabaseClient', () => ({ supabase: { rpc: rpcMock, from: fromMock } }));
+    vi.doMock('@/api/entities', () => ({
+      entities: {
+        ObservationType: { list: vi.fn().mockResolvedValue([{ id: APPETITE, code: 'appetite' }, { id: WEIGHT, code: 'weight' }]) },
+        ObservationOption: { list: vi.fn().mockResolvedValue([]) },
+      },
+    }));
+    return { rpcMock, fromMock, query };
+  }
+
+  const weightsIn = (payload) => payload.observations.filter((o) => o.observation_type_id === WEIGHT);
+
+  beforeEach(() => {
+    vi.resetModules();
+  });
+
+  it('Great Day on a day that already has a weight re-sends that weight (and still sends expected_updated_at)', async () => {
+    const { rpcMock, fromMock, query } = setup({ weightRows: [weightRow('2026-07-01', 12.4)] });
+    const { markGreatDay } = await import('./checkinClient');
+    await markGreatDay('pet-1', '2026-07-01', 'app', { expectedUpdatedAt: '2026-07-01T09:00:00Z' });
+
+    // Reads only this pet's saved check-in weights for that day.
+    expect(fromMock).toHaveBeenCalledWith('observations');
+    expect(query.calls).toEqual(expect.arrayContaining([
+      ['eq', 'pet_id', 'pet-1'],
+      ['eq', 'observation_type_id', WEIGHT],
+      ['in', 'daily_check_ins.check_in_date', ['2026-07-01']],
+    ]));
+    const [payload] = rpcMock.mock.calls[0][1].payloads;
+    expect(payload.expected_updated_at).toBe('2026-07-01T09:00:00Z');
+    expect(payload.status).toBe('great');
+    expect(weightsIn(payload)).toEqual([{ observation_type_id: WEIGHT, value: null, numeric_value: 12.4, notes: null }]);
+    // The baseline row is still there and weight never touches the count.
+    expect(payload.observations).toEqual(expect.arrayContaining([expect.objectContaining({ observation_type_id: APPETITE, value: 'normal' })]));
+    expect(payload.symptom_count).toBe(0);
+  });
+
+  it('Great Day on a day with no weight sends no weight row', async () => {
+    const { rpcMock } = setup({ weightRows: [] });
+    const { markGreatDay } = await import('./checkinClient');
+    await markGreatDay('pet-1', '2026-07-01', 'app');
+    expect(weightsIn(rpcMock.mock.calls[0][1].payloads[0])).toEqual([]);
+  });
+
+  it('an Off/Tough re-save that leaves Weight out of the selections keeps the saved weight', async () => {
+    const { rpcMock } = setup({ weightRows: [weightRow('2026-07-01', 12.4)] });
+    const { markOffTough } = await import('./checkinClient');
+    const result = await markOffTough('pet-1', '2026-07-01', 'off', [{ code: 'appetite', values: ['ate_much_less'] }], 'app', { expectedUpdatedAt: 'u0' });
+
+    const [payload] = rpcMock.mock.calls[0][1].payloads;
+    expect(weightsIn(payload)).toEqual([expect.objectContaining({ numeric_value: 12.4 })]);
+    expect(payload.expected_updated_at).toBe('u0');
+    expect(result.symptomCount).toBe(1);
+  });
+
+  it('a weight the owner typed replaces the saved one (no old row is re-sent, no extra read)', async () => {
+    const { rpcMock, fromMock } = setup({ weightRows: [weightRow('2026-07-01', 12.4)] });
+    const { markOffTough } = await import('./checkinClient');
+    await markOffTough('pet-1', '2026-07-01', 'off', [{ code: 'weight', numericValue: 13.1 }]);
+
+    expect(fromMock).not.toHaveBeenCalled();
+    expect(weightsIn(rpcMock.mock.calls[0][1].payloads[0])).toEqual([expect.objectContaining({ numeric_value: 13.1 })]);
+  });
+
+  it("a Weight box the owner emptied clears the day's weight", async () => {
+    const { rpcMock, fromMock } = setup({ weightRows: [weightRow('2026-07-01', 12.4)] });
+    const { markOffTough } = await import('./checkinClient');
+    await markOffTough('pet-1', '2026-07-01', 'tough', [{ code: 'weight', numericValue: null }]);
+
+    expect(fromMock).not.toHaveBeenCalled();
+    expect(weightsIn(rpcMock.mock.calls[0][1].payloads[0])).toEqual([]);
+  });
+
+  it("keeps every saved weight row for the day, oldest first so the last-saved stays the day's weight", async () => {
+    const { rpcMock } = setup({ weightRows: [
+      weightRow('2026-07-01', 12.9, '2026-07-01T12:00:00Z', 'after the vet'),
+      weightRow('2026-07-01', 12.4, '2026-07-01T08:00:00Z'),
+    ] });
+    const { markGreatDay } = await import('./checkinClient');
+    await markGreatDay('pet-1', '2026-07-01');
+
+    expect(weightsIn(rpcMock.mock.calls[0][1].payloads[0]).map((o) => [o.numeric_value, o.notes])).toEqual([[12.4, null], [12.9, 'after the vet']]);
+  });
+
+  it("does not save at all if the saved weight can't be read (so it can't be lost blind)", async () => {
+    const { rpcMock } = setup({ readError: new Error('read failed') });
+    const { markGreatDay, markOffTough, markGreatDaysBulk, markOffToughBulk } = await import('./checkinClient');
+    await expect(markGreatDay('pet-1', '2026-07-01')).rejects.toThrow('read failed');
+    await expect(markOffTough('pet-1', '2026-07-01', 'off', [])).rejects.toThrow('read failed');
+    await expect(markGreatDaysBulk('pet-1', ['2026-07-01'])).rejects.toThrow('read failed');
+    await expect(markOffToughBulk('pet-1', ['2026-07-01'], 'off', [])).rejects.toThrow('read failed');
+    expect(rpcMock).not.toHaveBeenCalled();
+  });
+
+  it('a conflict (spec 0043) is still reported, with nothing saved', async () => {
+    const { fromMock } = setup({ weightRows: [weightRow('2026-07-01', 12.4)] });
+    const rpcMock = vi.fn().mockResolvedValue({
+      data: [{ conflict: true, check_in: { id: 'ci-1', status: 'off', updated_at: 'newer' }, observations: [] }],
+      error: null,
+    });
+    vi.doMock('@/api/supabaseClient', () => ({ supabase: { rpc: rpcMock, from: fromMock } }));
+    const { markGreatDay } = await import('./checkinClient');
+    const result = await markGreatDay('pet-1', '2026-07-01', 'app', { expectedUpdatedAt: 'older' });
+    expect(result).toEqual(expect.objectContaining({ conflict: true }));
+    expect(rpcMock.mock.calls[0][1].payloads[0].expected_updated_at).toBe('older');
+  });
+
+  it("Catch-Up's bulk Great Day keeps each day's own weight", async () => {
+    const { rpcMock, query } = setup({ weightRows: [weightRow('2026-07-01', 12.4), weightRow('2026-07-03', 12.8)] });
+    const { markGreatDaysBulk } = await import('./checkinClient');
+    await markGreatDaysBulk('pet-1', ['2026-07-01', '2026-07-02', '2026-07-03'], 'catch_up');
+
+    expect(query.calls).toEqual(expect.arrayContaining([['in', 'daily_check_ins.check_in_date', ['2026-07-01', '2026-07-02', '2026-07-03']]]));
+    const payloads = rpcMock.mock.calls[0][1].payloads;
+    expect(payloads.map((p) => weightsIn(p).map((o) => o.numeric_value))).toEqual([[12.4], [], [12.8]]);
+  });
+
+  it("bulk apply with an empty Weight box keeps each day's own weight", async () => {
+    const { rpcMock } = setup({ weightRows: [weightRow('2026-07-02', 9.5)] });
+    const { markOffToughBulk } = await import('./checkinClient');
+    await markOffToughBulk('pet-1', ['2026-07-01', '2026-07-02'], 'off', [{ code: 'appetite', values: ['ate_much_less'] }], 'catch_up');
+
+    const payloads = rpcMock.mock.calls[0][1].payloads;
+    expect(payloads.map((p) => weightsIn(p).map((o) => o.numeric_value))).toEqual([[], [9.5]]);
+    expect(payloads.every((p) => p.symptom_count === 1)).toBe(true);
+  });
+
+  it('bulk apply with a typed weight saves that weight to every day instead', async () => {
+    const { rpcMock, fromMock } = setup({ weightRows: [weightRow('2026-07-02', 9.5)] });
+    const { markOffToughBulk } = await import('./checkinClient');
+    await markOffToughBulk('pet-1', ['2026-07-01', '2026-07-02'], 'off', [{ code: 'weight', numericValue: 10.2 }], 'catch_up');
+
+    expect(fromMock).not.toHaveBeenCalled();
+    const payloads = rpcMock.mock.calls[0][1].payloads;
+    expect(payloads.map((p) => weightsIn(p).map((o) => o.numeric_value))).toEqual([[10.2], [10.2]]);
+  });
+
+  it("bulk saves read each chunk's weights just before that chunk is saved", async () => {
+    const dates = Array.from({ length: 22 }, (_, i) => `2026-03-${String(i + 1).padStart(2, '0')}`);
+    const { rpcMock, fromMock } = setup({ weightRows: [weightRow('2026-03-22', 20)] });
+    const { markGreatDaysBulk } = await import('./checkinClient');
+    await markGreatDaysBulk('pet-1', dates, 'catch_up');
+
+    expect(fromMock).toHaveBeenCalledTimes(2);
+    expect(rpcMock).toHaveBeenCalledTimes(2);
+    expect(weightsIn(rpcMock.mock.calls[1][1].payloads[1])).toEqual([expect.objectContaining({ numeric_value: 20 })]);
+  });
+
+  it("getCheckInWeightLbs returns the day's last-saved check-in weight, or null", async () => {
+    setup({ weightRows: [weightRow('2026-07-01', 12.9, '2026-07-01T12:00:00Z'), weightRow('2026-07-01', 12.4, '2026-07-01T08:00:00Z')] });
+    const { getCheckInWeightLbs } = await import('./checkinClient');
+    expect(await getCheckInWeightLbs('pet-1', '2026-07-01')).toBe(12.9);
+  });
+});

@@ -105,3 +105,46 @@ test('the onboarding shell is a focus-trapped modal dialog', async ({ page }) =>
   await page.keyboard.press('Escape');
   await expect(page).toHaveURL('/pets');
 });
+
+// Spec 0081 AC5: the optional Starting Weight is saved as a standalone
+// weight for today (no check-in) and becomes the pet's current weight.
+test('AC5: a starting weight of 9 lbs becomes the new pet\'s current weight', async ({ page }) => {
+  await page.goto('/pet/new/onboarding');
+  await page.getByRole('button', { name: /Cat/ }).click();
+  await page.locator('#pet-name').fill(PET_NAME);
+  await page.locator('#sex-Female').click();
+  await page.locator('#altered-Yes').click();
+  await page.getByRole('button', { name: "I don't know" }).first().click();
+  await page.locator('#starting-weight').fill('9');
+  await page.getByRole('button', { name: 'Continue' }).click();
+  await waitForOnboardingStep(page, 'Step 2 of 6');
+
+  const supabase = createClient(process.env.VITE_SUPABASE_URL, process.env.VITE_SUPABASE_ANON_KEY);
+  const { error: signInError } = await supabase.auth.signInWithPassword({
+    email: process.env.PLAYWRIGHT_TEST1_EMAIL,
+    password: process.env.PLAYWRIGHT_TEST1_PASSWORD,
+  });
+  if (signInError) throw signInError;
+  const { data: pet, error: petError } = await supabase.from('pets').select('id').eq('name', PET_NAME).single();
+  if (petError) throw petError;
+  const { data: weights, error: weightError } = await supabase
+    .from('observations')
+    .select('numeric_value, daily_check_in_id, observed_at, observation_types!inner(code)')
+    .eq('pet_id', pet.id)
+    .eq('observation_types.code', 'weight');
+  if (weightError) throw weightError;
+  expect(weights).toHaveLength(1);
+  expect(Number(weights[0].numeric_value)).toBe(9);
+  expect(weights[0].daily_check_in_id).toBeNull();
+  // Standalone weights are dated noon UTC of the chosen calendar day.
+  expect(new Date(weights[0].observed_at).toISOString()).toMatch(/T12:00:00\.000Z$/);
+
+  // Pet Profile (Pets tab card) shows it as the current weight.
+  await page.goto('/pets');
+  await page.waitForLoadState('networkidle').catch(() => {});
+  const card = page.locator('div.rounded-2xl.px-4.py-4:not(.bg-card)')
+    .filter({ has: page.getByRole('heading', { name: PET_NAME, exact: true }) });
+  await expect(card).toBeVisible({ timeout: 10000 });
+  await card.getByRole('button', { name: 'Show more' }).click();
+  await expect(card.getByRole('button', { name: /^Weight/ })).toContainText('9.0 lbs', { timeout: 10000 });
+});

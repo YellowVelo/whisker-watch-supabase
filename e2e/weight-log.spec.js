@@ -228,3 +228,147 @@ test('AC4: 0, 301 and a future date are refused and nothing saves', async ({ pag
   await expect(sheet.getByText('No weights logged yet.')).toBeVisible();
   expect(await savedWeights(supabase, petId)).toHaveLength(0);
 });
+
+// --- Daily check-in weight (AC2, and spec 0081's "Check-in edit safety") ---
+// Driven through Check-In History (spec 0060), which reopens any day in
+// the last 180 days on a pet made today, the same path
+// check-in-history.spec.js uses.
+
+function isoDateDaysAgo(days) {
+  return isoDateDaysFromNow(-days);
+}
+
+async function openHistory(page, card) {
+  await card.getByRole('button', { name: 'Check-In History' }).click();
+  const calendar = page.getByRole('dialog', { name: 'Check-In History' });
+  await expect(calendar).toBeVisible({ timeout: 10000 });
+  // Day buttons render only once the window's check-ins have loaded.
+  await calendar.locator('button[aria-label$=", no check-in yet"]').first().waitFor({ timeout: 10000 });
+  return calendar;
+}
+
+// A seed at most a few days old is in this month or the one before.
+async function revealDay(calendar, dayButton) {
+  if (await dayButton.count() > 0) return;
+  await calendar.getByRole('button', { name: 'Previous month' }).click();
+}
+
+const detailSheet = (page) => page.getByRole('dialog', { name: /How was .+ day/ });
+
+async function confirmPastDaySave(page) {
+  const confirm = page.getByRole('dialog', { name: /Save changes to/ });
+  await expect(confirm).toBeVisible({ timeout: 5000 });
+  await confirm.getByRole('button', { name: 'Save' }).click();
+  await expect(confirm).toBeHidden({ timeout: 10000 });
+}
+
+async function startOffDayWithWeight(page) {
+  await detailSheet(page).getByRole('button', { name: 'Off Day' }).click();
+  const picker = page.getByRole('dialog', { name: 'What happened?' });
+  await picker.getByRole('button', { name: 'Weight', exact: true }).click();
+  await picker.getByRole('button', { name: 'Continue' }).click();
+  const details = page.getByRole('dialog', { name: 'A few details' });
+  await expect(details).toBeVisible({ timeout: 5000 });
+  return details;
+}
+
+test('AC2: a weight typed in a daily check-in shows in the sheet (labeled), on Pet Profile and on Trends', async ({ page }) => {
+  const { supabase, petId, name } = await createPet();
+  const card = await openPetCard(page, name);
+  const calendar = await openHistory(page, card);
+
+  const blankDay = calendar.locator('button[aria-label$=", no check-in yet"]').first();
+  await blankDay.click();
+  const details = await startOffDayWithWeight(page);
+  const weightBox = details.getByLabel('Weight in lbs');
+
+  // Same 0.1 to 300 lbs rule as the Log weight sheet (wording B).
+  await weightBox.fill('301');
+  await expect(details.getByRole('alert')).toHaveText('Enter a weight between 0.1 and 300 lbs.');
+  await expect(details.getByRole('button', { name: 'Save check-in' })).toBeDisabled();
+
+  await weightBox.fill('10.6');
+  await expect(details.getByRole('alert')).toHaveCount(0);
+  await details.getByRole('button', { name: 'Save check-in' }).click();
+  await confirmPastDaySave(page);
+  await expect(details).toBeHidden({ timeout: 10000 });
+
+  const rows = await savedWeights(supabase, petId);
+  expect(rows).toHaveLength(1);
+  expect(Number(rows[0].numeric_value)).toBe(10.6);
+  expect(rows[0].daily_check_in_id).not.toBeNull();
+
+  // Pet Profile's Weight card and the Log weight sheet's list.
+  await calendar.getByRole('button', { name: 'Close' }).click();
+  const card2 = await openPetCard(page, name);
+  await expect(weightRow(card2)).toContainText('10.6 lbs', { timeout: 10000 });
+  const sheet = await openSheetFromCard(page, card2);
+  await expect(entries(sheet)).toHaveCount(1, { timeout: 10000 });
+  await expect(entries(sheet).first()).toContainText('10.6 lbs');
+  await expect(entries(sheet).first()).toContainText('From daily check-in');
+  await sheet.getByRole('button', { name: 'Close' }).click();
+
+  // Trends, over a range that covers any day History can reopen.
+  await page.goto(`/pet/${petId}/trends`);
+  await page.getByRole('group', { name: 'Time range' }).getByRole('button', { name: '1Y' }).click();
+  const trendsWeight = page.locator('div.rounded-2xl').filter({ has: page.getByText('Weight', { exact: true }) }).last();
+  await expect(trendsWeight).toContainText('10.6', { timeout: 10000 });
+});
+
+test('re-saving an existing check-in keeps its weight: Great Day, and Off Day with the Weight box untouched', async ({ page }) => {
+  const { supabase, userId, petId, name } = await createPet();
+  const checkInDate = isoDateDaysAgo(3);
+  const { data: checkIn, error: ciError } = await supabase.from('daily_check_ins').insert({
+    pet_id: petId, created_by: userId, check_in_date: checkInDate, status: 'off',
+    symptom_count: 0, completed_at: new Date().toISOString(), source: 'app',
+  }).select('id').single();
+  if (ciError) throw ciError;
+  const { data: type, error: typeError } = await supabase.from('observation_types').select('id').eq('code', 'weight').single();
+  if (typeError) throw typeError;
+  const { error: obsError } = await supabase.from('observations').insert({
+    pet_id: petId, created_by: userId, daily_check_in_id: checkIn.id, observation_type_id: type.id, numeric_value: 9.4,
+  });
+  if (obsError) throw obsError;
+
+  const checkInWeights = async () => (await savedWeights(supabase, petId))
+    .filter((r) => r.daily_check_in_id != null)
+    .map((r) => Number(r.numeric_value));
+  const dayStatus = async () => (await supabase.from('daily_check_ins').select('status')
+    .eq('pet_id', petId).eq('check_in_date', checkInDate).single()).data?.status;
+
+  const card = await openPetCard(page, name);
+
+  // 1. Tap Great Day on the saved Off Day.
+  let calendar = await openHistory(page, card);
+  let dayButton = calendar.locator('button[aria-label$=", off"]').first();
+  await revealDay(calendar, dayButton);
+  await dayButton.click();
+  await expect(detailSheet(page)).toContainText('Already logged as Off Day', { timeout: 5000 });
+  await detailSheet(page).getByRole('button', { name: 'Great Day' }).click();
+  await confirmPastDaySave(page);
+  await expect.poll(dayStatus, { timeout: 10000 }).toBe('great');
+  expect(await checkInWeights()).toEqual([9.4]);
+  await calendar.getByRole('button', { name: 'Close' }).click();
+  await expect(calendar).toBeHidden();
+
+  // 2. Re-save as Off Day. The Weight box shows the saved weight, and
+  //    leaving it alone keeps it.
+  calendar = await openHistory(page, card);
+  dayButton = calendar.locator('button[aria-label$=", great"]').first();
+  await revealDay(calendar, dayButton);
+  await dayButton.click();
+  const details = await startOffDayWithWeight(page);
+  await expect(details.getByLabel('Weight in lbs')).toHaveValue('9.4', { timeout: 10000 });
+  await details.getByRole('button', { name: 'Save check-in' }).click();
+  await confirmPastDaySave(page);
+  await expect.poll(dayStatus, { timeout: 10000 }).toBe('off');
+  expect(await checkInWeights()).toEqual([9.4]);
+
+  // The weight still shows, still as a check-in weight.
+  await calendar.getByRole('button', { name: 'Close' }).click();
+  const card2 = await openPetCard(page, name);
+  await expect(weightRow(card2)).toContainText('9.4 lbs', { timeout: 10000 });
+  const sheet = await openSheetFromCard(page, card2);
+  await expect(entries(sheet)).toHaveCount(1, { timeout: 10000 });
+  await expect(entries(sheet).first()).toContainText('From daily check-in');
+});

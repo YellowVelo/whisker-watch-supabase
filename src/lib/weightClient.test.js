@@ -64,7 +64,7 @@ vi.mock('@/lib/checkin/checkinClient', () => ({
 
 const {
   weightDate, listWeights, addWeight, updateWeight, deleteWeight,
-  getWeightSummary, getWeightSummariesForPets, getWeightTrend, validateWeightInput,
+  getWeightSummary, getWeightSummariesForPets, getWeightTrend, validateWeightInput, isValidWeight,
   compareWeightsNewestFirst, weightErrorText, WEIGHT_MESSAGES, WEIGHT_INPUT_ERROR_CODES,
 } = await import('./weightClient');
 const { dateStrForInstant, dateStrInTimezone } = await import('./timezone');
@@ -176,6 +176,11 @@ describe('validateWeightInput (FR2: 0.1–300 lbs, one decimal, never a future d
     for (const lbs of [0, 301, '', null, undefined, 'abc', -5]) {
       expect(() => validateWeightInput({ lbs, date: today() }, tz)).toThrow(expect.objectContaining({ code: 'weight_out_of_range' }));
     }
+  });
+
+  it('isValidWeight applies the same rule without throwing (onboarding and the check-in Weight box)', () => {
+    for (const lbs of [0.1, 300, 11.24, '9']) expect(isValidWeight(lbs)).toBe(true);
+    for (const lbs of [0, 301, 300.06, '', null, undefined, 'abc', -5, Number.NaN]) expect(isValidWeight(lbs)).toBe(false);
   });
 
   it('refuses tomorrow in the owner\'s time zone with weight_date_in_future', () => {

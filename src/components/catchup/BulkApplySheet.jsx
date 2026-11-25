@@ -8,6 +8,7 @@ import { PALETTE } from '@/lib/toneColors';
 import PillToggle from '@/components/PillToggle';
 import BottomSheet from '@/components/BottomSheet';
 import { reportClientError } from '@/lib/errorMonitoring';
+import { isValidWeight, WEIGHT_MESSAGES } from '@/lib/weightClient';
 
 const PICKER_CATEGORIES = CATEGORIES.filter((c) => c.code !== 'medication_exception');
 
@@ -29,7 +30,7 @@ export default function BulkApplySheet({ pet, dates, onClose, onSaved }) {
   const [stage, setStage] = useState('vibe'); // vibe | categories | details | saving
   const [vibeStatus, setVibeStatus] = useState(null);
   const [selectedCodes, setSelectedCodes] = useState([]);
-  const [answers, setAnswers] = useState({});
+  const [answers, setAnswers] = useState(/** @type {Record<string, any>} */ ({}));
   const [error, setError] = useState(null);
 
   const setAnswer = (code, patch) => setAnswers((a) => ({ ...a, [code]: { ...a[code], ...patch } }));
@@ -39,6 +40,11 @@ export default function BulkApplySheet({ pet, dates, onClose, onSaved }) {
     if (cat.answerType !== 'enum') return false;
     return cat.multiSelect ? answers[code]?.values === undefined : !answers[code]?.value;
   });
+
+  // Same 0.1–300 lbs rule as every other weight entry (wording B).
+  const weightInvalid = selectedCodes.includes('weight')
+    && answers.weight?.numericValue != null
+    && !isValidWeight(answers.weight.numericValue);
 
   const chooseVibe = (status) => {
     setVibeStatus(status);
@@ -50,7 +56,7 @@ export default function BulkApplySheet({ pet, dates, onClose, onSaved }) {
   };
 
   const handleSave = async () => {
-    if (incompleteCodes.length > 0) return;
+    if (incompleteCodes.length > 0 || weightInvalid) return;
     setStage('saving');
     setError(null);
     try {
@@ -61,9 +67,15 @@ export default function BulkApplySheet({ pet, dates, onClose, onSaved }) {
           if (cat.multiSelect) {
             return { code, values: a.values || [], notes: a.notes || null };
           }
-          return { code, value: a.value ?? null, numericValue: a.numericValue ?? null, notes: a.notes || null };
+          // Weight to one decimal place, like every other weight entry.
+          const numericValue = a.numericValue != null && code === 'weight' ? Math.round(a.numericValue * 10) / 10 : (a.numericValue ?? null);
+          return { code, value: a.value ?? null, numericValue, notes: a.notes || null };
         })
         .filter((sel) => sel.values !== undefined || sel.value != null || sel.numericValue != null || sel.notes);
+      // Spec 0081: a weight typed here is saved to every one of these days.
+      // With the Weight box empty, no weight selection is sent, so each day
+      // keeps its own saved weight (checkinClient re-sends it). There is no
+      // single value to preload here, since each day can have its own.
 
       // One atomic call per chunk of 20 dates (spec 0016), sequential, not
       // parallel, so a partial failure is easy to reason about: dates in
@@ -120,7 +132,7 @@ export default function BulkApplySheet({ pet, dates, onClose, onSaved }) {
           )}
           <button
             onClick={handleSave}
-            disabled={stage === 'saving' || incompleteCodes.length > 0}
+            disabled={stage === 'saving' || incompleteCodes.length > 0 || weightInvalid}
             className="w-full flex items-center justify-center text-base font-bold rounded-2xl h-14 disabled:opacity-40 transition-opacity border-2"
             style={{ background: 'hsl(var(--background))', borderColor: PALETTE.sky, color: '#fff' }}
           >
@@ -180,6 +192,7 @@ export default function BulkApplySheet({ pet, dates, onClose, onSaved }) {
               species={pet.species}
               answer={answers[code] || {}}
               onChange={(patch) => setAnswer(code, patch)}
+              weightError={code === 'weight' && weightInvalid ? WEIGHT_MESSAGES.weight_out_of_range : null}
             />
           ))}
         </div>
@@ -193,7 +206,7 @@ export default function BulkApplySheet({ pet, dates, onClose, onSaved }) {
 // "today"/"yesterday"/a specific date wording doesn't apply to any single
 // one of them); everything else (options, multi-select toggle behavior,
 // notes) matches exactly so the two flows feel identical to the owner.
-function BulkCategoryQuestion({ category, species, answer, onChange }) {
+function BulkCategoryQuestion({ category, species, answer, onChange, weightError = null }) {
   const Icon = category.icon;
 
   return (
@@ -242,17 +255,25 @@ function BulkCategoryQuestion({ category, species, answer, onChange }) {
       )}
 
       {category.answerType === 'number' && (
-        <div className="flex items-center gap-3">
-          <input
-            type="number"
-            step="0.1"
-            placeholder="Weight"
-            value={answer.numericValue ?? ''}
-            onChange={(e) => onChange({ numericValue: e.target.value === '' ? null : parseFloat(e.target.value) })}
-            className="w-32 rounded-xl px-3.5 py-2.5 text-sm font-semibold text-white bg-white/8 border border-white/10 focus:outline-none focus:ring-1 focus:ring-primary"
-          />
-          <span className="text-[13px] text-tier-tertiary">lbs (optional)</span>
-        </div>
+        <>
+          <div className="flex items-center gap-3">
+            <input
+              type="number"
+              step="0.1"
+              min="0.1"
+              max="300"
+              inputMode="decimal"
+              placeholder="Weight"
+              aria-label="Weight in lbs"
+              aria-invalid={weightError ? true : undefined}
+              value={answer.numericValue ?? ''}
+              onChange={(e) => onChange({ numericValue: e.target.value === '' ? null : parseFloat(e.target.value) })}
+              className="w-32 rounded-xl px-3.5 py-2.5 text-sm font-semibold text-white bg-white/8 border border-white/10 focus:outline-none focus:ring-1 focus:ring-primary"
+            />
+            <span className="text-[13px] text-tier-tertiary">lbs (optional)</span>
+          </div>
+          {weightError && <p role="alert" className="text-[13px] text-destructive mt-2">{weightError}</p>}
+        </>
       )}
 
       {category.answerType === 'text' && (

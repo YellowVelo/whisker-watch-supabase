@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { CATEGORIES, getOptionsForSpecies, getCategory } from '@/lib/checkin/config';
-import { markGreatDay, markSkipped, markOffTough, loadObservationCatalog, describeObservation } from '@/lib/checkin/checkinClient';
+import { markGreatDay, markSkipped, markOffTough, loadObservationCatalog, describeObservation, getCheckInWeightLbs } from '@/lib/checkin/checkinClient';
+import { isValidWeight, WEIGHT_MESSAGES } from '@/lib/weightClient';
 import { entities } from '@/api/entities';
 import { track } from '@/lib/analytics';
 import { Textarea } from '@/components/ui/textarea';
@@ -80,7 +81,7 @@ export default function DailyCheckInSheet({ pet, date, onClose, onSaved, isCatch
   const dayWord = dayLabel || (isCatchUp ? 'yesterday' : 'today');
   const [stage, setStage] = useState('initial'); // initial | categories | details | saving
   const [selectedCodes, setSelectedCodes] = useState([]);
-  const [answers, setAnswers] = useState({}); // code -> { value, numericValue, notes }
+  const [answers, setAnswers] = useState(/** @type {Record<string, any>} */ ({})); // code -> { value, numericValue, notes, touched }
   const [error, setError] = useState(null);
   // Co-owner conflict detection (spec 0043) — set when the save was
   // refused because a different co-owner already saved a newer version of
@@ -98,6 +99,30 @@ export default function DailyCheckInSheet({ pet, date, onClose, onSaved, isCatch
   const [vibeStatus, setVibeStatus] = useState(null);
 
   const setAnswer = (code, patch) => setAnswers((a) => ({ ...a, [code]: { ...a[code], ...patch } }));
+
+  // Spec 0081: preload this day's saved check-in weight into the Weight
+  // box, so re-saving shows (and keeps) it. Only the owner typing in the
+  // box (`touched`) counts as changing or clearing it; an untouched box
+  // leaves the weight to checkinClient, which re-reads and keeps the day's
+  // saved weight at save time. A preload that arrives after the owner has
+  // typed never overwrites what they typed.
+  useEffect(() => {
+    let cancelled = false;
+    getCheckInWeightLbs(pet.id, date)
+      .then((lbs) => {
+        if (cancelled || lbs == null) return;
+        setAnswers((a) => (a.weight?.touched ? a : { ...a, weight: { ...a.weight, numericValue: lbs } }));
+      })
+      .catch((err) => reportClientError(err, { feature: 'daily_checkin', note: 'weight preload' }));
+    return () => { cancelled = true; };
+  }, [pet.id, date]);
+
+  // Same 0.1–300 lbs rule as every other weight entry (wording B). Only a
+  // number the owner typed is checked; an empty box is fine (optional).
+  const weightInvalid = selectedCodes.includes('weight')
+    && !!answers.weight?.touched
+    && answers.weight?.numericValue != null
+    && !isValidWeight(answers.weight.numericValue);
 
   // Only enum-answer categories require a selected option before the
   // check-in can be saved — Weight (number) and Other (text) are optional
@@ -216,19 +241,31 @@ export default function DailyCheckInSheet({ pet, date, onClose, onSaved, isCatch
   // produce a selection if the owner actually entered something. Shared
   // by the normal save and the "Keep Mine" conflict-retry (spec 0043),
   // which needs the exact same selection set re-sent, not recomputed.
-  const buildSelections = () => selectedCodes
-    .map((code) => {
+  //
+  // Weight (spec 0081) is sent only when the owner typed in the box: a
+  // number sets the day's weight, an emptied box clears it. Otherwise it's
+  // left out, and checkinClient keeps the day's saved weight.
+  const buildSelections = () => {
+    /** @type {any[]} */
+    const selections = [];
+    for (const code of selectedCodes) {
       const cat = getCategory(code);
       const a = answers[code] || {};
-      if (cat.multiSelect) {
-        return { code, values: a.values || [], notes: a.notes || null };
+      if (code === 'weight') {
+        // One decimal place, like every other weight entry.
+        if (a.touched) selections.push({ code, numericValue: a.numericValue != null ? Math.round(a.numericValue * 10) / 10 : null });
+        continue;
       }
-      return { code, value: a.value ?? null, numericValue: a.numericValue ?? null, notes: a.notes || null };
-    })
-    .filter((sel) => sel.values !== undefined || sel.value != null || sel.numericValue != null || sel.notes);
+      const sel = cat.multiSelect
+        ? { code, values: a.values || [], notes: a.notes || null }
+        : { code, value: a.value ?? null, numericValue: a.numericValue ?? null, notes: a.notes || null };
+      if (sel.values !== undefined || sel.value != null || sel.numericValue != null || sel.notes) selections.push(sel);
+    }
+    return selections;
+  };
 
   const handleSaveOffTough = () => {
-    if (incompleteCodes.length > 0) return;
+    if (incompleteCodes.length > 0 || weightInvalid) return;
     requestSave(doSaveOffTough, VIBE_LABELS[vibeStatus] || vibeStatus);
   };
 
@@ -296,7 +333,7 @@ export default function DailyCheckInSheet({ pet, date, onClose, onSaved, isCatch
           )}
           <button
             onClick={handleSaveOffTough}
-            disabled={stage === 'saving' || incompleteCodes.length > 0}
+            disabled={stage === 'saving' || incompleteCodes.length > 0 || weightInvalid}
             className="w-full flex items-center justify-center text-base font-bold rounded-2xl h-14 disabled:opacity-40 transition-opacity border-2"
             style={{ background: 'hsl(var(--background))', borderColor: PALETTE.sky, color: '#fff' }}
           >
@@ -421,6 +458,7 @@ export default function DailyCheckInSheet({ pet, date, onClose, onSaved, isCatch
               dayWord={dayWord}
               answer={answers[code] || {}}
               onChange={(patch) => setAnswer(code, patch)}
+              weightError={code === 'weight' && weightInvalid ? WEIGHT_MESSAGES.weight_out_of_range : null}
             />
           ))}
         </div>
@@ -442,7 +480,7 @@ function BigChoiceButton({ label, onClick, subtle = false }) {
   );
 }
 
-function CategoryQuestion({ category, species, petName, dayWord, answer, onChange }) {
+function CategoryQuestion({ category, species, petName, dayWord, answer, onChange, weightError = null }) {
   const Icon = category.icon;
 
   return (
@@ -495,17 +533,25 @@ function CategoryQuestion({ category, species, petName, dayWord, answer, onChang
       )}
 
       {category.answerType === 'number' && (
-        <div className="flex items-center gap-3">
-          <input
-            type="number"
-            step="0.1"
-            placeholder="Weight"
-            value={answer.numericValue ?? ''}
-            onChange={(e) => onChange({ numericValue: e.target.value === '' ? null : parseFloat(e.target.value) })}
-            className="w-32 rounded-xl px-3.5 py-2.5 text-sm font-semibold text-white bg-card border border-border focus:outline-none focus:ring-1 focus:ring-primary"
-          />
-          <span className="text-[13px] text-tier-tertiary">lbs (optional)</span>
-        </div>
+        <>
+          <div className="flex items-center gap-3">
+            <input
+              type="number"
+              step="0.1"
+              min="0.1"
+              max="300"
+              inputMode="decimal"
+              placeholder="Weight"
+              aria-label="Weight in lbs"
+              aria-invalid={weightError ? true : undefined}
+              value={answer.numericValue ?? ''}
+              onChange={(e) => onChange({ numericValue: e.target.value === '' ? null : parseFloat(e.target.value), touched: true })}
+              className="w-32 rounded-xl px-3.5 py-2.5 text-sm font-semibold text-white bg-card border border-border focus:outline-none focus:ring-1 focus:ring-primary"
+            />
+            <span className="text-[13px] text-tier-tertiary">lbs (optional)</span>
+          </div>
+          {weightError && <p role="alert" className="text-[13px] text-destructive mt-2">{weightError}</p>}
+        </>
       )}
 
       {category.answerType === 'text' && (

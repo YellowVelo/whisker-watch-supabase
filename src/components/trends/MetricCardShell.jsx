@@ -5,7 +5,7 @@ import { ChevronRight } from 'lucide-react';
 // error message, and empty state so each card only has to supply its own
 // data-fetch + content. This is what makes each card "independent" per
 // the Trends Feature Spec (a failure in one never blocks the others).
-export default function MetricCardShell({ icon: Icon, title, periodLabel, loading, error, empty, emptyMessage, emptyAction = null, children }) {
+export default function MetricCardShell({ icon: Icon, title, periodLabel, loading, error, empty, emptyMessage, emptyAction = null, errorAction = null, children }) {
   return (
     <div className="rounded-2xl px-4 pt-4 pb-4 bg-card border border-border">
       <div className="flex items-center justify-between mb-3">
@@ -25,7 +25,10 @@ export default function MetricCardShell({ icon: Icon, title, periodLabel, loadin
           <Skeleton className="h-16 w-full" />
         </div>
       ) : error ? (
-        <p className="text-[13px] text-tier-tertiary py-3 text-center">Unable to load trend.</p>
+        <div className="py-3 text-center">
+          <p className={`text-[13px] text-tier-tertiary${errorAction ? ' mb-2' : ''}`}>Unable to load trend.</p>
+          {errorAction}
+        </div>
       ) : empty ? (
         <div className="py-3 text-center">
           <p className="text-[13px] text-tier-tertiary mb-2">{emptyMessage}</p>
