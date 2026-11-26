@@ -195,10 +195,16 @@ export async function uploadFile({ file, purpose = 'photo' }) {
   // A spreadsheet often arrives with no type (spec 0081): store it with the
   // type its extension implies, so the bucket's type list accepts it.
   const contentType = purpose === 'spreadsheet' ? spreadsheetContentType(file) : file.type;
+  // storage-js ignores `contentType` for a File/Blob body (it sends the
+  // file's own type in a form upload), so re-wrap the file with the right
+  // type when it needs correcting.
+  const body = contentType && contentType !== file.type
+    ? new File([file], file.name, { type: contentType })
+    : file;
 
   const { error } = await supabase.storage
     .from(BUCKET)
-    .upload(path, file, { cacheControl: '3600', upsert: false, contentType });
+    .upload(path, body, { cacheControl: '3600', upsert: false, contentType });
 
   if (error) {
     // The bucket enforces the same limits server-side; anything it refuses

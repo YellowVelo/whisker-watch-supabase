@@ -165,17 +165,45 @@ describe('isSpreadsheetFile / spreadsheetContentType (spec 0081)', () => {
 });
 
 describe('uploadFile content type (spec 0081)', () => {
-  it('uploads a typeless .csv as text/csv and a typeless .xlsx as the xlsx type', async () => {
+  // storage-js sends a File body's own .type, not options.contentType, so
+  // the uploaded body itself must carry the corrected type.
+  const mockUpload = () => {
     const upload = vi.fn().mockResolvedValue({ error: null });
     supabase.auth = { getUser: vi.fn().mockResolvedValue({ data: { user: { id: 'u1' } } }) };
     supabase.storage = { from: vi.fn(() => ({ upload })) };
+    return upload;
+  };
 
-    await uploadFile({ file: { name: 'labs.csv', type: '', size: 100 }, purpose: 'spreadsheet' });
-    expect(upload.mock.calls[0][0]).toMatch(/^u1\/.+\.csv$/);
-    expect(upload.mock.calls[0][2].contentType).toBe('text/csv');
+  it('uploads a real typeless labs.csv File with a body typed text/csv', async () => {
+    const upload = mockUpload();
+    const picked = new File(['Test,Value\nALT,42\n'], 'labs.csv', { type: '' });
+    await uploadFile({ file: picked, purpose: 'spreadsheet' });
 
-    await uploadFile({ file: { name: 'labs.xlsx', type: '', size: 100 }, purpose: 'spreadsheet' });
-    expect(upload.mock.calls[1][2].contentType).toBe('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    const [path, body, options] = upload.mock.calls[0];
+    expect(path).toMatch(/^u1\/.+\.csv$/);
+    expect(body).toBeInstanceOf(File);
+    expect(body.type).toBe('text/csv');
+    expect(body.name).toBe('labs.csv');
+    expect(await body.text()).toBe('Test,Value\nALT,42\n');
+    expect(options.contentType).toBe('text/csv');
+  });
+
+  it('uploads a real typeless labs.xlsx File with a body typed as xlsx', async () => {
+    const upload = mockUpload();
+    const picked = new File([new Uint8Array([0x50, 0x4b, 0x03, 0x04])], 'labs.xlsx', { type: '' });
+    await uploadFile({ file: picked, purpose: 'spreadsheet' });
+
+    const [path, body] = upload.mock.calls[0];
+    expect(path).toMatch(/^u1\/.+\.xlsx$/);
+    expect(body.type).toBe('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    expect(body.size).toBe(4);
+  });
+
+  it('passes a correctly typed file through unchanged', async () => {
+    const upload = mockUpload();
+    const picked = new File(['a,1'], 'labs.csv', { type: 'text/csv' });
+    await uploadFile({ file: picked, purpose: 'spreadsheet' });
+    expect(upload.mock.calls[0][1]).toBe(picked);
   });
 
   it('refuses an .xls before uploading anything', async () => {
@@ -190,7 +218,9 @@ describe('uploadFile content type (spec 0081)', () => {
     const upload = vi.fn().mockResolvedValue({ error: null });
     supabase.auth = { getUser: vi.fn().mockResolvedValue({ data: { user: { id: 'u1' } } }) };
     supabase.storage = { from: vi.fn(() => ({ upload })) };
-    await uploadFile({ file: { name: 'cat.png', type: 'image/png', size: 100 }, purpose: 'photo' });
+    const photo = new File(['x'], 'cat.png', { type: 'image/png' });
+    await uploadFile({ file: photo, purpose: 'photo' });
+    expect(upload.mock.calls[0][1]).toBe(photo);
     expect(upload.mock.calls[0][2].contentType).toBe('image/png');
   });
 });

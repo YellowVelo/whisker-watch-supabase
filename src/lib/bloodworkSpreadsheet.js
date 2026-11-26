@@ -213,7 +213,16 @@ const OLE2_SIGNATURE = [0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]; // old 
 // unpacks. If that ever matters, sum the sizes in the zip's central
 // directory before calling the library.
 async function readXlsxSheets(bytes) {
-  const { default: readXlsxFile } = await import('read-excel-file/universal');
+  let readXlsxFile;
+  try {
+    ({ default: readXlsxFile } = await import('read-excel-file/universal'));
+  } catch (err) {
+    // The reader is loaded on demand, so this fails offline or on a stale
+    // PWA chunk after a deploy. That says nothing about the file, so it's
+    // not a SpreadsheetReadError: the caller shows its usual failure message.
+    reportClientError(err, { feature: 'bloodwork_spreadsheet', note: 'Could not load the .xlsx reader' });
+    throw new Error('Could not load the spreadsheet reader', { cause: err });
+  }
   let sheets;
   try {
     // Pass the ArrayBuffer, not the Uint8Array: older versions of
@@ -236,7 +245,9 @@ async function readXlsxSheets(bytes) {
  *
  * @param {File|Blob & { name?: string }} file
  * @returns {Promise<{ text: string, sheetNames: string[] }>}
- * @throws {SpreadsheetReadError} old_excel, too_large or nothing_found
+ * @throws {SpreadsheetReadError} old_excel, too_large or nothing_found;
+ *   any other Error (e.g. the .xlsx reader failed to load) gets the
+ *   caller's usual failure message
  */
 export async function readBloodworkSpreadsheet(file) {
   if (fileExtension(file?.name) === 'xls') throw new SpreadsheetReadError('old_excel');

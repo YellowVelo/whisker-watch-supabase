@@ -244,3 +244,33 @@ describe('the .xlsx library loads only on import', () => {
     expect(source).toMatch(/await import\('read-excel-file\/universal'\)/);
   });
 });
+
+describe('readBloodworkSpreadsheet: the .xlsx reader fails to load', () => {
+  it('reports it and throws an uncoded error, so the caller shows its usual failure message', async () => {
+    vi.resetModules();
+    vi.doMock('read-excel-file/universal', () => {
+      throw new Error('Failed to fetch dynamically imported module');
+    });
+    try {
+      const fresh = await import('./bloodworkSpreadsheet');
+      const monitoring = await import('@/lib/errorMonitoring');
+      const bytes = new Uint8Array([0x50, 0x4b, 0x03, 0x04, 0, 0, 0, 0]);
+      let caught;
+      try {
+        await fresh.readBloodworkSpreadsheet(asFile(bytes, 'labs.xlsx', XLSX_TYPE));
+      } catch (err) {
+        caught = err;
+      }
+      expect(caught).toBeInstanceOf(Error);
+      expect(caught).not.toBeInstanceOf(fresh.SpreadsheetReadError);
+      expect(fresh.spreadsheetErrorText(caught)).toBeNull();
+      expect(monitoring.reportClientError).toHaveBeenCalledWith(
+        expect.anything(),
+        { feature: 'bloodwork_spreadsheet', note: 'Could not load the .xlsx reader' },
+      );
+    } finally {
+      vi.doUnmock('read-excel-file/universal');
+      vi.resetModules();
+    }
+  });
+});
