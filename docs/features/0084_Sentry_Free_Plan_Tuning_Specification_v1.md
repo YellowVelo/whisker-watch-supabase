@@ -1,6 +1,7 @@
 # 0084_Sentry_Free_Plan_Tuning_Specification_v1
 
-**Status:** Approved by Lynn 2026-11-25. Not yet built.
+**Status:** Built 2026-11-25 on `claude/spec-0084-sentry-tuning`. All tasks passed review on the first round, QA passed, and the final review passed. Waiting for Lynn's PROTECTED merge OK. Approved by Lynn 2026-11-25.
+**Known limitation (final review):** Cloudflare also builds PR branches in the production project with the same settings, so errors from a PR preview link count as `production` in Sentry. Not a regression.
 **Date:** 2026-11-25
 **Branch:** `claude/spec-0084-sentry-tuning` (off `main` at `a7ffed9`)
 **Migration:** none
@@ -10,9 +11,9 @@
 ## Lynn — what I need from you
 
 1. ~~Review and approve this spec~~ Approved 2026-11-25.
-2. **Before the build, tell me your Sentry organization slug.** It's the word in your Sentry web address: `https://<this-part>.sentry.io/`. Blocks source map upload (Part A).
+2. ~~Tell me your Sentry organization slug~~ Done: `wysker-watch` (hard-coded in `vite.config.js`).
 3. **After approval, create a Sentry upload token:** Sentry → Settings → **Auth Tokens** (under Developer Settings) → **Create New Token**. Then paste it into Cloudflare → Workers & Pages → `whisker-watch-supabase` (the production project, *not* staging) → Settings → **Build** → Variables and secrets → add a **secret** named `SENTRY_AUTH_TOKEN`. Paste it there only, never in chat. Blocks Part A from taking effect, but not the build or merge: without the token, the build simply skips the upload.
-4. **After approval, create the backup cron monitor:** Sentry → **Monitors** → **Cron** → Add monitor. Name it `nightly-database-backup`, schedule `0 8 * * *`, time zone **UTC**, check-in margin **60 minutes**, max runtime **20 minutes**, project javascript-react, environment production. Sentry then shows a check-in address (on the monitor's setup / instructions tab, it looks like `https://o….ingest.sentry.io/api/…/cron/nightly-database-backup/…/`). Add it as a GitHub secret: GitHub → repo → Settings → Secrets and variables → Actions → New repository secret, named `SENTRY_CRON_URL`. Blocks Part C from taking effect, but not the merge: without it the backup runs exactly as today.
+4. **After approval, create the backup cron monitor:** Sentry → **Monitors** → **Cron** → Add monitor. Name it `nightly-database-backup`, schedule `0 8 * * *`, time zone **UTC**, check-in margin **120 minutes** (GitHub often starts on-the-hour schedules late; 60 would send false "missed" emails), max runtime **20 minutes**, project javascript-react, environment production. Sentry then shows a check-in address (on the monitor's setup / instructions tab, it looks like `https://o….ingest.sentry.io/api/…/cron/nightly-database-backup/…/`). Add it as a GitHub secret: GitHub → repo → Settings → Secrets and variables → Actions → New repository secret, named `SENTRY_CRON_URL`. Blocks Part C from taking effect, but not the merge: without it the backup runs exactly as today.
 5. **After merge, promote branch `main`'s build in Cloudflare** (commit message will start "Spec 0084"). The app part only takes effect after this.
 
 ## Before You Approve This

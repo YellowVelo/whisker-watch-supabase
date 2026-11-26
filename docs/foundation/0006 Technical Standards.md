@@ -110,7 +110,7 @@ Must never expose API keys to the client
 
 Accepts only the 8 named tasks (spec 0080); never a prompt, schema or file link from the browser. The server writes the instructions and loads pet data with the caller's own access.
 
-Limits: 20 requests per 10 minutes plus 100 per person per day (migration 0060). Replies answered without the AI don't count, except scan files found missing, the wrong type or too large after the limit check. One Sentry warning per person per day at the cap.
+Limits: 20 requests per 10 minutes plus 100 per person per day (migration 0060). Replies answered without the AI don't count, except scan files found missing, the wrong type or too large after the limit check. One Sentry warning per person per day at the cap (production only, spec 0084).
 
 Error Handling
 
