@@ -7,9 +7,11 @@ vi.mock('@/api/supabaseClient', () => ({ supabase: {} }));
 vi.mock('@/lib/errorMonitoring', () => ({ reportClientError: vi.fn() }));
 
 const {
-  buildReviewVisits, skippedText, includedVisits, canSaveReview, reviewVisitToRecord,
-  bloodworkImportErrorText, shouldReportImportError,
+  buildReviewVisits, skippedText, skippedGroups, includedVisits, canSaveReview, reviewVisitToRecord,
+  bloodworkImportErrorText, shouldReportImportError, changeVisitDate, toggleVisitWeight, weightToSave,
+  weightLineEnabled, isFutureDate,
 } = await import('./bloodworkImport');
+const { dateStrInTimezone } = await import('@/lib/timezone');
 const { SpreadsheetReadError, SPREADSHEET_MESSAGES } = await import('./bloodworkSpreadsheet');
 const { UploadRejectedError, UPLOAD_MESSAGES } = await import('@/api/storageClient');
 
@@ -92,9 +94,23 @@ describe('buildReviewVisits', () => {
     expect(visits[0].includeWeight).toBe(false);
   });
 
-  it('lists a weight with no unit as not imported', () => {
-    const answer = { visits: [{ date: '2026-10-02', values: { bun: 32 } }], skipped: [{ visit: 0, field: 'weight', label: 'Weight', unit: null, value: 9.8 }] };
-    expect(skippedText(buildReviewVisits(answer, none).visits[0].skipped)).toBe('Weight');
+  it('lists a weight with no unit as not imported for that reason, apart from other units', () => {
+    const answer = {
+      visits: [{ date: '2026-10-02', values: { bun: 32 } }],
+      skipped: [
+        { visit: 0, field: 'weight', label: 'Weight', unit: null, value: 9.8 },
+        { visit: 0, field: 'creatinine', label: 'Creatinine', unit: 'µmol/L', value: 194.48 },
+      ],
+    };
+    const { differentUnit, noUnit } = skippedGroups(buildReviewVisits(answer, none).visits[0].skipped);
+    expect(skippedText(noUnit)).toBe('Weight');
+    expect(skippedText(differentUnit)).toBe('Creatinine µmol/L');
+  });
+
+  it("starts an undated visit's weight line unticked and not tickable", () => {
+    const { visits } = buildReviewVisits({ visits: [{ values: { bun: 32 }, weight_lbs: 10.1 }] }, none);
+    expect(visits[0]).toMatchObject({ weightLbs: 10.1, includeWeight: false });
+    expect(weightLineEnabled(visits[0])).toBe(false);
   });
 
   it('turns the old flat scan answer into one visit (rollout)', () => {
@@ -117,12 +133,110 @@ describe('buildReviewVisits', () => {
   });
 });
 
+describe('changing a visit date (FR30, FR36)', () => {
+  const onFile = { bloodworkDates: new Set(['2026-03-14']), weightDates: new Set(['2026-06-14']) };
+  const undated = () => buildReviewVisits({ visits: [{ values: { bun: 32 }, weight_lbs: 10.1 }] }, onFile).visits[0];
+
+  it("keeps an undated visit's weight unticked when the owner types a date that already has a weight", () => {
+    const v = changeVisitDate(undated(), '2026-06-14', onFile);
+    expect(v).toMatchObject({ form: expect.objectContaining({ date: '2026-06-14' }), includeWeight: false, onFile: false, included: true });
+    expect(weightLineEnabled(v)).toBe(true);
+    expect(weightToSave(v, new Set(['2026-06-14']))).toBe(false);
+  });
+
+  it('ticks the weight when the new date has no weight', () => {
+    expect(changeVisitDate(undated(), '2026-05-01', onFile).includeWeight).toBe(true);
+  });
+
+  it('unticks the weight again when a ticked line moves to a date with a weight', () => {
+    const { visits } = buildReviewVisits({ visits: [{ date: '2026-05-01', values: {}, weight_lbs: 10.1 }] }, onFile);
+    expect(visits[0].includeWeight).toBe(true);
+    expect(changeVisitDate(visits[0], '2026-06-14', onFile).includeWeight).toBe(false);
+  });
+
+  it("does not carry the owner's own weight tick to a different date", () => {
+    const { visits } = buildReviewVisits({ visits: [{ date: '2026-06-14', values: {}, weight_lbs: 10.1 }] }, onFile);
+    const ticked = toggleVisitWeight(visits[0]);
+    expect(ticked).toMatchObject({ includeWeight: true, weightConfirmedDate: '2026-06-14' });
+    const moved = changeVisitDate(ticked, '2026-06-15', { ...onFile, weightDates: new Set(['2026-06-14', '2026-06-15']) });
+    expect(moved).toMatchObject({ includeWeight: false, weightConfirmedDate: null });
+  });
+
+  it('marks and unticks a visit moved onto a date that already has bloodwork', () => {
+    const v = changeVisitDate(undated(), '2026-03-14', onFile);
+    expect(v).toMatchObject({ onFile: true, included: false });
+    expect(weightLineEnabled(v)).toBe(false);
+    expect(changeVisitDate(v, '2026-03-15', onFile).onFile).toBe(false);
+  });
+
+  it('changes nothing when the date is unchanged', () => {
+    const { visits } = buildReviewVisits({ visits: [{ date: '2026-06-14', values: {}, weight_lbs: 10.1 }] }, onFile);
+    const ticked = toggleVisitWeight(visits[0]);
+    expect(changeVisitDate(ticked, '2026-06-14', onFile)).toBe(ticked);
+  });
+});
+
+describe('which weights a save logs (FR36: one weight per day, never silently replaced)', () => {
+  const visitOn = (date, weightDates) => buildReviewVisits({ visits: [{ date, values: {}, weight_lbs: 10.1 }] }, { bloodworkDates: new Set(), weightDates }).visits[0];
+
+  it('logs a ticked weight for a date with no weight', () => {
+    expect(weightToSave(visitOn('2026-05-01', new Set()), new Set())).toBe(true);
+  });
+
+  it('skips a weight that started ticked if a weight appeared on that date since the review opened', () => {
+    expect(weightToSave(visitOn('2026-05-01', new Set()), new Set(['2026-05-01']))).toBe(false);
+  });
+
+  it('skips every unconfirmed weight if the fresh weights could not be loaded', () => {
+    expect(weightToSave(visitOn('2026-05-01', new Set()), null)).toBe(false);
+  });
+
+  it('logs a weight over one on file only when the owner ticked it for that same date', () => {
+    const shownUnticked = visitOn('2026-06-14', new Set(['2026-06-14']));
+    expect(weightToSave(shownUnticked, new Set(['2026-06-14']))).toBe(false);
+    expect(weightToSave(toggleVisitWeight(shownUnticked), new Set(['2026-06-14']))).toBe(true);
+    expect(weightToSave(toggleVisitWeight(toggleVisitWeight(shownUnticked)), new Set(['2026-06-14']))).toBe(false);
+  });
+
+  it('never logs the weight of an unticked visit or a visit without a weight', () => {
+    const v = visitOn('2026-05-01', new Set());
+    expect(weightToSave({ ...v, included: false }, new Set())).toBe(false);
+    expect(weightToSave({ ...v, weightLbs: null }, new Set())).toBe(false);
+  });
+});
+
 describe('saving the review', () => {
+  const tz = 'America/New_York';
+
   it('needs at least one ticked visit, each with a date', () => {
     const { visits } = buildReviewVisits(IDEXX_LIKE, none);
-    expect(canSaveReview(visits)).toBe(true);
-    expect(canSaveReview(visits.map((v) => ({ ...v, included: false })))).toBe(false);
-    expect(canSaveReview([{ ...visits[0], form: { ...visits[0].form, date: '' } }])).toBe(false);
+    expect(canSaveReview(visits, tz)).toBe(true);
+    expect(canSaveReview(visits.map((v) => ({ ...v, included: false })), tz)).toBe(false);
+    expect(canSaveReview([{ ...visits[0], form: { ...visits[0].form, date: '' } }], tz)).toBe(false);
+  });
+
+  it("refuses a future date on a ticked visit, on the owner's calendar", () => {
+    const { visits } = buildReviewVisits(IDEXX_LIKE, none);
+    const today = dateStrInTimezone(tz, 0);
+    const tomorrow = dateStrInTimezone(tz, 1);
+    expect(isFutureDate(today, tz)).toBe(false);
+    expect(isFutureDate(tomorrow, tz)).toBe(true);
+    expect(canSaveReview([{ ...visits[0], form: { ...visits[0].form, date: today } }], tz)).toBe(true);
+    expect(canSaveReview([{ ...visits[0], form: { ...visits[0].form, date: tomorrow } }], tz)).toBe(false);
+    // An unticked future-dated visit doesn't block the others.
+    expect(canSaveReview([visits[0], { ...visits[1], included: false, form: { ...visits[1].form, date: tomorrow } }], tz)).toBe(true);
+  });
+
+  it("uses the owner's time zone, not the device's, for today", () => {
+    vi.useFakeTimers();
+    try {
+      // 02:00 UTC on Nov 26 is still Nov 25 in New York.
+      vi.setSystemTime(new Date('2026-11-26T02:00:00Z'));
+      expect(isFutureDate('2026-11-26', 'America/New_York')).toBe(true);
+      expect(isFutureDate('2026-11-26', 'UTC')).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('turns an edited card into a bloodwork row with numbers and no empty fields', () => {

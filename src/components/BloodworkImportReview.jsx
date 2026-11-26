@@ -7,7 +7,10 @@ import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
 import { PALETTE, PALETTE_SOFT } from '@/lib/toneColors';
 import { BLOODWORK_FIELDS, URINE_PROTEIN_VALUES } from '@/lib/bloodworkFields';
-import { includedVisits, canSaveReview, skippedText } from '@/lib/bloodworkImport';
+import {
+  includedVisits, canSaveReview, skippedText, skippedGroups, weightLineEnabled, isFutureDate,
+} from '@/lib/bloodworkImport';
+import { WEIGHT_MESSAGES } from '@/lib/weightClient';
 
 // Review step for bloodwork imported from a photo, PDF or spreadsheet
 // (spec 0081, FR30/FR35/FR36, wording F, I, J, K). Laid out like the
@@ -43,10 +46,27 @@ function Field({ label, children }) {
   );
 }
 
-function VisitCard({ visit, onToggle, onToggleWeight, onEdit }) {
+// "Not imported (different unit): …" and "Not imported (no unit): …" lines.
+function SkippedLines({ items }) {
+  const { differentUnit, noUnit } = skippedGroups(items);
+  return (
+    <>
+      {differentUnit.length > 0 && (
+        <p className="text-[13px] text-muted-foreground">Not imported (different unit): {skippedText(differentUnit)}</p>
+      )}
+      {noUnit.length > 0 && (
+        <p className="text-[13px] text-muted-foreground">Not imported (no unit): {skippedText(noUnit)}</p>
+      )}
+    </>
+  );
+}
+
+function VisitCard({ visit, timezone, onToggle, onToggleWeight, onEdit }) {
   const { form } = visit;
   const edit = (field) => (e) => onEdit(visit.key, field, e.target.value);
   const heading = visitHeading(form);
+  const weightEnabled = weightLineEnabled(visit);
+  const includeName = form.date ? `Include ${form.date}` : 'Include';
 
   return (
     <div className="border border-border rounded-xl p-3 bg-card space-y-3" data-testid="bloodwork-visit-card">
@@ -58,7 +78,7 @@ function VisitCard({ visit, onToggle, onToggleWeight, onEdit }) {
           </div>
         </div>
         <label className="flex items-center gap-2 min-h-11 min-w-11 cursor-pointer shrink-0 text-sm text-white">
-          <Checkbox checked={visit.included} onCheckedChange={() => onToggle(visit.key)} aria-label="Include" />
+          <Checkbox checked={visit.included} onCheckedChange={() => onToggle(visit.key)} aria-label={includeName} />
           Include
         </label>
       </div>
@@ -72,6 +92,9 @@ function VisitCard({ visit, onToggle, onToggleWeight, onEdit }) {
           <Field label="Date *">
             <Input type="date" value={form.date} onChange={edit('date')} className="h-11 text-sm" />
           </Field>
+          {isFutureDate(form.date, timezone) && (
+            <p className="text-[13px] text-destructive mt-1">{WEIGHT_MESSAGES.weight_date_in_future}</p>
+          )}
         </div>
         <Field label="Lab Name">
           <Input value={form.lab_name} onChange={edit('lab_name')} className="h-11 text-sm" />
@@ -126,18 +149,16 @@ function VisitCard({ visit, onToggle, onToggleWeight, onEdit }) {
         <Textarea value={form.notes} onChange={edit('notes')} rows={2} className="text-sm" />
       </Field>
 
-      {visit.skipped.length > 0 && (
-        <p className="text-[13px] text-muted-foreground">Not imported (different unit): {skippedText(visit.skipped)}</p>
-      )}
+      <SkippedLines items={visit.skipped} />
       {visit.notTracked.length > 0 && (
         <p className="text-[13px] text-muted-foreground">Not tracked yet: {visit.notTracked.join(', ')}</p>
       )}
       {visit.weightLbs !== null && (
-        <label className={`flex items-center gap-3 min-h-11 cursor-pointer text-sm text-white ${visit.included ? '' : 'opacity-50'}`}>
+        <label className={`flex items-center gap-3 min-h-11 cursor-pointer text-sm text-white ${weightEnabled ? '' : 'opacity-50'}`}>
           <Checkbox
             checked={visit.includeWeight}
             onCheckedChange={() => onToggleWeight(visit.key)}
-            disabled={!visit.included}
+            disabled={!weightEnabled}
             aria-label={`Weight ${visit.weightLbs} lbs: also add to weight history`}
           />
           Weight {visit.weightLbs} lbs: also add to weight history
@@ -147,7 +168,7 @@ function VisitCard({ visit, onToggle, onToggleWeight, onEdit }) {
   );
 }
 
-export default function BloodworkImportReview({ visits, unplacedSkipped, saving, onToggle, onToggleWeight, onEdit, onConfirm, onClose }) {
+export default function BloodworkImportReview({ visits, unplacedSkipped, saving, timezone, onToggle, onToggleWeight, onEdit, onConfirm, onClose }) {
   const count = includedVisits(visits).length;
 
   const subtitle = (
@@ -159,7 +180,7 @@ export default function BloodworkImportReview({ visits, unplacedSkipped, saving,
   const footer = (
     <div className="flex gap-2">
       <Button variant="outline" onClick={onClose} className="flex-1 min-h-11" disabled={saving}>Cancel</Button>
-      <Button onClick={onConfirm} className="flex-1 min-h-11" disabled={saving || !canSaveReview(visits)}>
+      <Button onClick={onConfirm} className="flex-1 min-h-11" disabled={saving || !canSaveReview(visits, timezone)}>
         {saving ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Saving...</> : `Save ${count} ${count === 1 ? 'visit' : 'visits'}`}
       </Button>
     </div>
@@ -168,11 +189,9 @@ export default function BloodworkImportReview({ visits, unplacedSkipped, saving,
   return (
     <BottomSheet titleId="bloodwork-import-review-title" title="Review imported bloodwork" subtitle={subtitle} onClose={onClose} footer={footer}>
       <div className="space-y-3 pb-2">
-        {unplacedSkipped.length > 0 && (
-          <p className="text-[13px] text-muted-foreground">Not imported (different unit): {skippedText(unplacedSkipped)}</p>
-        )}
+        <SkippedLines items={unplacedSkipped} />
         {visits.map((visit) => (
-          <VisitCard key={visit.key} visit={visit} onToggle={onToggle} onToggleWeight={onToggleWeight} onEdit={onEdit} />
+          <VisitCard key={visit.key} visit={visit} timezone={timezone} onToggle={onToggle} onToggleWeight={onToggleWeight} onEdit={onEdit} />
         ))}
       </div>
     </BottomSheet>

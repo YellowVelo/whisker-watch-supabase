@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   uploadFile, checkBloodworkUploadFile, bloodworkUploadPurpose, BLOODWORK_FILE_ACCEPT, BLOODWORK_UPLOAD_HELP,
 } from '@/api/storageClient';
@@ -18,6 +18,7 @@ import { BLOODWORK_FIELDS as FIELDS, URINE_PROTEIN_VALUES } from '@/lib/bloodwor
 import { readBloodworkSpreadsheet, SPREADSHEET_MESSAGES } from '@/lib/bloodworkSpreadsheet';
 import {
   buildReviewVisits, includedVisits, reviewVisitToRecord, bloodworkImportErrorText, shouldReportImportError,
+  changeVisitDate, toggleVisitWeight, weightToSave, SCAN_NOTHING_FOUND,
 } from '@/lib/bloodworkImport';
 import { aiErrorText } from '@/lib/aiGuardrails';
 import { reportClientError } from '@/lib/errorMonitoring';
@@ -48,10 +49,14 @@ export default function BloodworkSection({ petId }) {
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [importing, setImporting] = useState(false);
-  // { visits, unplacedSkipped } from buildReviewVisits while the import
+  // { visits, unplacedSkipped } from buildReviewVisits, plus the
+  // bloodworkDates/weightDates they were checked against, while the import
   // review is open.
   const [review, setReview] = useState(null);
   const [reviewSaving, setReviewSaving] = useState(false);
+  // Read by closeReview, so a close during a save is ignored whichever
+  // render's handler the sheet calls.
+  const reviewSavingRef = useRef(false);
   const [expandedId, setExpandedId] = useState(null);
   const [chartField, setChartField] = useState('creatinine');
 
@@ -123,10 +128,10 @@ export default function BloodworkSection({ petId }) {
       const built = buildReviewVisits(result, { bloodworkDates, weightDates });
       if (built.visits.length === 0) {
         pendingScan.discard();
-        if (purpose === 'spreadsheet') toast({ variant: 'destructive', description: SPREADSHEET_MESSAGES.nothing_found });
+        toast({ variant: 'destructive', description: purpose === 'spreadsheet' ? SPREADSHEET_MESSAGES.nothing_found : SCAN_NOTHING_FOUND });
         return;
       }
-      setReview(built);
+      setReview({ ...built, bloodworkDates, weightDates });
     } catch (err) {
       pendingScan.discard();
       if (shouldReportImportError(err)) {
@@ -143,45 +148,83 @@ export default function BloodworkSection({ petId }) {
     setReview((r) => r && { ...r, visits: r.visits.map((v) => (v.key === key ? change(v) : v)) });
   };
   const toggleVisit = (key) => updateVisit(key, (v) => ({ ...v, included: !v.included }));
-  const toggleWeight = (key) => updateVisit(key, (v) => ({ ...v, includeWeight: !v.includeWeight }));
-  const editVisit = (key, field, value) => updateVisit(key, (v) => ({ ...v, form: { ...v.form, [field]: value } }));
+  const toggleWeight = (key) => updateVisit(key, toggleVisitWeight);
+  // A new date works out "Already on file" and the weight tick again (FR30, FR36).
+  const editVisit = (key, field, value) => setReview((r) => r && {
+    ...r,
+    visits: r.visits.map((v) => {
+      if (v.key !== key) return v;
+      if (field === 'date') return changeVisitDate(v, value, r);
+      return { ...v, form: { ...v.form, [field]: value } };
+    }),
+  });
 
   const closeReview = () => {
+    if (reviewSavingRef.current) return;
     pendingScan.discard();
     setReview(null);
   };
 
-  // FR31/FR36: each ticked visit becomes a bloodwork record, then each
-  // ticked weight on a ticked visit is logged on that visit's date. The
-  // file is linked to the pet once anything is saved. If a save fails
-  // partway, the visits already saved leave the review and the rest stay
-  // for another try. A failed weight alone closes the review, since its
-  // visit is already saved.
+  // FR31/FR36: each ticked visit becomes a bloodwork record, and its ticked
+  // weight is logged on that visit's date straight after, so a visit leaves
+  // the review only once both are saved. The pet's weights are loaded again
+  // first, so a weight already on file is never replaced unless the owner
+  // ticked that line for that date (weightToSave). The file is linked to
+  // the pet once anything is saved. If a save fails partway, the saved
+  // visits leave the review and the rest stay for another try; a visit
+  // whose record saved but whose weight failed stays too, and a retry
+  // updates its record instead of adding a second one.
   const confirmReview = async () => {
-    if (!review) return;
+    if (!review || reviewSavingRef.current) return;
     const chosen = includedVisits(review.visits);
     const savedKeys = new Set();
+    /** @type {Map<string, string>} */
+    const savedIds = new Map();
+    const savedBloodworkDates = [];
+    const savedWeightDates = [];
+    reviewSavingRef.current = true;
     setReviewSaving(true);
     try {
+      const freshWeightDates = await loadWeightDates();
       for (const visit of chosen) {
-        await entities.Bloodwork.create(reviewVisitToRecord(visit, petId));
-        savedKeys.add(visit.key);
-      }
-      for (const visit of chosen) {
-        if (visit.includeWeight && visit.weightLbs !== null) {
-          await addWeight(petId, { date: visit.form.date, lbs: visit.weightLbs }, timezone);
+        const record = reviewVisitToRecord(visit, petId);
+        if (visit.savedId) {
+          await entities.Bloodwork.update(visit.savedId, record);
+        } else {
+          const row = await entities.Bloodwork.create(record);
+          savedIds.set(visit.key, row?.id);
         }
+        savedBloodworkDates.push(visit.form.date);
+        if (weightToSave(visit, freshWeightDates)) {
+          await addWeight(petId, { date: visit.form.date, lbs: visit.weightLbs }, timezone);
+          savedWeightDates.push(visit.form.date);
+          freshWeightDates?.add(visit.form.date);
+        }
+        savedKeys.add(visit.key);
       }
     } catch (err) {
       reportClientError(err, { feature: 'bloodwork_import', note: 'Could not save imported bloodwork' });
       // The app's generic failure message (the same one aiErrorText uses).
       toast({ variant: 'destructive', description: aiErrorText(null) });
     }
-    if (savedKeys.size > 0) await pendingScan.keep([petId]);
-    if (chosen.every((v) => savedKeys.has(v.key))) setReview(null);
-    else setReview({ ...review, visits: review.visits.filter((v) => !savedKeys.has(v.key)) });
+    const anySaved = savedKeys.size > 0 || savedIds.size > 0;
+    if (anySaved) await pendingScan.keep([petId]);
+    const allSaved = chosen.every((v) => savedKeys.has(v.key));
+    setReview((r) => {
+      if (!r || allSaved) return null;
+      const weightDates = r.weightDates && new Set([...r.weightDates, ...savedWeightDates]);
+      return {
+        ...r,
+        bloodworkDates: new Set([...r.bloodworkDates, ...savedBloodworkDates]),
+        weightDates,
+        visits: r.visits
+          .filter((v) => !savedKeys.has(v.key))
+          .map((v) => (savedIds.has(v.key) ? { ...v, savedId: savedIds.get(v.key) } : v)),
+      };
+    });
+    reviewSavingRef.current = false;
     setReviewSaving(false);
-    if (savedKeys.size > 0) load();
+    if (anySaved) load();
   };
 
   const openEdit = (r) => {
@@ -331,6 +374,7 @@ export default function BloodworkSection({ petId }) {
           visits={review.visits}
           unplacedSkipped={review.unplacedSkipped}
           saving={reviewSaving}
+          timezone={timezone}
           onToggle={toggleVisit}
           onToggleWeight={toggleWeight}
           onEdit={editVisit}

@@ -26,6 +26,7 @@ const CSV_FIXTURE = path.join(FIXTURES, 'bloodwork-rows-sample.csv');
 const XLSX_FIXTURE = path.join(FIXTURES, 'bloodwork-template-sample.xlsx');
 const SCAN_FIXTURE = path.join(FIXTURES, 'test-scan.png');
 const REVIEW = 'Review imported bloodwork';
+const BLOODWORK_REST = '**/rest/v1/bloodwork*';
 
 let supabase;
 let userId;
@@ -78,6 +79,21 @@ async function weightRows(petId) {
     .order('observed_at', { ascending: false });
   if (error) throw error;
   return data;
+}
+
+// A weight that came from a daily check-in, like the reviewer's case.
+async function addCheckInWeight(petId, date, lbs) {
+  const { data: checkIn, error: ciError } = await supabase.from('daily_check_ins').insert({
+    pet_id: petId, created_by: userId, check_in_date: date, status: 'great',
+    symptom_count: 0, completed_at: new Date().toISOString(), source: 'app',
+  }).select('id').single();
+  if (ciError) throw ciError;
+  const { data: type, error: typeError } = await supabase.from('observation_types').select('id').eq('code', 'weight').single();
+  if (typeError) throw typeError;
+  const { error } = await supabase.from('observations').insert({
+    pet_id: petId, created_by: userId, daily_check_in_id: checkIn.id, observation_type_id: type.id, numeric_value: lbs,
+  });
+  if (error) throw error;
 }
 
 async function fileExists(storagePath) {
@@ -194,6 +210,9 @@ test('AC16: a visit already on file starts unticked and saving adds nothing for 
   await expect(onFile).toContainText('Already on file');
   await expect(onFile.getByRole('checkbox', { name: 'Include' })).not.toBeChecked();
   await expect(cards(page).nth(0).getByRole('checkbox', { name: 'Include' })).toBeChecked();
+  // Each card's Include tick is named with its visit date.
+  await expect(reviewSheet(page).getByRole('checkbox', { name: 'Include 2026-06-14', exact: true })).not.toBeChecked();
+  await expect(reviewSheet(page).getByRole('checkbox', { name: 'Include 2026-10-02', exact: true })).toBeChecked();
   await expect(cards(page).nth(0)).not.toContainText('Already on file');
 
   await reviewSheet(page).getByRole('button', { name: 'Save 2 visits' }).click();
@@ -303,6 +322,17 @@ test('AC19: a sheet with no bloodwork gets wording G and its file is deleted', a
   await expect.poll(() => fileExists(storagePath)).toBe(false);
 });
 
+test('a photo or PDF scan with no bloodwork says so and its file is deleted', async ({ page }) => {
+  const petId = await createPet();
+  await stubAI(page, { visits: [], skipped: [] });
+  const storagePath = await importFile(page, petId, SCAN_FIXTURE);
+
+  await expect(page.getByText("We couldn't find any bloodwork results in this file.", { exact: true })).toBeVisible({ timeout: 15000 });
+  await expect(reviewSheet(page)).toHaveCount(0);
+  await expect.poll(() => fileExists(storagePath)).toBe(false);
+  expect(await bloodworkRows(petId)).toEqual([]);
+});
+
 test('a failed AI call shows the shared AI error and deletes the file', async ({ page }) => {
   const petId = await createPet();
   await page.route(ASK_VET_ASSISTANT, (route) => route.fulfill({ status: 500, json: { error: 'Something went wrong. Please try again.' } }));
@@ -314,7 +344,9 @@ test('a failed AI call shows the shared AI error and deletes the file', async ({
 
 const templateAnswer = {
   visits: [
-    { date: '2026-10-02', values: { bun: 32, creatinine: 2.1, sdma: 15, phosphorus: 5.2 }, weight_lbs: 9.8, not_tracked: ['Chloride'], conflict: false },
+    // `alt` is a reference range the AI wrongly put in values: it must not
+    // show up as a value.
+    { date: '2026-10-02', values: { bun: 32, creatinine: 2.1, sdma: 15, phosphorus: 5.2, alt: '10-100' }, weight_lbs: 9.8, not_tracked: ['Chloride'], conflict: false },
     { date: '2026-06-14', values: { bun: 28, creatinine: 1.9, sdma: 13, phosphorus: 4.8 }, weight_lbs: 10.1, not_tracked: ['Chloride'], conflict: false },
     { date: '2026-03-14', values: { bun: 25, creatinine: 1.7, sdma: 12, phosphorus: 4.5 }, weight_lbs: 10.4, not_tracked: ['Chloride'], conflict: false },
   ],
@@ -337,9 +369,10 @@ test("AC22: Lynn's template layout shows three visits with ticked weights, and s
   for (let i = 0; i < 3; i += 1) {
     const line = cards(page).nth(i).getByRole('checkbox', { name: `Weight ${weights[i]} lbs: also add to weight history` });
     await expect(line).toBeChecked();
-    // No reference-range number (e.g. 16-36, 0.8-2.4) shows as a value.
-    await expect(cards(page).nth(i).getByLabel('BUN')).not.toHaveValue(/16|36/);
   }
+  // A range the AI put in values never shows as a value.
+  await expect(cards(page).nth(0).getByLabel('ALT')).toHaveCount(0);
+  await expect(cards(page).nth(0)).not.toContainText('10-100');
 
   await reviewSheet(page).getByRole('button', { name: 'Save 3 visits' }).click();
   await expect(reviewSheet(page)).not.toBeVisible({ timeout: 15000 });
@@ -373,6 +406,140 @@ test('FR36: a weight line starts unticked when the pet already has a weight that
     ['2026-06-14', 11],
     ['2026-03-14', 10.4],
   ]);
+});
+
+test("FR36: typing a date that has a check-in weight onto an undated visit never replaces that weight", async ({ page }) => {
+  const petId = await createPet();
+  await addCheckInWeight(petId, '2026-06-14', 11);
+  await stubAI(page, { visits: [{ values: { bun: 28 }, weight_lbs: 10.1, not_tracked: [], conflict: false }], skipped: [] });
+  const storagePath = await importFile(page, petId, XLSX_FIXTURE);
+  keptPaths.push(storagePath);
+
+  await expect(cards(page)).toHaveCount(1, { timeout: 15000 });
+  const weightLine = cards(page).first().getByRole('checkbox', { name: /^Weight 10.1 lbs/ });
+  // Undated: the weight line starts unticked and can't be ticked yet.
+  await expect(weightLine).not.toBeChecked();
+  await expect(weightLine).toBeDisabled();
+
+  await cards(page).first().getByLabel('Date *').fill('2026-06-14');
+  await expect(weightLine).toBeEnabled();
+  await expect(weightLine).not.toBeChecked();
+
+  await reviewSheet(page).getByRole('button', { name: 'Save 1 visit' }).click();
+  await expect(reviewSheet(page)).not.toBeVisible({ timeout: 15000 });
+  await expect.poll(async () => (await bloodworkRows(petId)).map((r) => [r.date, r.bun])).toEqual([['2026-06-14', 28]]);
+  const weights = await weightRows(petId);
+  expect(weights.map((w) => [Number(w.numeric_value), w.daily_check_in_id !== null])).toEqual([[11, true]]);
+});
+
+test('FR30: moving a visit onto a date that already has bloodwork marks it "Already on file"', async ({ page }) => {
+  const petId = await createPet();
+  const { error } = await supabase.from('bloodwork').insert({ pet_id: petId, date: '2026-06-14', bun: 99 });
+  if (error) throw error;
+  await stubAI(page, { visits: [{ date: '2026-05-01', values: { bun: 28 }, not_tracked: [], conflict: false }], skipped: [] });
+  const storagePath = await importFile(page, petId, XLSX_FIXTURE);
+  keptPaths.push(storagePath);
+
+  await expect(cards(page)).toHaveCount(1, { timeout: 15000 });
+  await expect(cards(page).first()).not.toContainText('Already on file');
+  await cards(page).first().getByLabel('Date *').fill('2026-06-14');
+  await expect(cards(page).first()).toContainText('Already on file');
+  await expect(cards(page).first().getByRole('checkbox', { name: 'Include 2026-06-14', exact: true })).not.toBeChecked();
+});
+
+test('a future date on a ticked visit blocks Save and shows the date message', async ({ page }) => {
+  const petId = await createPet();
+  await stubAI(page, { visits: [{ date: '2026-05-01', values: { bun: 28 }, weight_lbs: 10.1, not_tracked: [], conflict: false }], skipped: [] });
+  const storagePath = await importFile(page, petId, XLSX_FIXTURE);
+  keptPaths.push(storagePath);
+
+  await expect(cards(page)).toHaveCount(1, { timeout: 15000 });
+  const save = reviewSheet(page).getByRole('button', { name: 'Save 1 visit' });
+  await expect(save).toBeEnabled();
+  // Far enough ahead to be the future in every time zone.
+  const future = new Date(Date.now() + 3 * 86400000).toISOString().slice(0, 10);
+  await cards(page).first().getByLabel('Date *').fill(future);
+  await expect(cards(page).first().getByText('Choose today or an earlier date.', { exact: true })).toBeVisible();
+  await expect(save).toBeDisabled();
+});
+
+test('FR36: a weight with no unit is listed as not imported (no unit)', async ({ page }) => {
+  const petId = await createPet();
+  await stubAI(page, {
+    visits: [{ date: '2026-10-02', values: { bun: 32 }, not_tracked: [], conflict: false }],
+    skipped: [{ visit: 0, date: '2026-10-02', field: 'weight', label: 'Weight', unit: null, value: 9.8 }],
+  });
+  const storagePath = await importFile(page, petId, XLSX_FIXTURE);
+  keptPaths.push(storagePath);
+
+  await expect(cards(page)).toHaveCount(1, { timeout: 15000 });
+  await expect(cards(page).first().getByText('Not imported (no unit): Weight', { exact: true })).toBeVisible();
+  await expect(cards(page).first()).not.toContainText('Not imported (different unit)');
+  await expect(cards(page).first().getByRole('checkbox', { name: /^Weight/ })).toHaveCount(0);
+});
+
+test("a save that fails partway keeps the saved visit's weight and leaves only the failed visit", async ({ page }) => {
+  const petId = await createPet();
+  await stubAI(page, {
+    visits: [
+      { date: '2026-10-02', values: { bun: 32 }, weight_lbs: 9.8, not_tracked: [], conflict: false },
+      { date: '2026-06-14', values: { bun: 28 }, weight_lbs: 10.1, not_tracked: [], conflict: false },
+    ],
+    skipped: [],
+  });
+  // The second bloodwork insert fails.
+  let inserts = 0;
+  await page.route(BLOODWORK_REST, async (route) => {
+    if (route.request().method() !== 'POST') return route.continue();
+    inserts += 1;
+    if (inserts === 2) return route.fulfill({ status: 500, json: { message: 'made-up failure' } });
+    return route.continue();
+  });
+  const storagePath = await importFile(page, petId, XLSX_FIXTURE);
+  keptPaths.push(storagePath);
+
+  await expect(cards(page)).toHaveCount(2, { timeout: 15000 });
+  await reviewSheet(page).getByRole('button', { name: 'Save 2 visits' }).click();
+  await expect(page.getByText('Something went wrong. Please try again.', { exact: true })).toBeVisible({ timeout: 15000 });
+  // Only the failed visit is left to try again.
+  await expect(cards(page)).toHaveCount(1);
+  await expect(cards(page).first()).toContainText('Jun 14, 2026');
+
+  expect((await bloodworkRows(petId)).map((r) => r.date)).toEqual(['2026-10-02']);
+  await expect.poll(async () => (await weightRows(petId)).map((w) => [w.observed_at.slice(0, 10), Number(w.numeric_value)])).toEqual([
+    ['2026-10-02', 9.8],
+  ]);
+  // The file is kept, since a visit was saved.
+  await expect.poll(async () => {
+    const { data } = await supabase.from('pet_documents').select('storage_path').eq('pet_id', petId);
+    return (data ?? []).map((d) => d.storage_path);
+  }).toEqual([storagePath]);
+});
+
+test('closing the review is ignored while it saves', async ({ page }) => {
+  const petId = await createPet();
+  await stubAI(page, { visits: [csvAnswer.visits[0]], skipped: [] });
+  let release;
+  const held = new Promise((resolve) => { release = resolve; });
+  await page.route(BLOODWORK_REST, async (route) => {
+    if (route.request().method() !== 'POST') return route.continue();
+    await held;
+    return route.continue();
+  });
+  const storagePath = await importFile(page, petId, CSV_FIXTURE);
+  keptPaths.push(storagePath);
+
+  await expect(cards(page)).toHaveCount(1, { timeout: 15000 });
+  await reviewSheet(page).getByRole('button', { name: 'Save 1 visit' }).click();
+  await expect(reviewSheet(page).getByRole('button', { name: 'Saving...' })).toBeVisible();
+  await page.keyboard.press('Escape');
+  await reviewSheet(page).getByRole('button', { name: 'Close' }).click();
+  await expect(reviewSheet(page)).toBeVisible();
+  release();
+
+  await expect(reviewSheet(page)).not.toBeVisible({ timeout: 15000 });
+  await expect.poll(async () => (await bloodworkRows(petId)).map((r) => r.date)).toEqual(['2026-10-02']);
+  expect(await fileExists(storagePath)).toBe(true);
 });
 
 test('AC23: the same date found twice with different values shows both, unticked, marked', async ({ page }) => {
