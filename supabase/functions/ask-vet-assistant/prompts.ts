@@ -37,6 +37,7 @@ import {
   getMobilityOptions,
   getBathroomOptions,
   PET_SCREEN_NAMES,
+  LEGACY_SCREEN_NAMES,
   type OptionLabel,
 } from './rules.ts';
 import { COUNTED_ATTRIBUTES, isCountableSymptom } from '../_shared/checkinRules.ts';
@@ -739,10 +740,17 @@ export function parseTaskRequest(body: unknown): TaskRequest | TaskRequestError 
 
   let screen: string | null = null;
   if (b.screen !== undefined && b.screen !== null) {
-    if (typeof b.screen !== 'string' || !PET_SCREEN_NAMES.includes(b.screen)) {
+    if (typeof b.screen !== 'string') {
       return refuse('invalid_screen', 'Unknown screen');
     }
-    screen = b.screen;
+    // An old tab's retired screen name counts as its current one (spec 0081).
+    const name: string = Object.prototype.hasOwnProperty.call(LEGACY_SCREEN_NAMES, b.screen)
+      ? LEGACY_SCREEN_NAMES[b.screen]
+      : b.screen;
+    if (!PET_SCREEN_NAMES.includes(name)) {
+      return refuse('invalid_screen', 'Unknown screen');
+    }
+    screen = name;
   }
 
   const task = b.task;

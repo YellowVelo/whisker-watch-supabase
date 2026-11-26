@@ -231,3 +231,12 @@ export const PET_SCREEN_NAMES: readonly string[] = [
   'Vet Export',
   'Profile',
 ];
+
+// Old screen names the server still accepts from an app tab opened before a
+// release, mapped to the current screen with the same topic. The app never
+// sends these (they aren't in PET_SCREEN_NAMES or src/lib/petScreenContext.js).
+// 'Weight' was the retired Symptoms page (spec 0081); its weight card now
+// lives on Trends. TODO: remove after spec 0081 has been live a release.
+export const LEGACY_SCREEN_NAMES: Readonly<Record<string, string>> = {
+  Weight: 'Trends',
+};

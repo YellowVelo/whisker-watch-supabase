@@ -21,7 +21,7 @@ import {
   BLOODWORK_FIELDS as SERVER_BLOODWORK, HEALTH_OPTIONS as SERVER_HEALTH_OPTIONS,
   APPETITE_OPTIONS as SERVER_APPETITE, WATER_OPTIONS as SERVER_WATER, ENERGY_OPTIONS as SERVER_ENERGY,
   getMobilityOptions as serverMobility, getBathroomOptions as serverBathroom,
-  PET_SCREEN_NAMES as SERVER_SCREENS, URINE_PROTEIN_VALUES as SERVER_URINE_PROTEIN,
+  PET_SCREEN_NAMES as SERVER_SCREENS, LEGACY_SCREEN_NAMES as SERVER_LEGACY_SCREENS, URINE_PROTEIN_VALUES as SERVER_URINE_PROTEIN,
 } from '../../supabase/functions/ask-vet-assistant/rules.ts';
 import {
   TRENDS_RANGES as SERVER_RANGES, MAX_QUESTION_CHARS as SERVER_MAX_QUESTION_CHARS,
@@ -198,6 +198,14 @@ describe('app/server parity: Ask Wysker screen names', () => {
   it('no longer has a Weight screen: the Symptoms page is retired (spec 0081)', () => {
     expect(APP_SCREENS).not.toContain('Weight');
     expect([...SERVER_SCREENS]).not.toContain('Weight');
+  });
+
+  // The one server-only exception: the server still accepts an old tab's
+  // 'Weight' for one release, as Trends (remove with the server's copy).
+  it("the server's only legacy screen name is 'Weight', mapped to a current screen", () => {
+    expect(SERVER_LEGACY_SCREENS).toEqual({ Weight: 'Trends' });
+    for (const target of Object.values(SERVER_LEGACY_SCREENS)) expect(APP_SCREENS).toContain(target);
+    for (const name of Object.keys(SERVER_LEGACY_SCREENS)) expect(APP_SCREENS).not.toContain(name);
   });
 });
 

@@ -486,11 +486,17 @@ Deno.test('history: over-long messages are cut to 2,000 (owner) / 8,000 (assista
 Deno.test('screen must be a known screen name when present', () => {
   assertEquals(refused(parseTaskRequest({ task: 'pet_insights', pet_id: PET_ID, screen: 'Admin' })).code, 'invalid_screen');
   assertEquals(refused(parseTaskRequest({ task: 'pet_chat', pet_id: PET_ID, question: 'Hi', screen: 3 })).code, 'invalid_screen');
-  // Spec 0081: the Symptoms page (the old "Weight" screen) is retired.
-  assertEquals(refused(parseTaskRequest({ task: 'pet_insights', pet_id: PET_ID, screen: 'Weight' })).code, 'invalid_screen');
+  // Look-alikes of a legacy name are still refused.
+  assertEquals(refused(parseTaskRequest({ task: 'pet_insights', pet_id: PET_ID, screen: 'weight' })).code, 'invalid_screen');
+  assertEquals(refused(parseTaskRequest({ task: 'pet_insights', pet_id: PET_ID, screen: 'toString' })).code, 'invalid_screen');
   const ok = accepted(parseTaskRequest({ task: 'pet_insights', pet_id: PET_ID, screen: 'Vet Export' }));
   assertEquals(ok, { task: 'pet_insights', pet_id: PET_ID, screen: 'Vet Export' });
   assertEquals(accepted(parseTaskRequest({ task: 'pet_insights', pet_id: PET_ID, screen: null })), { task: 'pet_insights', pet_id: PET_ID, screen: null });
+});
+
+Deno.test("spec 0081: an old tab's 'Weight' screen (the retired Symptoms page) is accepted for one release, as Trends", () => {
+  assertEquals(accepted(parseTaskRequest({ task: 'pet_insights', pet_id: PET_ID, screen: 'Weight' })), { task: 'pet_insights', pet_id: PET_ID, screen: 'Trends' });
+  assertEquals(accepted(parseTaskRequest({ task: 'pet_chat', pet_id: PET_ID, question: 'Hi', history: [], screen: 'Weight' })), { task: 'pet_chat', pet_id: PET_ID, question: 'Hi', history: [], screen: 'Trends' });
 });
 
 Deno.test('trends_summary requires a known range', () => {
