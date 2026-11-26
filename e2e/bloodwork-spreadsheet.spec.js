@@ -211,8 +211,8 @@ test('AC16: a visit already on file starts unticked and saving adds nothing for 
   await expect(onFile.getByRole('checkbox', { name: 'Include' })).not.toBeChecked();
   await expect(cards(page).nth(0).getByRole('checkbox', { name: 'Include' })).toBeChecked();
   // Each card's Include tick is named with its visit date.
-  await expect(reviewSheet(page).getByRole('checkbox', { name: 'Include 2026-06-14', exact: true })).not.toBeChecked();
-  await expect(reviewSheet(page).getByRole('checkbox', { name: 'Include 2026-10-02', exact: true })).toBeChecked();
+  await expect(reviewSheet(page).getByRole('checkbox', { name: 'Include Jun 14, 2026', exact: true })).not.toBeChecked();
+  await expect(reviewSheet(page).getByRole('checkbox', { name: 'Include Oct 2, 2026', exact: true })).toBeChecked();
   await expect(cards(page).nth(0)).not.toContainText('Already on file');
 
   await reviewSheet(page).getByRole('button', { name: 'Save 2 visits' }).click();
@@ -384,7 +384,7 @@ test("AC22: Lynn's template layout shows three visits with ticked weights, and s
   ]);
 });
 
-test('FR36: a weight line starts unticked when the pet already has a weight that day, and unticked weights are not saved', async ({ page }) => {
+test('FR36: a weight line is disabled when the pet already has a weight that day, and that weight is kept', async ({ page }) => {
   const petId = await createPet();
   const { data: type } = await supabase.from('observation_types').select('id').eq('code', 'weight').single();
   const { error } = await supabase.from('observations').insert({
@@ -396,8 +396,12 @@ test('FR36: a weight line starts unticked when the pet already has a weight that
   keptPaths.push(storagePath);
 
   await expect(cards(page)).toHaveCount(3, { timeout: 15000 });
-  await expect(cards(page).nth(1).getByRole('checkbox', { name: /^Weight 10.1 lbs/ })).not.toBeChecked();
+  const onFileLine = cards(page).nth(1).getByRole('checkbox', { name: /^Weight 10.1 lbs/ });
+  await expect(onFileLine).not.toBeChecked();
+  await expect(onFileLine).toBeDisabled();
+  await expect(cards(page).nth(1).getByText('Weight 10.1 lbs: a weight is already logged for this day.', { exact: true })).toBeVisible();
   await expect(cards(page).nth(0).getByRole('checkbox', { name: /^Weight 9.8 lbs/ })).toBeChecked();
+  await expect(cards(page).nth(0).getByRole('checkbox', { name: /^Weight 9.8 lbs/ })).toBeEnabled();
 
   await reviewSheet(page).getByRole('button', { name: 'Save 3 visits' }).click();
   await expect(reviewSheet(page)).not.toBeVisible({ timeout: 15000 });
@@ -422,14 +426,108 @@ test("FR36: typing a date that has a check-in weight onto an undated visit never
   await expect(weightLine).toBeDisabled();
 
   await cards(page).first().getByLabel('Date *').fill('2026-06-14');
-  await expect(weightLine).toBeEnabled();
+  await expect(weightLine).toBeDisabled();
   await expect(weightLine).not.toBeChecked();
+  await expect(cards(page).first().getByText('Weight 10.1 lbs: a weight is already logged for this day.', { exact: true })).toBeVisible();
+  // Moving it to a free day turns the line back on.
+  await cards(page).first().getByLabel('Date *').fill('2026-06-15');
+  await expect(weightLine).toBeEnabled();
+  await expect(weightLine).toBeChecked();
+  await cards(page).first().getByLabel('Date *').fill('2026-06-14');
+  await expect(weightLine).toBeDisabled();
 
   await reviewSheet(page).getByRole('button', { name: 'Save 1 visit' }).click();
   await expect(reviewSheet(page)).not.toBeVisible({ timeout: 15000 });
   await expect.poll(async () => (await bloodworkRows(petId)).map((r) => [r.date, r.bun])).toEqual([['2026-06-14', 28]]);
   const weights = await weightRows(petId);
   expect(weights.map((w) => [Number(w.numeric_value), w.daily_check_in_id !== null])).toEqual([[11, true]]);
+});
+
+test('FR36: a visit on a day with a check-in weight of 11 shows the weight line disabled, and the weight stays 11', async ({ page }) => {
+  const petId = await createPet();
+  await addCheckInWeight(petId, '2026-06-14', 11);
+  await stubAI(page, { visits: [{ date: '2026-06-14', values: { bun: 28 }, weight_lbs: 10.1, not_tracked: [], conflict: false }], skipped: [] });
+  const storagePath = await importFile(page, petId, XLSX_FIXTURE);
+  keptPaths.push(storagePath);
+
+  await expect(cards(page)).toHaveCount(1, { timeout: 15000 });
+  const weightLine = cards(page).first().getByRole('checkbox', { name: 'Weight 10.1 lbs: a weight is already logged for this day. (Jun 14, 2026)', exact: true });
+  await expect(weightLine).toBeDisabled();
+  await expect(weightLine).not.toBeChecked();
+  await expect(cards(page).first().getByText('Weight 10.1 lbs: a weight is already logged for this day.', { exact: true })).toBeVisible();
+  await expect(cards(page).first()).not.toContainText('also add to weight history');
+
+  await reviewSheet(page).getByRole('button', { name: 'Save 1 visit' }).click();
+  await expect(reviewSheet(page)).not.toBeVisible({ timeout: 15000 });
+  await expect.poll(async () => (await bloodworkRows(petId)).map((r) => [r.date, r.bun])).toEqual([['2026-06-14', 28]]);
+  const weights = await weightRows(petId);
+  expect(weights.map((w) => [Number(w.numeric_value), w.daily_check_in_id !== null])).toEqual([[11, true]]);
+  // Nothing was skipped, so no skipped-weight message.
+  await expect(page.getByText("The bloodwork was saved, but the weight wasn't added because this day already has one.")).toHaveCount(0);
+});
+
+const SKIPPED_WEIGHT = "The bloodwork was saved, but the weight wasn't added because this day already has one.";
+
+test('FR36: a weight logged on that day after the review opened is never replaced, and the owner is told', async ({ page }) => {
+  const petId = await createPet();
+  await stubAI(page, { visits: [{ date: '2026-06-14', values: { bun: 28 }, weight_lbs: 10.1, not_tracked: [], conflict: false }], skipped: [] });
+  const storagePath = await importFile(page, petId, XLSX_FIXTURE);
+  keptPaths.push(storagePath);
+
+  await expect(cards(page)).toHaveCount(1, { timeout: 15000 });
+  await expect(cards(page).first().getByRole('checkbox', { name: /^Weight 10.1 lbs: also add/ })).toBeChecked();
+  // Someone logs a weight for that day while the review is open.
+  await addCheckInWeight(petId, '2026-06-14', 11);
+
+  await reviewSheet(page).getByRole('button', { name: 'Save 1 visit' }).click();
+  await expect(reviewSheet(page)).not.toBeVisible({ timeout: 15000 });
+  await expect(page.getByText(SKIPPED_WEIGHT, { exact: true })).toBeVisible({ timeout: 10000 });
+  await expect.poll(async () => (await bloodworkRows(petId)).map((r) => [r.date, r.bun])).toEqual([['2026-06-14', 28]]);
+  const weights = await weightRows(petId);
+  expect(weights.map((w) => [Number(w.numeric_value), w.daily_check_in_id !== null])).toEqual([[11, true]]);
+});
+
+test("FR36: if the weights can't be checked at save time, no weight is saved and the owner is told", async ({ page }) => {
+  const petId = await createPet();
+  await stubAI(page, { visits: [{ date: '2026-06-14', values: { bun: 28 }, weight_lbs: 10.1, not_tracked: [], conflict: false }], skipped: [] });
+  const storagePath = await importFile(page, petId, XLSX_FIXTURE);
+  keptPaths.push(storagePath);
+
+  await expect(cards(page)).toHaveCount(1, { timeout: 15000 });
+  await expect(cards(page).first().getByRole('checkbox', { name: /^Weight 10.1 lbs: also add/ })).toBeChecked();
+  // The fresh weight load just before saving fails.
+  await page.route('**/rest/v1/observations*', (route) => (
+    route.request().method() === 'GET' ? route.fulfill({ status: 500, json: { message: 'made-up failure' } }) : route.continue()
+  ));
+
+  await reviewSheet(page).getByRole('button', { name: 'Save 1 visit' }).click();
+  await expect(reviewSheet(page)).not.toBeVisible({ timeout: 15000 });
+  await expect(page.getByText(SKIPPED_WEIGHT, { exact: true })).toBeVisible({ timeout: 10000 });
+  await expect.poll(async () => (await bloodworkRows(petId)).map((r) => [r.date, r.bun])).toEqual([['2026-06-14', 28]]);
+  expect(await weightRows(petId)).toEqual([]);
+});
+
+test('a visit whose record saved but whose weight failed stays, marked "Already on file"', async ({ page }) => {
+  const petId = await createPet();
+  await stubAI(page, { visits: [{ date: '2026-06-14', values: { bun: 28 }, weight_lbs: 10.1, not_tracked: [], conflict: false }], skipped: [] });
+  const storagePath = await importFile(page, petId, XLSX_FIXTURE);
+  keptPaths.push(storagePath);
+
+  await expect(cards(page)).toHaveCount(1, { timeout: 15000 });
+  await expect(cards(page).first()).not.toContainText('Already on file');
+  // Saving the weight fails.
+  await page.route('**/rest/v1/observations*', (route) => (
+    route.request().method() === 'POST' ? route.fulfill({ status: 500, json: { message: 'made-up failure' } }) : route.continue()
+  ));
+
+  await reviewSheet(page).getByRole('button', { name: 'Save 1 visit' }).click();
+  await expect(page.getByText('Something went wrong. Please try again.', { exact: true })).toBeVisible({ timeout: 15000 });
+  await expect(cards(page)).toHaveCount(1);
+  await expect(cards(page).first()).toContainText('Already on file');
+  await expect(cards(page).first().getByRole('checkbox', { name: 'Include Jun 14, 2026', exact: true })).not.toBeChecked();
+  await expect(page.getByText(SKIPPED_WEIGHT, { exact: true })).toHaveCount(0);
+  expect((await bloodworkRows(petId)).map((r) => r.date)).toEqual(['2026-06-14']);
+  expect(await weightRows(petId)).toEqual([]);
 });
 
 test('FR30: moving a visit onto a date that already has bloodwork marks it "Already on file"', async ({ page }) => {
@@ -444,7 +542,7 @@ test('FR30: moving a visit onto a date that already has bloodwork marks it "Alre
   await expect(cards(page).first()).not.toContainText('Already on file');
   await cards(page).first().getByLabel('Date *').fill('2026-06-14');
   await expect(cards(page).first()).toContainText('Already on file');
-  await expect(cards(page).first().getByRole('checkbox', { name: 'Include 2026-06-14', exact: true })).not.toBeChecked();
+  await expect(cards(page).first().getByRole('checkbox', { name: 'Include Jun 14, 2026', exact: true })).not.toBeChecked();
 });
 
 test('a future date on a ticked visit blocks Save and shows the date message', async ({ page }) => {

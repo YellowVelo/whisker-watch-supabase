@@ -18,7 +18,8 @@ import { BLOODWORK_FIELDS as FIELDS, URINE_PROTEIN_VALUES } from '@/lib/bloodwor
 import { readBloodworkSpreadsheet, SPREADSHEET_MESSAGES } from '@/lib/bloodworkSpreadsheet';
 import {
   buildReviewVisits, includedVisits, reviewVisitToRecord, bloodworkImportErrorText, shouldReportImportError,
-  changeVisitDate, toggleVisitWeight, weightToSave, SCAN_NOTHING_FOUND,
+  changeVisitDate, toggleVisitWeight, weightToSave, weightTicked, refreshVisitsOnFile,
+  SCAN_NOTHING_FOUND, WEIGHT_SKIPPED_MESSAGE,
 } from '@/lib/bloodworkImport';
 import { aiErrorText } from '@/lib/aiGuardrails';
 import { reportClientError } from '@/lib/errorMonitoring';
@@ -168,12 +169,14 @@ export default function BloodworkSection({ petId }) {
   // FR31/FR36: each ticked visit becomes a bloodwork record, and its ticked
   // weight is logged on that visit's date straight after, so a visit leaves
   // the review only once both are saved. The pet's weights are loaded again
-  // first, so a weight already on file is never replaced unless the owner
-  // ticked that line for that date (weightToSave). The file is linked to
-  // the pet once anything is saved. If a save fails partway, the saved
-  // visits leave the review and the rest stay for another try; a visit
-  // whose record saved but whose weight failed stays too, and a retry
-  // updates its record instead of adding a second one.
+  // first, and an import never replaces a weight: a ticked weight is
+  // skipped if its day has a weight by then, or if that load fails
+  // (weightToSave), and the owner is told after the save. The file is
+  // linked to the pet once anything is saved. If a save fails partway, the
+  // saved visits leave the review and the rest stay for another try,
+  // checked again against the dates now on file; a visit whose record
+  // saved but whose weight failed stays too, shown "Already on file", and
+  // a retry updates its record instead of adding a second one.
   const confirmReview = async () => {
     if (!review || reviewSavingRef.current) return;
     const chosen = includedVisits(review.visits);
@@ -182,10 +185,13 @@ export default function BloodworkSection({ petId }) {
     const savedIds = new Map();
     const savedBloodworkDates = [];
     const savedWeightDates = [];
+    let weightSkipped = false;
+    /** @type {Set<string>|null} */
+    let freshWeightDates = null;
     reviewSavingRef.current = true;
     setReviewSaving(true);
     try {
-      const freshWeightDates = await loadWeightDates();
+      freshWeightDates = await loadWeightDates();
       for (const visit of chosen) {
         const record = reviewVisitToRecord(visit, petId);
         if (visit.savedId) {
@@ -199,6 +205,8 @@ export default function BloodworkSection({ petId }) {
           await addWeight(petId, { date: visit.form.date, lbs: visit.weightLbs }, timezone);
           savedWeightDates.push(visit.form.date);
           freshWeightDates?.add(visit.form.date);
+        } else if (weightTicked(visit)) {
+          weightSkipped = true;
         }
         savedKeys.add(visit.key);
       }
@@ -212,18 +220,17 @@ export default function BloodworkSection({ petId }) {
     const allSaved = chosen.every((v) => savedKeys.has(v.key));
     setReview((r) => {
       if (!r || allSaved) return null;
-      const weightDates = r.weightDates && new Set([...r.weightDates, ...savedWeightDates]);
-      return {
-        ...r,
-        bloodworkDates: new Set([...r.bloodworkDates, ...savedBloodworkDates]),
-        weightDates,
-        visits: r.visits
-          .filter((v) => !savedKeys.has(v.key))
-          .map((v) => (savedIds.has(v.key) ? { ...v, savedId: savedIds.get(v.key) } : v)),
-      };
+      const bloodworkDates = new Set([...r.bloodworkDates, ...savedBloodworkDates]);
+      // The fresh load already includes the weights just saved.
+      const weightDates = freshWeightDates ?? (r.weightDates && new Set([...r.weightDates, ...savedWeightDates]));
+      const remaining = r.visits
+        .filter((v) => !savedKeys.has(v.key))
+        .map((v) => (savedIds.has(v.key) ? { ...v, savedId: savedIds.get(v.key) } : v));
+      return { ...r, bloodworkDates, weightDates, visits: refreshVisitsOnFile(remaining, { bloodworkDates, weightDates }) };
     });
     reviewSavingRef.current = false;
     setReviewSaving(false);
+    if (weightSkipped) toast({ description: WEIGHT_SKIPPED_MESSAGE });
     if (anySaved) load();
   };
 

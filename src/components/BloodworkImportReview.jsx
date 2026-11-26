@@ -1,5 +1,4 @@
 import { Loader2 } from 'lucide-react';
-import { format, parseISO } from 'date-fns';
 import BottomSheet from '@/components/BottomSheet';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -9,6 +8,7 @@ import { PALETTE, PALETTE_SOFT } from '@/lib/toneColors';
 import { BLOODWORK_FIELDS, URINE_PROTEIN_VALUES } from '@/lib/bloodworkFields';
 import {
   includedVisits, canSaveReview, skippedText, skippedGroups, weightLineEnabled, isFutureDate,
+  headingDate, weightLineText, reviewCheckboxNames,
 } from '@/lib/bloodworkImport';
 import { WEIGHT_MESSAGES } from '@/lib/weightClient';
 
@@ -23,7 +23,7 @@ const FIELD_BY_KEY = new Map(BLOODWORK_FIELDS.map((f) => [f.key, f]));
 
 function visitHeading(form) {
   const parts = [];
-  if (/^\d{4}-\d{2}-\d{2}$/.test(form.date)) parts.push(format(parseISO(form.date), 'MMM d, yyyy'));
+  if (/^\d{4}-\d{2}-\d{2}$/.test(form.date)) parts.push(headingDate(form.date));
   if (form.lab_name) parts.push(form.lab_name);
   if (form.vet_name) parts.push(form.vet_name);
   return parts.join(' · ');
@@ -61,12 +61,11 @@ function SkippedLines({ items }) {
   );
 }
 
-function VisitCard({ visit, timezone, onToggle, onToggleWeight, onEdit }) {
+function VisitCard({ visit, names, timezone, onToggle, onToggleWeight, onEdit }) {
   const { form } = visit;
   const edit = (field) => (e) => onEdit(visit.key, field, e.target.value);
   const heading = visitHeading(form);
   const weightEnabled = weightLineEnabled(visit);
-  const includeName = form.date ? `Include ${form.date}` : 'Include';
 
   return (
     <div className="border border-border rounded-xl p-3 bg-card space-y-3" data-testid="bloodwork-visit-card">
@@ -78,7 +77,7 @@ function VisitCard({ visit, timezone, onToggle, onToggleWeight, onEdit }) {
           </div>
         </div>
         <label className="flex items-center gap-2 min-h-11 min-w-11 cursor-pointer shrink-0 text-sm text-white">
-          <Checkbox checked={visit.included} onCheckedChange={() => onToggle(visit.key)} aria-label={includeName} />
+          <Checkbox checked={visit.included} onCheckedChange={() => onToggle(visit.key)} aria-label={names.include} />
           Include
         </label>
       </div>
@@ -159,9 +158,9 @@ function VisitCard({ visit, timezone, onToggle, onToggleWeight, onEdit }) {
             checked={visit.includeWeight}
             onCheckedChange={() => onToggleWeight(visit.key)}
             disabled={!weightEnabled}
-            aria-label={`Weight ${visit.weightLbs} lbs: also add to weight history`}
+            aria-label={names.weight}
           />
-          Weight {visit.weightLbs} lbs: also add to weight history
+          {weightLineText(visit)}
         </label>
       )}
     </div>
@@ -170,6 +169,7 @@ function VisitCard({ visit, timezone, onToggle, onToggleWeight, onEdit }) {
 
 export default function BloodworkImportReview({ visits, unplacedSkipped, saving, timezone, onToggle, onToggleWeight, onEdit, onConfirm, onClose }) {
   const count = includedVisits(visits).length;
+  const names = reviewCheckboxNames(visits);
 
   const subtitle = (
     <p className="text-[13px] text-muted-foreground mt-2">
@@ -191,7 +191,7 @@ export default function BloodworkImportReview({ visits, unplacedSkipped, saving,
       <div className="space-y-3 pb-2">
         <SkippedLines items={unplacedSkipped} />
         {visits.map((visit) => (
-          <VisitCard key={visit.key} visit={visit} timezone={timezone} onToggle={onToggle} onToggleWeight={onToggleWeight} onEdit={onEdit} />
+          <VisitCard key={visit.key} visit={visit} names={names.get(visit.key)} timezone={timezone} onToggle={onToggle} onToggleWeight={onToggleWeight} onEdit={onEdit} />
         ))}
       </div>
     </BottomSheet>

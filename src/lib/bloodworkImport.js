@@ -3,6 +3,7 @@ import { UploadRejectedError, UPLOAD_MESSAGES } from '@/api/storageClient';
 import { SPREADSHEET_MESSAGES, SpreadsheetReadError, spreadsheetErrorText } from '@/lib/bloodworkSpreadsheet';
 import { scanErrorText } from '@/lib/scannedDocuments';
 import { dateStrInTimezone } from '@/lib/timezone';
+import { format, parseISO } from 'date-fns';
 
 /**
  * The Bloodwork tab's import review (spec 0081, FR30, FR31, FR35, FR36):
@@ -75,12 +76,13 @@ function skippedItem(s) {
  * - Every card starts ticked, except a visit whose date already has a
  *   bloodwork record ("Already on file", FR30/AC16) or one found twice
  *   with different values ("Found twice…", FR37/AC23).
- * - A weight line (FR36) starts ticked unless the pet already has a weight
- *   on that date or the visit has no date. `weightDates` null means the
- *   pet's weights couldn't be loaded: every weight line then starts
- *   unticked, so a check-in weight is never replaced without the owner
- *   choosing it. Changing a card's date works these out again
- *   (changeVisitDate).
+ * - A weight line (FR36) starts ticked unless the visit has no date or the
+ *   pet already has a weight on that date. An import never replaces a
+ *   weight (Lynn, 2026-11-26): a date with a weight on file gets a
+ *   disabled line (`weightOnFile`). `weightDates` null means the pet's
+ *   weights couldn't be loaded: every weight line then starts unticked,
+ *   and the save checks again (weightToSave). Changing a card's date works
+ *   these out again (changeVisitDate).
  *
  * @param {any} result - either bloodwork task's answer
  * @param {{ bloodworkDates: Set<string>, weightDates: Set<string>|null }} onFile
@@ -97,14 +99,14 @@ function skippedItem(s) {
  *   included: boolean,
  *   weightLbs: number|null,
  *   includeWeight: boolean,
- *   weightConfirmedDate: string|null,
+ *   weightOnFile: boolean,
  *   savedId?: string,
  * }} ReviewVisit
  *
- * `weightConfirmedDate` is the date the owner ticked the weight line for
- * themselves; only then may the save replace a weight already on that date
- * (weightToSave). `savedId` is the record a visit already saved, if its
- * weight then failed: a retry updates that record instead of adding another.
+ * `weightOnFile` is true when the pet already has a weight on the visit's
+ * date; the weight line is then disabled and never saved. `savedId` is the
+ * record a visit already saved, if its weight then failed: a retry updates
+ * that record instead of adding another.
  */
 export function buildReviewVisits(result, { bloodworkDates, weightDates }) {
   const { visits: rawVisits, skipped: rawSkipped } = answerVisits(result);
@@ -140,7 +142,7 @@ export function buildReviewVisits(result, { bloodworkDates, weightDates }) {
       included: !onFile && !conflict,
       weightLbs: weight,
       includeWeight: weightStartsTicked(weight, form.date, weightDates),
-      weightConfirmedDate: null,
+      weightOnFile: hasWeightOn(form.date, weightDates),
     };
   });
 
@@ -156,6 +158,11 @@ export function buildReviewVisits(result, { bloodworkDates, weightDates }) {
   return { visits, unplacedSkipped };
 }
 
+// Whether the pet is known to have a weight on `date`.
+function hasWeightOn(date, weightDates) {
+  return isDate(date) && weightDates !== null && weightDates.has(date);
+}
+
 // A weight line starts ticked only for a dated visit whose date has no
 // weight on file, and only if the pet's weights could be loaded.
 function weightStartsTicked(weight, date, weightDates) {
@@ -167,7 +174,8 @@ function weightStartsTicked(weight, date, weightDates) {
  * and the weight line's tick are worked out again for the new date, as if
  * the card had opened with it. A card moved onto a date that already has a
  * bloodwork record is unticked, like one that opened there. The owner's
- * own weight tick doesn't carry over to a different date.
+ * own weight tick doesn't carry over to a different date, and a date with
+ * a weight on file disables the weight line.
  *
  * @param {ReviewVisit} visit
  * @param {string} date
@@ -183,36 +191,130 @@ export function changeVisitDate(visit, date, { bloodworkDates, weightDates }) {
     onFile,
     included: onFile && !visit.onFile ? false : visit.included,
     includeWeight: weightStartsTicked(visit.weightLbs, date, weightDates),
-    weightConfirmedDate: null,
+    weightOnFile: hasWeightOn(date, weightDates),
   };
 }
 
-/** The owner ticks or unticks a card's weight line, for the card's current date. */
-export function toggleVisitWeight(visit) {
-  const includeWeight = !visit.includeWeight;
-  return { ...visit, includeWeight, weightConfirmedDate: includeWeight ? visit.form.date : null };
+/**
+ * The cards still in the review after a save that stopped partway (FR30,
+ * FR36): "Already on file" and the weight line are worked out again
+ * against the dates now on file. A visit whose record saved but whose
+ * weight didn't shows "Already on file" and is unticked, like any visit
+ * newly on file; a weight line for a date that now has a weight is
+ * disabled.
+ *
+ * @param {ReviewVisit[]} visits
+ * @param {{ bloodworkDates: Set<string>, weightDates: Set<string>|null }} onFile
+ * @returns {ReviewVisit[]}
+ */
+export function refreshVisitsOnFile(visits, { bloodworkDates, weightDates }) {
+  return visits.map((visit) => {
+    const { date } = visit.form;
+    const onFile = isDate(date) && bloodworkDates.has(date);
+    const weightOnFile = hasWeightOn(date, weightDates);
+    return {
+      ...visit,
+      onFile,
+      included: onFile && !visit.onFile ? false : visit.included,
+      weightOnFile,
+      includeWeight: weightOnFile ? false : visit.includeWeight,
+    };
+  });
 }
 
-/** Whether the weight line can be ticked: the visit is ticked and has a date. */
+/** The owner ticks or unticks a card's weight line. A day with a weight on file can't be ticked. */
+export function toggleVisitWeight(visit) {
+  if (visit.weightOnFile) return { ...visit, includeWeight: false };
+  return { ...visit, includeWeight: !visit.includeWeight };
+}
+
+/**
+ * Whether the weight line can be ticked: the visit is ticked, has a date,
+ * and that date has no weight on file.
+ */
 export function weightLineEnabled(visit) {
-  return visit.included && isDate(visit.form.date);
+  return visit.included && isDate(visit.form.date) && !visit.weightOnFile;
+}
+
+/**
+ * Whether the owner asked for this visit's weight: the visit and its
+ * weight line are ticked, and it has a weight, a date and no weight on
+ * file for that date as far as the review knows.
+ *
+ * @param {ReviewVisit} visit
+ */
+export function weightTicked(visit) {
+  return visit.included && visit.includeWeight && !visit.weightOnFile && visit.weightLbs !== null && isDate(visit.form.date);
 }
 
 /**
  * Whether saving this visit also logs its weight (FR36). One weight per pet
- * per day, and an import never silently replaces one: if the pet has a
- * weight on the visit's date (checked against `freshWeightDates`, loaded
- * just before saving; null if that failed), the weight is logged only if
- * the owner ticked the line themselves for that same date.
+ * per day, and an import never replaces one (Lynn, 2026-11-26): a ticked
+ * weight is logged only if `freshWeightDates`, loaded just before saving,
+ * shows no weight on the visit's date. If that load failed (null), no
+ * weight is logged. A ticked weight refused here is skipped, and the owner
+ * is told with WEIGHT_SKIPPED_MESSAGE.
  *
  * @param {ReviewVisit} visit
  * @param {Set<string>|null} freshWeightDates
  */
 export function weightToSave(visit, freshWeightDates) {
-  const { date } = visit.form;
-  if (!visit.included || !visit.includeWeight || visit.weightLbs === null || !isDate(date)) return false;
-  if (visit.weightConfirmedDate === date) return true;
-  return freshWeightDates !== null && !freshWeightDates.has(date);
+  if (!weightTicked(visit)) return false;
+  return freshWeightDates !== null && !freshWeightDates.has(visit.form.date);
+}
+
+// Shown after a save that skipped a ticked weight (Lynn, 2026-11-26): the
+// day had a weight by then, or the weights couldn't be checked.
+export const WEIGHT_SKIPPED_MESSAGE = "The bloodwork was saved, but the weight wasn't added because this day already has one.";
+
+/** A YYYY-MM-DD date as the card heading shows it: "Mar 14, 2026". */
+export function headingDate(date) {
+  return format(parseISO(date), 'MMM d, yyyy');
+}
+
+/**
+ * The weight line's text: wording J ("Weight 9.8 lbs: also add to weight
+ * history"), or, when the day already has a weight, "Weight 9.8 lbs: a
+ * weight is already logged for this day." (Lynn, 2026-11-26).
+ *
+ * @param {ReviewVisit} visit
+ */
+export function weightLineText(visit) {
+  return visit.weightOnFile
+    ? `Weight ${visit.weightLbs} lbs: a weight is already logged for this day.`
+    : `Weight ${visit.weightLbs} lbs: also add to weight history`;
+}
+
+/**
+ * Accessible names for each card's Include and weight ticks: the heading's
+ * date ("Include Mar 14, 2026"), with "(version N)" added when more than
+ * one card in the review has the same date, such as a same-date conflict
+ * pair, so no two ticks share a name. The weight tick's name is its line's
+ * text followed by the same date and version in brackets:
+ * "Weight 9.8 lbs: also add to weight history (Oct 2, 2026, version 2)".
+ *
+ * @param {ReviewVisit[]} visits
+ * @returns {Map<string, { include: string, weight: string|null }>}
+ */
+export function reviewCheckboxNames(visits) {
+  const counts = new Map();
+  for (const v of visits) counts.set(v.form.date, (counts.get(v.form.date) ?? 0) + 1);
+  const seen = new Map();
+  const names = new Map();
+  for (const v of visits) {
+    const { date } = v.form;
+    const n = (seen.get(date) ?? 0) + 1;
+    seen.set(date, n);
+    const dateText = isDate(date) ? headingDate(date) : '';
+    const version = counts.get(date) > 1 ? `version ${n}` : '';
+    const include = ['Include', dateText, version && `(${version})`].filter(Boolean).join(' ');
+    const where = [dateText, version].filter(Boolean).join(', ');
+    names.set(v.key, {
+      include,
+      weight: v.weightLbs === null ? null : `${weightLineText(v)}${where ? ` (${where})` : ''}`,
+    });
+  }
+  return names;
 }
 
 /** "Creatinine µmol/L, BUN mmol/L": the list after "Not imported (different unit):". */

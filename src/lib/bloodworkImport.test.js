@@ -9,7 +9,8 @@ vi.mock('@/lib/errorMonitoring', () => ({ reportClientError: vi.fn() }));
 const {
   buildReviewVisits, skippedText, skippedGroups, includedVisits, canSaveReview, reviewVisitToRecord,
   bloodworkImportErrorText, shouldReportImportError, changeVisitDate, toggleVisitWeight, weightToSave,
-  weightLineEnabled, isFutureDate,
+  weightLineEnabled, isFutureDate, weightTicked, refreshVisitsOnFile, reviewCheckboxNames, weightLineText,
+  WEIGHT_SKIPPED_MESSAGE,
 } = await import('./bloodworkImport');
 const { dateStrInTimezone } = await import('@/lib/timezone');
 const { SpreadsheetReadError, SPREADSHEET_MESSAGES } = await import('./bloodworkSpreadsheet');
@@ -89,6 +90,19 @@ describe('buildReviewVisits', () => {
     expect(visits.map((v) => [v.weightLbs, v.includeWeight])).toEqual([[9.8, true], [10.1, false], [null, false]]);
   });
 
+  it("disables a weight line whose day already has a weight, says so, and can't be ticked (Lynn, 2026-11-26)", () => {
+    const answer = { visits: [{ date: '2026-06-14', values: {}, weight_lbs: 10.1 }, { date: '2026-05-01', values: {}, weight_lbs: 9.8 }] };
+    const [onFile, free] = buildReviewVisits(answer, { bloodworkDates: new Set(), weightDates: new Set(['2026-06-14']) }).visits;
+    expect(onFile).toMatchObject({ weightOnFile: true, includeWeight: false, included: true });
+    expect(weightLineEnabled(onFile)).toBe(false);
+    expect(weightLineText(onFile)).toBe('Weight 10.1 lbs: a weight is already logged for this day.');
+    expect(toggleVisitWeight(onFile).includeWeight).toBe(false);
+    expect(weightToSave(toggleVisitWeight(onFile), new Set())).toBe(false);
+    expect(free.weightOnFile).toBe(false);
+    expect(weightLineEnabled(free)).toBe(true);
+    expect(weightLineText(free)).toBe('Weight 9.8 lbs: also add to weight history');
+  });
+
   it('starts every weight line unticked when the weights could not be loaded', () => {
     const { visits } = buildReviewVisits({ visits: [{ date: '2026-10-02', values: {}, weight_lbs: 9.8 }] }, { bloodworkDates: new Set(), weightDates: null });
     expect(visits[0].includeWeight).toBe(false);
@@ -137,29 +151,32 @@ describe('changing a visit date (FR30, FR36)', () => {
   const onFile = { bloodworkDates: new Set(['2026-03-14']), weightDates: new Set(['2026-06-14']) };
   const undated = () => buildReviewVisits({ visits: [{ values: { bun: 32 }, weight_lbs: 10.1 }] }, onFile).visits[0];
 
-  it("keeps an undated visit's weight unticked when the owner types a date that already has a weight", () => {
+  it("disables an undated visit's weight line when the owner types a date that already has a weight", () => {
     const v = changeVisitDate(undated(), '2026-06-14', onFile);
-    expect(v).toMatchObject({ form: expect.objectContaining({ date: '2026-06-14' }), includeWeight: false, onFile: false, included: true });
+    expect(v).toMatchObject({ form: expect.objectContaining({ date: '2026-06-14' }), includeWeight: false, weightOnFile: true, onFile: false, included: true });
+    expect(weightLineEnabled(v)).toBe(false);
+    expect(weightToSave(toggleVisitWeight(v), new Set(['2026-06-14']))).toBe(false);
+  });
+
+  it('ticks and enables the weight when the new date has no weight', () => {
+    const v = changeVisitDate(undated(), '2026-05-01', onFile);
+    expect(v).toMatchObject({ includeWeight: true, weightOnFile: false });
     expect(weightLineEnabled(v)).toBe(true);
-    expect(weightToSave(v, new Set(['2026-06-14']))).toBe(false);
   });
 
-  it('ticks the weight when the new date has no weight', () => {
-    expect(changeVisitDate(undated(), '2026-05-01', onFile).includeWeight).toBe(true);
-  });
-
-  it('unticks the weight again when a ticked line moves to a date with a weight', () => {
+  it('unticks and disables the weight when a ticked line moves to a date with a weight, and re-enables it when moved off', () => {
     const { visits } = buildReviewVisits({ visits: [{ date: '2026-05-01', values: {}, weight_lbs: 10.1 }] }, onFile);
     expect(visits[0].includeWeight).toBe(true);
-    expect(changeVisitDate(visits[0], '2026-06-14', onFile).includeWeight).toBe(false);
+    const moved = changeVisitDate(visits[0], '2026-06-14', onFile);
+    expect(moved).toMatchObject({ includeWeight: false, weightOnFile: true });
+    expect(changeVisitDate(moved, '2026-05-02', onFile)).toMatchObject({ includeWeight: true, weightOnFile: false });
   });
 
   it("does not carry the owner's own weight tick to a different date", () => {
-    const { visits } = buildReviewVisits({ visits: [{ date: '2026-06-14', values: {}, weight_lbs: 10.1 }] }, onFile);
-    const ticked = toggleVisitWeight(visits[0]);
-    expect(ticked).toMatchObject({ includeWeight: true, weightConfirmedDate: '2026-06-14' });
-    const moved = changeVisitDate(ticked, '2026-06-15', { ...onFile, weightDates: new Set(['2026-06-14', '2026-06-15']) });
-    expect(moved).toMatchObject({ includeWeight: false, weightConfirmedDate: null });
+    const { visits } = buildReviewVisits({ visits: [{ date: '2026-05-01', values: {}, weight_lbs: 10.1 }] }, onFile);
+    const unticked = toggleVisitWeight(visits[0]);
+    expect(unticked.includeWeight).toBe(false);
+    expect(changeVisitDate(unticked, '2026-05-02', onFile).includeWeight).toBe(true);
   });
 
   it('marks and unticks a visit moved onto a date that already has bloodwork', () => {
@@ -176,32 +193,108 @@ describe('changing a visit date (FR30, FR36)', () => {
   });
 });
 
-describe('which weights a save logs (FR36: one weight per day, never silently replaced)', () => {
+describe('which weights a save logs (FR36: one weight per day, an import never replaces one)', () => {
   const visitOn = (date, weightDates) => buildReviewVisits({ visits: [{ date, values: {}, weight_lbs: 10.1 }] }, { bloodworkDates: new Set(), weightDates }).visits[0];
 
   it('logs a ticked weight for a date with no weight', () => {
     expect(weightToSave(visitOn('2026-05-01', new Set()), new Set())).toBe(true);
   });
 
-  it('skips a weight that started ticked if a weight appeared on that date since the review opened', () => {
-    expect(weightToSave(visitOn('2026-05-01', new Set()), new Set(['2026-05-01']))).toBe(false);
+  it('skips a ticked weight if a weight appeared on that date since the review opened, and counts it as skipped', () => {
+    const v = visitOn('2026-05-01', new Set());
+    expect(weightToSave(v, new Set(['2026-05-01']))).toBe(false);
+    expect(weightTicked(v)).toBe(true);
   });
 
-  it('skips every unconfirmed weight if the fresh weights could not be loaded', () => {
-    expect(weightToSave(visitOn('2026-05-01', new Set()), null)).toBe(false);
+  it('skips every weight if the fresh weights could not be loaded, and counts it as skipped', () => {
+    const v = visitOn('2026-05-01', new Set());
+    expect(weightToSave(v, null)).toBe(false);
+    expect(weightTicked(v)).toBe(true);
   });
 
-  it('logs a weight over one on file only when the owner ticked it for that same date', () => {
-    const shownUnticked = visitOn('2026-06-14', new Set(['2026-06-14']));
-    expect(weightToSave(shownUnticked, new Set(['2026-06-14']))).toBe(false);
-    expect(weightToSave(toggleVisitWeight(shownUnticked), new Set(['2026-06-14']))).toBe(true);
-    expect(weightToSave(toggleVisitWeight(toggleVisitWeight(shownUnticked)), new Set(['2026-06-14']))).toBe(false);
+  it('never logs a weight over one on file, even if the owner ticks the line, and never counts it as skipped', () => {
+    const shown = visitOn('2026-06-14', new Set(['2026-06-14']));
+    expect(weightToSave(shown, new Set(['2026-06-14']))).toBe(false);
+    expect(weightToSave(toggleVisitWeight(shown), new Set(['2026-06-14']))).toBe(false);
+    // Even forced on, a weight on file is never saved or reported as skipped.
+    expect(weightToSave({ ...shown, includeWeight: true }, new Set())).toBe(false);
+    expect(weightTicked({ ...shown, includeWeight: true })).toBe(false);
+  });
+
+  it("starts unticked when the review couldn't load weights, but can be ticked and is saved if the fresh load shows the day free", () => {
+    const v = visitOn('2026-05-01', null);
+    expect(v).toMatchObject({ includeWeight: false, weightOnFile: false });
+    expect(weightLineEnabled(v)).toBe(true);
+    expect(weightToSave(toggleVisitWeight(v), new Set())).toBe(true);
+    expect(weightToSave(toggleVisitWeight(v), new Set(['2026-05-01']))).toBe(false);
+  });
+
+  it('has the approved skipped-weight message', () => {
+    expect(WEIGHT_SKIPPED_MESSAGE).toBe("The bloodwork was saved, but the weight wasn't added because this day already has one.");
   });
 
   it('never logs the weight of an unticked visit or a visit without a weight', () => {
     const v = visitOn('2026-05-01', new Set());
     expect(weightToSave({ ...v, included: false }, new Set())).toBe(false);
     expect(weightToSave({ ...v, weightLbs: null }, new Set())).toBe(false);
+  });
+});
+
+describe('after a save that stopped partway (FR30, FR36)', () => {
+  const answer = {
+    visits: [
+      { date: '2026-10-02', values: { bun: 32 }, weight_lbs: 9.8 },
+      { date: '2026-06-14', values: { bun: 28 }, weight_lbs: 10.1 },
+      { date: '2026-03-14', values: { bun: 25 }, weight_lbs: 10.4 },
+    ],
+  };
+
+  it('marks a visit whose record saved "Already on file" and unticks it, and disables weights for days that now have one', () => {
+    const { visits } = buildReviewVisits(answer, none);
+    // 2026-06-14's record saved but its weight failed; 2026-03-14 gained a
+    // weight elsewhere meanwhile.
+    const left = [{ ...visits[1], savedId: 'bw-1' }, visits[2]];
+    const [saved, other] = refreshVisitsOnFile(left, { bloodworkDates: new Set(['2026-10-02', '2026-06-14']), weightDates: new Set(['2026-10-02', '2026-03-14']) });
+    expect(saved).toMatchObject({ onFile: true, included: false, savedId: 'bw-1', weightOnFile: false, includeWeight: true });
+    expect(other).toMatchObject({ onFile: false, included: true, weightOnFile: true, includeWeight: false });
+    expect(weightLineEnabled(other)).toBe(false);
+  });
+
+  it('leaves a visit unchanged when nothing new is on file for its date', () => {
+    const { visits } = buildReviewVisits(answer, none);
+    const [v] = refreshVisitsOnFile([visits[2]], { bloodworkDates: new Set(['2026-10-02']), weightDates: null });
+    expect(v).toMatchObject({ onFile: false, included: true, weightOnFile: false, includeWeight: true });
+  });
+});
+
+describe('checkbox names', () => {
+  it('names each Include and weight tick with the heading date', () => {
+    const { visits } = buildReviewVisits({ visits: [{ date: '2026-03-14', values: {}, weight_lbs: 9.8 }, { date: '2026-06-14', values: {} }] }, { bloodworkDates: new Set(), weightDates: new Set(['2026-03-14']) });
+    const names = reviewCheckboxNames(visits);
+    expect(names.get(visits[0].key)).toEqual({ include: 'Include Mar 14, 2026', weight: 'Weight 9.8 lbs: a weight is already logged for this day. (Mar 14, 2026)' });
+    expect(names.get(visits[1].key)).toEqual({ include: 'Include Jun 14, 2026', weight: null });
+  });
+
+  it('adds "(version N)" for cards sharing a date, so every name is unique', () => {
+    const { visits } = buildReviewVisits({
+      visits: [
+        { date: '2026-10-02', values: { creatinine: 2.1 }, weight_lbs: 9.8, conflict: true },
+        { date: '2026-10-02', values: { creatinine: 2.4 }, weight_lbs: 9.8, conflict: true },
+        { date: '2026-06-14', values: {} },
+      ],
+    }, none);
+    const names = reviewCheckboxNames(visits);
+    expect(visits.map((v) => names.get(v.key).include)).toEqual(['Include Oct 2, 2026 (version 1)', 'Include Oct 2, 2026 (version 2)', 'Include Jun 14, 2026']);
+    expect(names.get(visits[0].key).weight).toBe('Weight 9.8 lbs: also add to weight history (Oct 2, 2026, version 1)');
+    expect(names.get(visits[1].key).weight).toBe('Weight 9.8 lbs: also add to weight history (Oct 2, 2026, version 2)');
+    const all = [...names.values()].flatMap((n) => [n.include, n.weight]).filter(Boolean);
+    expect(new Set(all).size).toBe(all.length);
+  });
+
+  it('keeps undated cards apart too', () => {
+    const { visits } = buildReviewVisits({ visits: [{ values: { bun: 1 } }, { values: { bun: 2 } }] }, none);
+    const names = reviewCheckboxNames(visits);
+    expect(visits.map((v) => names.get(v.key).include)).toEqual(['Include (version 1)', 'Include (version 2)']);
   });
 });
 
