@@ -1,6 +1,6 @@
 # 0081_Base44_Cleanup_Weight_Home_And_Bloodwork_Spreadsheet_Specification_v1
 
-**Status:** Built 2026-11-26 (PROTECTED; awaiting Lynn's merge OK). Approved by Lynn 2026-11-23: spec, wording A–H and the FR9 translation table. Follow-up decisions, same day, from her IDEXX PDF sample and her spreadsheet template: photo/PDF scans use the same review as spreadsheets (FR35), and spreadsheet weights can go into weight history (FR36). Wording I–K approved too. Fully approved. **Amendments 1–2 approved by Lynn 2026-11-24** (see "Amendments"): no new date column for weight; old tables deleted without moving records. **Amendment 3** records Lynn's decisions during the build (2026-11-24 to 2026-11-26) and the copy she approved then.
+**Status:** Shipped 2026-11-26. PR #62 merged as `3fa4afd` with Lynn's PROTECTED merge OK. Migration 0061 and the two changed Edge Functions are live on dev, staging and prod; Lynn promoted the frontend. PA-71, PA-50, PA-51 marked Complete. Only Lynn's manual checks remain (see "Lynn — what I need from you" and "Rollout record"). Approved by Lynn 2026-11-23: spec, wording A–H and the FR9 translation table. Follow-up decisions, same day, from her IDEXX PDF sample and her spreadsheet template: photo/PDF scans use the same review as spreadsheets (FR35), and spreadsheet weights can go into weight history (FR36). Wording I–K approved too. Fully approved. **Amendments 1–2 approved by Lynn 2026-11-24** (see "Amendments"): no new date column for weight; old tables deleted without moving records. **Amendment 3** records Lynn's decisions during the build (2026-11-24 to 2026-11-26) and the copy she approved then.
 **Date:** 2026-11-23
 **Branch:** `claude/base44-cleanup`
 **Migration:** `0061` (reserved by the first session). It gives weight its new home, moves the old records, and deletes the three Base44-era tables.
@@ -35,8 +35,10 @@
 3. ~~Approve the FR9 translation table~~ Approved 2026-11-23.
 3a. ~~Answer Open Question 3~~ Answered 2026-11-23: same review for photo, PDF and spreadsheet; spreadsheet weights become a tickable line.
 3b. ~~Approve wording I–K~~ Approved 2026-11-23.
-4. **Now, blocks the merge:** OK the PROTECTED merge (0011 rule). The build is done and reviewed; it waits only for your OK.
-5. **After the merge, at rollout, on each project (dev, staging, prod):** promote the frontend build in Cloudflare (branch `main`, commit message starting "Spec 0081"). That blocks my next steps. Then I add the deploy marker, deploy the two Edge Functions (`ask-vet-assistant`, `generate-vet-report`) and run `supabase db push --include-all`, in that order (Amendment 3). I'll tell you when each project is ready for your promotion.
+4. ~~OK the PROTECTED merge~~ OK'd; PR #62 merged 2026-11-26 (`3fa4afd`).
+5. ~~Promote the frontend and set the deploy marker on each project~~ Done 2026-11-26 (see "Rollout record").
+6. **Not blocking, whenever you can:** do the three manual checks in `docs/testing/QA_Test_Plan.md` marked "see the spec 0081 manual checklist": the co-owner conflict after a weight edit (two devices, test1@ and coowner1@), the real-AI read of your own Excel file and the IDEXX sample PDF on dev, and a sitter (test4@ or petsitter1@) seeing weight on Trends read-only during a sit.
+7. **Optional:** delete the old `claude/base44-cleanup` branch on GitHub (github.com → the repo → Branches → trash icon next to it), if you want it gone.
 
 ## Before You Approve This
 
@@ -339,3 +341,14 @@ FR11 counts (2026-11-24): dev 3 old symptom logs (all on days with a check-in, n
    - Weight not checked toast: "The bloodwork was saved, but the weight wasn't added. Please try adding it in Log weight."
 9. **Rollout order on each project:** frontend promoted → deploy marker (`spec_0081_frontend_live`) → Edge Functions deployed → `supabase db push --include-all`. The old functions read the dropped tables, so they must be replaced before the push.
 10. **Found during QA, pre-existing, logged as a follow-up (PA-77):** the Health Records page has no sitter guard.
+
+## Rollout record (2026-11-26)
+
+1. **Frontend:** promoted by Lynn in Cloudflare.
+2. **Deploy marker:** Lynn set `spec_0081_frontend_live` on staging and prod. Dev had it already. On staging and prod, Lynn chose to enable RLS on `private.deploy_markers` in the SQL editor.
+3. **Staging and prod, in order:**
+   - `ask-vet-assistant` and `generate-vet-report` deployed; `scripts/check-functions-start.sh` reported all 14 functions started.
+   - A read-only pre-check found no views, foreign keys, publications or function bodies depending on `symptom_logs`, `wellness_scores` or `food_logs`.
+   - `supabase db push --include-all` applied 0061.
+   - After the push: the three tables are gone, the `uploads` bucket is private with 8 allowed file types (CSV and Excel included), and no public function is executable by anon.
+4. **Dev:** had 0061 and both functions since 2026-11-25.
