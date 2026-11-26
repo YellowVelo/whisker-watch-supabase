@@ -4,6 +4,7 @@
 //   - EMERGENCY_KEYWORD_PATTERNS /
 //     detectEmergencyKeywords() = src/lib/aiGuardrails.js
 //   - BLOODWORK_FIELDS          = src/lib/bloodworkFields.js (key, label, unit)
+//   - URINE_PROTEIN_VALUES      = src/lib/bloodworkFields.js
 //   - baseline option labels    = src/lib/onboardingConfig.js (used by the
 //                                 port of src/lib/baselineContext.js)
 //   - PET_SCREEN_NAMES          = src/lib/petScreenContext.js
@@ -144,6 +145,10 @@ export const BLOODWORK_FIELDS: readonly BloodworkField[] = [
   { key: 'glucose', label: 'Glucose', unit: 'mg/dL' },
   { key: 't4', label: 'T4 Thyroid', unit: 'µg/dL' },
 ];
+
+// The urine protein answers the bloodwork form offers (and the scans may
+// return).
+export const URINE_PROTEIN_VALUES: readonly string[] = ['Negative', 'Trace', '1+', '2+', '3+', '4+'];
 
 // ---------------------------------------------------------------------------
 // Baseline option labels (pet_onboarding answers), for the server port of

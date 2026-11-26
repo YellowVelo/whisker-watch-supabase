@@ -59,13 +59,13 @@ export function aiScreen(screen) {
  * Requires the user to be logged in — the Edge Function checks the
  * Supabase auth session.
  *
- * Spec 0080: the app never sends AI instructions. It names one of 8 tasks
+ * Spec 0080: the app never sends AI instructions. It names one of 9 tasks
  * and sends only ids and the owner's own words; the server writes the
  * instructions and looks up the pet's details itself. Only the fields that
  * are defined are sent.
  *
  * @param {Object} params
- * @param {'pet_chat'|'household_chat'|'pet_insights'|'trends_summary'|'scan_vaccines'|'scan_vaccine_single'|'scan_medication'|'scan_bloodwork'} params.task
+ * @param {'pet_chat'|'household_chat'|'pet_insights'|'trends_summary'|'scan_vaccines'|'scan_vaccine_single'|'scan_medication'|'scan_bloodwork'|'bloodwork_spreadsheet'} params.task
  * @param {string} [params.pet_id] - the pet the task is about
  * @param {string} [params.file_path] - scans: storage path of an uploaded
  *   image or PDF in the private "uploads" bucket, from uploadFile(). The
@@ -77,22 +77,28 @@ export function aiScreen(screen) {
  * @param {string} [params.question] - chats: the owner's new message
  * @param {Array<{ role: string, content: string }>} [params.history] - chats:
  *   the conversation before the question (see buildChatHistory)
+ * @param {string} [params.sheet_text] - bloodwork_spreadsheet: the
+ *   spreadsheet as text, from readBloodworkSpreadsheet() in
+ *   src/lib/bloodworkSpreadsheet.js (at most MAX_SHEET_TEXT_CHARS; the
+ *   server refuses longer text with 400 sheet_too_large). The file itself
+ *   is never sent to the AI (spec 0081).
  * @returns {Promise<Object>} the task's parsed JSON answer. Special answers
  *   that never reach the AI: `{ urgent: true }` (chats, insights),
  *   `{ not_enough_data: true }` (pet_insights), `{ summary: null }`
- *   (trends_summary)
+ *   (trends_summary). The two bloodwork tasks answer `{ visits, skipped }`
+ *   (spec 0081; see src/lib/bloodworkScanResult.js)
  * @throws {Error} with the server's message, plus `status` (e.g. 413 for an
  *   image too large to scan, 429 when rate-limited) and `code` (e.g.
  *   'daily_limit' or 'rate_limited' for a 429) from the function's error body
  */
-export async function invokeAI({ task, pet_id, file_path, screen, range, question, history }) {
+export async function invokeAI({ task, pet_id, file_path, screen, range, question, history, sheet_text }) {
   const { data: sessionData } = await supabase.auth.getSession();
   const token = sessionData?.session?.access_token;
   if (!token) {
     throw new Error('Not authenticated');
   }
 
-  const fields = { task, pet_id, file_path, screen, range, question, history };
+  const fields = { task, pet_id, file_path, screen, range, question, history, sheet_text };
   const body = Object.fromEntries(Object.entries(fields).filter(([, v]) => v !== undefined && v !== null));
 
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;

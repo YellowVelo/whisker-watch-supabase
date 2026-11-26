@@ -6,11 +6,23 @@
 // refused), AC4 (emergency phrase stops before any AI call), AC5 (urgent
 // answers keep no AI text) and AC8 (file_url refused).
 //
+// Spec 0081 (bloodwork, FR29, FR32, FR35-FR37): the bloodwork spreadsheet
+// task's request checks (60,000-character limit) and instructions, the
+// scan's new { visits, skipped } instructions, and the server's check of
+// the AI's bloodwork answer (cleanBloodworkAnswer, ./bloodwork.ts): other
+// units moved to skipped and never converted (AC17, AC21), kg weights
+// converted (FR36), malformed fields dropped, identical visits across
+// sheets merged (AC22) and same-date differences marked (AC23). Sheet text
+// here is made up, in the shape the app's reader gives for
+// e2e/fixtures/bloodwork-template-sample.xlsx.
+//
 // Run: deno test --node-modules-dir=none supabase/tests/ai_prompts.test.ts
 
 import { assert, assertEquals, assertStringIncludes } from 'https://deno.land/std@0.224.0/assert/mod.ts';
 import {
   AI_DISCLAIMER_SENTENCE,
+  BLOODWORK_ANSWER_SCHEMA,
+  buildBloodworkSpreadsheet,
   buildHouseholdChat,
   buildPetChat,
   buildPetInsights,
@@ -23,6 +35,7 @@ import {
   formatBaselineForAI,
   hasEnoughCheckIns,
   isTaskRequestError,
+  MAX_SHEET_TEXT_CHARS,
   parseTaskRequest,
   stripUrgent,
   TASK_NAMES,
@@ -33,6 +46,7 @@ import {
   type TaskRequestError,
 } from '../functions/ask-vet-assistant/prompts.ts';
 import { BLOODWORK_FIELDS } from '../functions/ask-vet-assistant/rules.ts';
+import { cleanBloodworkAnswer, normalizeUnit } from '../functions/ask-vet-assistant/bloodwork.ts';
 
 const PET_ID = '0b6f2c1e-4a1d-4c7b-9e2f-3a5d6c7b8e9f';
 const NOW = Date.UTC(2026, 10, 23);
@@ -62,6 +76,25 @@ const checkIns: CheckInDay[] = [
   { date: '2026-11-19', status: 'tough', symptoms: [] },
 ];
 
+// Made-up sheet text in the shape src/lib/bloodworkSpreadsheet.js gives for
+// the template layout (two near-identical sheets, visits across the
+// columns, Range and Measure label columns, a WEIGHT row, a treatment row).
+const TEMPLATE_ROWS = [
+  'Test,Range,Measure,Visit 1,Visit 2,Visit 3',
+  'DATE,,,2026-10-02,2026-06-14,2026-03-14',
+  'WEIGHT,,lbs,9.8,10.1,10.4',
+  'BUN,16-36,mg/dL,32,28,25',
+  'CREATININE,0.8-2.4,mg/dL,2.1,1.9,1.7',
+  'SDMA,0-14,ug/dL,15,13,12',
+  'PHOSPHORUS,3.1-7.5,mg/dL,5.2,4.8,4.5',
+  'CHLORIDE,112-129,mmol/L,118,117,119',
+  'Sub-Q fluids,,ml,100,100',
+];
+const TEMPLATE_SHEET_TEXT = [
+  `Sheet 1 of 2: Inc Research\n${[...TEMPLATE_ROWS, 'Research panel A,,units,7,6,5'].join('\n')}`,
+  `Sheet 2 of 2: No Research\n${TEMPLATE_ROWS.join('\n')}`,
+].join('\n\n');
+
 function allBuilt(): Record<string, BuiltPrompt> {
   return {
     pet_chat: buildPetChat({ pet, medications: meds, baseline, screen: 'Trends', history: HISTORY, question: QUESTION, nowMs: NOW }),
@@ -72,6 +105,7 @@ function allBuilt(): Record<string, BuiltPrompt> {
     scan_vaccine_single: buildScanVaccineSingle(),
     scan_medication: buildScanMedication(),
     scan_bloodwork: buildScanBloodwork(),
+    bloodwork_spreadsheet: buildBloodworkSpreadsheet(TEMPLATE_SHEET_TEXT),
   };
 }
 
@@ -256,13 +290,48 @@ Deno.test('onboarding scans: wording and shapes match the entry cards', () => {
   assertEquals(Object.keys(m.schema.properties as Record<string, unknown>), ['name', 'dosage', 'frequency']);
 });
 
-Deno.test('bloodwork scan: urine fields, urine_protein values and BLOODWORK_FIELDS', () => {
+Deno.test('bloodwork scan (FR35): asks for { visits, skipped }, every visit, units as written, never converted', () => {
   const b = buildScanBloodwork();
-  assertStringIncludes(b.system, 'Return only a JSON object with these possible fields: date (YYYY-MM-DD), lab_name, vet_name, urine_specific_gravity, urine_protein (one of: Negative, Trace, 1+, 2+, 3+, 4+), notes, and numeric fields: bun (BUN, mg/dL), creatinine (Creatinine, mg/dL)');
-  assertStringIncludes(b.system, 't4 (T4 Thyroid, µg/dL). Only include fields that are clearly visible in the document. Omit fields not present.');
-  const props = b.schema.properties as Record<string, unknown>;
-  for (const f of BLOODWORK_FIELDS) assertEquals(props[f.key], { type: 'number' }, f.key);
-  for (const k of ['date', 'lab_name', 'vet_name', 'urine_specific_gravity', 'urine_protein', 'notes']) assertEquals(props[k], { type: 'string' }, k);
+  assertEquals(b.user, '');
+  assertEquals(b.schema, BLOODWORK_ANSWER_SCHEMA);
+  assertEquals(Object.keys(b.schema.properties as Record<string, unknown>), ['visits', 'skipped']);
+  assertStringIncludes(b.system, 'You are analyzing a veterinary bloodwork report (image or PDF). It may show more than one visit');
+  assertStringIncludes(b.system, 'Never convert a value to another unit.');
+  assertStringIncludes(b.system, 'creatinine in µmol/L instead of mg/dL');
+  assertStringIncludes(b.system, 'never report a number from them as a value');
+  assertStringIncludes(b.system, 'urine_protein (one of: Negative, Trace, 1+, 2+, 3+, 4+)');
+  assertStringIncludes(b.system, 'Ignore treatments, fluids, medications, supplements');
+  assertStringIncludes(b.system, '"not_tracked"');
+  assertStringIncludes(b.system, 'If a weight has no stated unit');
+  // The 16 fields with their units, from the parity-checked list.
+  for (const f of BLOODWORK_FIELDS) assertStringIncludes(b.system, `${f.key} (${f.label}, ${f.unit})`);
+  type Schema = { properties: Record<string, Schema>; items: Schema };
+  const visit = (b.schema as unknown as Schema).properties.visits.items.properties;
+  assertEquals(Object.keys(visit.values.properties), BLOODWORK_FIELDS.map((f) => f.key));
+  for (const k of ['date', 'lab_name', 'vet_name', 'urine_specific_gravity', 'urine_protein', 'notes', 'weight', 'not_tracked']) {
+    assert(k in visit, `visit schema has ${k}`);
+  }
+});
+
+Deno.test('bloodwork spreadsheet (FR28, FR37): reading rules in system, the sheet text only in user', () => {
+  const b = buildBloodworkSpreadsheet(TEMPLATE_SHEET_TEXT);
+  assertEquals(b.user, `The spreadsheet:\n\n${TEMPLATE_SHEET_TEXT}`);
+  assert(!b.system.includes('Inc Research') && !b.system.includes('Sub-Q fluids'), 'sheet text leaked into system');
+  assertEquals(b.schema, BLOODWORK_ANSWER_SCHEMA);
+  assertStringIncludes(b.system, 'each sheet starts with a line "Sheet N of M: <sheet name>"');
+  // Range and Measure are labels, never results.
+  assertStringIncludes(b.system, 'Reference ranges ("Range", "Reference", "Ref. interval", "Normal") and unit labels ("Measure", "Units") are labels for a test, never results');
+  // Both layouts.
+  assertStringIncludes(b.system, 'one row per visit (tests across the columns) or one row per test (visits across the columns');
+  // Identical visits across sheets once; same date, different results, both.
+  assertStringIncludes(b.system, 'If the same date appears on more than one sheet with the same results, report that visit once.');
+  assertStringIncludes(b.system, 'If the same date appears with different results, report each version as a separate visit');
+  // Treatments ignored; untracked tests listed; weight with a stated unit (FR36).
+  assertStringIncludes(b.system, 'Ignore treatments, fluids, medications, supplements, diet, procedures, charges');
+  assertStringIncludes(b.system, 'chloride, globulin, GGT, bilirubin, cholesterol, amylase, lipase, CK, blood count details, other urine tests or blood pressure');
+  assertStringIncludes(b.system, 'if the visit records the pet\'s weight with a stated unit (for example lbs or kg)');
+  assertStringIncludes(b.system, 'Never convert a value to another unit.');
+  for (const f of BLOODWORK_FIELDS) assertStringIncludes(b.system, `${f.key} (${f.label}, ${f.unit})`);
 });
 
 Deno.test('formatBaselineForAI: omits unset fields; species picks the option list', () => {
@@ -299,6 +368,25 @@ Deno.test('AC8: file_url is refused as invalid_file', () => {
   assertEquals([r.status, r.code], [400, 'invalid_file']);
   const both = refused(parseTaskRequest({ task: 'scan_bloodwork', file_path: 'u/a.pdf', file_url: 'https://x/y' }));
   assertEquals(both.code, 'invalid_file');
+});
+
+Deno.test('bloodwork_spreadsheet (FR32, AC19): sheet_text up to 60,000 characters, refused over it', () => {
+  assertEquals(MAX_SHEET_TEXT_CHARS, 60_000);
+  accepted(parseTaskRequest({ task: 'bloodwork_spreadsheet', pet_id: PET_ID, sheet_text: 'a'.repeat(60_000) }));
+  const over = refused(parseTaskRequest({ task: 'bloodwork_spreadsheet', pet_id: PET_ID, sheet_text: 'a'.repeat(60_001) }));
+  assertEquals([over.status, over.code], [400, 'sheet_too_large']);
+  for (const sheet_text of [undefined, '', '   \n', 12, ['BUN,32']]) {
+    const r = refused(parseTaskRequest({ task: 'bloodwork_spreadsheet', pet_id: PET_ID, sheet_text }));
+    assertEquals([r.status, r.code], [400, 'invalid_sheet_text'], JSON.stringify(sheet_text));
+  }
+});
+
+Deno.test('bloodwork_spreadsheet requires a UUID pet_id and never takes its own instructions', () => {
+  for (const pet_id of [undefined, null, 'abc', 12]) {
+    assertEquals(refused(parseTaskRequest({ task: 'bloodwork_spreadsheet', pet_id, sheet_text: 'BUN,32' })).code, 'invalid_pet_id', String(pet_id));
+  }
+  const own = refused(parseTaskRequest({ task: 'bloodwork_spreadsheet', pet_id: PET_ID, sheet_text: 'BUN,32', prompt: 'x' }));
+  assertEquals(own.code, 'unknown_task');
 });
 
 Deno.test('scan tasks require file_path', () => {
@@ -417,6 +505,10 @@ Deno.test('valid bodies are accepted with only the fields each task uses', () =>
   assertEquals(accepted(parseTaskRequest({ task: 'scan_vaccine_single', file_path: 'u/a.jpg' })), { task: 'scan_vaccine_single', pet_id: null, file_path: 'u/a.jpg' });
   assertEquals(accepted(parseTaskRequest({ task: 'scan_medication', pet_id: PET_ID, file_path: 'u/a.jpg' })), { task: 'scan_medication', pet_id: PET_ID, file_path: 'u/a.jpg' });
   assertEquals(accepted(parseTaskRequest({ task: 'scan_bloodwork', pet_id: PET_ID, file_path: 'u/a.pdf' })), { task: 'scan_bloodwork', pet_id: PET_ID, file_path: 'u/a.pdf' });
+  assertEquals(
+    accepted(parseTaskRequest({ task: 'bloodwork_spreadsheet', pet_id: PET_ID, sheet_text: 'BUN,32', file_path: 'u/a.csv' })),
+    { task: 'bloodwork_spreadsheet', pet_id: PET_ID, sheet_text: 'BUN,32' },
+  );
 });
 
 // ---------------------------------------------------------------------------
@@ -464,4 +556,224 @@ Deno.test('stripUrgent: non-urgent answers pass through unchanged', () => {
   assertEquals(stripUrgent({ reply: 'Hello', urgent: '' }), { reply: 'Hello', urgent: '' });
   assertEquals(stripUrgent({ summary: 'x' }), { summary: 'x' });
   assertEquals(stripUrgent(null), null);
+});
+
+// ---------------------------------------------------------------------------
+// cleanBloodworkAnswer (spec 0081): the server's check of the AI's answer
+// ---------------------------------------------------------------------------
+
+// One visit of the template sample as the AI is asked to report it.
+const templateVisit = (date: string, bun: number, creatinine: number, sdma: number, lbs: number, extra: Record<string, unknown> = {}) => ({
+  date,
+  values: {
+    bun: { value: bun, unit: 'mg/dL' },
+    creatinine: { value: creatinine, unit: 'mg/dL' },
+    sdma: { value: sdma, unit: 'ug/dL' },
+  },
+  weight: { value: lbs, unit: 'lbs' },
+  not_tracked: ['CHLORIDE'],
+  ...extra,
+});
+
+Deno.test('AC21: a value in another unit is moved to skipped, even if the AI put it in values, and never converted', () => {
+  // Shaped like the IDEXX sample: 2 visits side by side, SI units.
+  const answer = cleanBloodworkAnswer({
+    visits: [
+      { date: '2026-03-01', lab_name: 'IDEXX', values: { creatinine: { value: 194.48, unit: 'µmol/L' }, bun: { value: 12.1, unit: 'mmol/L' }, alt: { value: 55, unit: 'U/L' } }, not_tracked: ['Chloride', 'Globulin'] },
+      { date: '2025-09-12', lab_name: 'IDEXX', values: { creatinine: { value: 168.0, unit: 'umol/L' }, alt: { value: 48, unit: 'U/L' } } },
+    ],
+    skipped: [],
+  });
+  assertEquals(answer.visits.length, 2);
+  assertEquals(answer.visits.map((v) => v.date), ['2026-03-01', '2025-09-12']);
+  for (const v of answer.visits) {
+    assertEquals(v.values.creatinine, undefined, 'creatinine must never be a value');
+    assertEquals(v.values.bun, undefined);
+    assertEquals(v.conflict, false);
+  }
+  assertEquals(answer.visits[0].values, { alt: 55 });
+  assertEquals(answer.visits[1].values, { alt: 48 });
+  assertEquals(answer.visits[0].not_tracked, ['Chloride', 'Globulin']);
+  assertEquals(answer.skipped, [
+    { visit: 0, date: '2026-03-01', field: 'creatinine', label: 'Creatinine', unit: 'µmol/L', value: 194.48 },
+    { visit: 0, date: '2026-03-01', field: 'bun', label: 'BUN', unit: 'mmol/L', value: 12.1 },
+    { visit: 1, date: '2025-09-12', field: 'creatinine', label: 'Creatinine', unit: 'umol/L', value: 168 },
+  ]);
+});
+
+Deno.test("AC17: the AI's own skipped list is placed on its visit; a visit with only skipped values still gets a card", () => {
+  const answer = cleanBloodworkAnswer({
+    visits: [{ date: '2026-03-01', values: { alt: { value: 55, unit: 'U/L' } } }],
+    skipped: [
+      { date: '2026-03-01', field: 'creatinine', value: 194.48, unit: 'µmol/L' },
+      { date: '2025-09-12', field: 'Creatinine', value: 168, unit: 'µmol/L' },
+      { field: 'glucose', value: 5.4, unit: 'mmol/L' },
+      { date: '2026-03-01', field: 'chloride', value: 118, unit: 'mmol/L' }, // not a tracked field
+      'nonsense',
+    ],
+  });
+  assertEquals(answer.visits.map((v) => [v.date, v.values]), [['2026-03-01', { alt: 55 }], ['2025-09-12', {}]]);
+  assertEquals(answer.skipped, [
+    { visit: 0, date: '2026-03-01', field: 'creatinine', label: 'Creatinine', unit: 'µmol/L', value: 194.48 },
+    { visit: 1, date: '2025-09-12', field: 'creatinine', label: 'Creatinine', unit: 'µmol/L', value: 168 },
+    { visit: null, date: null, field: 'glucose', label: 'Glucose', unit: 'mmol/L', value: 5.4 },
+  ]);
+});
+
+Deno.test("unit spellings of the field's own unit are kept; a value with no stated unit is kept", () => {
+  assertEquals(normalizeUnit('µg/dL'), normalizeUnit('ug/dL'));
+  assertEquals(normalizeUnit('μg/dL'), normalizeUnit('mcg/dl'));
+  assertEquals(normalizeUnit(' MG / DL '), normalizeUnit('mg/dL'));
+  const answer = cleanBloodworkAnswer({
+    visits: [{
+      date: '2026-10-02',
+      values: {
+        sdma: { value: 15, unit: 'ug/dL' },
+        t4: { value: 2.1, unit: 'mcg/dL' },
+        bun: { value: 32, unit: 'MG/DL' },
+        hematocrit: { value: 38, unit: '%' },
+        potassium: { value: 4.1, unit: null },
+        glucose: 110, // a bare number: no unit stated
+        sodium: { value: 150, unit: 'mmol/L' }, // not mEq/L: never treated as the same
+      },
+    }],
+  });
+  assertEquals(answer.visits[0].values, { sdma: 15, t4: 2.1, bun: 32, hematocrit: 38, potassium: 4.1, glucose: 110 });
+  assertEquals(answer.skipped.map((s) => [s.field, s.unit]), [['sodium', 'mmol/L']]);
+});
+
+Deno.test('malformed fields are dropped, never guessed', () => {
+  const answer = cleanBloodworkAnswer({
+    visits: [
+      {
+        date: '2026-02-30', // not a real date
+        lab_name: '  ',
+        vet_name: 42,
+        notes: 'Fasted sample',
+        urine_specific_gravity: 'high',
+        urine_protein: 'lots',
+        values: {
+          bun: { value: '<5', unit: 'mg/dL' },
+          creatinine: { value: 'N/A' },
+          sdma: { value: -3, unit: 'µg/dL' },
+          phosphorus: { value: '4.8', unit: 'mg/dL' }, // numeric text is fine
+          chloride: { value: 118, unit: 'mmol/L' }, // not a tracked field
+          alt: { value: Infinity, unit: 'U/L' },
+        },
+        weight: { value: 'heavy', unit: 'lbs' },
+        not_tracked: ['GGT', 'ggt', '', 7, 'Cholesterol'],
+        conflict: true, // the AI can't set this
+        urgent: true, // nor anything else
+      },
+      'not a visit',
+      null,
+      { date: '2026-01-01', values: { bun: { value: 'x' } } }, // nothing usable: dropped
+    ],
+  });
+  assertEquals(answer.visits, [{
+    date: null,
+    notes: 'Fasted sample',
+    values: { phosphorus: 4.8 },
+    not_tracked: ['GGT', 'Cholesterol'],
+    conflict: false,
+  }]);
+  assertEquals(answer.skipped, []);
+});
+
+Deno.test('urine fields: specific gravity as text, protein only from the form list', () => {
+  const answer = cleanBloodworkAnswer({
+    visits: [
+      { date: '2026-10-02', urine_specific_gravity: '1.020', urine_protein: 'trace' },
+      { date: '2026-06-14', urine_specific_gravity: 1.035, urine_protein: '2+' },
+    ],
+  });
+  assertEquals(answer.visits.map((v) => [v.urine_specific_gravity, v.urine_protein]), [['1.020', 'Trace'], ['1.035', '2+']]);
+});
+
+Deno.test('FR36: weight in lbs kept, kg converted to lbs, no unit or another unit skipped, out of range dropped', () => {
+  const answer = cleanBloodworkAnswer({
+    visits: [
+      { date: '2026-10-05', weight: { value: 9.84, unit: 'lbs' } },
+      { date: '2026-10-04', weight: { value: 4.45, unit: 'kg' } },
+      { date: '2026-10-03', weight: { value: 9.8 }, values: { bun: { value: 30, unit: 'mg/dL' } } },
+      { date: '2026-10-02', weight: { value: 150, unit: 'oz' }, values: { bun: { value: 31, unit: 'mg/dL' } } },
+      { date: '2026-10-01', weight: { value: 400, unit: 'lb' }, values: { bun: { value: 32, unit: 'mg/dL' } } },
+    ],
+  });
+  assertEquals(answer.visits.map((v) => [v.date, v.weight_lbs]), [
+    ['2026-10-05', 9.8],
+    ['2026-10-04', 9.8], // 4.45 kg = 9.81 lbs
+    ['2026-10-03', undefined],
+    ['2026-10-02', undefined],
+    ['2026-10-01', undefined],
+  ]);
+  assertEquals(answer.skipped, [
+    { visit: 2, date: '2026-10-03', field: 'weight', label: 'Weight', unit: null, value: 9.8 },
+    { visit: 3, date: '2026-10-02', field: 'weight', label: 'Weight', unit: 'oz', value: 150 },
+  ]);
+});
+
+Deno.test('AC22: the template sample read from two sheets gives exactly three visits, each with its weight', () => {
+  // The AI repeated every visit once per sheet; the server merges them.
+  const visits = [
+    templateVisit('2026-10-02', 32, 2.1, 15, 9.8, { not_tracked: ['CHLORIDE', 'Research panel A'] }),
+    templateVisit('2026-06-14', 28, 1.9, 13, 10.1, { not_tracked: ['CHLORIDE', 'Research panel A'] }),
+    templateVisit('2026-03-14', 25, 1.7, 12, 10.4, { not_tracked: ['CHLORIDE', 'Research panel A'] }),
+    templateVisit('2026-10-02', 32, 2.1, 15, 9.8, { lab_name: 'IDEXX' }),
+    templateVisit('2026-06-14', 28, 1.9, 13, 10.1),
+    templateVisit('2026-03-14', 25, 1.7, 12, 10.4),
+  ];
+  const answer = cleanBloodworkAnswer({ visits, skipped: [] });
+  assertEquals(answer.visits.length, 3);
+  assertEquals(answer.visits.map((v) => v.date), ['2026-10-02', '2026-06-14', '2026-03-14']);
+  assertEquals(answer.visits.map((v) => v.weight_lbs), [9.8, 10.1, 10.4]);
+  assertEquals(answer.visits[0].values, { bun: 32, creatinine: 2.1, sdma: 15 });
+  assertEquals(answer.visits[0].lab_name, 'IDEXX', 'details from the second copy fill gaps');
+  assertEquals(answer.visits[0].not_tracked, ['CHLORIDE', 'Research panel A']);
+  assert(answer.visits.every((v) => !v.conflict), 'identical copies are not a conflict');
+  // No reference-range number (16, 36, 0.8, 2.4, 14 ...) is a value.
+  const allValues = answer.visits.flatMap((v) => Object.values(v.values));
+  for (const range of [16, 36, 0.8, 2.4, 14, 3.1, 7.5, 112, 129]) assert(!allValues.includes(range), `range number ${range} became a value`);
+  assertEquals(answer.skipped, []);
+});
+
+Deno.test('AC23: the same date with a different creatinine on one sheet gives both versions, marked conflict', () => {
+  const answer = cleanBloodworkAnswer({
+    visits: [
+      templateVisit('2026-10-02', 32, 2.1, 15, 9.8),
+      templateVisit('2026-06-14', 28, 1.9, 13, 10.1),
+      templateVisit('2026-10-02', 32, 2.3, 15, 9.8),
+      templateVisit('2026-06-14', 28, 1.9, 13, 10.1),
+    ],
+  });
+  assertEquals(answer.visits.map((v) => [v.date, v.values.creatinine, v.conflict]), [
+    ['2026-10-02', 2.1, true],
+    ['2026-10-02', 2.3, true],
+    ['2026-06-14', 1.9, false],
+  ]);
+});
+
+Deno.test('merging: a third identical copy joins its match; skipped values count as results', () => {
+  const si = (value: number) => ({ date: '2026-03-01', values: { alt: { value: 55, unit: 'U/L' }, creatinine: { value, unit: 'µmol/L' } } });
+  const answer = cleanBloodworkAnswer({ visits: [si(194.48), si(194.48), si(201)] });
+  assertEquals(answer.visits.length, 2);
+  assert(answer.visits.every((v) => v.conflict));
+  assertEquals(answer.skipped.map((s) => [s.visit, s.value]), [[0, 194.48], [1, 201]]);
+});
+
+Deno.test('undated visits are never merged and come last', () => {
+  const answer = cleanBloodworkAnswer({
+    visits: [
+      { values: { bun: { value: 30, unit: 'mg/dL' } } },
+      { values: { bun: { value: 30, unit: 'mg/dL' } } },
+      { date: '2026-01-05', values: { bun: { value: 31, unit: 'mg/dL' } } },
+    ],
+  });
+  assertEquals(answer.visits.map((v) => [v.date, v.conflict]), [['2026-01-05', false], [null, false], [null, false]]);
+});
+
+Deno.test('an answer with nothing usable is { visits: [], skipped: [] }', () => {
+  for (const raw of [null, undefined, 'text', 42, [], {}, { visits: 'x' }, { visits: [], skipped: 'x' }, { bun: 32, creatinine: 2.1 }]) {
+    assertEquals(cleanBloodworkAnswer(raw), { visits: [], skipped: [] }, JSON.stringify(raw));
+  }
 });

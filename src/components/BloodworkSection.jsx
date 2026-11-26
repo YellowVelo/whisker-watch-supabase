@@ -12,7 +12,8 @@ import { Plus, FlaskConical, ChevronDown, ChevronUp, Pencil, Trash2, Upload, Loa
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { format, parseISO } from 'date-fns';
 import { useToast } from '@/components/ui/use-toast';
-import { BLOODWORK_FIELDS as FIELDS } from '@/lib/bloodworkFields';
+import { BLOODWORK_FIELDS as FIELDS, URINE_PROTEIN_VALUES } from '@/lib/bloodworkFields';
+import { scannedBloodworkToForm } from '@/lib/bloodworkScanResult';
 
 const URINE_FIELDS = [
   { key: 'urine_specific_gravity', label: 'Urine Specific Gravity' },
@@ -70,7 +71,10 @@ export default function BloodworkSection({ petId }) {
         pet_id: petId,
         file_path: path,
       });
-      const extracted = result;
+      // Spec 0081: the scan now answers { visits, skipped }; older servers
+      // answered one flat record. Either way, the first visit prefills the
+      // form until the shared review replaces it.
+      const extracted = scannedBloodworkToForm(result);
 
       if (extracted) {
         const f = { ...EMPTY_FORM };
@@ -286,7 +290,7 @@ export default function BloodworkSection({ petId }) {
                   className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm"
                 >
                   <option value="">Not reported</option>
-                  {['Negative', 'Trace', '1+', '2+', '3+', '4+'].map(o => <option key={o} value={o}>{o}</option>)}
+                  {URINE_PROTEIN_VALUES.map(o => <option key={o} value={o}>{o}</option>)}
                 </select>
               </div>
             </div>

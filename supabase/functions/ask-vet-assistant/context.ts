@@ -379,3 +379,13 @@ export async function loadOwnedPetNames(client: SupabaseClient, userId: string):
   const rows = await loadOwnedPetRows(client, userId);
   return rows.map((p) => ({ name: p.name ?? null }));
 }
+
+// True if the caller owns or co-owns the pet (is_pet_owner(), migration
+// 0059: signed-in callable, answers only about the caller). Sitters get
+// false. Used where the result is something only owners may save, such as
+// bloodwork (owners and co-owners only, migration 0004).
+export async function callerOwnsPet(client: SupabaseClient, petId: string, userId: string): Promise<boolean> {
+  const { data, error } = await client.rpc('is_pet_owner', { p_pet_id: petId, p_user_id: userId });
+  if (error) fail('pet owner check', error);
+  return data === true;
+}
