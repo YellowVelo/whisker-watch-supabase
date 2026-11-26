@@ -134,9 +134,13 @@ export function parseCsv(text, delimiter = detectDelimiter(text)) {
   return rows;
 }
 
-// UTF-8 if it's valid UTF-8; otherwise Windows-1252, which is what Excel
-// on Windows uses for "CSV" (so "µmol/L" survives).
-function decodeText(bytes) {
+// UTF-16 if the file starts with a UTF-16 byte-order mark (Excel's
+// "Unicode Text" export); otherwise UTF-8 if it's valid UTF-8; otherwise
+// Windows-1252, which is what Excel on Windows uses for "CSV" (so "µmol/L"
+// survives).
+export function decodeText(bytes) {
+  if (bytes[0] === 0xff && bytes[1] === 0xfe) return new TextDecoder('utf-16le').decode(bytes.subarray(2));
+  if (bytes[0] === 0xfe && bytes[1] === 0xff) return new TextDecoder('utf-16be').decode(bytes.subarray(2));
   try {
     return new TextDecoder('utf-8', { fatal: true }).decode(bytes).replace(/^﻿/, '');
   } catch {
@@ -184,6 +188,11 @@ function rowsToLines(rows) {
  * @returns {string}
  */
 export function sheetsToText(sheets) {
+  return sheetsToBlocks(sheets).text;
+}
+
+// sheetsToText, plus the names of the sheets it kept (empty ones left out).
+function sheetsToBlocks(sheets) {
   const blocks = sheets
     .map((s) => ({ name: s.name, lines: rowsToLines(s.rows) }))
     .filter((s) => s.lines.length > 0);
@@ -195,7 +204,7 @@ export function sheetsToText(sheets) {
     .map((s, i) => `Sheet ${i + 1} of ${blocks.length}: ${s.name}\n${s.lines.join('\n')}`)
     .join('\n\n');
   if (text.length > MAX_SHEET_TEXT_CHARS) throw new SpreadsheetReadError('too_large');
-  return text;
+  return { text, names: blocks.map((s) => s.name) };
 }
 
 // ── Files ─────────────────────────────────────────────────────────────────
@@ -221,7 +230,8 @@ async function readXlsxSheets(bytes) {
     // PWA chunk after a deploy. That says nothing about the file, so it's
     // not a SpreadsheetReadError: the caller shows its usual failure message.
     reportClientError(err, { feature: 'bloodwork_spreadsheet', note: 'Could not load the .xlsx reader' });
-    throw new Error('Could not load the spreadsheet reader', { cause: err });
+    // `reported` tells the caller Sentry already has it.
+    throw Object.assign(new Error('Could not load the spreadsheet reader', { cause: err }), { reported: true });
   }
   let sheets;
   try {
@@ -244,7 +254,8 @@ async function readXlsxSheets(bytes) {
  * Read a picked .csv or .xlsx into plain text for the AI.
  *
  * @param {File|Blob & { name?: string }} file
- * @returns {Promise<{ text: string, sheetNames: string[] }>}
+ * @returns {Promise<{ text: string, sheetNames: string[] }>} `sheetNames`
+ *   lists only the sheets that had content (the ones in `text`)
  * @throws {SpreadsheetReadError} old_excel, too_large or nothing_found;
  *   any other Error (e.g. the .xlsx reader failed to load) gets the
  *   caller's usual failure message
@@ -262,5 +273,6 @@ export async function readBloodworkSpreadsheet(file) {
     ? await readXlsxSheets(bytes)
     : [{ name: 'Sheet 1', rows: parseCsv(decodeText(bytes)) }];
 
-  return { text: sheetsToText(sheets), sheetNames: sheets.map((s) => s.name) };
+  const { text, names } = sheetsToBlocks(sheets);
+  return { text, sheetNames: names };
 }

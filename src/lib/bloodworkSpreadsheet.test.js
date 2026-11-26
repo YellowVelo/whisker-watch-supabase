@@ -141,6 +141,24 @@ describe('readBloodworkSpreadsheet: CSV', () => {
     expect(text).toContain('Creatinine,194,µmol/L');
   });
 
+  it('reads a UTF-16 CSV (either byte order) from its byte-order mark', async () => {
+    const csv = 'Date,Creatinine,Unit\r\n2026-10-02,194,µmol/L\r\n';
+    const le = new Uint8Array(2 + csv.length * 2);
+    const be = new Uint8Array(2 + csv.length * 2);
+    le.set([0xff, 0xfe]);
+    be.set([0xfe, 0xff]);
+    for (let i = 0; i < csv.length; i += 1) {
+      const c = csv.charCodeAt(i);
+      le[2 + i * 2] = c & 0xff;
+      le[3 + i * 2] = c >> 8;
+      be[2 + i * 2] = c >> 8;
+      be[3 + i * 2] = c & 0xff;
+    }
+    const expected = 'Sheet 1 of 1: Sheet 1\nDate,Creatinine,Unit\n2026-10-02,194,µmol/L';
+    expect((await readBloodworkSpreadsheet(asFile(le, 'labs.csv'))).text).toBe(expected);
+    expect((await readBloodworkSpreadsheet(asFile(be, 'labs.csv'))).text).toBe(expected);
+  });
+
   it('refuses an empty file, and one with no readable content', async () => {
     expect((await readError(asFile('', 'labs.csv', 'text/csv'))).code).toBe('nothing_found');
     expect((await readError(asFile(',,,\r\n\r\n , ,\n', 'labs.csv'))).code).toBe('nothing_found');
@@ -191,7 +209,7 @@ describe('readBloodworkSpreadsheet: .xlsx', () => {
       { name: 'Urine', rows: [['Date', 'USG'], ['2026-10-02', 1.035]] },
     ]);
     const { text, sheetNames } = await readBloodworkSpreadsheet(asFile(bytes, 'labs.xlsx', XLSX_TYPE));
-    expect(sheetNames).toEqual(['Chemistry', 'Blank', 'Urine']);
+    expect(sheetNames).toEqual(['Chemistry', 'Urine']);
     expect(text).toBe([
       'Sheet 1 of 2: Chemistry', 'Date,BUN', '2026-10-02,32',
       '',
@@ -264,6 +282,7 @@ describe('readBloodworkSpreadsheet: the .xlsx reader fails to load', () => {
       expect(caught).toBeInstanceOf(Error);
       expect(caught).not.toBeInstanceOf(fresh.SpreadsheetReadError);
       expect(fresh.spreadsheetErrorText(caught)).toBeNull();
+      expect(caught.reported).toBe(true);
       expect(monitoring.reportClientError).toHaveBeenCalledWith(
         expect.anything(),
         { feature: 'bloodwork_spreadsheet', note: 'Could not load the .xlsx reader' },

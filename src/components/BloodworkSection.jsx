@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
-import { uploadFile } from '@/api/storageClient';
-import { usePendingScan, scanErrorText } from '@/lib/scannedDocuments';
+import {
+  uploadFile, checkBloodworkUploadFile, bloodworkUploadPurpose, BLOODWORK_FILE_ACCEPT, BLOODWORK_UPLOAD_HELP,
+} from '@/api/storageClient';
+import { usePendingScan } from '@/lib/scannedDocuments';
 import { entities } from '@/api/entities';
 import { invokeAI } from '@/api/aiClient';
 import { Button } from '@/components/ui/button';
@@ -13,7 +15,16 @@ import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'rec
 import { format, parseISO } from 'date-fns';
 import { useToast } from '@/components/ui/use-toast';
 import { BLOODWORK_FIELDS as FIELDS, URINE_PROTEIN_VALUES } from '@/lib/bloodworkFields';
-import { scannedBloodworkToForm } from '@/lib/bloodworkScanResult';
+import { readBloodworkSpreadsheet, SPREADSHEET_MESSAGES } from '@/lib/bloodworkSpreadsheet';
+import {
+  buildReviewVisits, includedVisits, reviewVisitToRecord, bloodworkImportErrorText, shouldReportImportError,
+} from '@/lib/bloodworkImport';
+import { aiErrorText } from '@/lib/aiGuardrails';
+import { reportClientError } from '@/lib/errorMonitoring';
+import { listWeights, addWeight } from '@/lib/weightClient';
+import { useAuth } from '@/lib/AuthContext';
+import { detectTimezone } from '@/lib/timezone';
+import BloodworkImportReview from '@/components/BloodworkImportReview';
 
 const URINE_FIELDS = [
   { key: 'urine_specific_gravity', label: 'Urine Specific Gravity' },
@@ -24,8 +35,11 @@ const EMPTY_FORM = { date: '', lab_name: '', vet_name: '', notes: '', urine_spec
 
 export default function BloodworkSection({ petId }) {
   const { toast } = useToast();
-  // Spec 0071: an imported report is kept (linked to this pet) only if the
-  // prefilled form is saved; closing the form deletes it.
+  const { user } = useAuth();
+  const timezone = user?.timezone || detectTimezone() || 'UTC';
+  // Spec 0071/0081: an imported file (photo, PDF or spreadsheet) is kept,
+  // linked to this pet, only if the review is confirmed; closing the
+  // review, or a failed import, deletes it.
   const pendingScan = usePendingScan('bloodwork');
   const [records, setRecords] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -34,6 +48,10 @@ export default function BloodworkSection({ petId }) {
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [importing, setImporting] = useState(false);
+  // { visits, unplacedSkipped } from buildReviewVisits while the import
+  // review is open.
+  const [review, setReview] = useState(null);
+  const [reviewSaving, setReviewSaving] = useState(false);
   const [expandedId, setExpandedId] = useState(null);
   const [chartField, setChartField] = useState('creatinine');
 
@@ -54,47 +72,116 @@ export default function BloodworkSection({ petId }) {
     setDialogOpen(true);
   };
 
+  // Dates that already have a bloodwork record (FR30, "Already on file").
+  const loadBloodworkDates = async () => {
+    const rows = await entities.Bloodwork.filter({ pet_id: petId }, '-date', 1000);
+    return new Set(rows.map((r) => r.date).filter(Boolean));
+  };
+
+  // Dates that already have a weight (FR36). null if they can't be loaded,
+  // so every weight line starts unticked rather than risk replacing one.
+  const loadWeightDates = async () => {
+    try {
+      const weights = await listWeights(petId, Infinity);
+      return new Set(weights.map((w) => w.date).filter(Boolean));
+    } catch (err) {
+      reportClientError(err, { feature: 'bloodwork_import', note: 'Could not load weights for the import review' });
+      return null;
+    }
+  };
+
+  // Spec 0081 (FR27, FR28, FR32-FR35): photos, PDFs and spreadsheets all
+  // open the same review. A spreadsheet is read here first, so an old .xls
+  // or an oversized sheet never uploads or reaches the AI; only its text is
+  // sent to the AI, never the file.
   const handleImport = async (e) => {
-    const file = e.target.files?.[0];
+    const input = e.target;
+    const file = input.files?.[0];
     if (!file) return;
+    const refusal = checkBloodworkUploadFile(file);
+    if (refusal) {
+      toast({ variant: 'destructive', description: refusal });
+      input.value = '';
+      return;
+    }
+    const purpose = bloodworkUploadPurpose(file);
     setImporting(true);
     try {
-      const { path } = await uploadFile({ file, purpose: 'scan' });
+      const sheetText = purpose === 'spreadsheet' ? (await readBloodworkSpreadsheet(file)).text : null;
+
+      const { path } = await uploadFile({ file, purpose });
       pendingScan.hold(path);
 
-      // The Edge Function reads the file from storage, detects whether it's
-      // an image or a PDF, and builds the right Claude input block either
-      // way, so the same call works for both. Spec 0080: it also writes the
-      // instructions (including the bloodwork field list) itself.
-      const result = await invokeAI({
-        task: 'scan_bloodwork',
-        pet_id: petId,
-        file_path: path,
-      });
-      // Spec 0081: the scan now answers { visits, skipped }; older servers
-      // answered one flat record. Either way, the first visit prefills the
-      // form until the shared review replaces it.
-      const extracted = scannedBloodworkToForm(result);
+      // The server writes the instructions for both tasks (spec 0080) and
+      // answers { visits, skipped } (spec 0081). For a photo or PDF it
+      // reads the file from storage itself.
+      const result = purpose === 'spreadsheet'
+        ? await invokeAI({ task: 'bloodwork_spreadsheet', pet_id: petId, sheet_text: sheetText })
+        : await invokeAI({ task: 'scan_bloodwork', pet_id: petId, file_path: path });
 
-      if (extracted) {
-        const f = { ...EMPTY_FORM };
-        Object.keys(extracted).forEach(k => { if (extracted[k] != null && extracted[k] !== '') f[k] = extracted[k]; });
-        setEditing(null);
-        setForm(f);
-        setDialogOpen(true);
-      } else {
+      const [bloodworkDates, weightDates] = await Promise.all([loadBloodworkDates(), loadWeightDates()]);
+      const built = buildReviewVisits(result, { bloodworkDates, weightDates });
+      if (built.visits.length === 0) {
         pendingScan.discard();
+        if (purpose === 'spreadsheet') toast({ variant: 'destructive', description: SPREADSHEET_MESSAGES.nothing_found });
+        return;
       }
+      setReview(built);
     } catch (err) {
       pendingScan.discard();
-      // Covers both the new rate limit (spec 0050) and any other scan
-      // failure — without this, the button just returned to normal with
-      // no explanation of why nothing got imported.
-      toast({ variant: 'destructive', description: scanErrorText(err) });
+      if (shouldReportImportError(err)) {
+        reportClientError(err, { feature: 'bloodwork_import', note: 'Bloodwork import failed', purpose });
+      }
+      toast({ variant: 'destructive', description: bloodworkImportErrorText(err) });
     } finally {
       setImporting(false);
-      e.target.value = '';
+      input.value = '';
     }
+  };
+
+  const updateVisit = (key, change) => {
+    setReview((r) => r && { ...r, visits: r.visits.map((v) => (v.key === key ? change(v) : v)) });
+  };
+  const toggleVisit = (key) => updateVisit(key, (v) => ({ ...v, included: !v.included }));
+  const toggleWeight = (key) => updateVisit(key, (v) => ({ ...v, includeWeight: !v.includeWeight }));
+  const editVisit = (key, field, value) => updateVisit(key, (v) => ({ ...v, form: { ...v.form, [field]: value } }));
+
+  const closeReview = () => {
+    pendingScan.discard();
+    setReview(null);
+  };
+
+  // FR31/FR36: each ticked visit becomes a bloodwork record, then each
+  // ticked weight on a ticked visit is logged on that visit's date. The
+  // file is linked to the pet once anything is saved. If a save fails
+  // partway, the visits already saved leave the review and the rest stay
+  // for another try. A failed weight alone closes the review, since its
+  // visit is already saved.
+  const confirmReview = async () => {
+    if (!review) return;
+    const chosen = includedVisits(review.visits);
+    const savedKeys = new Set();
+    setReviewSaving(true);
+    try {
+      for (const visit of chosen) {
+        await entities.Bloodwork.create(reviewVisitToRecord(visit, petId));
+        savedKeys.add(visit.key);
+      }
+      for (const visit of chosen) {
+        if (visit.includeWeight && visit.weightLbs !== null) {
+          await addWeight(petId, { date: visit.form.date, lbs: visit.weightLbs }, timezone);
+        }
+      }
+    } catch (err) {
+      reportClientError(err, { feature: 'bloodwork_import', note: 'Could not save imported bloodwork' });
+      // The app's generic failure message (the same one aiErrorText uses).
+      toast({ variant: 'destructive', description: aiErrorText(null) });
+    }
+    if (savedKeys.size > 0) await pendingScan.keep([petId]);
+    if (chosen.every((v) => savedKeys.has(v.key))) setReview(null);
+    else setReview({ ...review, visits: review.visits.filter((v) => !savedKeys.has(v.key)) });
+    setReviewSaving(false);
+    if (savedKeys.size > 0) load();
   };
 
   const openEdit = (r) => {
@@ -119,7 +206,6 @@ export default function BloodworkSection({ petId }) {
     } else {
       await entities.Bloodwork.create(data);
     }
-    if (!editing) await pendingScan.keep([petId]);
     setSaving(false);
     setDialogOpen(false);
     load();
@@ -157,11 +243,12 @@ export default function BloodworkSection({ petId }) {
                 Upload File
               </span>
             </Button>
-            <input type="file" accept="image/*,.pdf" className="hidden" onChange={handleImport} disabled={importing} />
+            <input type="file" accept={BLOODWORK_FILE_ACCEPT} className="hidden" onChange={handleImport} disabled={importing} />
           </label>
           <Button size="sm" onClick={openAdd}><Plus className="h-4 w-4 mr-1" /> Add</Button>
         </div>
       </div>
+      <p className="text-[13px] text-muted-foreground text-right -mt-2">{BLOODWORK_UPLOAD_HELP}</p>
 
       {records.length >= 2 && (
         <div className="bg-card border border-border rounded-xl p-4 space-y-3">
@@ -239,7 +326,20 @@ export default function BloodworkSection({ petId }) {
         </div>
       )}
 
-      <Dialog open={dialogOpen} onOpenChange={(open) => { if (!open) pendingScan.discard(); setDialogOpen(open); }}>
+      {review && (
+        <BloodworkImportReview
+          visits={review.visits}
+          unplacedSkipped={review.unplacedSkipped}
+          saving={reviewSaving}
+          onToggle={toggleVisit}
+          onToggleWeight={toggleWeight}
+          onEdit={editVisit}
+          onConfirm={confirmReview}
+          onClose={closeReview}
+        />
+      )}
+
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-2xl">{editing ? 'Edit' : 'Add'} Bloodwork</DialogTitle>

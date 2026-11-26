@@ -86,7 +86,7 @@ export function aiScreen(screen) {
  *   that never reach the AI: `{ urgent: true }` (chats, insights),
  *   `{ not_enough_data: true }` (pet_insights), `{ summary: null }`
  *   (trends_summary). The two bloodwork tasks answer `{ visits, skipped }`
- *   (spec 0081; see src/lib/bloodworkScanResult.js)
+ *   (spec 0081; see src/lib/bloodworkImport.js)
  * @throws {Error} with the server's message, plus `status` (e.g. 413 for an
  *   image too large to scan, 429 when rate-limited) and `code` (e.g.
  *   'daily_limit' or 'rate_limited' for a 429) from the function's error body

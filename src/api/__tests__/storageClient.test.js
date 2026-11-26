@@ -77,9 +77,16 @@ describe('Bloodwork tab upload checks (spec 0081, Lynn 2026-11-25)', () => {
     expect(checkBloodworkUploadFile(pick('a.heic', 'image/heic'))).toBe(UPLOAD_MESSAGES.wrongTypeBloodwork);
   });
 
-  it('keeps the usual too-large, scan-photo and old-Excel messages', () => {
-    expect(checkBloodworkUploadFile(pick('a.docx', 'application/msword', 12))).toBe(UPLOAD_MESSAGES.tooLarge);
-    expect(checkBloodworkUploadFile(pick('a.csv', 'text/csv', 11))).toBe(UPLOAD_MESSAGES.tooLarge);
+  it('uses the Bloodwork wording for a file over 10 MB (size checked before type)', () => {
+    expect(UPLOAD_MESSAGES.tooLargeBloodwork).toBe('That file is over 10 MB. Try a smaller file.');
+    expect(checkBloodworkUploadFile(pick('a.docx', 'application/msword', 12))).toBe(UPLOAD_MESSAGES.tooLargeBloodwork);
+    expect(checkBloodworkUploadFile(pick('a.csv', 'text/csv', 11))).toBe(UPLOAD_MESSAGES.tooLargeBloodwork);
+    expect(checkBloodworkUploadFile(pick('a.pdf', 'application/pdf', 11))).toBe(UPLOAD_MESSAGES.tooLargeBloodwork);
+    // Other screens keep the photo-or-PDF wording.
+    expect(checkUploadFile(pick('a.pdf', 'application/pdf', 11), 'scan')).toBe(UPLOAD_MESSAGES.tooLarge);
+  });
+
+  it('keeps the usual scan-photo and old-Excel messages', () => {
     expect(checkBloodworkUploadFile(pick('a.jpg', 'image/jpeg', 6))).toBe(UPLOAD_MESSAGES.scanImageTooLarge);
     expect(checkBloodworkUploadFile(pick('a.xls', 'application/vnd.ms-excel'))).toBe(UPLOAD_MESSAGES.oldExcel);
   });
@@ -212,6 +219,21 @@ describe('uploadFile content type (spec 0081)', () => {
     await expect(uploadFile({ file: { name: 'labs.xls', type: 'application/vnd.ms-excel', size: 100 }, purpose: 'spreadsheet' }))
       .rejects.toThrow(UPLOAD_MESSAGES.oldExcel);
     expect(upload).not.toHaveBeenCalled();
+  });
+
+  it('names a file with no extension by its type, never by its whole name', async () => {
+    const upload = mockUpload();
+    await uploadFile({ file: new File(['a,1'], 'labs', { type: 'text/csv' }), purpose: 'spreadsheet' });
+    await uploadFile({ file: new File(['%PDF'], 'report', { type: 'application/pdf' }), purpose: 'scan' });
+    expect(upload.mock.calls[0][0]).toMatch(/^u1\/\d+-[a-z0-9]+\.csv$/);
+    expect(upload.mock.calls[1][0]).toMatch(/^u1\/\d+-[a-z0-9]+\.pdf$/);
+    expect(upload.mock.calls[0][0]).not.toMatch(/labs/);
+  });
+
+  it('keeps a lower-case extension from the name', async () => {
+    const upload = mockUpload();
+    await uploadFile({ file: new File(['x'], 'Cat.PNG', { type: 'image/png' }), purpose: 'photo' });
+    expect(upload.mock.calls[0][0]).toMatch(/\.png$/);
   });
 
   it('keeps the browser type for photos', async () => {

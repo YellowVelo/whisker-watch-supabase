@@ -36,6 +36,17 @@ export const LEGACY_EXCEL_TYPE = 'application/vnd.ms-excel';
 export const XLSX_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 const SPREADSHEET_TYPE_BY_EXT = { csv: CSV_TYPE, xlsx: XLSX_TYPE };
 
+// The stored file's extension when its name has none, from its type.
+const EXT_BY_TYPE = {
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+  'image/webp': 'webp',
+  'image/gif': 'gif',
+  'application/pdf': 'pdf',
+  [CSV_TYPE]: 'csv',
+  [XLSX_TYPE]: 'xlsx',
+};
+
 // The Bloodwork tab's file picker (wording E): photos, PDFs and spreadsheets.
 export const BLOODWORK_FILE_ACCEPT = 'image/*,application/pdf,.csv,.xlsx,text/csv,'
   + XLSX_TYPE;
@@ -54,6 +65,9 @@ export const UPLOAD_MESSAGES = {
   // Bloodwork tab only (approved by Lynn, 2026-11-25); use
   // checkBloodworkUploadFile, not this key directly.
   wrongTypeBloodwork: 'Wysker Watch can only use photos (JPEG, PNG, WebP, GIF), PDFs, or CSV and Excel (.xlsx) files.',
+  // Bloodwork tab only (approved by Lynn, 2026-11-25): the tab also takes
+  // spreadsheets, so "photo or PDF" would be wrong there.
+  tooLargeBloodwork: 'That file is over 10 MB. Try a smaller file.',
 };
 
 /** Lower-case extension of a file name, or '' if it has none. */
@@ -93,15 +107,18 @@ export function bloodworkUploadPurpose(file) {
 
 /**
  * checkUploadFile for a file picked on the Bloodwork tab, which also takes
- * spreadsheets: the wrong-type message lists them (Lynn, 2026-11-25). Every
- * other message is the same as checkUploadFile's.
+ * spreadsheets: the wrong-type and too-large messages don't say "photo or
+ * PDF" there (Lynn, 2026-11-25). Every other message is the same as
+ * checkUploadFile's.
  *
  * @param {File} file
  * @returns {string|null}
  */
 export function checkBloodworkUploadFile(file) {
   const refusal = checkUploadFile(file, bloodworkUploadPurpose(file));
-  return refusal === UPLOAD_MESSAGES.wrongType ? UPLOAD_MESSAGES.wrongTypeBloodwork : refusal;
+  if (refusal === UPLOAD_MESSAGES.wrongType) return UPLOAD_MESSAGES.wrongTypeBloodwork;
+  if (refusal === UPLOAD_MESSAGES.tooLarge) return UPLOAD_MESSAGES.tooLargeBloodwork;
+  return refusal;
 }
 
 /**
@@ -190,11 +207,13 @@ export async function uploadFile({ file, purpose = 'photo' }) {
   const userId = userData?.user?.id;
   if (!userId) throw new Error('Not authenticated');
 
-  const ext = (file.name.split('.').pop() || 'bin').toLowerCase();
-  const path = `${userId}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
   // A spreadsheet often arrives with no type (spec 0081): store it with the
   // type its extension implies, so the bucket's type list accepts it.
   const contentType = purpose === 'spreadsheet' ? spreadsheetContentType(file) : file.type;
+  // A name with no extension ("labs") gets one from the type, never the
+  // whole name.
+  const ext = fileExtension(file.name) || EXT_BY_TYPE[contentType] || 'bin';
+  const path = `${userId}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
   // storage-js ignores `contentType` for a File/Blob body (it sends the
   // file's own type in a form upload), so re-wrap the file with the right
   // type when it needs correcting.
