@@ -11,8 +11,10 @@
 //     an unknown urine protein answer) is dropped.
 //   - A lab value whose stated unit isn't the field's unit is moved to
 //     `skipped`, even if the AI put it in `values`. Lab values are never
-//     converted (FR29, Before You Approve item 7). A value with no stated
-//     unit is taken as the field's unit.
+//     converted (FR29, Before You Approve item 7). mmol/L for sodium and
+//     potassium, and IU/L for ALT, AST and Alk Phos, count as the field's
+//     unit (EQUIVALENT_UNITS, Lynn 2026-11-25). A value with no stated
+//     unit is taken as the field's unit (Lynn 2026-11-25, "keep them").
 //   - Weight (FR36): lbs is kept, kg is converted to lbs (the one stated
 //     exception: weight isn't a lab value), rounded to one decimal and kept
 //     only inside 0.1-300 lbs. A weight with no unit, or any other unit, is
@@ -124,10 +126,33 @@ export function normalizeUnit(unit: string): string {
     .replace(/^mc(?=g\/)/, 'u');
 }
 
-// True if a stated unit is the field's own unit (no unit stated counts).
+// Other names for a field's own unit that give the same number (Lynn,
+// 2026-11-25, "accept them"). Each is listed only for the fields where it's
+// numerically true, and the value is kept exactly as written, never
+// converted:
+//   - mmol/L = mEq/L only for the monovalent electrolytes, sodium and
+//     potassium (chloride isn't one of the 16 tracked fields). Never for
+//     calcium or phosphorus, which aren't monovalent and are tracked in
+//     mg/dL anyway.
+//   - IU/L = U/L for the enzymes: ALT, AST and Alk Phos.
+// Any other unit difference still goes to `skipped`.
+export const EQUIVALENT_UNITS: Readonly<Record<string, readonly string[]>> = {
+  sodium: ['mmol/L'],
+  potassium: ['mmol/L'],
+  alt: ['IU/L'],
+  ast: ['IU/L'],
+  alkaline_phosphatase: ['IU/L'],
+};
+
+// True if a stated unit is the field's own unit, or one of its
+// EQUIVALENT_UNITS. A value with no stated unit is taken as the field's own
+// unit (Lynn, 2026-11-25, "keep them"); the review shows the app's unit
+// beside every value so the owner can check it.
 export function unitMatches(stated: string | null, field: BloodworkField): boolean {
   if (stated === null) return true;
-  return normalizeUnit(stated) === normalizeUnit(field.unit);
+  const s = normalizeUnit(stated);
+  if (s === normalizeUnit(field.unit)) return true;
+  return (EQUIVALENT_UNITS[field.key] ?? []).some((u) => normalizeUnit(u) === s);
 }
 
 const LBS_UNITS = new Set(['lb', 'lbs', 'pound', 'pounds']);

@@ -40,6 +40,7 @@ import {
   type OptionLabel,
 } from './rules.ts';
 import { COUNTED_ATTRIBUTES, isCountableSymptom } from '../_shared/checkinRules.ts';
+import { EQUIVALENT_UNITS } from './bloodwork.ts';
 
 // ---------------------------------------------------------------------------
 // Safety sentences (moved from src/lib/aiGuardrails.js, spec 0041).
@@ -559,10 +560,27 @@ export function bloodworkFieldList(): string {
   return BLOODWORK_FIELDS.map((f) => `${f.key} (${f.label}, ${f.unit})`).join(', ');
 }
 
+// The units that count as a field's own (./bloodwork.ts EQUIVALENT_UNITS,
+// Lynn 2026-11-25), e.g. "mmol/L for sodium and potassium (the same as
+// mEq/L), and IU/L for alt, ast and alkaline_phosphatase (the same as U/L)".
+export function equivalentUnitList(): string {
+  const groups = new Map<string, { unit: string; own: string; keys: string[] }>();
+  for (const f of BLOODWORK_FIELDS) {
+    for (const unit of EQUIVALENT_UNITS[f.key] ?? []) {
+      const id = `${unit}|${f.unit}`;
+      if (!groups.has(id)) groups.set(id, { unit, own: f.unit, keys: [] });
+      groups.get(id)!.keys.push(f.key);
+    }
+  }
+  const and = (items: string[]) => items.length < 2 ? items.join('') : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`;
+  const parts = [...groups.values()].map((g) => `${g.unit} for ${and(g.keys)} (the same as ${g.own})`);
+  return parts.length < 2 ? parts.join('') : `${parts.slice(0, -1).join(', ')}, and ${parts[parts.length - 1]}`;
+}
+
 // The reading rules both bloodwork tasks share, one per line.
 export const BLOODWORK_READING_RULES: readonly string[] = [
   `For each visit, report each of these 16 tracked tests you find in "values", keyed by the field name, as { "value": <number>, "unit": <the unit exactly as written in the document, or null if no unit is stated anywhere for it> }: ${bloodworkFieldList()}.`,
-  'Never convert a value to another unit. If a tracked test is reported in a different unit from the one listed (for example creatinine in µmol/L instead of mg/dL, or glucose in mmol/L instead of mg/dL), leave it out of "values" and add it to "skipped" as { "date", "field", "value", "unit" }, with the unit exactly as written.',
+  `Never convert a value to another unit. These units count as the listed one, so report them in "values" with the number and the unit exactly as written: ${equivalentUnitList()}. If a tracked test is reported in any other unit than the one listed (for example creatinine in µmol/L instead of mg/dL, glucose in mmol/L instead of mg/dL, or calcium in mmol/L instead of mg/dL), leave it out of "values" and add it to "skipped" as { "date", "field", "value", "unit" }, with the unit exactly as written.`,
   'Only report a value that is one plain number. Leave out values such as "<5", ">1000", "N/A", "see comment" or blank cells.',
   'Reference ranges ("Range", "Reference", "Ref. interval", "Normal") and unit labels ("Measure", "Units") are labels for a test, never results: never report a number from them as a value.',
   `Also report, when present: date (the visit or sample date, YYYY-MM-DD), lab_name, vet_name, urine_specific_gravity, urine_protein (one of: ${URINE_PROTEIN_VALUES.join(', ')}), and notes (only comments written about the results).`,

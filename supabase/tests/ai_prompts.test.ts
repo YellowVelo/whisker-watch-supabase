@@ -32,6 +32,7 @@ import {
   buildScanVaccineSingle,
   buildTrendsSummary,
   emergencyStop,
+  equivalentUnitList,
   formatBaselineForAI,
   hasEnoughCheckIns,
   isTaskRequestError,
@@ -46,7 +47,7 @@ import {
   type TaskRequestError,
 } from '../functions/ask-vet-assistant/prompts.ts';
 import { BLOODWORK_FIELDS } from '../functions/ask-vet-assistant/rules.ts';
-import { cleanBloodworkAnswer, normalizeUnit } from '../functions/ask-vet-assistant/bloodwork.ts';
+import { cleanBloodworkAnswer, EQUIVALENT_UNITS, normalizeUnit, unitMatches } from '../functions/ask-vet-assistant/bloodwork.ts';
 
 const PET_ID = '0b6f2c1e-4a1d-4c7b-9e2f-3a5d6c7b8e9f';
 const NOW = Date.UTC(2026, 10, 23);
@@ -298,6 +299,10 @@ Deno.test('bloodwork scan (FR35): asks for { visits, skipped }, every visit, uni
   assertStringIncludes(b.system, 'You are analyzing a veterinary bloodwork report (image or PDF). It may show more than one visit');
   assertStringIncludes(b.system, 'Never convert a value to another unit.');
   assertStringIncludes(b.system, 'creatinine in µmol/L instead of mg/dL');
+  // Equivalent units (Lynn 2026-11-25) are accepted as written; calcium in mmol/L is not.
+  assertEquals(equivalentUnitList(), 'mmol/L for potassium and sodium (the same as mEq/L), and IU/L for alt, ast and alkaline_phosphatase (the same as U/L)');
+  assertStringIncludes(b.system, `These units count as the listed one, so report them in "values" with the number and the unit exactly as written: ${equivalentUnitList()}.`);
+  assertStringIncludes(b.system, 'calcium in mmol/L instead of mg/dL');
   assertStringIncludes(b.system, 'never report a number from them as a value');
   assertStringIncludes(b.system, 'urine_protein (one of: Negative, Trace, 1+, 2+, 3+, 4+)');
   assertStringIncludes(b.system, 'Ignore treatments, fluids, medications, supplements');
@@ -331,6 +336,7 @@ Deno.test('bloodwork spreadsheet (FR28, FR37): reading rules in system, the shee
   assertStringIncludes(b.system, 'chloride, globulin, GGT, bilirubin, cholesterol, amylase, lipase, CK, blood count details, other urine tests or blood pressure');
   assertStringIncludes(b.system, 'if the visit records the pet\'s weight with a stated unit (for example lbs or kg)');
   assertStringIncludes(b.system, 'Never convert a value to another unit.');
+  assertStringIncludes(b.system, equivalentUnitList());
   for (const f of BLOODWORK_FIELDS) assertStringIncludes(b.system, `${f.key} (${f.label}, ${f.unit})`);
 });
 
@@ -634,12 +640,67 @@ Deno.test("unit spellings of the field's own unit are kept; a value with no stat
         hematocrit: { value: 38, unit: '%' },
         potassium: { value: 4.1, unit: null },
         glucose: 110, // a bare number: no unit stated
-        sodium: { value: 150, unit: 'mmol/L' }, // not mEq/L: never treated as the same
+        calcium: { value: 2.5, unit: 'mmol/L' }, // not mg/dL, and mmol/L is never mg/dL
       },
     }],
   });
   assertEquals(answer.visits[0].values, { sdma: 15, t4: 2.1, bun: 32, hematocrit: 38, potassium: 4.1, glucose: 110 });
-  assertEquals(answer.skipped.map((s) => [s.field, s.unit]), [['sodium', 'mmol/L']]);
+  assertEquals(answer.skipped.map((s) => [s.field, s.unit]), [['calcium', 'mmol/L']]);
+});
+
+Deno.test('equivalent units (Lynn 2026-11-25): mmol/L for sodium and potassium, IU/L for ALT, AST and Alk Phos, kept as written', () => {
+  // Exactly these fields, nothing else.
+  assertEquals(EQUIVALENT_UNITS, {
+    sodium: ['mmol/L'],
+    potassium: ['mmol/L'],
+    alt: ['IU/L'],
+    ast: ['IU/L'],
+    alkaline_phosphatase: ['IU/L'],
+  });
+  const field = (key: string) => BLOODWORK_FIELDS.find((f) => f.key === key)!;
+  for (const key of ['sodium', 'potassium']) {
+    for (const u of ['mmol/L', 'MMOL/L', 'mmol / l', 'mEq/L']) assert(unitMatches(u, field(key)), `${key} ${u}`);
+  }
+  for (const key of ['alt', 'ast', 'alkaline_phosphatase']) {
+    for (const u of ['IU/L', 'iu/l', 'U/L']) assert(unitMatches(u, field(key)), `${key} ${u}`);
+  }
+  // Never for the other fields: calcium and phosphorus aren't monovalent,
+  // and IU/L or mEq/L means nothing for a mg/dL field.
+  for (const key of ['calcium', 'phosphorus', 'bun', 'glucose', 'creatinine']) {
+    for (const u of ['mmol/L', 'mEq/L', 'IU/L']) assert(!unitMatches(u, field(key)), `${key} ${u}`);
+  }
+  // Not swapped between the two groups, and no other alias sneaks in.
+  for (const key of ['sodium', 'potassium']) {
+    for (const u of ['IU/L', 'U/L', 'mmol', 'umol/L']) assert(!unitMatches(u, field(key)), `${key} ${u}`);
+  }
+  for (const key of ['alt', 'ast', 'alkaline_phosphatase']) {
+    for (const u of ['mmol/L', 'mEq/L', 'U/mL', 'ukat/L', 'IU/mL']) assert(!unitMatches(u, field(key)), `${key} ${u}`);
+  }
+  // No stated unit is still the field's own unit (Lynn 2026-11-25, "keep them").
+  for (const f of BLOODWORK_FIELDS) assert(unitMatches(null, f), f.key);
+
+  const answer = cleanBloodworkAnswer({
+    visits: [{
+      date: '2026-03-01',
+      values: {
+        sodium: { value: 150.4, unit: 'mmol/L' },
+        potassium: { value: 4.2, unit: 'mmol/l' },
+        alt: { value: 55, unit: 'IU/L' },
+        ast: { value: 31, unit: 'iu/L' },
+        alkaline_phosphatase: { value: 120, unit: 'IU/L' },
+        calcium: { value: 2.45, unit: 'mmol/L' },
+        phosphorus: { value: 1.3, unit: 'mmol/L' },
+        glucose: { value: 5.4, unit: 'mmol/L' },
+      },
+    }],
+  });
+  // Numbers exactly as written: never converted.
+  assertEquals(answer.visits[0].values, { sodium: 150.4, potassium: 4.2, alt: 55, ast: 31, alkaline_phosphatase: 120 });
+  assertEquals(answer.skipped.map((s) => [s.field, s.unit, s.value]), [
+    ['calcium', 'mmol/L', 2.45],
+    ['phosphorus', 'mmol/L', 1.3],
+    ['glucose', 'mmol/L', 5.4],
+  ]);
 });
 
 Deno.test('malformed fields are dropped, never guessed', () => {

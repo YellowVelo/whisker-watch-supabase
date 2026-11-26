@@ -42,7 +42,9 @@
 //     sheet_too_large (FR32); only owners and co-owners may use it (a
 //     sitter in the sit window, a stranger, an ended sitter and a removed
 //     co-owner get 403 forbidden_pet; logged out, 401), and none of these
-//     refusals counts toward the rate limits.
+//     refusals counts toward the rate limits. The primary owner and a
+//     current co-owner get past that check: with their daily key seeded
+//     to the cap they get 429 daily_limit, which comes after it.
 //
 // Same shape as ai_context.test.ts: users are created and signed in once
 // for the whole file (Supabase Auth limits sign-ins per IP). The service
@@ -453,6 +455,25 @@ Deno.test('ask-vet-assistant task requests (spec 0080)', async (t) => {
         assertEquals(res.json.error, DAILY_LIMIT_MESSAGE, `call ${i}: expected wording A`);
       }
       assertEquals(await countRows(warnedKey(owner.userId)), 1, 'expected exactly one daily-cap warning');
+    });
+
+    await t.step('bloodwork_spreadsheet: the primary owner and a current co-owner get past the owner check (429 daily_limit, no AI call)', async () => {
+      // Runs after the daily-cap step, so the owner's one warning is
+      // already counted there. Each caller's daily key is filled to the cap
+      // (the co-owner's may already hold the scan step's one row), so the
+      // request passes the owner check and is refused at the rate check,
+      // which comes after it and before the AI. A 403 would mean the owner
+      // check wrongly refused them. Seeded rows are removed by key below.
+      const body = { task: 'bloodwork_spreadsheet', pet_id: petId, sheet_text: 'Sheet 1 of 1: S\nTest,Visit 1\nBUN,32' };
+      const callers = [['primary owner', owner], ['current co-owner', coOwner]] as const;
+      for (const [who, caller] of callers) {
+        const have = await countRows(dailyKey(caller.userId));
+        if (have < 100) await seedRows(dailyKey(caller.userId), 100 - have);
+        const res = await callFunction(FN, caller.accessToken, body);
+        assertEquals(res.status, 429, `${who}: expected 429, got ${res.status} ${JSON.stringify(res.json)}`);
+        assertEquals(res.json.code, 'daily_limit', `${who}: expected daily_limit`);
+        assertEquals(res.json.error, DAILY_LIMIT_MESSAGE, `${who}: expected wording A`);
+      }
     });
   } finally {
     // Sits, invites, co-owner rows and document links cascade with the pet
