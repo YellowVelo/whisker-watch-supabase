@@ -671,3 +671,59 @@ test('AC23: the same date found twice with different values shows both, unticked
     ['2026-06-14', 1.9],
   ]);
 });
+
+// --- QA 2026-11-26: Lynn's 2026-11-25/26 decisions and edge cases ---
+
+// Counts upload requests, so a refusal can be shown to upload nothing.
+function countUploads(page) {
+  const uploads = [];
+  page.on('request', (req) => {
+    if (req.method() === 'POST' && /\/storage\/v1\/object\/uploads\//.test(req.url())) uploads.push(req.url());
+  });
+  return uploads;
+}
+
+test('Bloodwork tab: a file of the wrong type gets the Bloodwork wording, with no upload or AI call', async ({ page }) => {
+  const petId = await createPet();
+  const calls = await stubAI(page, { visits: [], skipped: [] });
+  const uploads = countUploads(page);
+  await importFile(page, petId, { name: 'labs.docx', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', buffer: Buffer.from('PK made-up') }, { expectUpload: false });
+  await expect(page.getByText('Wysker Watch can only use photos (JPEG, PNG, WebP, GIF), PDFs, or CSV and Excel (.xlsx) files.', { exact: true })).toBeVisible({ timeout: 10000 });
+  await expect(reviewSheet(page)).toHaveCount(0);
+  expect(calls).toHaveLength(0);
+  expect(uploads).toHaveLength(0);
+});
+
+test('Bloodwork tab: a file over 10 MB gets the Bloodwork size wording, with no upload or AI call', async ({ page }) => {
+  const petId = await createPet();
+  const calls = await stubAI(page, { visits: [], skipped: [] });
+  const uploads = countUploads(page);
+  const big = Buffer.alloc(10 * 1024 * 1024 + 1, 0x20);
+  big.write('%PDF-1.4', 0);
+  await importFile(page, petId, { name: 'labs.pdf', mimeType: 'application/pdf', buffer: big }, { expectUpload: false });
+  await expect(page.getByText('That file is over 10 MB. Try a smaller file.', { exact: true })).toBeVisible({ timeout: 10000 });
+  await expect(reviewSheet(page)).toHaveCount(0);
+  expect(calls).toHaveLength(0);
+  expect(uploads).toHaveLength(0);
+});
+
+test('one visit: "We found 1 visit." and "Save 1 visit"; the card shows only the values found, each with the app\'s unit', async ({ page }) => {
+  const petId = await createPet();
+  // The server sends a value with no unit as a bare number (kept, Lynn
+  // 2026-11-25); the review shows it with the app's own unit.
+  await stubAI(page, { visits: [{ date: '2026-08-20', lab_name: 'Made-up Lab', values: { bun: 33, potassium: 4.4 }, not_tracked: [], conflict: false }], skipped: [] });
+  const storagePath = await importFile(page, petId, CSV_FIXTURE);
+  keptPaths.push(storagePath);
+
+  await expect(cards(page)).toHaveCount(1, { timeout: 15000 });
+  await expect(reviewSheet(page).getByText('We found 1 visit. Check each one before saving.', { exact: true })).toBeVisible();
+  const card = cards(page).first();
+  await expect(card.getByTestId(/^unit-/)).toHaveCount(2);
+  await expect(card.getByTestId('unit-bun')).toHaveText('mg/dL');
+  await expect(card.getByTestId('unit-potassium')).toHaveText('mEq/L');
+  await expect(card.getByTestId('unit-creatinine')).toHaveCount(0);
+
+  await reviewSheet(page).getByRole('button', { name: 'Save 1 visit', exact: true }).click();
+  await expect(reviewSheet(page)).not.toBeVisible({ timeout: 15000 });
+  await expect.poll(async () => (await bloodworkRows(petId)).map((r) => [r.date, r.bun, r.creatinine])).toEqual([['2026-08-20', 33, null]]);
+});

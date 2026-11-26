@@ -198,6 +198,7 @@ Deno.test('weight home access and retired tables (spec 0081)', async (t) => {
     createScratchUser('wt-stranger'),
   ]);
   let h: Household | null = null;
+  const extraPetIds: string[] = [];
   try {
     h = await buildHousehold({ owner, coOwner, sitter, stranger });
     const hh = h;
@@ -322,6 +323,97 @@ Deno.test('weight home access and retired tables (spec 0081)', async (t) => {
       assertEquals(await tryDelete(hh.coOwner.client, coIds[1]), 1, 'co-owner deletes their own check-in weight');
     });
 
+    // QA 2026-11-26 (reviewer "Unverified"): Health Records
+    // (src/pages/PetHealthRecords.jsx) has no sitter-only guard, so a sitter
+    // who opens /pet/<id>/health-records during a sit sees its Bloodwork tab.
+    // This pins what the database lets them do there: nothing. They read no
+    // bloodwork, can't add or change any, and can't link a document to the
+    // pet, so an import or manual Add from that screen can never save.
+    await t.step("sitter during an open sit can't read, add, change or link the pet's bloodwork (Health Records)", async () => {
+      const { data: record, error: recordError } = await hh.owner.client
+        .from('bloodwork')
+        .insert({ pet_id: hh.petId, date: utcDay(-3), bun: 30 })
+        .select('id')
+        .single();
+      if (recordError || !record) throw new Error(`owner bloodwork insert failed: ${recordError?.message}`);
+
+      const { data: seen } = await hh.sitter.client.from('bloodwork').select('id').eq('pet_id', hh.petId);
+      assertEquals(seen ?? [], [], 'sitter reads no bloodwork');
+
+      const { error: addError } = await hh.sitter.client.from('bloodwork').insert({ pet_id: hh.petId, date: utcDay(-4), bun: 31 });
+      assert(addError, 'sitter bloodwork insert must be refused');
+      const { data: changed } = await hh.sitter.client.from('bloodwork').update({ bun: 99 }).eq('id', record.id).select('id');
+      assertEquals(changed?.length ?? 0, 0, 'sitter bloodwork update changes no rows');
+      const { data: removed } = await hh.sitter.client.from('bloodwork').delete().eq('id', record.id).select('id');
+      assertEquals(removed?.length ?? 0, 0, 'sitter bloodwork delete removes no rows');
+
+      const { error: linkError } = await hh.sitter.client
+        .from('pet_documents')
+        .insert({ pet_id: hh.petId, storage_path: `${hh.sitter.userId}/qa-sitter-sheet.csv`, kind: 'bloodwork' });
+      assert(linkError, 'sitter document link must be refused');
+
+      const { data: rows } = await adminClient().from('bloodwork').select('id, bun').eq('pet_id', hh.petId);
+      assertEquals(rows?.map((r) => [r.id, Number(r.bun)]), [[record.id, 30]], "only the owner's record, unchanged");
+      const { data: docs } = await adminClient().from('pet_documents').select('id').eq('pet_id', hh.petId);
+      assertEquals(docs?.length ?? 0, 0, 'no document was linked');
+    });
+
+    // Multiple pets: a sitter sees weight only for the pets in the sit, not
+    // the same owner's other pets.
+    await t.step("sitter can't read the weights of the owner's other pet, which isn't in the sit (AC11)", async () => {
+      const { data: otherPet, error: petError } = await hh.owner.client
+        .from('pets')
+        .insert({ name: 'Scratch Weight Pet 2', created_by: hh.owner.userId })
+        .select('id')
+        .single();
+      if (petError || !otherPet) throw new Error(`second pet insert failed: ${petError?.message}`);
+      extraPetIds.push(otherPet.id);
+      const { data: otherWeight, error: weightError } = await hh.owner.client
+        .from('observations')
+        .insert({
+          pet_id: otherPet.id,
+          created_by: hh.owner.userId,
+          observation_type_id: hh.weightTypeId,
+          daily_check_in_id: null,
+          numeric_value: 20.5,
+          observed_at: noonUtc(utcDay(-1)),
+        })
+        .select('id')
+        .single();
+      if (weightError || !otherWeight) throw new Error(`second pet weight failed: ${weightError?.message}`);
+      const { standaloneId } = await seedOwnerWeights(hh, -42);
+
+      assertEquals(await readableIds(hh.sitter.client, [otherWeight.id, standaloneId]), [standaloneId], 'sitter reads only the sat pet');
+      assertEquals(await readableIds(hh.coOwner.client, [otherWeight.id]), [], "co-owner of pet 1 doesn't read pet 2's weight");
+      assertEquals(await readableIds(hh.owner.client, [otherWeight.id]), [otherWeight.id], 'the owner reads both');
+    });
+
+    // The window opens the day before start_date on the owner's calendar
+    // (0057). Moved to start tomorrow, the sit is open today; moved to start
+    // in two days, it isn't. Put back to today afterwards.
+    await t.step('sitter window edges: open the day before the sit starts, closed two days before (AC11)', async () => {
+      const { standaloneId, checkInWeightId } = await seedOwnerWeights(hh, -45);
+      const ids = [standaloneId, checkInWeightId].sort();
+      const moveSit = async (start: number, end: number) => {
+        const { data } = await hh.owner.client
+          .from('pet_sits')
+          .update({ start_date: utcDay(start), end_date: utcDay(end) })
+          .eq('id', hh.sitId)
+          .select('id');
+        assertEquals(data?.length, 1, 'owner can move their own sit');
+      };
+      try {
+        await moveSit(1, 3);
+        assertEquals(await readableIds(hh.sitter.client, ids), ids, 'open the day before start');
+        await moveSit(2, 4);
+        assertEquals(await readableIds(hh.sitter.client, ids), [], 'closed two days before start');
+        await moveSit(-3, -1);
+        assertEquals(await readableIds(hh.sitter.client, ids), ids, 'open the day after end');
+      } finally {
+        await moveSit(0, 0);
+      }
+    });
+
     await t.step('sitter loses read access once the sit window closes (AC11)', async () => {
       const { standaloneId, checkInWeightId } = await seedOwnerWeights(hh, -29);
       // Move the sit well into the past: the window (day before start to day
@@ -400,6 +492,7 @@ Deno.test('weight home access and retired tables (spec 0081)', async (t) => {
       await admin.from('pet_sits').delete().eq('id', h.sitId);
       await admin.from('pets').delete().eq('id', h.petId);
     }
+    for (const id of extraPetIds) await admin.from('pets').delete().eq('id', id);
     await Promise.all([owner, coOwner, sitter, stranger].map((u) => deleteScratchUser(u.userId)));
   }
 });

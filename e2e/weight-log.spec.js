@@ -10,22 +10,28 @@
 // Card scoping: same selector as check-in-history.spec.js. The Pets-tab
 // card's outer wrapper is the only rounded-2xl/px-4/py-4 div without
 // bg-card, filtered down to the one holding this test's pet's heading.
-import { test, expect } from './fixtures.js';
+import { test, expect, dismissAnyOpenSheet } from './fixtures.js';
 import { createClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
 
 dotenv.config({ path: '.env.playwright' });
 
-let weightPetId;
+let weightPetIds = [];
 
+// Signed in once per file and reused (Supabase Auth limits sign-ins per
+// IP; CLAUDE.md's sign-in-once-per-file rule). QA 2026-11-26: this used to
+// sign in again for every pet and every cleanup.
+let signedIn = null;
 async function signInSupabase() {
+  if (signedIn) return signedIn;
   const supabase = createClient(process.env.VITE_SUPABASE_URL, process.env.VITE_SUPABASE_ANON_KEY);
   const { data, error } = await supabase.auth.signInWithPassword({
     email: process.env.PLAYWRIGHT_TEST1_EMAIL,
     password: process.env.PLAYWRIGHT_TEST1_PASSWORD,
   });
   if (error) throw new Error(`could not sign in as ${process.env.PLAYWRIGHT_TEST1_EMAIL}: ${error.message}`);
-  return { supabase, userId: data.user.id };
+  signedIn = { supabase, userId: data.user.id };
+  return signedIn;
 }
 
 function isoDateDaysFromNow(days) {
@@ -33,22 +39,25 @@ function isoDateDaysFromNow(days) {
 }
 
 test.afterEach(async () => {
-  if (!weightPetId) return;
+  const ids = weightPetIds;
+  weightPetIds = [];
+  if (ids.length === 0) return;
   const { supabase } = await signInSupabase();
-  await supabase.functions.invoke('delete-pet', { body: { pet_id: weightPetId } });
-  weightPetId = undefined;
+  for (const id of ids) await supabase.functions.invoke('delete-pet', { body: { pet_id: id } });
 });
 
+let petCounter = 0;
 async function createPet() {
   const { supabase, userId } = await signInSupabase();
-  const name = `E2E Weight Pet ${Date.now()}`;
+  petCounter += 1;
+  const name = `E2E Weight Pet ${Date.now()}-${petCounter}`;
   const { data: pet, error } = await supabase
     .from('pets')
     .insert({ created_by: userId, name, species: 'Cat' })
     .select('id')
     .single();
   if (error) throw error;
-  weightPetId = pet.id;
+  weightPetIds.push(pet.id);
   return { supabase, userId, petId: pet.id, name };
 }
 
@@ -490,4 +499,161 @@ test("AC9: an old Symptoms link opens the pet's profile", async ({ page }) => {
   await expect(card).toBeVisible({ timeout: 10000 });
   await expect(weightRow(card)).toBeVisible({ timeout: 10000 });
   await expect(page.getByRole('button', { name: 'Log symptoms' })).toHaveCount(0);
+});
+
+// --- QA 2026-11-26: edge cases beyond the happy path ---
+
+// A standalone weight seeded straight into the database, dated like the
+// app dates it (noon UTC of the chosen day).
+async function seedStandaloneWeight(supabase, userId, petId, date, lbs) {
+  const { data: type, error: typeError } = await supabase.from('observation_types').select('id').eq('code', 'weight').single();
+  if (typeError) throw typeError;
+  const { data, error } = await supabase.from('observations').insert({
+    pet_id: petId, created_by: userId, daily_check_in_id: null, observation_type_id: type.id,
+    numeric_value: lbs, observed_at: `${date}T12:00:00.000Z`,
+  }).select('id').single();
+  if (error) throw error;
+  return data.id;
+}
+
+test('empty and odd input: a blank weight and a cleared date are refused; two decimals save as one', async ({ page }) => {
+  const { supabase, petId, name } = await createPet();
+  const card = await openPetCard(page, name);
+  const sheet = await openSheetFromCard(page, card);
+  await expect(sheet.getByText('No weights logged yet.')).toBeVisible({ timeout: 10000 });
+
+  // Blank weight: wording B, nothing saved.
+  await sheet.getByRole('button', { name: 'Save' }).click();
+  await expect(sheet.getByRole('alert')).toHaveText('Enter a weight between 0.1 and 300 lbs.');
+
+  // Cleared date: "Choose a date.", nothing saved.
+  const dateInput = sheet.getByLabel('Date', { exact: true });
+  const today = await dateInput.inputValue();
+  await dateInput.fill('');
+  await logWeight(sheet, 10);
+  await expect(sheet.getByRole('alert')).toHaveText('Choose a date.');
+  expect(await savedWeights(supabase, petId)).toHaveLength(0);
+
+  // Extra decimals round to one place.
+  await dateInput.fill(today);
+  await logWeight(sheet, '10.26');
+  await expect(entries(sheet)).toHaveCount(1, { timeout: 10000 });
+  await expect(entries(sheet).first()).toContainText('10.3 lbs');
+  expect((await savedWeights(supabase, petId)).map((r) => Number(r.numeric_value))).toEqual([10.3]);
+});
+
+test('network failure: the list, a save and a delete each fail with their own message and change nothing', async ({ page }) => {
+  const { supabase, userId, petId, name } = await createPet();
+  await seedStandaloneWeight(supabase, userId, petId, isoDateDaysFromNow(-6), 9.5);
+  const card = await openPetCard(page, name);
+  await expect(weightRow(card)).toContainText('9.5 lbs', { timeout: 10000 });
+
+  // The recent-weights list can't load.
+  const failGets = (route) => (route.request().method() === 'GET'
+    ? route.fulfill({ status: 500, json: { message: 'made-up failure' } })
+    : route.continue());
+  await page.route('**/rest/v1/observations*', failGets);
+  let sheet = await openSheetFromCard(page, card);
+  await expect(sheet.getByText('Unable to load recent weights.', { exact: true })).toBeVisible({ timeout: 10000 });
+  await page.unroute('**/rest/v1/observations*', failGets);
+  await sheet.getByRole('button', { name: 'Close' }).click();
+
+  // A save that can't reach the database (reads still work).
+  sheet = await openSheetFromCard(page, card);
+  await expect(entries(sheet)).toHaveCount(1, { timeout: 10000 });
+  const failWrites = (route) => (route.request().method() === 'GET'
+    ? route.continue()
+    : route.abort('internetdisconnected'));
+  await page.route('**/rest/v1/observations*', failWrites);
+  await logWeight(sheet, 10.5);
+  await expect(sheet.getByRole('alert')).toHaveText("We couldn't save this weight. Please try again.", { timeout: 10000 });
+
+  // A delete that can't reach the database.
+  await entries(sheet).first().getByRole('button', { name: 'Delete' }).click();
+  const confirm = page.getByRole('dialog', { name: 'Delete this weight?' });
+  await confirm.getByRole('button', { name: 'Delete' }).click();
+  await expect(confirm.getByText("We couldn't delete this weight. Please try again.", { exact: true })).toBeVisible({ timeout: 10000 });
+  await page.unroute('**/rest/v1/observations*', failWrites);
+
+  // Nothing changed: the one seeded weight is still there, unchanged.
+  expect((await savedWeights(supabase, petId)).map((r) => Number(r.numeric_value))).toEqual([9.5]);
+});
+
+test('deleted elsewhere: editing or deleting a weight another device already deleted says so', async ({ page }) => {
+  const { supabase, userId, petId, name } = await createPet();
+  const firstId = await seedStandaloneWeight(supabase, userId, petId, isoDateDaysFromNow(-8), 9.1);
+  const secondId = await seedStandaloneWeight(supabase, userId, petId, isoDateDaysFromNow(-9), 9.2);
+  const card = await openPetCard(page, name);
+  const sheet = await openSheetFromCard(page, card);
+  await expect(entries(sheet)).toHaveCount(2, { timeout: 10000 });
+
+  // Edit: start editing the newer one, it's deleted elsewhere, then Save.
+  await entries(sheet).first().getByRole('button', { name: 'Edit' }).click();
+  await expect(sheet.getByLabel('Weight', { exact: true })).toHaveValue('9.1');
+  await supabase.from('observations').delete().eq('id', firstId);
+  await logWeight(sheet, 9.9);
+  await expect(sheet.getByRole('alert')).toHaveText('This weight has already been deleted.', { timeout: 10000 });
+  await expect(entries(sheet)).toHaveCount(1, { timeout: 10000 });
+  await expect(entries(sheet).first()).toContainText('9.2 lbs');
+
+  // Delete: the other one is deleted elsewhere before the owner confirms.
+  await entries(sheet).first().getByRole('button', { name: 'Delete' }).click();
+  const confirm = page.getByRole('dialog', { name: 'Delete this weight?' });
+  await expect(confirm).toBeVisible();
+  await supabase.from('observations').delete().eq('id', secondId);
+  await confirm.getByRole('button', { name: 'Delete' }).click();
+  await expect(confirm.getByText('This weight has already been deleted.', { exact: true })).toBeVisible({ timeout: 10000 });
+
+  // Neither attempt brought a weight back.
+  expect(await savedWeights(supabase, petId)).toHaveLength(0);
+});
+
+test("multiple pets: a weight logged for one pet never shows on another pet's card", async ({ page }) => {
+  const petA = await createPet();
+  const petB = await createPet();
+  const cardA = await openPetCard(page, petA.name);
+  const sheet = await openSheetFromCard(page, cardA);
+  await expect(sheet.getByText('No weights logged yet.')).toBeVisible({ timeout: 10000 });
+  await logWeight(sheet, 14.2);
+  await expect(entries(sheet)).toHaveCount(1, { timeout: 10000 });
+  await sheet.getByRole('button', { name: 'Close' }).click();
+
+  const cardB = await openPetCard(page, petB.name);
+  await expect(weightRow(cardB)).toContainText('No weight history.', { timeout: 10000 });
+  const sheetB = await openSheetFromCard(page, cardB);
+  await expect(sheetB.getByText('No weights logged yet.')).toBeVisible({ timeout: 10000 });
+  expect(await savedWeights(petB.supabase, petB.petId)).toHaveLength(0);
+  expect((await savedWeights(petA.supabase, petA.petId)).map((r) => Number(r.numeric_value))).toEqual([14.2]);
+});
+
+// Lynn 2026-11-25: Home's Weight chip stays direction-only (no number);
+// AC1's numbers are on Pet Profile and Trends.
+test("Home's Weight chip shows the direction from yesterday's to today's weight, with no number", async ({ page }) => {
+  const { name } = await createPet();
+  const card = await openPetCard(page, name);
+  const sheet = await openSheetFromCard(page, card);
+  await expect(sheet.getByText('No weights logged yet.')).toBeVisible({ timeout: 10000 });
+  const dateInput = sheet.getByLabel('Date', { exact: true });
+  const today = await dateInput.inputValue();
+  const d = new Date(`${today}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() - 1);
+  const yesterday = d.toISOString().slice(0, 10);
+
+  await dateInput.fill(yesterday);
+  await logWeight(sheet, 10.0);
+  await expect(entries(sheet)).toHaveCount(1, { timeout: 10000 });
+  // The date resets to today after a save.
+  await expect(dateInput).toHaveValue(today);
+  await logWeight(sheet, 11.0);
+  await expect(entries(sheet)).toHaveCount(2, { timeout: 10000 });
+  await sheet.getByRole('button', { name: 'Close' }).click();
+
+  await page.goto('/');
+  await dismissAnyOpenSheet(page);
+  const homeCard = page.getByRole('link', { name: `${name}. View profile.`, exact: true });
+  await expect(homeCard).toBeVisible({ timeout: 15000 });
+  const chip = homeCard.getByRole('button', { name: 'Weight increased versus yesterday' });
+  await expect(chip).toBeVisible({ timeout: 15000 });
+  await expect(chip).not.toContainText('11');
+  await expect(chip).not.toContainText('lbs');
 });
