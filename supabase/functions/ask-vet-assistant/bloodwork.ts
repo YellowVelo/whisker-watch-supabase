@@ -19,6 +19,10 @@
 //     exception: weight isn't a lab value), rounded to one decimal and kept
 //     only inside 0.1-300 lbs. A weight with no unit, or any other unit, is
 //     moved to `skipped`.
+//   - A "not tracked" entry that names one of the 16 tracked tests (by
+//     key, label or a common alias such as TP, Urea or ALKP,
+//     TRACKED_FIELD_ALIASES) is moved to `skipped`, with whatever unit and
+//     value the AI wrote beside it. It's never moved into `values`.
 //   - Merges visits with the same date and the same results (FR37: a
 //     workbook with near-identical sheets gives each visit once). Same date
 //     with different results stays as separate visits, each marked
@@ -190,6 +194,99 @@ function skippedField(value: unknown): { field: string; label: string } | null {
   return f ? { field: f.key, label: f.label } : null;
 }
 
+// ---------------------------------------------------------------------------
+// A tracked test listed as "not tracked"
+// ---------------------------------------------------------------------------
+
+// Other names a lab report uses for the 16 tracked tests, compared after
+// trackedNameKey(). The field's key and label are always matched too.
+// Kept to names that only ever mean that test: "protein" alone (urine
+// protein?), "ionized calcium" or "free T4" are different tests and are
+// deliberately not listed.
+export const TRACKED_FIELD_ALIASES: Readonly<Record<string, readonly string[]>> = {
+  bun: ['urea', 'urea nitrogen', 'blood urea nitrogen', 'serum urea nitrogen', 'sun'],
+  creatinine: ['creat', 'crea', 'crt'],
+  sdma: ['idexx sdma', 'symmetric dimethylarginine'],
+  phosphorus: ['phos', 'phosphorous', 'phosphate', 'inorganic phosphorus', 'inorganic phosphate'],
+  potassium: ['k'],
+  sodium: ['na'],
+  calcium: ['ca', 'total calcium'],
+  hematocrit: ['hct', 'pcv', 'haematocrit', 'packed cell volume'],
+  hemoglobin: ['hgb', 'hb', 'haemoglobin'],
+  total_protein: ['tp', 'tpro', 'total protein serum', 'serum total protein', 'protein total', 'total serum protein'],
+  albumin: ['alb'],
+  alt: ['sgpt', 'alt sgpt', 'alanine aminotransferase', 'alanine transaminase'],
+  ast: ['sgot', 'ast sgot', 'aspartate aminotransferase', 'aspartate transaminase'],
+  alkaline_phosphatase: ['alkp', 'alp', 'alk phos', 'alk phosphatase', 'alkaline phos', 'sap', 'serum alkaline phosphatase'],
+  glucose: ['glu', 'gluc', 'blood glucose'],
+  t4: ['tt4', 'total t4', 't4 total', 'thyroxine', 'total thyroxine', 't4 thyroid'],
+};
+
+// "Alk. Phos", "ALKP", "K+", "total_protein" -> "alk phos", "alkp", "k",
+// "total protein".
+export function trackedNameKey(name: string): string {
+  return name
+    .normalize('NFKC')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+const FIELD_BY_NAME = new Map<string, BloodworkField>();
+for (const f of BLOODWORK_FIELDS) {
+  for (const n of [f.key, f.label, ...(TRACKED_FIELD_ALIASES[f.key] ?? [])]) FIELD_BY_NAME.set(trackedNameKey(n), f);
+}
+
+/** The tracked field a test name means, by key, label or alias, or null. */
+export function trackedFieldForName(name: string): BloodworkField | null {
+  return FIELD_BY_NAME.get(trackedNameKey(name)) ?? null;
+}
+
+interface NamedTracked {
+  field: BloodworkField;
+  unit: string | null;
+  value: number | null;
+}
+
+const NUMBER_RE = /^(\d+(?:\.\d+)?)\s*(.*)$/;
+
+// "65 g/L" -> { value: 65, unit: 'g/L' }; "g/L" -> { value: null, unit: 'g/L' }.
+function valueAndUnit(rest: string): { value: number | null; unit: string | null } {
+  const t = rest.trim();
+  if (!t) return { value: null, unit: null };
+  const m = NUMBER_RE.exec(t);
+  if (m) return { value: plainNumber(m[1]), unit: unitText(m[2]) };
+  return /\d/.test(t) ? { value: null, unit: null } : { value: null, unit: unitText(t) };
+}
+
+// A "not tracked" entry that is really one of the 16 tracked tests, with
+// whatever unit and value the AI wrote beside its name: "Total Protein",
+// "TP (g/L)", "Total Protein: 65 g/L", "Urea (BUN) 12.1 mmol/L". null if
+// the entry names any other test.
+export function trackedNameInNotTracked(entry: string): NamedTracked | null {
+  const whole = trackedFieldForName(entry);
+  if (whole) return { field: whole, unit: null, value: null };
+  // "Name (x)" with anything after: x is another name for it, or its unit
+  // (and maybe its value).
+  const paren = /^(.*?)\s*\(([^)]*)\)\s*(.*)$/.exec(entry);
+  if (paren) {
+    const field = trackedFieldForName(paren[1]);
+    if (field) {
+      const inner = trackedFieldForName(paren[2]) ? '' : paren[2];
+      const after = valueAndUnit(paren[3]);
+      const within = valueAndUnit(inner);
+      return { field, value: after.value ?? within.value, unit: after.unit ?? within.unit };
+    }
+  }
+  // "Name: 65 g/L", "Name - g/L", "Name 65 g/L".
+  for (const re of [/^(.*?)\s*[:=–—-]\s*(.+)$/, /^(.*?)\s+(\d.*)$/]) {
+    const split = re.exec(entry);
+    const field = split && trackedFieldForName(split[1]);
+    if (split && field) return { field, ...valueAndUnit(split[2]) };
+  }
+  return null;
+}
+
 function notTracked(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
   const out: string[] = [];
@@ -211,6 +308,9 @@ function notTracked(value: unknown): string[] {
 interface WorkingVisit {
   visit: BloodworkVisit;
   skipped: Omit<SkippedValue, 'visit'>[];
+  // Tracked tests the AI listed in not_tracked (trackedNameInNotTracked),
+  // moved to `skipped` once the AI's own skipped list is placed.
+  namedTracked: NamedTracked[];
 }
 
 const skippedKey = (s: Omit<SkippedValue, 'visit'>) => `${s.field}|${s.unit === null ? '' : normalizeUnit(s.unit)}|${s.value ?? ''}`;
@@ -221,8 +321,13 @@ function addSkipped(w: WorkingVisit, s: Omit<SkippedValue, 'visit'>) {
 
 function cleanVisit(raw: Raw): WorkingVisit {
   const date = validDate(raw.date);
-  const visit: BloodworkVisit = { date, values: {}, not_tracked: notTracked(raw.not_tracked), conflict: false };
-  const w: WorkingVisit = { visit, skipped: [] };
+  const visit: BloodworkVisit = { date, values: {}, not_tracked: [], conflict: false };
+  const w: WorkingVisit = { visit, skipped: [], namedTracked: [] };
+  for (const name of notTracked(raw.not_tracked)) {
+    const named = trackedNameInNotTracked(name);
+    if (named) w.namedTracked.push(named);
+    else visit.not_tracked.push(name);
+  }
 
   const lab = text(raw.lab_name, MAX_NAME_CHARS);
   const vet = text(raw.vet_name, MAX_NAME_CHARS);
@@ -321,12 +426,26 @@ export function cleanBloodworkAnswer(raw: unknown): BloodworkAnswer {
     if (matches.length > 0) {
       for (const w of matches) addSkipped(w, { ...s });
     } else if (date !== null) {
-      const w: WorkingVisit = { visit: { date, values: {}, not_tracked: [], conflict: false }, skipped: [] };
+      const w: WorkingVisit = { visit: { date, values: {}, not_tracked: [], conflict: false }, skipped: [], namedTracked: [] };
       addSkipped(w, s);
       working.push(w);
     } else {
       unplaced.push(s);
     }
+  }
+
+  // A tracked test the AI listed as "not tracked" (for example Total
+  // Protein in g/L) was left out of `values` for a reason, most likely its
+  // unit, so it's reported as not imported, never as not tracked and never
+  // as a value. Skipped once only: not if the visit already has it as a
+  // value or skipped.
+  for (const w of working) {
+    for (const n of w.namedTracked) {
+      if (w.visit.values[n.field.key] !== undefined) continue;
+      if (w.skipped.some((s) => s.field === n.field.key)) continue;
+      addSkipped(w, { date: w.visit.date, field: n.field.key, label: n.field.label, unit: n.unit, value: n.value });
+    }
+    w.namedTracked = [];
   }
 
   // Merge identical visits on the same date; mark same-date differences.

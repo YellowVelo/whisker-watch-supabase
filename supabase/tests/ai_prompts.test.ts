@@ -47,7 +47,15 @@ import {
   type TaskRequestError,
 } from '../functions/ask-vet-assistant/prompts.ts';
 import { BLOODWORK_FIELDS } from '../functions/ask-vet-assistant/rules.ts';
-import { cleanBloodworkAnswer, EQUIVALENT_UNITS, normalizeUnit, unitMatches } from '../functions/ask-vet-assistant/bloodwork.ts';
+import {
+  cleanBloodworkAnswer,
+  EQUIVALENT_UNITS,
+  normalizeUnit,
+  TRACKED_FIELD_ALIASES,
+  trackedFieldForName,
+  trackedNameInNotTracked,
+  unitMatches,
+} from '../functions/ask-vet-assistant/bloodwork.ts';
 
 const PET_ID = '0b6f2c1e-4a1d-4c7b-9e2f-3a5d6c7b8e9f';
 const NOW = Date.UTC(2026, 10, 23);
@@ -308,6 +316,9 @@ Deno.test('bloodwork scan (FR35): asks for { visits, skipped }, every visit, uni
   assertStringIncludes(b.system, 'Ignore treatments, fluids, medications, supplements');
   assertStringIncludes(b.system, '"not_tracked"');
   assertStringIncludes(b.system, 'If a weight has no stated unit');
+  // QA B1: a tracked test in another unit is skipped, never "not tracked".
+  assertStringIncludes(b.system, 'Never list one of the 16 tracked tests in "not_tracked", whatever it is called (for example TP or Total Protein for total_protein, Urea for bun');
+  assertStringIncludes(b.system, 'a tracked test in another unit goes in "skipped" as described above (for example total protein in g/L instead of g/dL)');
   // The 16 fields with their units, from the parity-checked list.
   for (const f of BLOODWORK_FIELDS) assertStringIncludes(b.system, `${f.key} (${f.label}, ${f.unit})`);
   type Schema = { properties: Record<string, Schema>; items: Schema };
@@ -337,6 +348,7 @@ Deno.test('bloodwork spreadsheet (FR28, FR37): reading rules in system, the shee
   assertStringIncludes(b.system, 'if the visit records the pet\'s weight with a stated unit (for example lbs or kg)');
   assertStringIncludes(b.system, 'Never convert a value to another unit.');
   assertStringIncludes(b.system, equivalentUnitList());
+  assertStringIncludes(b.system, 'Never list one of the 16 tracked tests in "not_tracked"');
   for (const f of BLOODWORK_FIELDS) assertStringIncludes(b.system, `${f.key} (${f.label}, ${f.unit})`);
 });
 
@@ -837,4 +849,94 @@ Deno.test('an answer with nothing usable is { visits: [], skipped: [] }', () => 
   for (const raw of [null, undefined, 'text', 42, [], {}, { visits: 'x' }, { visits: [], skipped: 'x' }, { bun: 32, creatinine: 2.1 }]) {
     assertEquals(cleanBloodworkAnswer(raw), { visits: [], skipped: [] }, JSON.stringify(raw));
   }
+});
+
+// ---------------------------------------------------------------------------
+// QA B1 (2026-11-26): the real AI put Total Protein in g/L into not_tracked,
+// so the card said "Not tracked yet: Total Protein". A tracked test named
+// in not_tracked is moved to skipped, never to values.
+// ---------------------------------------------------------------------------
+
+Deno.test('B1: every tracked field is matched by its key, its label and each alias; other tests are not', () => {
+  for (const f of BLOODWORK_FIELDS) {
+    assertEquals(trackedFieldForName(f.key)?.key, f.key, f.key);
+    assertEquals(trackedFieldForName(f.label)?.key, f.key, f.label);
+    assertEquals(trackedFieldForName(f.label.toUpperCase())?.key, f.key, f.label.toUpperCase());
+    for (const alias of TRACKED_FIELD_ALIASES[f.key] ?? []) assertEquals(trackedFieldForName(alias)?.key, f.key, alias);
+  }
+  const named: [string, string][] = [
+    ['Total Protein', 'total_protein'], ['TP', 'total_protein'], ['total_protein', 'total_protein'],
+    ['BUN', 'bun'], ['Urea', 'bun'], ['UREA', 'bun'], ['Creat', 'creatinine'], ['CREA', 'creatinine'],
+    ['ALKP', 'alkaline_phosphatase'], ['Alk Phos', 'alkaline_phosphatase'], ['Alk. Phos.', 'alkaline_phosphatase'], ['ALP', 'alkaline_phosphatase'],
+    ['K+', 'potassium'], ['Na+', 'sodium'], ['HCT', 'hematocrit'], ['PCV', 'hematocrit'], ['HGB', 'hemoglobin'],
+    ['ALT (SGPT)', 'alt'], ['T4', 't4'], ['TT4', 't4'], ['GLU', 'glucose'],
+  ];
+  for (const [name, key] of named) assertEquals(trackedFieldForName(name)?.key, key, name);
+  for (const name of ['Chloride', 'Globulin', 'GGT', 'Bilirubin', 'Cholesterol', 'Protein', 'Urine Protein', 'Ionized Calcium', 'Free T4', 'A/G Ratio', 'BUN/Creatinine Ratio']) {
+    assertEquals(trackedFieldForName(name), null, name);
+  }
+});
+
+Deno.test('B1: a tracked test name in not_tracked keeps whatever unit and value was written beside it', () => {
+  const read = (s: string) => {
+    const n = trackedNameInNotTracked(s);
+    return n && [n.field.key, n.unit, n.value];
+  };
+  assertEquals(read('Total Protein'), ['total_protein', null, null]);
+  assertEquals(read('Total Protein (g/L)'), ['total_protein', 'g/L', null]);
+  assertEquals(read('Total Protein: 65 g/L'), ['total_protein', 'g/L', 65]);
+  assertEquals(read('TP 65 g/L'), ['total_protein', 'g/L', 65]);
+  assertEquals(read('TP - g/L'), ['total_protein', 'g/L', null]);
+  assertEquals(read('Urea (BUN) 12.1 mmol/L'), ['bun', 'mmol/L', 12.1]);
+  assertEquals(read('Creatinine (194.48 µmol/L)'), ['creatinine', 'µmol/L', 194.48]);
+  assertEquals(read('T4 Thyroid 2.1'), ['t4', null, 2.1]);
+  assertEquals(read('Alk-Phos 120 IU/L'), ['alkaline_phosphatase', 'IU/L', 120]);
+  assertEquals(read('Chloride'), null);
+  assertEquals(read('Chloride (mmol/L)'), null);
+  assertEquals(read('Globulin: 3.1 g/dL'), null);
+});
+
+Deno.test('B1: Total Protein in g/L listed as not tracked is reported as skipped (different unit), never as a value or as not tracked', () => {
+  const answer = cleanBloodworkAnswer({
+    visits: [{
+      date: '2026-03-01',
+      values: { alt: { value: 55, unit: 'U/L' } },
+      not_tracked: ['Chloride', 'Total Protein (g/L)', 'Globulin', 'TP', 'Urea: 12.1 mmol/L', 'ALKP', 'Creat'],
+    }],
+    skipped: [],
+  });
+  assertEquals(answer.visits.length, 1);
+  const v = answer.visits[0];
+  assertEquals(v.values, { alt: 55 }, 'never moved into values');
+  assertEquals(v.not_tracked, ['Chloride', 'Globulin']);
+  // "Total Protein (g/L)" and "TP" are the same test: skipped once.
+  assertEquals(answer.skipped, [
+    { visit: 0, date: '2026-03-01', field: 'total_protein', label: 'Total Protein', unit: 'g/L', value: null },
+    { visit: 0, date: '2026-03-01', field: 'bun', label: 'BUN', unit: 'mmol/L', value: 12.1 },
+    { visit: 0, date: '2026-03-01', field: 'alkaline_phosphatase', label: 'Alk Phos', unit: null, value: null },
+    { visit: 0, date: '2026-03-01', field: 'creatinine', label: 'Creatinine', unit: null, value: null },
+  ]);
+});
+
+Deno.test('B1: a tracked test already in values or already skipped is only dropped from not_tracked, never added twice', () => {
+  const answer = cleanBloodworkAnswer({
+    visits: [{
+      date: '2026-03-01',
+      values: { total_protein: { value: 7.1, unit: 'g/dL' }, creatinine: { value: 194.48, unit: 'µmol/L' } },
+      not_tracked: ['Total Protein', 'Creatinine', 'Glucose', 'GGT'],
+    }],
+    skipped: [{ date: '2026-03-01', field: 'glucose', value: 5.4, unit: 'mmol/L' }],
+  });
+  assertEquals(answer.visits[0].values, { total_protein: 7.1 });
+  assertEquals(answer.visits[0].not_tracked, ['GGT']);
+  assertEquals(answer.skipped, [
+    { visit: 0, date: '2026-03-01', field: 'creatinine', label: 'Creatinine', unit: 'µmol/L', value: 194.48 },
+    { visit: 0, date: '2026-03-01', field: 'glucose', label: 'Glucose', unit: 'mmol/L', value: 5.4 },
+  ]);
+});
+
+Deno.test('B1: a visit whose only results were tracked tests listed as not tracked still gets a card', () => {
+  const answer = cleanBloodworkAnswer({ visits: [{ date: '2026-03-01', not_tracked: ['Total Protein'] }] });
+  assertEquals(answer.visits.map((v) => [v.date, v.values, v.not_tracked]), [['2026-03-01', {}, []]]);
+  assertEquals(answer.skipped, [{ visit: 0, date: '2026-03-01', field: 'total_protein', label: 'Total Protein', unit: null, value: null }]);
 });
