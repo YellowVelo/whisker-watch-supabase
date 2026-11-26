@@ -1,6 +1,6 @@
 # 0081_Base44_Cleanup_Weight_Home_And_Bloodwork_Spreadsheet_Specification_v1
 
-**Status:** Approved by Lynn 2026-11-23: spec, wording A–H and the FR9 translation table. Follow-up decisions, same day, from her IDEXX PDF sample and her spreadsheet template: photo/PDF scans use the same review as spreadsheets (FR35), and spreadsheet weights can go into weight history (FR36). Wording I–K approved too. Fully approved. **Amendments 1–2 approved by Lynn 2026-11-24** (see "Amendments"): no new date column for weight; old tables deleted without moving records.
+**Status:** Built 2026-11-26 (PROTECTED; awaiting Lynn's merge OK). Approved by Lynn 2026-11-23: spec, wording A–H and the FR9 translation table. Follow-up decisions, same day, from her IDEXX PDF sample and her spreadsheet template: photo/PDF scans use the same review as spreadsheets (FR35), and spreadsheet weights can go into weight history (FR36). Wording I–K approved too. Fully approved. **Amendments 1–2 approved by Lynn 2026-11-24** (see "Amendments"): no new date column for weight; old tables deleted without moving records.
 **Date:** 2026-11-23
 **Branch:** `claude/base44-cleanup`
 **Migration:** `0061` (reserved by the first session). It gives weight its new home, moves the old records, and deletes the three Base44-era tables.
@@ -35,8 +35,8 @@
 3. ~~Approve the FR9 translation table~~ Approved 2026-11-23.
 3a. ~~Answer Open Question 3~~ Answered 2026-11-23: same review for photo, PDF and spreadsheet; spreadsheet weights become a tickable line.
 3b. ~~Approve wording I–K~~ Approved 2026-11-23.
-4. **Later, before merge:** OK the PROTECTED merge after review passes (0011 rule).
-5. **Later, at rollout:** promote the frontend build in Cloudflare (branch `main`, commit message starting "Spec 0081"), then add a deploy marker on each project. I'll give you the exact steps and tell you when.
+4. **Now, blocks the merge:** OK the PROTECTED merge (0011 rule). The build is done and reviewed; it waits only for your OK.
+5. **After the merge, at rollout, on each project (dev, staging, prod):** promote the frontend build in Cloudflare (branch `main`, commit message starting "Spec 0081"). That blocks my next steps. Then I add the deploy marker, deploy the two Edge Functions (`ask-vet-assistant`, `generate-vet-report`) and run `supabase db push --include-all`, in that order (Amendment 3). I'll tell you when each project is ready for your promotion.
 
 ## Before You Approve This
 
@@ -303,3 +303,39 @@ FR11 counts (2026-11-24): dev 3 old symptom logs (all on days with a check-in, n
 1. FR7–FR10 (moving weights, answers, notes, pain and medication) are dropped. Migration 0061 has no move step and no `migrate_symptom_log_row` function; after its gate it adds the spreadsheet file types and drops `symptom_logs`, `wellness_scores` and `food_logs`.
 2. AC6–AC8 are dropped. AC9 (the tables are gone, `/symptoms` redirects) stays.
 3. The nightly database backup keeps a copy of the dropped tables for 30 days; that is the only undo.
+
+### Amendment 3 — Lynn's decisions during the build (2026-11-24 to 2026-11-26)
+
+1. **One weight per pet per day.** The Log weight sheet replaces that day's weight instead of adding a second one. Typing or clearing a weight in a check-in replaces any standalone weight that day. Re-saving a check-in never changes the day's weight.
+2. **Sitters may see weight on Trends during a sit,** read-only.
+3. **Home's Weight chip stays direction-only.** AC1 is met by Pet Profile and Trends.
+4. **No label on out-of-range old weights.**
+5. **Onboarding weight uses wording B.**
+6. **Bloodwork imports:**
+   - mmol/L counts as mEq/L for sodium and potassium; IU/L counts as U/L for ALT, AST and alkaline phosphatase.
+   - A value with no unit is kept, shown with the app's unit.
+   - Cards show only the values found.
+   - An import never replaces a weight already on file, and that line is disabled.
+   - A tracked test the AI listed as "not tracked" shows as "Not imported (different unit)".
+   - A visit with nothing saveable starts unticked.
+7. **The Privacy Policy is unchanged.**
+8. **Approved copy, word for word:**
+   - "Choose today or an earlier date."
+   - "Choose a date."
+   - "This weight came from a daily check-in, so its date can't be changed."
+   - "This weight has already been deleted."
+   - "We couldn't save this weight. Please try again."
+   - "We couldn't delete this weight. Please try again."
+   - "Unable to load recent weights."
+   - The Cancel button.
+   - Bloodwork tab, wrong file type: "Wysker Watch can only use photos (JPEG, PNG, WebP, GIF), PDFs, or CSV and Excel (.xlsx) files."
+   - Bloodwork tab, file too large: "That file is over 10 MB. Try a smaller file."
+   - "We found 1 visit." / "Save 1 visit"
+   - Save failure: "Something went wrong. Please try again."
+   - "Not imported (no unit): Weight"
+   - Empty photo/PDF scan: "We couldn't find any bloodwork results in this file."
+   - Disabled weight line: "Weight {X} lbs: a weight is already logged for this day."
+   - Weight skipped toast: "The bloodwork was saved, but the weight wasn't added because this day already has one."
+   - Weight not checked toast: "The bloodwork was saved, but the weight wasn't added. Please try adding it in Log weight."
+9. **Rollout order on each project:** frontend promoted → deploy marker (`spec_0081_frontend_live`) → Edge Functions deployed → `supabase db push --include-all`. The old functions read the dropped tables, so they must be replaced before the push.
+10. **Found during QA, pre-existing, logged as a follow-up (PA-77):** the Health Records page has no sitter guard.
