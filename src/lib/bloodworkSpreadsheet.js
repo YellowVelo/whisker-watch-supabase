@@ -54,11 +54,27 @@ export function spreadsheetErrorText(err) {
 function detectDelimiter(text) {
   const counts = { ',': 0, ';': 0, '\t': 0 };
   let inQuotes = false;
-  for (const ch of text) {
-    if (ch === '"') inQuotes = !inQuotes;
-    else if (!inQuotes && (ch === '\n' || ch === '\r')) {
+  // A quote opens quoting only at the very start of a field; anywhere else
+  // it's a literal character (e.g. 2" mass). The separator isn't known yet,
+  // so a field starts after a line break or any candidate separator.
+  let atFieldStart = true;
+  for (let i = 0; i < text.length; i += 1) {
+    const ch = text[i];
+    if (inQuotes) {
+      if (ch === '"') {
+        if (text[i + 1] === '"') i += 1;
+        else inQuotes = false;
+      }
+    } else if (ch === '"' && atFieldStart) {
+      inQuotes = true;
+      atFieldStart = false;
+    } else if (ch === '\n' || ch === '\r') {
       if (counts[','] + counts[';'] + counts['\t'] > 0) break;
-    } else if (!inQuotes && ch in counts) counts[ch] += 1;
+      atFieldStart = true;
+    } else if (ch in counts) {
+      counts[ch] += 1;
+      atFieldStart = true;
+    } else atFieldStart = false;
   }
   if (counts[';'] > counts[','] && counts[';'] >= counts['\t']) return ';';
   if (counts['\t'] > counts[',']) return '\t';
@@ -79,6 +95,10 @@ export function parseCsv(text, delimiter = detectDelimiter(text)) {
   let row = [];
   let cell = '';
   let inQuotes = false;
+  // True until the current field has any content. A quote opens quoting
+  // only there; a quote in the middle of an unquoted field (2" mass) is a
+  // literal character and stays in the cell.
+  let atFieldStart = true;
   for (let i = 0; i < text.length; i += 1) {
     const ch = text[i];
     if (inQuotes) {
@@ -88,18 +108,24 @@ export function parseCsv(text, delimiter = detectDelimiter(text)) {
           i += 1;
         } else inQuotes = false;
       } else cell += ch;
-    } else if (ch === '"') {
+    } else if (ch === '"' && atFieldStart) {
       inQuotes = true;
+      atFieldStart = false;
     } else if (ch === delimiter) {
       row.push(cell);
       cell = '';
+      atFieldStart = true;
     } else if (ch === '\n' || ch === '\r') {
       if (ch === '\r' && text[i + 1] === '\n') i += 1;
       row.push(cell);
       rows.push(row);
       row = [];
       cell = '';
-    } else cell += ch;
+      atFieldStart = true;
+    } else {
+      cell += ch;
+      atFieldStart = false;
+    }
   }
   if (cell !== '' || row.length > 0) {
     row.push(cell);
@@ -178,11 +204,23 @@ const startsWith = (bytes, sig) => sig.every((b, i) => bytes[i] === b);
 const ZIP_SIGNATURE = [0x50, 0x4b, 0x03, 0x04]; // every .xlsx
 const OLE2_SIGNATURE = [0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]; // old .xls
 
+// Size of an unpacked workbook: `read-excel-file` (pinned to 9.3.14) offers
+// no option to refuse an oversized one before unpacking, and its zip filter
+// sees only each entry's path, not its size. So the only limits here are
+// the 10 MB upload cap on the packed file (checkUploadFile) and the
+// MAX_SHEET_TEXT_CHARS check on the text after parsing. Parsing runs on the
+// main thread, so a hugely compressed workbook can pause the page while it
+// unpacks. If that ever matters, sum the sizes in the zip's central
+// directory before calling the library.
 async function readXlsxSheets(bytes) {
   const { default: readXlsxFile } = await import('read-excel-file/universal');
   let sheets;
   try {
-    sheets = await readXlsxFile(bytes);
+    // Pass the ArrayBuffer, not the Uint8Array: older versions of
+    // read-excel-file (including the pinned 9.3.14) accept only a Blob or
+    // an ArrayBuffer. `bytes` was made from a whole ArrayBuffer, so
+    // `bytes.buffer` is exactly the file.
+    sheets = await readXlsxFile(bytes.buffer);
   } catch (err) {
     if (err?.code === 'XLS_FILE_NOT_SUPPORTED') throw new SpreadsheetReadError('old_excel');
     if (err?.code !== 'NO_DATA') {

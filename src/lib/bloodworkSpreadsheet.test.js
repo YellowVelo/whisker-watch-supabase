@@ -65,6 +65,46 @@ describe('parseCsv', () => {
     expect(parseCsv('BUN;Creatinine\n32;2,1')).toEqual([['BUN', 'Creatinine'], ['32', '2,1']]);
     expect(parseCsv('BUN\tCreatinine\n32\t2.1')).toEqual([['BUN', 'Creatinine'], ['32', '2.1']]);
   });
+
+  it('keeps a quote in the middle of an unquoted field as a literal character', () => {
+    const csv = 'Date,BUN,Notes\n2026-10-02,32,2" mass on flank\n2026-06-14,28,ok\n2026-03-14,25,ok\n';
+    const rows = parseCsv(csv);
+    expect(rows).toHaveLength(4);
+    expect(rows).toEqual([
+      ['Date', 'BUN', 'Notes'],
+      ['2026-10-02', '32', '2" mass on flank'],
+      ['2026-06-14', '28', 'ok'],
+      ['2026-03-14', '25', 'ok'],
+    ]);
+  });
+
+  it('keeps a mid-field quote in a semicolon-separated file, and still detects the semicolons', () => {
+    const csv = 'Notes;BUN;Creatinine\n2" mass;32;2,1\nok;28;1,9\n';
+    expect(parseCsv(csv)).toEqual([
+      ['Notes', 'BUN', 'Creatinine'],
+      ['2" mass', '32', '2,1'],
+      ['ok', '28', '1,9'],
+    ]);
+  });
+
+  it('a mid-field quote on the first line does not hide the separator', () => {
+    expect(parseCsv('Size 2" a;BUN;Crea\n1;2;3')).toEqual([['Size 2" a', 'BUN', 'Crea'], ['1', '2', '3']]);
+  });
+
+  it('still reads well-formed quoted fields, including quoted fields in a semicolon file', () => {
+    expect(parseCsv('a,"b ""x"", c",d\n"1",2,"3"\n')).toEqual([['a', 'b "x", c', 'd'], ['1', '2', '3']]);
+    expect(parseCsv('"a;b";c\n"1";"2;3"')).toEqual([['a;b', 'c'], ['1', '2;3']]);
+    expect(parseCsv('"",x\n')).toEqual([['', 'x']]);
+  });
+});
+
+describe('readBloodworkSpreadsheet: a mid-field quote', () => {
+  it("doesn't swallow the rows after it", async () => {
+    const csv = 'Date,BUN,Notes\n2026-10-02,32,2" mass on flank\n2026-06-14,28,ok\n2026-03-14,25,ok\n';
+    const { text } = await readBloodworkSpreadsheet(asFile(csv, 'labs.csv', 'text/csv'));
+    expect(text).toContain('2026-03-14,25,ok');
+    expect(text).toContain('"2"" mass on flank"');
+  });
 });
 
 describe('readBloodworkSpreadsheet: CSV', () => {

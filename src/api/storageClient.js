@@ -51,6 +51,9 @@ export const UPLOAD_MESSAGES = {
   scanImageTooLarge: 'That photo is too large to scan. Try a smaller photo or a PDF.',
   // Spec 0081, wording G (also used by src/lib/bloodworkSpreadsheet.js).
   oldExcel: 'This is an older Excel file. Save it as .xlsx or .csv and try again.',
+  // Bloodwork tab only (approved by Lynn, 2026-11-25); use
+  // checkBloodworkUploadFile, not this key directly.
+  wrongTypeBloodwork: 'Wysker Watch can only use photos (JPEG, PNG, WebP, GIF), PDFs, or CSV and Excel (.xlsx) files.',
 };
 
 /** Lower-case extension of a file name, or '' if it has none. */
@@ -71,7 +74,34 @@ export function fileExtension(name) {
 export function isSpreadsheetFile(file) {
   const ext = fileExtension(file?.name);
   if (ext === 'csv' || ext === 'xlsx' || ext === 'xls') return true;
-  return file?.type === CSV_TYPE || file?.type === XLSX_TYPE;
+  // "application/vnd.ms-excel" is included so a file with no extension and
+  // that type takes the spreadsheet route and gets the old-Excel message,
+  // matching checkUploadFile's 'spreadsheet' rules.
+  return file?.type === CSV_TYPE || file?.type === XLSX_TYPE || file?.type === LEGACY_EXCEL_TYPE;
+}
+
+/**
+ * Which checkUploadFile/uploadFile purpose a file picked on the Bloodwork
+ * tab uses: 'spreadsheet' for spreadsheets, 'scan' for everything else.
+ *
+ * @param {{ name?: string, type?: string }} file
+ * @returns {'spreadsheet'|'scan'}
+ */
+export function bloodworkUploadPurpose(file) {
+  return isSpreadsheetFile(file) ? 'spreadsheet' : 'scan';
+}
+
+/**
+ * checkUploadFile for a file picked on the Bloodwork tab, which also takes
+ * spreadsheets: the wrong-type message lists them (Lynn, 2026-11-25). Every
+ * other message is the same as checkUploadFile's.
+ *
+ * @param {File} file
+ * @returns {string|null}
+ */
+export function checkBloodworkUploadFile(file) {
+  const refusal = checkUploadFile(file, bloodworkUploadPurpose(file));
+  return refusal === UPLOAD_MESSAGES.wrongType ? UPLOAD_MESSAGES.wrongTypeBloodwork : refusal;
 }
 
 /**

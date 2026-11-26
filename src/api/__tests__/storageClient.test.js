@@ -4,6 +4,7 @@ vi.mock('../supabaseClient', () => ({ supabase: {} }));
 
 const {
   checkUploadFile, UPLOAD_MESSAGES, isSpreadsheetFile, spreadsheetContentType, uploadFile, BLOODWORK_UPLOAD_HELP,
+  bloodworkUploadPurpose, checkBloodworkUploadFile,
 } = await import('../storageClient');
 const { supabase } = await import('../supabaseClient');
 
@@ -44,6 +45,43 @@ describe('checkUploadFile (spec 0071)', () => {
   it('refuses a scan photo over the AI image limit of 5 MB', () => {
     expect(checkUploadFile(file('image/jpeg', 6), 'scan')).toBe(UPLOAD_MESSAGES.scanImageTooLarge);
     expect(checkUploadFile(file('image/jpeg', 4), 'scan')).toBeNull();
+  });
+});
+
+describe('Bloodwork tab upload checks (spec 0081, Lynn 2026-11-25)', () => {
+  const pick = (name, type, sizeMb = 0.1) => ({ name, type, size: Math.round(sizeMb * MB) });
+
+  it('has the approved Bloodwork wrong-type wording, and leaves the general one alone', () => {
+    expect(UPLOAD_MESSAGES.wrongTypeBloodwork).toBe(
+      'Wysker Watch can only use photos (JPEG, PNG, WebP, GIF), PDFs, or CSV and Excel (.xlsx) files.',
+    );
+    expect(UPLOAD_MESSAGES.wrongType).toBe('Wysker Watch can only use photos (JPEG, PNG, WebP, GIF) or PDFs.');
+  });
+
+  it('routes spreadsheets to the spreadsheet purpose and everything else to scan', () => {
+    expect(bloodworkUploadPurpose(pick('labs.csv', 'text/csv'))).toBe('spreadsheet');
+    expect(bloodworkUploadPurpose(pick('labs.xlsx', ''))).toBe('spreadsheet');
+    expect(bloodworkUploadPurpose(pick('labs.pdf', 'application/pdf'))).toBe('scan');
+    expect(bloodworkUploadPurpose(pick('labs.jpg', 'image/jpeg'))).toBe('scan');
+  });
+
+  it('accepts photos, PDFs, CSVs and .xlsx files', () => {
+    expect(checkBloodworkUploadFile(pick('a.jpg', 'image/jpeg', 2))).toBeNull();
+    expect(checkBloodworkUploadFile(pick('a.pdf', 'application/pdf', 8))).toBeNull();
+    expect(checkBloodworkUploadFile(pick('a.csv', ''))).toBeNull();
+    expect(checkBloodworkUploadFile(pick('a.xlsx', ''))).toBeNull();
+  });
+
+  it('uses the Bloodwork wording for a wrong file type', () => {
+    expect(checkBloodworkUploadFile(pick('a.docx', 'application/msword'))).toBe(UPLOAD_MESSAGES.wrongTypeBloodwork);
+    expect(checkBloodworkUploadFile(pick('a.heic', 'image/heic'))).toBe(UPLOAD_MESSAGES.wrongTypeBloodwork);
+  });
+
+  it('keeps the usual too-large, scan-photo and old-Excel messages', () => {
+    expect(checkBloodworkUploadFile(pick('a.docx', 'application/msword', 12))).toBe(UPLOAD_MESSAGES.tooLarge);
+    expect(checkBloodworkUploadFile(pick('a.csv', 'text/csv', 11))).toBe(UPLOAD_MESSAGES.tooLarge);
+    expect(checkBloodworkUploadFile(pick('a.jpg', 'image/jpeg', 6))).toBe(UPLOAD_MESSAGES.scanImageTooLarge);
+    expect(checkBloodworkUploadFile(pick('a.xls', 'application/vnd.ms-excel'))).toBe(UPLOAD_MESSAGES.oldExcel);
   });
 });
 
@@ -104,6 +142,14 @@ describe('isSpreadsheetFile / spreadsheetContentType (spec 0081)', () => {
     expect(isSpreadsheetFile({ name: 'a', type: XLSX })).toBe(true);
     expect(isSpreadsheetFile({ name: 'a.pdf', type: 'application/pdf' })).toBe(false);
     expect(isSpreadsheetFile({ name: 'a.jpg', type: 'image/jpeg' })).toBe(false);
+  });
+
+  it('sends a no-extension "application/vnd.ms-excel" file down the spreadsheet route (old-Excel message)', () => {
+    const f = { name: 'labs', type: 'application/vnd.ms-excel', size: 100 };
+    expect(isSpreadsheetFile(f)).toBe(true);
+    expect(bloodworkUploadPurpose(f)).toBe('spreadsheet');
+    expect(checkUploadFile(f, 'spreadsheet')).toBe(UPLOAD_MESSAGES.oldExcel);
+    expect(checkBloodworkUploadFile(f)).toBe(UPLOAD_MESSAGES.oldExcel);
   });
 
   it('takes the type from the extension when the browser gives none', () => {
