@@ -10,7 +10,7 @@ const {
   buildReviewVisits, skippedText, skippedGroups, includedVisits, canSaveReview, reviewVisitToRecord,
   bloodworkImportErrorText, shouldReportImportError, changeVisitDate, toggleVisitWeight, weightToSave,
   weightLineEnabled, isFutureDate, weightTicked, refreshVisitsOnFile, reviewCheckboxNames, weightLineText,
-  WEIGHT_SKIPPED_MESSAGE,
+  WEIGHT_SKIPPED_MESSAGE, WEIGHT_NOT_CHECKED_MESSAGE,
 } = await import('./bloodworkImport');
 const { dateStrInTimezone } = await import('@/lib/timezone');
 const { SpreadsheetReadError, SPREADSHEET_MESSAGES } = await import('./bloodworkSpreadsheet');
@@ -55,7 +55,7 @@ describe('buildReviewVisits', () => {
 
   it('keeps a skipped value it cannot place for a top-level line', () => {
     const { unplacedSkipped } = buildReviewVisits({ visits: IDEXX_LIKE.visits, skipped: [{ visit: null, date: null, field: 'bun', label: 'BUN', unit: 'mmol/L', value: 11 }] }, none);
-    expect(unplacedSkipped).toEqual([{ label: 'BUN', unit: 'mmol/L' }]);
+    expect(unplacedSkipped).toEqual([{ field: 'bun', label: 'BUN', unit: 'mmol/L' }]);
   });
 
   it('starts a visit already on file unticked and marked (AC16)', () => {
@@ -119,6 +119,22 @@ describe('buildReviewVisits', () => {
     const { differentUnit, noUnit } = skippedGroups(buildReviewVisits(answer, none).visits[0].skipped);
     expect(skippedText(noUnit)).toBe('Weight');
     expect(skippedText(differentUnit)).toBe('Creatinine µmol/L');
+  });
+
+  it('QA B1: a lab value the AI listed as not tracked with no unit is shown as a different unit, never "no unit"', () => {
+    // The server moves "Total Protein" out of not_tracked into skipped with
+    // whatever unit the AI gave, here none.
+    const answer = {
+      visits: [{ date: '2026-10-02', values: { bun: 32 }, not_tracked: ['Chloride'] }],
+      skipped: [
+        { visit: 0, field: 'total_protein', label: 'Total Protein', unit: null, value: null },
+        { visit: 0, field: 'creatinine', label: 'Creatinine', unit: 'µmol/L', value: 194.48 },
+        { visit: 0, field: 'weight', label: 'Weight', unit: null, value: 9.8 },
+      ],
+    };
+    const { differentUnit, noUnit } = skippedGroups(buildReviewVisits(answer, none).visits[0].skipped);
+    expect(skippedText(differentUnit)).toBe('Total Protein, Creatinine µmol/L');
+    expect(skippedText(noUnit)).toBe('Weight');
   });
 
   it("starts an undated visit's weight line unticked and not tickable", () => {
@@ -231,6 +247,11 @@ describe('which weights a save logs (FR36: one weight per day, an import never r
 
   it('has the approved skipped-weight message', () => {
     expect(WEIGHT_SKIPPED_MESSAGE).toBe("The bloodwork was saved, but the weight wasn't added because this day already has one.");
+  });
+
+  it("QA B3: has its own message for when the weights couldn't be checked at save time, never the \"already has one\" one", () => {
+    expect(WEIGHT_NOT_CHECKED_MESSAGE).toBe("The bloodwork was saved, but the weight wasn't added. Please try adding it in Log weight.");
+    expect(WEIGHT_NOT_CHECKED_MESSAGE).not.toContain('already has one');
   });
 
   it('never logs the weight of an unticked visit or a visit without a weight', () => {

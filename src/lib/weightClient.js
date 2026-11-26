@@ -276,15 +276,39 @@ export async function getDayWeightLbs(petId, date) {
   return dayWeight ? dayWeight.lbs : null;
 }
 
+// Whether this person may log a weight for this pet from Pet Profile or
+// Trends: never for a pet they only sit for (`sitterOnly`, still null while
+// the lookup answers) or a memorial pet. One rule for both screens.
+/** @param {{ is_memorial?: boolean } | null | undefined} pet @param {boolean | null} sitterOnly */
+export function canLogWeightFor(pet, sitterOnly) {
+  return sitterOnly === false && !!pet && !pet.is_memorial;
+}
+
+// What addWeight returns when `ifNoneExists` found a weight on the day and
+// wrote nothing.
+export const WEIGHT_ADD_SKIPPED = Object.freeze({ skipped: true });
+
 // Logs a weight for a day. One weight per pet per day: if the pet already
 // has a weight on that date (from a check-in or logged here), that weight
 // is updated to the new value instead of a second one being added. For a
 // check-in weight, updateWeight also moves the check-in's updated_at (spec
 // 0043). Otherwise a standalone weight (no check-in) is saved. `timezone`
 // is the owner's profiles.timezone, used only to refuse a future date.
-export async function addWeight(petId, { date, lbs }, timezone) {
+//
+// `ifNoneExists` (add only): if the day already has any weight, nothing is
+// written and WEIGHT_ADD_SKIPPED is returned. A bloodwork import uses it,
+// since an import never replaces a weight on file (Lynn, 2026-11-26), even
+// one saved after the import's own check.
+/**
+ * @param {string} petId
+ * @param {{ date: string, lbs: any }} weight
+ * @param {string} [timezone]
+ * @param {{ ifNoneExists?: boolean }} [options]
+ */
+export async function addWeight(petId, { date, lbs }, timezone, { ifNoneExists = false } = {}) {
   const value = validateWeightInput({ lbs, date }, timezone);
   const [dayWeight] = await weightsOnDate(petId, date);
+  if (dayWeight && ifNoneExists) return WEIGHT_ADD_SKIPPED;
   if (dayWeight) return updateWeight(dayWeight, { lbs: value }, timezone);
   const typeId = await weightTypeId();
   const row = await entities.Observation.create({

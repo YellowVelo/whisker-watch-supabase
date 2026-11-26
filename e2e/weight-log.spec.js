@@ -626,6 +626,25 @@ test("multiple pets: a weight logged for one pet never shows on another pet's ca
   expect((await savedWeights(petA.supabase, petA.petId)).map((r) => Number(r.numeric_value))).toEqual([14.2]);
 });
 
+// QA 2026-11-26: a memorial pet's weight history can be read but no new
+// weight logged, on Pet Profile and on Trends alike (canLogWeightFor).
+test('memorial pet: no way to log a weight from Pet Profile or Trends', async ({ page }) => {
+  const { supabase, petId, name } = await createPet();
+  const { error } = await supabase.from('pets').update({ is_memorial: true }).eq('id', petId);
+  if (error) throw error;
+
+  const card = await openPetCard(page, name);
+  await expect(card.getByRole('button', { name: 'Edit Pet' })).toBeVisible({ timeout: 10000 });
+  await expect(weightRow(card)).toHaveCount(0);
+  await expect(card.getByText('Record Weight', { exact: true })).toHaveCount(0);
+
+  await page.goto(`/pet/${petId}/trends`);
+  const trendsWeight = page.locator('div.rounded-2xl').filter({ has: page.getByText('Weight', { exact: true }) }).last();
+  await expect(trendsWeight).toBeVisible({ timeout: 10000 });
+  await expect(page.getByRole('button', { name: 'Log weight' })).toHaveCount(0);
+  await expect(page.getByRole('dialog', { name: 'Log weight' })).toHaveCount(0);
+});
+
 // Lynn 2026-11-25: Home's Weight chip stays direction-only (no number);
 // AC1's numbers are on Pet Profile and Trends.
 test("Home's Weight chip shows the direction from yesterday's to today's weight, with no number", async ({ page }) => {

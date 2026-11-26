@@ -67,7 +67,7 @@ function answerVisits(result) {
 
 function skippedItem(s) {
   const label = textOf(s.label) || textOf(s.field);
-  return label ? { label, unit: textOf(s.unit) || null } : null;
+  return label ? { field: textOf(s.field) || null, label, unit: textOf(s.unit) || null } : null;
 }
 
 /**
@@ -86,13 +86,13 @@ function skippedItem(s) {
  *
  * @param {any} result - either bloodwork task's answer
  * @param {{ bloodworkDates: Set<string>, weightDates: Set<string>|null }} onFile
- * @returns {{ visits: ReviewVisit[], unplacedSkipped: { label: string, unit: string|null }[] }}
+ * @returns {{ visits: ReviewVisit[], unplacedSkipped: { field: string|null, label: string, unit: string|null }[] }}
  *
  * @typedef {{
  *   key: string,
  *   form: Record<string, string>,
  *   valueKeys: string[],
- *   skipped: { label: string, unit: string|null }[],
+ *   skipped: { field: string|null, label: string, unit: string|null }[],
  *   notTracked: string[],
  *   conflict: boolean,
  *   onFile: boolean,
@@ -253,7 +253,8 @@ export function weightTicked(visit) {
  * weight is logged only if `freshWeightDates`, loaded just before saving,
  * shows no weight on the visit's date. If that load failed (null), no
  * weight is logged. A ticked weight refused here is skipped, and the owner
- * is told with WEIGHT_SKIPPED_MESSAGE.
+ * is told with WEIGHT_SKIPPED_MESSAGE (the day has a weight) or
+ * WEIGHT_NOT_CHECKED_MESSAGE (the load failed).
  *
  * @param {ReviewVisit} visit
  * @param {Set<string>|null} freshWeightDates
@@ -263,9 +264,14 @@ export function weightToSave(visit, freshWeightDates) {
   return freshWeightDates !== null && !freshWeightDates.has(visit.form.date);
 }
 
-// Shown after a save that skipped a ticked weight (Lynn, 2026-11-26): the
-// day had a weight by then, or the weights couldn't be checked.
+// Shown after a save that skipped a ticked weight because the day had a
+// weight by then (Lynn, 2026-11-26).
 export const WEIGHT_SKIPPED_MESSAGE = "The bloodwork was saved, but the weight wasn't added because this day already has one.";
+
+// Shown instead when the weights couldn't be loaded again at save time, so
+// no ticked weight was added (QA B3, 2026-11-26; wording pending Lynn's
+// approval).
+export const WEIGHT_NOT_CHECKED_MESSAGE = "The bloodwork was saved, but the weight wasn't added. Please try adding it in Log weight.";
 
 /** A YYYY-MM-DD date as the card heading shows it: "Mar 14, 2026". */
 export function headingDate(date) {
@@ -324,13 +330,17 @@ export function skippedText(items) {
 
 /**
  * Skipped values split by why: `differentUnit` (a stated unit the app
- * doesn't use) and `noUnit` (no unit stated; only a weight is ever skipped
- * for that, since a lab value with no unit is taken as the field's own).
+ * doesn't use) and `noUnit` (a weight with no unit stated). A lab value is
+ * never skipped for having no unit (it's taken as the field's own), so a
+ * skipped lab value with no unit is one the AI listed as "not tracked"
+ * without saying its unit (QA B1): it was left out for its unit, so it's
+ * shown as a different unit.
  */
 export function skippedGroups(items) {
+  const noUnit = (s) => !s.unit && (s.field === 'weight' || (!s.field && s.label === 'Weight'));
   return {
-    differentUnit: items.filter((s) => s.unit),
-    noUnit: items.filter((s) => !s.unit),
+    differentUnit: items.filter((s) => !noUnit(s)),
+    noUnit: items.filter(noUnit),
   };
 }
 

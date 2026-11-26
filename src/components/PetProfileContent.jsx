@@ -23,7 +23,7 @@ import { getChipState } from '@/lib/checkin/chipLabels';
 import {
   getVaccinationSummary, getTimelineEvents, getHealthRecordsCount,
 } from '@/lib/checkin/petProfileClient';
-import { getWeightSummary } from '@/lib/weightClient';
+import { getWeightSummary, canLogWeightFor } from '@/lib/weightClient';
 import { getSitterOnlyPetIds } from '@/lib/petsClient';
 import { getPetLabel } from '@/lib/speciesConfig';
 import { computeDetailedAge } from '@/lib/lifeStage';
@@ -423,7 +423,7 @@ export default function PetProfileContent({ petId, onReload = undefined, expande
   const vaxSummary = getVaccinationSummary(vaccinations);
   const weightValLbs = weightSummary?.currentLbs != null ? weightSummary.currentLbs.toFixed(1) : null;
   const weightDeltaLbs = weightSummary?.deltaLbs;
-  const canLogWeight = sitterOnly === false;
+  const canLogWeight = canLogWeightFor(pet, sitterOnly);
 
   const baselineState = onboarding?.completed_at ? 'complete' : onboarding ? 'in_progress' : 'not_started';
   const baselineSubtitle = {

@@ -19,6 +19,7 @@ import { detectTimezone } from '@/lib/timezone';
 import PetPhoto from '@/components/PetPhoto';
 import { getSitterOnlyPetIds } from '@/lib/petsClient';
 import { reportClientError } from '@/lib/errorMonitoring';
+import { canLogWeightFor } from '@/lib/weightClient';
 
 // Trends sub-tab: every Health/Wellbeing attribute gets its own chart here
 // (unlike Overview, which only covers Appetite/Water/Energy/Weight/Insight
@@ -174,7 +175,7 @@ export default function PetTrends() {
     );
   }
 
-  const canLogWeight = sitterOnly === false && !pet.is_memorial;
+  const canLogWeight = canLogWeightFor(pet, sitterOnly);
 
   return (
     <PageTransition>

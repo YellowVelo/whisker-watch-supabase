@@ -80,6 +80,7 @@ const {
   weightDate, listWeights, addWeight, updateWeight, deleteWeight,
   getWeightSummary, getWeightSummariesForPets, getWeightTrend, validateWeightInput, isValidWeight,
   compareWeightsNewestFirst, weightErrorText, WEIGHT_MESSAGES, WEIGHT_INPUT_ERROR_CODES, getDayWeightLbs,
+  WEIGHT_ADD_SKIPPED, canLogWeightFor,
 } = await import('./weightClient');
 const { dateStrForInstant, dateStrInTimezone } = await import('./timezone');
 
@@ -594,6 +595,65 @@ describe('one weight per pet per day (Lynn, 2026-11-25)', () => {
     expect((await weightsOn(day)).map((e) => [e.id, e.lbs, e.outOfRange])).toEqual([['bad', 9.5, false]]);
   });
 
+  // QA B2: an import never replaces a weight on file, even one saved after
+  // the import's own check, so it uses addWeight's add-only option.
+  describe('addWeight with ifNoneExists (add only)', () => {
+    it('writes nothing and returns WEIGHT_ADD_SKIPPED if the day has a standalone weight', async () => {
+      state.rows = [standalone('s1', PET_A, day, 11.0)];
+      await expect(addWeight(PET_A, { date: day, lbs: 12 }, tz, { ifNoneExists: true })).resolves.toBe(WEIGHT_ADD_SKIPPED);
+      expect(WEIGHT_ADD_SKIPPED).toEqual({ skipped: true });
+      expect(create).not.toHaveBeenCalled();
+      expect(update).not.toHaveBeenCalled();
+      expect((await weightsOn(day)).map((e) => [e.id, e.lbs])).toEqual([['s1', 11]]);
+    });
+
+    it("writes nothing if the day has a check-in weight, and never moves the check-in's updated_at", async () => {
+      state.rows = [fromCheckIn('c1', PET_A, day, 11.0, `${day}T20:00:00+00:00`)];
+      await expect(addWeight(PET_A, { date: day, lbs: 12 }, tz, { ifNoneExists: true })).resolves.toBe(WEIGHT_ADD_SKIPPED);
+      expect(create).not.toHaveBeenCalled();
+      expect(update).not.toHaveBeenCalled();
+      expect(checkInUpdate).not.toHaveBeenCalled();
+      expect((await weightsOn(day)).map((e) => e.lbs)).toEqual([11]);
+    });
+
+    it('writes nothing even if the weight on file is out of range', async () => {
+      state.rows = [standalone('bad', PET_A, day, 0)];
+      await expect(addWeight(PET_A, { date: day, lbs: 9.5 }, tz, { ifNoneExists: true })).resolves.toBe(WEIGHT_ADD_SKIPPED);
+      expect(update).not.toHaveBeenCalled();
+    });
+
+    it("checks the day itself at write time: a weight saved after the caller's own check is not replaced", async () => {
+      // The caller checked when the day was empty; another tab saved a weight since.
+      state.rows = [];
+      const callerSawFree = (await listWeights(PET_A)).every((e) => e.date !== day);
+      expect(callerSawFree).toBe(true);
+      state.rows = [standalone('other-tab', PET_A, day, 10.2)];
+      await expect(addWeight(PET_A, { date: day, lbs: 12 }, tz, { ifNoneExists: true })).resolves.toBe(WEIGHT_ADD_SKIPPED);
+      expect((await weightsOn(day)).map((e) => [e.id, e.lbs])).toEqual([['other-tab', 10.2]]);
+    });
+
+    it('adds one standalone weight on a day with none, and only that day counts', async () => {
+      state.rows = [standalone('s0', PET_A, other, 10.0), standalone('b1', PET_B, day, 30)];
+      const row = await addWeight(PET_A, { date: day, lbs: 12 }, tz, { ifNoneExists: true });
+      expect(row).not.toBe(WEIGHT_ADD_SKIPPED);
+      expect(create).toHaveBeenCalledTimes(1);
+      expect((await weightsOn(day)).map((e) => [e.lbs, e.fromCheckIn])).toEqual([[12, false]]);
+    });
+
+    it('still refuses an out-of-range value or a future date before checking the day', async () => {
+      await expect(addWeight(PET_A, { date: day, lbs: 0 }, tz, { ifNoneExists: true })).rejects.toMatchObject({ code: 'weight_out_of_range' });
+      await expect(addWeight(PET_A, { date: dateStrInTimezone(tz, 2), lbs: 10 }, tz, { ifNoneExists: true })).rejects.toMatchObject({ code: 'weight_date_in_future' });
+      expect(create).not.toHaveBeenCalled();
+    });
+
+    it("without the option, normal callers still update the day's weight", async () => {
+      state.rows = [standalone('s1', PET_A, day, 11.0)];
+      const row = await addWeight(PET_A, { date: day, lbs: 12 }, tz);
+      expect(row).not.toBe(WEIGHT_ADD_SKIPPED);
+      expect((await weightsOn(day)).map((e) => [e.id, e.lbs])).toEqual([['s1', 12]]);
+    });
+  });
+
   it('addWeight on a day with no weight adds one standalone weight', async () => {
     state.rows = [standalone('s0', PET_A, other, 10.0)];
     await addWeight(PET_A, { date: day, lbs: 12 }, tz);
@@ -728,5 +788,25 @@ describe("getDayWeightLbs: the day's weight for the check-in's Weight box", () =
   it("reads only that pet's weights", async () => {
     state.rows = [standalone('s-b', PET_B, day, 40.0)];
     expect(await getDayWeightLbs(PET_A, day)).toBeNull();
+  });
+});
+
+// Memorial pets (QA, 2026-11-26): Trends already hid "Log weight" for a
+// memorial pet; Pet Profile's Weight card now uses the same rule.
+describe('canLogWeightFor: who sees Log weight on Pet Profile and Trends', () => {
+  it('an owner of a living pet can log a weight', () => {
+    expect(canLogWeightFor({ is_memorial: false }, false)).toBe(true);
+    expect(canLogWeightFor({}, false)).toBe(true);
+  });
+  it('never for a memorial pet', () => {
+    expect(canLogWeightFor({ is_memorial: true }, false)).toBe(false);
+  });
+  it('never for a pet the person only sits for, or while that lookup is still answering', () => {
+    expect(canLogWeightFor({ is_memorial: false }, true)).toBe(false);
+    expect(canLogWeightFor({ is_memorial: false }, null)).toBe(false);
+  });
+  it('never without a pet', () => {
+    expect(canLogWeightFor(null, false)).toBe(false);
+    expect(canLogWeightFor(undefined, false)).toBe(false);
   });
 });

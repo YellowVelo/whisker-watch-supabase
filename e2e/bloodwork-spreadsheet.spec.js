@@ -467,6 +467,8 @@ test('FR36: a visit on a day with a check-in weight of 11 shows the weight line 
 });
 
 const SKIPPED_WEIGHT = "The bloodwork was saved, but the weight wasn't added because this day already has one.";
+// QA B3: when the weights can't be checked at save time (pending Lynn's approval).
+const WEIGHT_NOT_CHECKED = "The bloodwork was saved, but the weight wasn't added. Please try adding it in Log weight.";
 
 test('FR36: a weight logged on that day after the review opened is never replaced, and the owner is told', async ({ page }) => {
   const petId = await createPet();
@@ -487,6 +489,36 @@ test('FR36: a weight logged on that day after the review opened is never replace
   expect(weights.map((w) => [Number(w.numeric_value), w.daily_check_in_id !== null])).toEqual([[11, true]]);
 });
 
+// QA B2: a weight saved after the import's fresh weight load but before
+// its weight write. The bloodwork save sits between the two, so the
+// weight is added while that request is held, then the request goes on.
+test('QA B2: a weight saved between the fresh check and the weight write is never replaced, and the owner is told', async ({ page }) => {
+  const petId = await createPet();
+  await stubAI(page, { visits: [{ date: '2026-06-14', values: { bun: 28 }, weight_lbs: 10.1, not_tracked: [], conflict: false }], skipped: [] });
+  const storagePath = await importFile(page, petId, XLSX_FIXTURE);
+  keptPaths.push(storagePath);
+
+  await expect(cards(page)).toHaveCount(1, { timeout: 15000 });
+  await expect(cards(page).first().getByRole('checkbox', { name: /^Weight 10.1 lbs: also add/ })).toBeChecked();
+  let raced = false;
+  await page.route(BLOODWORK_REST, async (route) => {
+    if (route.request().method() === 'POST' && !raced) {
+      raced = true;
+      await addCheckInWeight(petId, '2026-06-14', 11);
+    }
+    await route.continue();
+  });
+
+  await reviewSheet(page).getByRole('button', { name: 'Save 1 visit' }).click();
+  await expect(reviewSheet(page)).not.toBeVisible({ timeout: 15000 });
+  expect(raced).toBe(true);
+  await expect(page.getByText(SKIPPED_WEIGHT, { exact: true })).toBeVisible({ timeout: 10000 });
+  await expect(page.getByText(WEIGHT_NOT_CHECKED, { exact: true })).toHaveCount(0);
+  await expect.poll(async () => (await bloodworkRows(petId)).map((r) => [r.date, r.bun])).toEqual([['2026-06-14', 28]]);
+  const weights = await weightRows(petId);
+  expect(weights.map((w) => [Number(w.numeric_value), w.daily_check_in_id !== null])).toEqual([[11, true]]);
+});
+
 test("FR36: if the weights can't be checked at save time, no weight is saved and the owner is told", async ({ page }) => {
   const petId = await createPet();
   await stubAI(page, { visits: [{ date: '2026-06-14', values: { bun: 28 }, weight_lbs: 10.1, not_tracked: [], conflict: false }], skipped: [] });
@@ -502,7 +534,9 @@ test("FR36: if the weights can't be checked at save time, no weight is saved and
 
   await reviewSheet(page).getByRole('button', { name: 'Save 1 visit' }).click();
   await expect(reviewSheet(page)).not.toBeVisible({ timeout: 15000 });
-  await expect(page.getByText(SKIPPED_WEIGHT, { exact: true })).toBeVisible({ timeout: 10000 });
+  // QA B3: never "…because this day already has one", which isn't known.
+  await expect(page.getByText(WEIGHT_NOT_CHECKED, { exact: true })).toBeVisible({ timeout: 10000 });
+  await expect(page.getByText(SKIPPED_WEIGHT, { exact: true })).toHaveCount(0);
   await expect.poll(async () => (await bloodworkRows(petId)).map((r) => [r.date, r.bun])).toEqual([['2026-06-14', 28]]);
   expect(await weightRows(petId)).toEqual([]);
 });
@@ -574,6 +608,23 @@ test('FR36: a weight with no unit is listed as not imported (no unit)', async ({
   await expect(cards(page).first().getByText('Not imported (no unit): Weight', { exact: true })).toBeVisible();
   await expect(cards(page).first()).not.toContainText('Not imported (different unit)');
   await expect(cards(page).first().getByRole('checkbox', { name: /^Weight/ })).toHaveCount(0);
+});
+
+// QA B1: the server moves a tracked test the AI listed as "not tracked"
+// (Total Protein in g/L) into skipped, sometimes with no unit.
+test('QA B1: a tracked test moved out of "not tracked" shows as not imported (different unit), never "Not tracked yet"', async ({ page }) => {
+  const petId = await createPet();
+  await stubAI(page, {
+    visits: [{ date: '2026-10-02', values: { bun: 32 }, not_tracked: ['Chloride'], conflict: false }],
+    skipped: [{ visit: 0, date: '2026-10-02', field: 'total_protein', label: 'Total Protein', unit: null, value: null }],
+  });
+  const storagePath = await importFile(page, petId, XLSX_FIXTURE);
+  keptPaths.push(storagePath);
+
+  await expect(cards(page)).toHaveCount(1, { timeout: 15000 });
+  await expect(cards(page).first().getByText('Not imported (different unit): Total Protein', { exact: true })).toBeVisible();
+  await expect(cards(page).first()).not.toContainText('Not imported (no unit)');
+  await expect(cards(page).first()).not.toContainText(/Not tracked yet:.*Total Protein/);
 });
 
 test("a save that fails partway keeps the saved visit's weight and leaves only the failed visit", async ({ page }) => {

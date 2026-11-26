@@ -19,11 +19,11 @@ import { readBloodworkSpreadsheet, SPREADSHEET_MESSAGES } from '@/lib/bloodworkS
 import {
   buildReviewVisits, includedVisits, reviewVisitToRecord, bloodworkImportErrorText, shouldReportImportError,
   changeVisitDate, toggleVisitWeight, weightToSave, weightTicked, refreshVisitsOnFile,
-  SCAN_NOTHING_FOUND, WEIGHT_SKIPPED_MESSAGE,
+  SCAN_NOTHING_FOUND, WEIGHT_SKIPPED_MESSAGE, WEIGHT_NOT_CHECKED_MESSAGE,
 } from '@/lib/bloodworkImport';
 import { aiErrorText } from '@/lib/aiGuardrails';
 import { reportClientError } from '@/lib/errorMonitoring';
-import { listWeights, addWeight } from '@/lib/weightClient';
+import { listWeights, addWeight, WEIGHT_ADD_SKIPPED } from '@/lib/weightClient';
 import { useAuth } from '@/lib/AuthContext';
 import { detectTimezone } from '@/lib/timezone';
 import BloodworkImportReview from '@/components/BloodworkImportReview';
@@ -171,7 +171,9 @@ export default function BloodworkSection({ petId }) {
   // the review only once both are saved. The pet's weights are loaded again
   // first, and an import never replaces a weight: a ticked weight is
   // skipped if its day has a weight by then, or if that load fails
-  // (weightToSave), and the owner is told after the save. The file is
+  // (weightToSave), and addWeight's add-only option skips it if one is
+  // saved after that load (QA B2). The owner is told after the save, with
+  // a different message if the load failed (QA B3). The file is
   // linked to the pet once anything is saved. If a save fails partway, the
   // saved visits leave the review and the rest stay for another try,
   // checked again against the dates now on file; a visit whose record
@@ -186,6 +188,7 @@ export default function BloodworkSection({ petId }) {
     const savedBloodworkDates = [];
     const savedWeightDates = [];
     let weightSkipped = false;
+    let weightNotChecked = false;
     /** @type {Set<string>|null} */
     let freshWeightDates = null;
     reviewSavingRef.current = true;
@@ -202,11 +205,14 @@ export default function BloodworkSection({ petId }) {
         }
         savedBloodworkDates.push(visit.form.date);
         if (weightToSave(visit, freshWeightDates)) {
-          await addWeight(petId, { date: visit.form.date, lbs: visit.weightLbs }, timezone);
-          savedWeightDates.push(visit.form.date);
+          const added = await addWeight(petId, { date: visit.form.date, lbs: visit.weightLbs }, timezone, { ifNoneExists: true });
+          if (added === WEIGHT_ADD_SKIPPED) weightSkipped = true;
+          else savedWeightDates.push(visit.form.date);
+          // Either way the day has a weight now.
           freshWeightDates?.add(visit.form.date);
         } else if (weightTicked(visit)) {
-          weightSkipped = true;
+          if (freshWeightDates === null) weightNotChecked = true;
+          else weightSkipped = true;
         }
         savedKeys.add(visit.key);
       }
@@ -230,7 +236,8 @@ export default function BloodworkSection({ petId }) {
     });
     reviewSavingRef.current = false;
     setReviewSaving(false);
-    if (weightSkipped) toast({ description: WEIGHT_SKIPPED_MESSAGE });
+    if (weightNotChecked) toast({ description: WEIGHT_NOT_CHECKED_MESSAGE });
+    else if (weightSkipped) toast({ description: WEIGHT_SKIPPED_MESSAGE });
     if (anySaved) load();
   };
 
