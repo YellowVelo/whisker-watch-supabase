@@ -91,7 +91,7 @@ describe('buildReviewVisits', () => {
   });
 
   it("disables a weight line whose day already has a weight, says so, and can't be ticked (Lynn, 2026-11-26)", () => {
-    const answer = { visits: [{ date: '2026-06-14', values: {}, weight_lbs: 10.1 }, { date: '2026-05-01', values: {}, weight_lbs: 9.8 }] };
+    const answer = { visits: [{ date: '2026-06-14', values: { bun: 28 }, weight_lbs: 10.1 }, { date: '2026-05-01', values: { bun: 30 }, weight_lbs: 9.8 }] };
     const [onFile, free] = buildReviewVisits(answer, { bloodworkDates: new Set(), weightDates: new Set(['2026-06-14']) }).visits;
     expect(onFile).toMatchObject({ weightOnFile: true, includeWeight: false, included: true });
     expect(weightLineEnabled(onFile)).toBe(false);
@@ -135,6 +135,25 @@ describe('buildReviewVisits', () => {
     const { differentUnit, noUnit } = skippedGroups(buildReviewVisits(answer, none).visits[0].skipped);
     expect(skippedText(differentUnit)).toBe('Total Protein, Creatinine µmol/L');
     expect(skippedText(noUnit)).toBe('Weight');
+  });
+
+  it('starts a visit with no lab values to save unticked, so it never adds an empty record (whole-branch review)', () => {
+    const answer = {
+      visits: [
+        { date: '2026-10-02', values: {}, weight_lbs: 9.8, not_tracked: ['Chloride'] },
+        { date: '2026-06-14', values: {}, not_tracked: ['GGT'] },
+        { date: '2026-03-14', values: {} },
+        { date: '2026-01-10', values: { bun: 25 }, weight_lbs: 10.4 },
+      ],
+      skipped: [{ visit: 2, date: '2026-03-14', field: 'creatinine', label: 'Creatinine', unit: 'µmol/L', value: 170 }],
+    };
+    const { visits } = buildReviewVisits(answer, none);
+    expect(visits.map((v) => v.included)).toEqual([false, false, false, true]);
+    expect(includedVisits(visits).map((v) => v.form.date)).toEqual(['2026-01-10']);
+    // A weight-only visit's weight isn't saved unless the owner ticks the visit.
+    expect(weightLineEnabled(visits[0])).toBe(false);
+    expect(weightToSave(visits[0], new Set())).toBe(false);
+    expect(canSaveReview(visits.slice(0, 3), 'UTC')).toBe(false);
   });
 
   it("starts an undated visit's weight line unticked and not tickable", () => {
@@ -210,7 +229,7 @@ describe('changing a visit date (FR30, FR36)', () => {
 });
 
 describe('which weights a save logs (FR36: one weight per day, an import never replaces one)', () => {
-  const visitOn = (date, weightDates) => buildReviewVisits({ visits: [{ date, values: {}, weight_lbs: 10.1 }] }, { bloodworkDates: new Set(), weightDates }).visits[0];
+  const visitOn = (date, weightDates) => buildReviewVisits({ visits: [{ date, values: { bun: 28 }, weight_lbs: 10.1 }] }, { bloodworkDates: new Set(), weightDates }).visits[0];
 
   it('logs a ticked weight for a date with no weight', () => {
     expect(weightToSave(visitOn('2026-05-01', new Set()), new Set())).toBe(true);

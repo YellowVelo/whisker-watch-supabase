@@ -28,7 +28,9 @@ export default function ConfirmDeleteDialog({
 }) {
   const [typedText, setTypedText] = useState('');
 
-  const singleStep = !confirmText;
+  // Only a missing confirmText means one step: an empty name ('') must
+  // still go through the type-to-confirm step, never a one-tap delete.
+  const singleStep = confirmText === undefined;
 
   const close = () => {
     if (confirming) return;

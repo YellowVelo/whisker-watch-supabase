@@ -75,7 +75,8 @@ function skippedItem(s) {
  *
  * - Every card starts ticked, except a visit whose date already has a
  *   bloodwork record ("Already on file", FR30/AC16) or one found twice
- *   with different values ("Found twice…", FR37/AC23).
+ *   with different values ("Found twice…", FR37/AC23), or one with no lab
+ *   values to save (only "not imported" values or a weight).
  * - A weight line (FR36) starts ticked unless the visit has no date or the
  *   pet already has a weight on that date. An import never replaces a
  *   weight (Lynn, 2026-11-26): a date with a weight on file gets a
@@ -139,7 +140,10 @@ export function buildReviewVisits(result, { bloodworkDates, weightDates }) {
       notTracked: Array.isArray(raw.not_tracked) ? raw.not_tracked.map(textOf).filter(Boolean) : [],
       conflict,
       onFile,
-      included: !onFile && !conflict,
+      // A visit with no lab values to save (only "not imported" values or
+      // a weight) starts unticked: saving it would add an empty bloodwork
+      // record that then marks its date "Already on file".
+      included: !onFile && !conflict && valueKeys.length > 0,
       weightLbs: weight,
       includeWeight: weightStartsTicked(weight, form.date, weightDates),
       weightOnFile: hasWeightOn(form.date, weightDates),
@@ -269,8 +273,7 @@ export function weightToSave(visit, freshWeightDates) {
 export const WEIGHT_SKIPPED_MESSAGE = "The bloodwork was saved, but the weight wasn't added because this day already has one.";
 
 // Shown instead when the weights couldn't be loaded again at save time, so
-// no ticked weight was added (QA B3, 2026-11-26; wording pending Lynn's
-// approval).
+// no ticked weight was added (QA B3; wording approved by Lynn 2026-11-26).
 export const WEIGHT_NOT_CHECKED_MESSAGE = "The bloodwork was saved, but the weight wasn't added. Please try adding it in Log weight.";
 
 /** A YYYY-MM-DD date as the card heading shows it: "Mar 14, 2026". */
