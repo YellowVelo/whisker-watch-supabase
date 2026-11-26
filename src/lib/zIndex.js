@@ -6,7 +6,7 @@
 //
 // Order, low to high:
 //   chrome  — persistent page chrome (AppHeader, BottomTabBar, PullToRefreshIndicator)
-//   overlay — full-screen flows (CatchUpFlow, OnboardingShell, AskWyskerSheet, PetSymptoms' log overlay)
+//   overlay — full-screen flows (CatchUpFlow, OnboardingShell, AskWyskerSheet)
 //   banner  — persistent system banners (AccountTypeBanner, OfflineBanner, IosInstallBanner)
 //   popup   — BottomSheet + Dialog/AlertDialog/Drawer/Select (all portal-based popups)
 //   toast   — toast notifications

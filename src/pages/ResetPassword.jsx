@@ -4,12 +4,11 @@ import SetPasswordForm from '@/components/SetPasswordForm';
 import AuthLayout from '@/components/AuthLayout';
 import { KeyRound } from 'lucide-react';
 
-// NOTE: Supabase's password-reset flow differs from Base44's. Clicking the
-// emailed reset link logs the user into a temporary "recovery" session
-// automatically (Supabase handles the token in the URL itself before this
-// component even mounts) — we just need to call updateUser() with the new
-// password while that session is active. There's no manual resetToken to
-// read or pass, unlike the old Base44 implementation.
+// Clicking the emailed reset link logs the user into a temporary "recovery"
+// session automatically (Supabase handles the token in the URL itself
+// before this component even mounts), so this page just calls
+// updateUser() with the new password while that session is active. There's
+// no reset token for the page to read or pass.
 export default function ResetPassword() {
   const [sessionReady, setSessionReady] = useState(false);
 

@@ -17,6 +17,9 @@ import { PALETTE } from '@/lib/toneColors';
 import { useAuth } from '@/lib/AuthContext';
 import { detectTimezone } from '@/lib/timezone';
 import PetPhoto from '@/components/PetPhoto';
+import { getSitterOnlyPetIds } from '@/lib/petsClient';
+import { reportClientError } from '@/lib/errorMonitoring';
+import { canLogWeightFor } from '@/lib/weightClient';
 
 // Trends sub-tab: every Health/Wellbeing attribute gets its own chart here
 // (unlike Overview, which only covers Appetite/Water/Energy/Weight/Insight
@@ -33,16 +36,9 @@ const GROUPS = {
   wellness: { label: 'Wellness', codes: WELLBEING_ATTRIBUTES, includesVomitingNausea: false, includesWeight: false },
 };
 
-// "Trends" used to be a legacy sub-tab charting symptom_logs directly
-// (previously PetProfileTabs' own "Trends" tab). That table stopped
-// accumulating appetite/energy/stool/vomiting entries once Daily Check-In
-// became the primary logging flow (Data Model_V2.md §7 — symptom_logs is
-// now written to only for Weight), so that sub-tab was permanently stuck
-// on "Need at least 2 logs to show trends" for any pet tracked purely
-// through Daily Check-In, even when Overview (reading observations) had
-// real trended data for the same pet. Fixed by rendering the same real,
-// observations-backed cards for both "Overview" and "Trends" rather than
-// maintaining a second, disconnected data path.
+// "Overview" and "Trends" render the same observations-backed cards (the
+// daily check-in's record of answers), so both always show the same data
+// for a pet; there is no second, separate data path behind "Trends".
 const SECTIONS = [
   { key: 'overview', label: 'Overview' },
   { key: 'trends', label: 'Trends' },
@@ -95,6 +91,25 @@ export default function PetTrends() {
   }, [petId]);
 
   useEffect(() => { if (petId) loadPet(); }, [petId, loadPet]);
+
+  // Sitters reach this screen too (Pets I Sit) and can read weight but
+  // never write it, so the Weight card's "Log weight" button is hidden for
+  // a pet the person only sits for (spec 0081). Hidden until the lookup
+  // answers. If the lookup fails it's reported and the button shows, the
+  // same fallback as loadOwnedPets (spec 0079); the database still refuses
+  // a sitter's write.
+  const [sitterOnly, setSitterOnly] = useState(/** @type {boolean | null} */ (null));
+  useEffect(() => {
+    let cancelled = false;
+    setSitterOnly(null);
+    getSitterOnlyPetIds()
+      .then((ids) => { if (!cancelled) setSitterOnly(ids.has(petId)); })
+      .catch((err) => {
+        reportClientError(err, { feature: 'trends', note: 'sitter-only pet lookup failed' });
+        if (!cancelled) setSitterOnly(false);
+      });
+    return () => { cancelled = true; };
+  }, [petId]);
 
   useEffect(() => { if (pet) track('trends_viewed', { pet_id: pet.id }); }, [pet]);
 
@@ -159,6 +174,8 @@ export default function PetTrends() {
       </div>
     );
   }
+
+  const canLogWeight = canLogWeightFor(pet, sitterOnly);
 
   return (
     <PageTransition>
@@ -266,7 +283,7 @@ export default function PetTrends() {
                     )}
                     {GROUPS[activeGroup].includesWeight && (
                       <div ref={(el) => { cardRefs.current.weight = el; }} className="rounded-2xl transition-shadow" style={highlightedMetric === 'weight' ? { boxShadow: `0 0 0 2px ${PALETTE.sky}` } : undefined}>
-                        <WeightCard petId={petId} range={debouncedRange} timezone={timezone} />
+                        <WeightCard petId={petId} range={debouncedRange} timezone={timezone} canLogWeight={canLogWeight} />
                       </div>
                     )}
                   </div>
@@ -276,7 +293,7 @@ export default function PetTrends() {
                   <ObservationCard petId={petId} range={debouncedRange} code="appetite" label="Appetite" icon={UtensilsCrossed} timezone={timezone} />
                   <ObservationCard petId={petId} range={debouncedRange} code="water_intake" label="Water Intake" icon={Droplets} timezone={timezone} />
                   <ObservationCard petId={petId} range={debouncedRange} code="energy" label="Energy" icon={Zap} timezone={timezone} />
-                  <WeightCard petId={petId} range={debouncedRange} timezone={timezone} />
+                  <WeightCard petId={petId} range={debouncedRange} timezone={timezone} canLogWeight={canLogWeight} />
                   <InsightSummaryCard petId={petId} range={debouncedRange} />
                 </div>
               )}

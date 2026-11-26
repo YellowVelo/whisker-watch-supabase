@@ -1,7 +1,8 @@
 // The bloodwork lab values shown in BloodworkSection.jsx and asked for by
 // the bloodwork scan. Moved out of the component (spec 0080) so the Vitest
 // parity test can compare it with the server copy in
-// supabase/functions/ask-vet-assistant/rules.ts (key, label, unit).
+// supabase/functions/ask-vet-assistant/rules.ts (key, label, unit; and
+// URINE_PROTEIN_VALUES).
 //
 // Design System Amendment #10 (2026-07-30) — 16 lab values need more
 // colors than the original 5 --chart-* tokens, so the token set itself
@@ -25,3 +26,7 @@ export const BLOODWORK_FIELDS = [
   { key: 'glucose', label: 'Glucose', unit: 'mg/dL', normal: '70–150', color: 'hsl(var(--chart-14))' },
   { key: 't4', label: 'T4 Thyroid', unit: 'µg/dL', normal: '0.8–4.7', color: 'hsl(var(--chart-15))' },
 ];
+
+// The urine protein answers the bloodwork form offers. The server copy
+// (rules.ts) tells the bloodwork scans which answers they may return.
+export const URINE_PROTEIN_VALUES = ['Negative', 'Trace', '1+', '2+', '3+', '4+'];

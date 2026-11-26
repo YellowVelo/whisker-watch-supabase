@@ -9,12 +9,16 @@ import { Input } from '@/components/ui/input';
 // or 2 (type-to-confirm) — owned by the caller, since what triggers each
 // transition differs (Settings has its own single-dialog-open-at-a-time
 // state machine; PetProfileContent tracks its own delete flow separately).
+//
+// Leave `confirmText` out for a one-step confirm (spec 0081, deleting one
+// weight): step 1's button is then `confirmLabel` and calls onConfirm
+// directly, with `confirming`/`error` shown in place; there is no step 2.
 export default function ConfirmDeleteDialog({
   step,
   onOpenChange,
   title,
   warning,
-  confirmText,
+  confirmText = undefined,
   confirmLabel = 'Delete',
   confirmingLabel = 'Deleting…',
   confirming = false,
@@ -23,6 +27,11 @@ export default function ConfirmDeleteDialog({
   onConfirm,
 }) {
   const [typedText, setTypedText] = useState('');
+
+  // Only a missing confirmText means one step. An empty name ('') still
+  // gets both steps (Continue, then Confirm), so it's never a one-tap
+  // delete; nothing has to be typed, since '' already matches.
+  const singleStep = confirmText === undefined;
 
   const close = () => {
     if (confirming) return;
@@ -38,19 +47,30 @@ export default function ConfirmDeleteDialog({
             <DialogTitle className="text-2xl text-destructive">{title}</DialogTitle>
           </DialogHeader>
           <DialogDescription asChild>{warning}</DialogDescription>
+          {singleStep && error && <p className="text-sm text-destructive">{error}</p>}
           <DialogFooter className="mt-2 gap-2">
-            <button onClick={close} className="flex-1 h-10 rounded-lg border border-border text-sm font-medium hover:bg-secondary transition-colors">Cancel</button>
-            <button
-              onClick={() => onOpenChange(2)}
-              className="flex-1 h-10 rounded-lg bg-destructive text-destructive-foreground text-sm font-medium hover:bg-destructive/90 transition-colors"
-            >
-              Continue
-            </button>
+            <button onClick={close} disabled={confirming} className="flex-1 h-10 rounded-lg border border-border text-sm font-medium hover:bg-secondary transition-colors disabled:opacity-50">Cancel</button>
+            {singleStep ? (
+              <button
+                onClick={() => onConfirm()}
+                disabled={confirming || confirmDisabled}
+                className="flex-1 h-10 rounded-lg bg-destructive text-destructive-foreground text-sm font-medium hover:bg-destructive/90 transition-colors disabled:opacity-40"
+              >
+                {confirming ? confirmingLabel : confirmLabel}
+              </button>
+            ) : (
+              <button
+                onClick={() => onOpenChange(2)}
+                className="flex-1 h-10 rounded-lg bg-destructive text-destructive-foreground text-sm font-medium hover:bg-destructive/90 transition-colors"
+              >
+                Continue
+              </button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      <Dialog open={step === 2} onOpenChange={(v) => !v && close()}>
+      <Dialog open={!singleStep && step === 2} onOpenChange={(v) => !v && close()}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="text-2xl text-destructive">Confirm Deletion</DialogTitle>

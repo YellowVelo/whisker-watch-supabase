@@ -2,7 +2,6 @@
 const SCREEN_PATTERNS = [
   [/\/trends(?:$|\?)/, 'Trends'],
   [/\/timeline(?:$|\?)/, 'Timeline'],
-  [/\/symptoms(?:$|\?)/, 'Weight'],
   [/\/food(?:$|\?)/, 'Food'],
   [/\/export(?:$|\?)/, 'Vet Export'],
   [/\/profile/, 'Profile'],

@@ -42,6 +42,12 @@ describe('invokeAI request body (spec 0080 FR1)', () => {
     expect(sentBody()).toEqual({ task: 'pet_chat', pet_id: PET_ID, screen: 'Trends', question: 'Is she ok?', history });
   });
 
+  it('sends the bloodwork spreadsheet text as sheet_text, with no file (spec 0081)', async () => {
+    const sheet_text = 'Sheet 1 of 1: Results\nTest,Range,Measure,Visit 1\nBUN,16-36,mg/dL,32';
+    await invokeAI({ task: 'bloodwork_spreadsheet', pet_id: PET_ID, sheet_text });
+    expect(sentBody()).toEqual({ task: 'bloodwork_spreadsheet', pet_id: PET_ID, sheet_text });
+  });
+
   it('posts to ask-vet-assistant with the session token', async () => {
     await invokeAI({ task: 'household_chat', question: 'hi' });
     const [url, init] = fetchMock.mock.calls[0];
