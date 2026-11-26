@@ -4,6 +4,12 @@ import { defineConfig } from 'vite'
 import { VitePWA } from 'vite-plugin-pwa'
 
 import { cloudflare } from "@cloudflare/vite-plugin";
+import { sentryVitePlugin } from '@sentry/vite-plugin'
+
+// Spec 0084 (FR1-3): source maps are uploaded to Sentry and then deleted, only
+// when the build has SENTRY_AUTH_TOKEN (the production Cloudflare build). Without
+// it (staging, local, CI) no maps are generated at all, so none can be published.
+const sentryUploadEnabled = !!process.env.SENTRY_AUTH_TOKEN
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -30,6 +36,9 @@ export default defineConfig({
         ],
       },
       workbox: {
+        // Spec 0084 (FR3): the service worker is written after the Sentry plugin
+        // deletes maps, so it must never emit its own (it would follow build.sourcemap).
+        sourcemap: false,
         // App shell: precache so the shell loads and the app opens offline.
         globPatterns: ['**/*.{js,css,html,svg,png,ico,woff,woff2}'],
         navigateFallback: '/index.html',
@@ -43,7 +52,26 @@ export default defineConfig({
         ],
       },
     }),
+    // Must stay last, after VitePWA.
+    sentryVitePlugin({
+      org: 'wysker-watch',
+      project: 'javascript-react',
+      authToken: process.env.SENTRY_AUTH_TOKEN,
+      telemetry: false,
+      disable: !sentryUploadEnabled,
+      // Workers Builds' commit SHA; if unset, the plugin detects the release from git.
+      release: { name: process.env.WORKERS_CI_COMMIT_SHA },
+      sourcemaps: { filesToDeleteAfterUpload: ['./dist/**/*.map'] },
+      // A bad token or a Sentry outage must never fail the production build.
+      errorHandler: (err) => {
+        console.warn('[sentry-vite-plugin] source map upload failed, continuing build:', err)
+      },
+    }),
   ],
+  build: {
+    // 'hidden': maps are generated for upload but the JS files don't point to them.
+    sourcemap: sentryUploadEnabled ? 'hidden' : false,
+  },
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),

@@ -98,10 +98,11 @@ jobs:
             supabase/tests/vet_report_pdf.test.ts \
             supabase/tests/weight_home.test.ts
 
-      - name: Run Edge Function code checks (spec 0078 - exact library versions, no raw error messages)
+      - name: Run Edge Function code checks (spec 0078 - exact library versions, no raw error messages; spec 0084 - only production reports to Sentry)
         run: |
           deno test --allow-read --allow-env --node-modules-dir=none \
-            supabase/tests/function_hygiene.test.ts
+            supabase/tests/function_hygiene.test.ts \
+            supabase/tests/error_reporting.test.ts
 
       # Pure unit tests, no secrets: no network, file or env permission.
       - name: Run check-in counting rules, AI prompt, Vet Report overview and pet photo unit tests (spec 0080)

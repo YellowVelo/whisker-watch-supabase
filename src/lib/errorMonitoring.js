@@ -1,28 +1,51 @@
 import * as Sentry from '@sentry/react';
 
 // Production error/crash monitoring (spec 0052). Sentry.init() is skipped
-// entirely when VITE_SENTRY_DSN is unset (e.g. local dev without a DSN
-// configured) so this is a silent no-op rather than an error — monitoring
+// entirely when VITE_SENTRY_DSN is unset, or when VITE_SENTRY_ENVIRONMENT
+// isn't exactly 'production' (spec 0084: dev, staging, local and CI send
+// nothing), so this is a silent no-op rather than an error — monitoring
 // must never be able to break the app itself.
 const dsn = import.meta.env.VITE_SENTRY_DSN;
+const environment = import.meta.env.VITE_SENTRY_ENVIRONMENT || 'development';
 
 // Accounts whose errors stay out of the dashboard: e2e runs (test) and the
 // shared demo login (demo). Everyone else reports, including Lynn's own
 // 'owner' account (spec 0078, PA-15; before that, only 'production' did),
 // and errors from before sign-in, when account_type isn't known yet.
-// Edge Functions don't filter at all (_shared/errorReporting.ts).
+// Edge Functions also report only from production, but don't filter by
+// account type (_shared/errorReporting.ts).
 const EXCLUDED_ACCOUNT_TYPES = new Set(['test', 'demo']);
 
-export function shouldSendEvent(event) {
-  return !EXCLUDED_ACCOUNT_TYPES.has(event?.tags?.account_type);
+// Network drops (spec 0084, FR5): the person's connection failed, not the
+// app. Supabase wraps them as AuthRetryableFetchError. "Failed to fetch
+// dynamically imported module" is kept: that's a broken deploy, not a drop.
+const NETWORK_DROP_MESSAGE = /Failed to fetch|Load failed|NetworkError when attempting to fetch resource/;
+const DYNAMIC_IMPORT_MESSAGE = /dynamically imported module/;
+
+function isNetworkDrop(event) {
+  const values = event?.exception?.values;
+  if (!Array.isArray(values)) return false;
+  return values.some((ex) => {
+    if (ex?.type === 'AuthRetryableFetchError') return true;
+    const value = typeof ex?.value === 'string' ? ex.value : '';
+    return NETWORK_DROP_MESSAGE.test(value) && !DYNAMIC_IMPORT_MESSAGE.test(value);
+  });
 }
 
-export const sentryEnabled = !!dsn;
+export function shouldSendEvent(event) {
+  if (EXCLUDED_ACCOUNT_TYPES.has(event?.tags?.account_type)) return false;
+  return !isNetworkDrop(event);
+}
+
+// Only production reports (spec 0084, FR4). Staging, dev, local and CI
+// runs send nothing; to test locally, set VITE_SENTRY_ENVIRONMENT=production
+// temporarily.
+export const sentryEnabled = !!dsn && environment === 'production';
 
 if (sentryEnabled) {
   Sentry.init({
     dsn,
-    environment: import.meta.env.VITE_SENTRY_ENVIRONMENT || 'development',
+    environment,
     // Error capture only — no performance tracing or session replay (spec
     // 0052 non-goals).
     tracesSampleRate: 0,

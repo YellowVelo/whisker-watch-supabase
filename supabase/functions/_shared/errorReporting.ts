@@ -12,9 +12,12 @@
 // SENTRY_DSN/SENTRY_ENVIRONMENT are Edge Function secrets, set per Supabase
 // project (wysker-watch-dev / wysker-watch-staging / Whisker-Watch prod —
 // same DSN value, different SENTRY_ENVIRONMENT — never set on the
-// disposable wysker-watch-restore-scratch project). If SENTRY_DSN is
-// unset, reportError() is a no-op — monitoring must never be able to
-// break a function.
+// disposable wysker-watch-restore-scratch project). Only production
+// reports (spec 0084, FR4): if SENTRY_DSN is unset, or SENTRY_ENVIRONMENT
+// is anything other than exactly 'production' (dev, staging, unset),
+// reportError() is a no-op. Monitoring must never be able to break a
+// function. No account-type filtering happens here, so test-account errors
+// on production still report.
 //
 // The version is pinned on purpose (spec 0075, 2026-11-21). Unpinned, every
 // deploy takes the newest release, and 11.16.0 (2026-11-20) crashes the
@@ -27,7 +30,13 @@ import * as Sentry from 'npm:@sentry/deno@11.15.0';
 const dsn = Deno.env.get('SENTRY_DSN');
 const environment = Deno.env.get('SENTRY_ENVIRONMENT') || 'development';
 
-export const sentryEnabled = !!dsn;
+// True only for exactly 'production' (spec 0084, FR4). Case matters:
+// 'Production' is not production.
+export function isReportingEnvironment(env: string | undefined): boolean {
+  return env === 'production';
+}
+
+export const sentryEnabled = !!dsn && isReportingEnvironment(environment);
 
 if (sentryEnabled) {
   Sentry.init({
