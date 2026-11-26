@@ -1,6 +1,6 @@
 # 0081_Base44_Cleanup_Weight_Home_And_Bloodwork_Spreadsheet_Specification_v1
 
-**Status:** Built 2026-11-26 (PROTECTED; awaiting Lynn's merge OK). Approved by Lynn 2026-11-23: spec, wording A–H and the FR9 translation table. Follow-up decisions, same day, from her IDEXX PDF sample and her spreadsheet template: photo/PDF scans use the same review as spreadsheets (FR35), and spreadsheet weights can go into weight history (FR36). Wording I–K approved too. Fully approved. **Amendments 1–2 approved by Lynn 2026-11-24** (see "Amendments"): no new date column for weight; old tables deleted without moving records.
+**Status:** Built 2026-11-26 (PROTECTED; awaiting Lynn's merge OK). Approved by Lynn 2026-11-23: spec, wording A–H and the FR9 translation table. Follow-up decisions, same day, from her IDEXX PDF sample and her spreadsheet template: photo/PDF scans use the same review as spreadsheets (FR35), and spreadsheet weights can go into weight history (FR36). Wording I–K approved too. Fully approved. **Amendments 1–2 approved by Lynn 2026-11-24** (see "Amendments"): no new date column for weight; old tables deleted without moving records. **Amendment 3** records Lynn's decisions during the build (2026-11-24 to 2026-11-26) and the copy she approved then.
 **Date:** 2026-11-23
 **Branch:** `claude/base44-cleanup`
 **Migration:** `0061` (reserved by the first session). It gives weight its new home, moves the old records, and deletes the three Base44-era tables.

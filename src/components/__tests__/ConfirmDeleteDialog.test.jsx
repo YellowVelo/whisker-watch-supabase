@@ -37,7 +37,7 @@ const render = (props) =>
   );
 
 describe('ConfirmDeleteDialog', () => {
-  it('still asks for the name to be typed when confirmText is an empty string', () => {
+  it('still takes two taps (Continue, then Confirm) when confirmText is an empty string, with nothing to type since it already matches', () => {
     const first = render({ step: 1, confirmText: '' });
     expect(first).toContain('Continue');
     expect(first).not.toContain('Delete forever');

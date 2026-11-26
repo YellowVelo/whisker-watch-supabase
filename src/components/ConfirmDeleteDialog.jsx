@@ -28,8 +28,9 @@ export default function ConfirmDeleteDialog({
 }) {
   const [typedText, setTypedText] = useState('');
 
-  // Only a missing confirmText means one step: an empty name ('') must
-  // still go through the type-to-confirm step, never a one-tap delete.
+  // Only a missing confirmText means one step. An empty name ('') still
+  // gets both steps (Continue, then Confirm), so it's never a one-tap
+  // delete; nothing has to be typed, since '' already matches.
   const singleStep = confirmText === undefined;
 
   const close = () => {
