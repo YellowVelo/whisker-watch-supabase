@@ -91,16 +91,16 @@ describe('listOwnedPets', () => {
 describe('loadOwnedPets', () => {
   // AC5: owned + also-sat pets are kept, sitter-only pets are dropped.
   it('keeps owned and co-owned pets, drops sitter-only ones, and counts them', async () => {
-    const { pets, sitterOnlyCount } = await loadOwnedPets('-created_date', 'home');
+    const { pets, sitterOnlyCount } = await loadOwnedPets('-created_at', 'home');
     expect(pets.map((p) => p.id)).toEqual(['pet-own', 'pet-coown', 'pet-other']);
     expect(sitterOnlyCount).toBe(1);
-    expect(state.listOrders).toEqual(['-created_date']);
+    expect(state.listOrders).toEqual(['-created_at']);
     expect(reportClientError).not.toHaveBeenCalled();
   });
 
   it('counts zero sitter-only pets when the person sits for nobody', async () => {
     state.accesses = [];
-    const { pets, sitterOnlyCount } = await loadOwnedPets('-created_date', 'home');
+    const { pets, sitterOnlyCount } = await loadOwnedPets('-created_at', 'home');
     expect(pets).toHaveLength(4);
     expect(sitterOnlyCount).toBe(0);
   });
@@ -111,7 +111,7 @@ describe('loadOwnedPets', () => {
     async (feature) => {
       const err = new Error('network blip');
       state.sitterLookupError = err;
-      const { pets, sitterOnlyCount } = await loadOwnedPets('-created_date', feature);
+      const { pets, sitterOnlyCount } = await loadOwnedPets('-created_at', feature);
       expect(pets.map((p) => p.id)).toEqual(['pet-own', 'pet-coown', 'pet-friend', 'pet-other']);
       expect(sitterOnlyCount).toBe(0);
       expect(reportClientError).toHaveBeenCalledTimes(1);
@@ -123,7 +123,7 @@ describe('loadOwnedPets', () => {
   it('passes a pet-list failure up unchanged, so Home still shows its load error', async () => {
     const err = new Error('pets down');
     state.petListError = err;
-    await expect(loadOwnedPets('-created_date', 'home')).rejects.toBe(err);
+    await expect(loadOwnedPets('-created_at', 'home')).rejects.toBe(err);
     expect(reportClientError).not.toHaveBeenCalled();
   });
 });
@@ -147,7 +147,7 @@ describe('loadOwnedPets edge cases', () => {
     state.coOwnerRows = [];
     state.sits = { 'sit-1': { pet_ids: ['pet-a', 'pet-b'] }, 'sit-2': { pet_ids: ['pet-c'] } };
     state.pets = ['pet-a', 'pet-b', 'pet-c'].map((id) => ({ id }));
-    const { pets, sitterOnlyCount } = await loadOwnedPets('-created_date', 'ask_wysker');
+    const { pets, sitterOnlyCount } = await loadOwnedPets('-created_at', 'ask_wysker');
     expect(pets).toEqual([]);
     expect(sitterOnlyCount).toBe(3);
   });
@@ -156,7 +156,7 @@ describe('loadOwnedPets edge cases', () => {
   it('drops sat pets from more than one owner, keeping my own', async () => {
     state.sits = { 'sit-1': { pet_ids: ['friend1-pet'] }, 'sit-2': { pet_ids: ['friend2-pet', 'pet-own'] } };
     state.pets = ['pet-own', 'friend1-pet', 'friend2-pet'].map((id) => ({ id }));
-    const { pets, sitterOnlyCount } = await loadOwnedPets('-created_date', 'home');
+    const { pets, sitterOnlyCount } = await loadOwnedPets('-created_at', 'home');
     expect(pets.map((p) => p.id)).toEqual(['pet-own']);
     expect(sitterOnlyCount).toBe(2);
   });
@@ -166,7 +166,7 @@ describe('loadOwnedPets edge cases', () => {
   // the sit window), never inflates the count or breaks the list.
   it('ignores a deleted sit and a sat pet that is no longer in the pet list', async () => {
     state.sits = { 'sit-1': { pet_ids: ['pet-friend', 'pet-deleted'] } }; // sit-2 deleted
-    const { pets, sitterOnlyCount } = await loadOwnedPets('-created_date', 'home');
+    const { pets, sitterOnlyCount } = await loadOwnedPets('-created_at', 'home');
     expect(pets.map((p) => p.id)).toEqual(['pet-own', 'pet-coown', 'pet-other']);
     expect(sitterOnlyCount).toBe(1);
     expect(reportClientError).not.toHaveBeenCalled();
@@ -175,6 +175,6 @@ describe('loadOwnedPets edge cases', () => {
   it('a brand-new account with no pets and no sits gets an empty list and zero', async () => {
     state.pets = [];
     state.accesses = [];
-    expect(await loadOwnedPets('-created_date', 'home')).toEqual({ pets: [], sitterOnlyCount: 0 });
+    expect(await loadOwnedPets('-created_at', 'home')).toEqual({ pets: [], sitterOnlyCount: 0 });
   });
 });

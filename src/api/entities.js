@@ -7,11 +7,9 @@ export const entities = {
   Profile: createEntityClient('profiles'),
   Pet: createEntityClient('pets'),
   PetFood: createEntityClient('pet_foods'),
-  FoodLog: createEntityClient('food_logs'),
   Medication: createEntityClient('medications'),
   Vaccination: createEntityClient('vaccinations'),
   Bloodwork: createEntityClient('bloodwork'),
-  SymptomLog: createEntityClient('symptom_logs'),
   PetSit: createEntityClient('pet_sits'),
   PetSitLog: createEntityClient('pet_sit_logs'),
   PetSitterAccess: createEntityClient('pet_sitter_access'),
@@ -22,7 +20,6 @@ export const entities = {
   ObservationOption: createEntityClient('observation_options'),
   Observation: createEntityClient('observations'),
   PetBaseline: createEntityClient('pet_baselines'),
-  WellnessScore: createEntityClient('wellness_scores'),
   Notification: createEntityClient('notifications'),
   // Admin-only reads/updates (spec 0053) — inserts happen via the public
   // beta-signup Edge Function, never through this client, so .create()'s

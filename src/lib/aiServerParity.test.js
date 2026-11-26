@@ -2,7 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { EMERGENCY_KEYWORD_PATTERNS as APP_EMERGENCY, detectEmergencyKeywords as appDetect } from './aiGuardrails';
 import { BASELINE_VALUES as APP_BASELINE, NOT_OBSERVED_VALUES as APP_NOT_OBSERVED } from './checkin/checkinClient';
 import { COUNTED_CATEGORIES, HEALTH_ATTRIBUTES as APP_HEALTH, WELLBEING_ATTRIBUTES as APP_WELLBEING } from './checkin/config';
-import { BLOODWORK_FIELDS as APP_BLOODWORK } from './bloodworkFields';
+import { BLOODWORK_FIELDS as APP_BLOODWORK, URINE_PROTEIN_VALUES as APP_URINE_PROTEIN } from './bloodworkFields';
+import { MAX_SHEET_TEXT_CHARS as APP_MAX_SHEET_TEXT_CHARS } from './bloodworkSpreadsheet';
 import {
   HEALTH_OPTIONS as APP_HEALTH_OPTIONS, APPETITE_OPTIONS as APP_APPETITE, WATER_OPTIONS as APP_WATER,
   ENERGY_OPTIONS as APP_ENERGY, getMobilityOptions as appMobility, getBathroomOptions as appBathroom,
@@ -20,9 +21,13 @@ import {
   BLOODWORK_FIELDS as SERVER_BLOODWORK, HEALTH_OPTIONS as SERVER_HEALTH_OPTIONS,
   APPETITE_OPTIONS as SERVER_APPETITE, WATER_OPTIONS as SERVER_WATER, ENERGY_OPTIONS as SERVER_ENERGY,
   getMobilityOptions as serverMobility, getBathroomOptions as serverBathroom,
-  PET_SCREEN_NAMES as SERVER_SCREENS,
+  PET_SCREEN_NAMES as SERVER_SCREENS, LEGACY_SCREEN_NAMES as SERVER_LEGACY_SCREENS, URINE_PROTEIN_VALUES as SERVER_URINE_PROTEIN,
 } from '../../supabase/functions/ask-vet-assistant/rules.ts';
-import { TRENDS_RANGES as SERVER_RANGES, MAX_QUESTION_CHARS as SERVER_MAX_QUESTION_CHARS } from '../../supabase/functions/ask-vet-assistant/prompts.ts';
+import {
+  TRENDS_RANGES as SERVER_RANGES, MAX_QUESTION_CHARS as SERVER_MAX_QUESTION_CHARS,
+  MAX_SHEET_TEXT_CHARS as SERVER_MAX_SHEET_TEXT_CHARS, TASK_NAMES as SERVER_TASKS,
+  BLOODWORK_ANSWER_SCHEMA, buildScanBloodwork, buildBloodworkSpreadsheet,
+} from '../../supabase/functions/ask-vet-assistant/prompts.ts';
 import { MAX_QUESTION_CHARS as APP_MAX_QUESTION_CHARS } from '../api/aiClient';
 // context.ts's only non-relative import is a type-only one (stripped when
 // Vitest compiles it), so it loads under Node too.
@@ -138,6 +143,30 @@ describe('app/server parity: bloodwork fields', () => {
   });
 });
 
+describe('app/server parity: bloodwork scan and spreadsheet answers (spec 0081)', () => {
+  it('has the same urine protein answers as the form', () => {
+    expect([...SERVER_URINE_PROTEIN]).toEqual(APP_URINE_PROTEIN);
+  });
+
+  it("refuses spreadsheet text at the app's limit (60,000 characters)", () => {
+    expect(SERVER_MAX_SHEET_TEXT_CHARS).toBe(APP_MAX_SHEET_TEXT_CHARS);
+    expect(APP_MAX_SHEET_TEXT_CHARS).toBe(60000);
+  });
+
+  it('has bloodwork_spreadsheet as a 9th task', () => {
+    expect(SERVER_TASKS).toHaveLength(9);
+    expect(SERVER_TASKS).toContain('bloodwork_spreadsheet');
+  });
+
+  it("asks both bloodwork tasks for every app field with the app's unit", () => {
+    const valueKeys = Object.keys(BLOODWORK_ANSWER_SCHEMA.properties.visits.items.properties.values.properties);
+    expect(valueKeys).toEqual(APP_BLOODWORK.map((f) => f.key));
+    for (const built of [buildScanBloodwork(), buildBloodworkSpreadsheet('Sheet 1 of 1: S')]) {
+      for (const f of APP_BLOODWORK) expect(built.system).toContain(`${f.key} (${f.label}, ${f.unit})`);
+    }
+  });
+});
+
 describe("app/server parity: baseline option labels (onboarding options vs the server's AI baseline summary)", () => {
   it('has the same health status labels', () => {
     expect(SERVER_HEALTH_OPTIONS('Tribble')).toEqual(labelsOnly(APP_HEALTH_OPTIONS('Tribble')));
@@ -161,9 +190,22 @@ describe('app/server parity: Ask Wysker screen names', () => {
   });
 
   it("the app's list covers every screen getPetContext can return", () => {
-    const paths = ['/pet/p1', '/pet/p1/trends', '/pet/p1/timeline', '/pet/p1/symptoms', '/pet/p1/food', '/pet/p1/export', '/pet/p1/profile'];
+    const paths = ['/pet/p1', '/pet/p1/trends', '/pet/p1/timeline', '/pet/p1/food', '/pet/p1/export', '/pet/p1/profile'];
     const returned = paths.map((p) => getPetContext(p).screen);
     expect([...new Set(returned)].sort()).toEqual([...APP_SCREENS].sort());
+  });
+
+  it('no longer has a Weight screen: the Symptoms page is retired (spec 0081)', () => {
+    expect(APP_SCREENS).not.toContain('Weight');
+    expect([...SERVER_SCREENS]).not.toContain('Weight');
+  });
+
+  // The one server-only exception: the server still accepts an old tab's
+  // 'Weight' for one release, as Trends (remove with the server's copy).
+  it("the server's only legacy screen name is 'Weight', mapped to a current screen", () => {
+    expect(SERVER_LEGACY_SCREENS).toEqual({ Weight: 'Trends' });
+    for (const target of Object.values(SERVER_LEGACY_SCREENS)) expect(APP_SCREENS).toContain(target);
+    for (const name of Object.keys(SERVER_LEGACY_SCREENS)) expect(APP_SCREENS).not.toContain(name);
   });
 });
 

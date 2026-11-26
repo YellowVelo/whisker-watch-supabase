@@ -10,20 +10,18 @@ import { shouldRedirectToReset, RESET_PASSWORD_PATH } from '@/lib/passwordRecove
 const AuthContext = createContext(undefined);
 
 /**
- * Supabase-backed replacement for the old Base44 AuthContext.
+ * The app's sign-in state, backed by Supabase Auth.
  *
- * Keeps the exact same shape consumers rely on (useAuth() ->
- * { user, isAuthenticated, isLoadingAuth, authError, authChecked,
- *   logout, checkUserAuth, ... }) so ProtectedRoute.jsx
- * and App.jsx don't need to change.
+ * useAuth() returns { user, isAuthenticated, isLoadingAuth, authError,
+ * authChecked, profileLoadError, logout, checkUserAuth, refreshProfile }.
  *
- * "user" now includes the merged profiles row (role, etc.) alongside
- * the base Supabase auth user (id, email).
+ * "user" is the Supabase auth user (id, email) merged with that
+ * person's profiles row (role, account_type, timezone, etc.).
  *
- * Note: there's no more "app public settings" / "user not registered"
- * concept (that was a Base44-specific multi-tenant thing). authError
- * is kept for shape-compatibility but will rarely be set now — auth
- * failures mostly show up as isAuthenticated=false.
+ * authError is set only to { type: 'unknown', message } when the
+ * session check itself throws; ProtectedRoute treats it like being
+ * signed out. An ordinary missing or expired session shows up as
+ * isAuthenticated=false with no authError.
  */
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
@@ -238,11 +236,6 @@ export const AuthProvider = ({ children }) => {
       user,
       isAuthenticated,
       isLoadingAuth,
-      // Compatibility alias: Base44 had a separate "public settings" load
-      // step that no longer exists with Supabase. App.jsx still checks
-      // this flag, so we mirror isLoadingAuth here rather than touching
-      // every consumer right now.
-      isLoadingPublicSettings: isLoadingAuth,
       authError,
       authChecked,
       profileLoadError,

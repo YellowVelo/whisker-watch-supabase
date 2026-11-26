@@ -28,21 +28,26 @@
 //     wording.
 //   - "owner_profile" in the spec maps to `profiles` (name + email only;
 //     there is no phone/emergency-contact column on profiles today).
-//   - Weight comes from `symptom_logs.weight_grams` — there is no
-//     `weight_observations` table; weight is still legacy-only
-//     (Data Model_V2.md §7).
+//   - Weight (spec 0081, PA-71) comes from weight `observations`, both
+//     kinds (typed in a check-in, or logged on its own), read as the caller
+//     through ../_shared/weight.ts: same dating, one weight per day and
+//     0.1–300 lbs rule as the app's src/lib/weightClient.js. The 180-day
+//     window is counted on the owner's calendar, as Trends' range is.
+//     Weight rows are left out of the Daily Observations list, so a weight
+//     is never shown twice or as a stray observation.
 //   - `pet_baselines` is queried but is expected to be empty today
 //     (nothing in the app writes to it yet) — the section renders a
 //     plain "not yet available" note rather than fabricating data.
 //
-// Observations and food logs are capped to the last 180 days (spec §9
-// performance guidance); a note is added to the report when older data
-// exists but isn't shown.
+// Observations are capped to the last 180 days (spec §9 performance
+// guidance); a note is added to the report when older data exists but
+// isn't shown. The old food-log section is gone (spec 0081, FR16).
 
 import { createClient } from 'jsr:@supabase/supabase-js@2.119.2';
 import { PDFDocument, StandardFonts, rgb } from 'npm:pdf-lib@1.17.1';
 import { reportError } from '../_shared/errorReporting.ts';
-import { COUNTED_ATTRIBUTES, type CheckInRow } from '../_shared/checkinRules.ts';
+import { COUNTED_ATTRIBUTES, dateStrInTimezone, type CheckInRow } from '../_shared/checkinRules.ts';
+import { loadDailyWeights, loadWeightTypeId, weightsInRange } from '../_shared/weight.ts';
 import { buildWellnessOverview, overviewWindow, type WellnessDay, type WellnessObservation } from './wellness.ts';
 import {
   humanizeCode,
@@ -462,6 +467,16 @@ Deno.serve(async (req) => {
     // One window for the check-in query and the chart (overviewWindow
     // counts calendar days, so a daylight-saving change can't split them).
     const { start: overviewStart, end: overviewEnd } = overviewWindow(profile?.timezone);
+    // Weight's window, on the owner's calendar like Trends' range cutoff.
+    const weightCutoff = dateStrInTimezone(profile?.timezone, -DAYS_WINDOW);
+
+    // Needed before the reads below: weight rows are read by type and left
+    // out of the Daily Observations list.
+    const weightTypeId = await loadWeightTypeId(supabaseClient);
+    let observationsQuery = supabaseClient.from('observations')
+      .select('observed_at, observation_type_id, value, numeric_value, notes', { count: 'exact' })
+      .eq('pet_id', petId).gte('observed_at', sinceDate);
+    if (weightTypeId) observationsQuery = observationsQuery.neq('observation_type_id', weightTypeId);
 
     const [
       { data: checkInRows, error: checkInsError },
@@ -471,8 +486,7 @@ Deno.serve(async (req) => {
       { data: observationTypes, error: typesError },
       { data: medications },
       { data: vaccinations },
-      { data: foodLogs, count: foodLogsTotalCount },
-      { data: symptomLogs },
+      dailyWeights,
       { data: bloodwork },
     ] = await Promise.all([
       // Caller's client, so RLS decides which check-ins are visible.
@@ -481,13 +495,12 @@ Deno.serve(async (req) => {
         .order('check_in_date', { ascending: true }),
       supabaseClient.from('observation_options').select('observation_type_id, value, label'),
       supabaseClient.from('pet_baselines').select('*').eq('pet_id', petId).is('effective_to', null),
-      supabaseClient.from('observations').select('observed_at, observation_type_id, value, numeric_value, notes', { count: 'exact' })
-        .eq('pet_id', petId).gte('observed_at', sinceDate).order('observed_at', { ascending: false }).limit(500),
+      observationsQuery.order('observed_at', { ascending: false }).limit(500),
       supabaseClient.from('observation_types').select('id, code, label'),
       supabaseClient.from('medications').select('*').eq('pet_id', petId).order('active', { ascending: false }).order('start_date', { ascending: false }),
       supabaseClient.from('vaccinations').select('*').eq('pet_id', petId).order('date_given', { ascending: false }),
-      supabaseClient.from('food_logs').select('*', { count: 'exact' }).eq('pet_id', petId).gte('date', sinceDate).order('date', { ascending: false }).limit(500),
-      supabaseClient.from('symptom_logs').select('date, weight_grams').eq('pet_id', petId).not('weight_grams', 'is', null).gte('date', sinceDate).order('date', { ascending: true }),
+      // One weight per day, newest first; throws if the read fails.
+      loadDailyWeights(supabaseClient, petId, weightTypeId),
       supabaseClient.from('bloodwork').select('*').eq('pet_id', petId).order('date', { ascending: false }),
     ]);
 
@@ -622,12 +635,13 @@ Deno.serve(async (req) => {
 
     // Weight Trend
     r.heading('Weight Trend');
-    if ((symptomLogs || []).length > 0) {
-      const weightPoints = (symptomLogs ?? []).map((s: any) => ({ label: formatDate(s.date), value: Math.round((s.weight_grams / 453.59237) * 10) / 10 }));
+    const weightsInWindow = weightsInRange(dailyWeights, weightCutoff); // newest first
+    if (weightsInWindow.length > 0) {
+      const weightPoints = [...weightsInWindow].reverse().map((w) => ({ label: formatDate(w.date), value: w.lbs }));
       r.lineChart(weightPoints);
       r.table(
         [{ header: 'Date', width: 150 }, { header: 'Weight (lbs)', width: 150 }],
-        [...(symptomLogs ?? [])].reverse().slice(0, 60).map((s: any) => [formatDate(s.date), `${(s.weight_grams / 453.59237).toFixed(1)}`]),
+        weightsInWindow.slice(0, 60).map((w) => [formatDate(w.date), w.lbs.toFixed(1)]),
       );
     } else {
       r.paragraph(`No weight entries recorded in the last ${DAYS_WINDOW} days.`, { color: rgb(0.5, 0.5, 0.5) });
@@ -653,20 +667,6 @@ Deno.serve(async (req) => {
       );
     } else {
       r.paragraph('No vaccination records on file.', { color: rgb(0.5, 0.5, 0.5) });
-    }
-
-    // Diet & Food Logs
-    r.heading('Diet & Food Logs');
-    if ((foodLogs || []).length > 0) {
-      r.table(
-        [{ header: 'Date', width: 80 }, { header: 'Food', width: 150 }, { header: 'Amount Eaten', width: 110 }, { header: 'Notes', width: 130 }],
-        (foodLogs ?? []).slice(0, 150).map((f: any) => [formatDate(f.date), `${f.food_name}${f.brand ? ` (${f.brand})` : ''}`, f.amount_eaten || '—', f.notes || '—']),
-      );
-      if ((foodLogsTotalCount || 0) > (foodLogs ?? []).length || (foodLogs ?? []).length > 150) {
-        r.paragraph(`Showing food logs from the last ${DAYS_WINDOW} days (data truncated). Older records are not included in this report.`, { size: 8, color: rgb(0.55, 0.55, 0.55) });
-      }
-    } else {
-      r.paragraph(`No food logs recorded in the last ${DAYS_WINDOW} days.`, { color: rgb(0.5, 0.5, 0.5) });
     }
 
     // Bloodwork

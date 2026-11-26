@@ -43,7 +43,7 @@ export default function PetSittingSection({ petId = undefined }) {
   const load = async () => {
     setLoading(true);
     const [pets, sitData] = await Promise.all([
-      entities.Pet.list('-created_date'),
+      entities.Pet.list('-created_at'),
       entities.PetSit.list('-start_date', 50),
     ]);
     const activePets = pets.filter(c => !c.is_memorial);

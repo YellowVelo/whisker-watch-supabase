@@ -89,11 +89,14 @@ function isoDay(offsetDays: number): string {
   return d.toISOString().slice(0, 10);
 }
 
-// Spec 0081 may have dropped some of these, so a missing table is skipped,
-// the same way 0062 skips it (to_regclass). PostgREST reports a table it
-// doesn't know as PGRST205 (or 42P01 straight from Postgres).
+// A table missing on a project is skipped, the same way 0062 skips it
+// (to_regclass), in case a project has drifted from migration history.
+// PostgREST reports a table it doesn't know as PGRST205 (or 42P01 straight
+// from Postgres).
 async function tableExists(table: string): Promise<boolean> {
-  const { error } = await adminClient().from(table).select('id', { head: true }).limit(1);
+  // A plain GET, not head: a HEAD on a dropped table returns 204 with no
+  // error body, so it would look like the table exists.
+  const { error } = await adminClient().from(table).select('id').limit(1);
   if (!error) return true;
   if (error.code === 'PGRST205' || error.code === '42P01') return false;
   throw new Error(`checking ${table} failed: ${error.message}`);
@@ -116,6 +119,8 @@ interface Fr5Context {
 
 // The FR5 tables, each with a minimal valid row (required columns only,
 // from 0001/0012/0014) and an ordinary edit that touches something else.
+// 0062 also covered food_logs, symptom_logs and wellness_scores; migration
+// 0061 (spec 0081) dropped them, so they are no longer listed.
 const FR5_TABLES: Record<string, {
   row: (h: Household, c: Fr5Context) => Record<string, unknown>;
   edit: Record<string, unknown>;
@@ -125,12 +130,9 @@ const FR5_TABLES: Record<string, {
   vaccinations: { row: (h) => ({ pet_id: h.petId, vaccine_name: 'Scratch Rabies' }), edit: { notes: 'edited' } },
   medications: { row: (h) => ({ pet_id: h.petId, name: 'Scratch Med' }), edit: { name: 'Scratch Med edited' } },
   bloodwork: { row: (h) => ({ pet_id: h.petId, date: isoDay(0) }), edit: { notes: 'edited' } },
-  food_logs: { row: (h) => ({ pet_id: h.petId, date: isoDay(0), food_name: 'Scratch Food' }), edit: { food_name: 'Scratch Food edited' } },
   pet_foods: { row: (h) => ({ pet_id: h.petId, name: 'Scratch Food' }), edit: { name: 'Scratch Food edited' } },
   pet_baselines: { row: (h, c) => ({ pet_id: h.petId, observation_type_id: c.observationTypeId, baseline_value: 'normal' }), edit: { baseline_notes: 'edited' } },
   pet_onboarding: { row: (h) => ({ pet_id: h.petId }), edit: { completed_at: new Date().toISOString() } },
-  symptom_logs: { row: (h) => ({ pet_id: h.petId, date: isoDay(0) }), edit: { notes: 'edited' } },
-  wellness_scores: { row: (h) => ({ pet_id: h.petId, check_in_date: isoDay(0), score: 50 }), edit: { score_reason_summary: 'edited' } },
   pet_sit_logs: { row: (h, c) => ({ pet_sit_id: c.sitId, pet_id: h.petId, date: isoDay(0) }), edit: { notes: 'edited' } },
 };
 
@@ -276,7 +278,7 @@ Deno.test('co-owner lockdown (specs 0072, 0083)', async (t) => {
     for (const [table, spec] of Object.entries(FR5_TABLES)) {
       await t.step(`access tightening: ${table} "entered by" is the inserter and never changes (AC5, AC6)`, async () => {
         if (!(await tableExists(table))) {
-          console.log(`  ${table} does not exist on this project (spec 0081); skipped`);
+          console.log(`  ${table} does not exist on this project; skipped`);
           return;
         }
         await withHousehold(u, async (h) => {

@@ -132,33 +132,6 @@ export async function getVomitingNauseaTrend(petId, range, timezone) {
   return { hasAnyData, series, vomiting, nausea };
 }
 
-// Weight card + chart, from symptom_logs.weight_grams — the only place
-// weight is written (Data Model §3.8). Delta compares the two most recent
-// entries (no true baseline exists yet), same documented limitation as
-// the existing Pet Profile Weight card.
-export async function getWeightTrend(petId, range, timezone) {
-  const days = RANGE_DAYS[range] ?? RANGE_DAYS['24H'];
-  const logs = await entities.SymptomLog.filter({ pet_id: petId }, '-date', 400);
-  const hasAnyData = logs.some((l) => l.weight_grams != null);
-  const cutoff = cutoffDateStr(days, timezone);
-
-  const toLbs = (grams) => Math.round((grams / 453.59237) * 10) / 10;
-  const withWeight = logs
-    .filter((l) => l.weight_grams != null && l.date >= cutoff)
-    .slice()
-    .reverse();
-
-  if (withWeight.length === 0) {
-    return { hasAnyData, series: [], currentLbs: null, deltaLbs: null };
-  }
-
-  const series = withWeight.map((l) => ({ date: l.date, value: toLbs(l.weight_grams) }));
-  const currentLbs = series[series.length - 1].value;
-  const deltaLbs = series.length >= 2 ? currentLbs - series[series.length - 2].value : null;
-
-  return { hasAnyData, series, currentLbs, deltaLbs };
-}
-
 // One-paragraph Insight Summary for the selected range. Spec 0080: the
 // server rebuilds the same Appetite / Water Intake / Energy / Weight
 // descriptions the cards show and writes the instructions itself; the app

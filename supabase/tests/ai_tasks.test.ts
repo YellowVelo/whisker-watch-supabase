@@ -35,6 +35,16 @@
 //     reached by seeding rate_limit_hits with the service role, each on its
 //     own user, so no step's rows affect another; the request is refused at
 //     the rate check, before the AI.
+//   - Spec 0081 AC20 (FR34): the bloodwork scan refuses a .csv/.xlsx/.xls
+//     path before the rate check, and a spreadsheet stored under an image
+//     name by its type after the download; neither reaches the AI.
+//   - Spec 0081 bloodwork_spreadsheet: text over 60,000 characters gets 400
+//     sheet_too_large (FR32); only owners and co-owners may use it (a
+//     sitter in the sit window, a stranger, an ended sitter and a removed
+//     co-owner get 403 forbidden_pet; logged out, 401), and none of these
+//     refusals counts toward the rate limits. The primary owner and a
+//     current co-owner get past that check: with their daily key seeded
+//     to the cap they get 429 daily_limit, which comes after it.
 //
 // Same shape as ai_context.test.ts: users are created and signed in once
 // for the whole file (Supabase Auth limits sign-ins per IP). The service
@@ -333,6 +343,64 @@ Deno.test('ask-vet-assistant task requests (spec 0080)', async (t) => {
       assertEquals(await countRows(dailyKey(stranger.userId)), 0, 'a refused scan must not count');
     });
 
+    await t.step('AC20 (FR34): the scan refuses a spreadsheet path before the rate check (415 unsupported_type)', async () => {
+      for (const ext of ['csv', 'xlsx', 'xls', 'CSV']) {
+        const res = await callFunction(FN, owner.accessToken, {
+          task: 'scan_bloodwork', pet_id: petId, file_path: `${owner.userId}/aitask-sheet.${ext}`,
+        });
+        assertEquals(res.status, 415, `.${ext}: expected 415, got ${JSON.stringify(res.json)}`);
+        assertEquals(res.json.code, 'unsupported_type', `.${ext}`);
+      }
+      assertEquals(await countRows(rateKey(owner.userId)), 0, 'a refused spreadsheet path must not count (10-minute key)');
+      assertEquals(await countRows(dailyKey(owner.userId)), 0, 'a refused spreadsheet path must not count (daily key)');
+    });
+
+    await t.step('AC20 (FR34): a stored spreadsheet under an image name is refused by its type, never sent to the AI', async () => {
+      // The co-owner's own folder, so the owner's rate rows stay empty for
+      // the FR10 step below. This refusal comes after the download (after
+      // the rate check), so it counts once, like the other file replies.
+      const path = `${coOwner.userId}/aitask-sheet.png`;
+      const { error } = await coOwner.client.storage
+        .from('uploads')
+        .upload(path, new TextEncoder().encode('Test,Visit 1\nBUN,32\n'), { contentType: 'text/csv' });
+      if (error) throw new Error(`spreadsheet upload failed: ${error.message}`);
+      const res = await callFunction(FN, coOwner.accessToken, { task: 'scan_bloodwork', pet_id: petId, file_path: path });
+      assertEquals(res.status, 415, `expected 415, got ${JSON.stringify(res.json)}`);
+      assertEquals(res.json.code, 'unsupported_type');
+    });
+
+    await t.step('bloodwork_spreadsheet (FR32, AC19): text over 60,000 characters is refused (400) and not counted', async () => {
+      const res = await callFunction(FN, owner.accessToken, {
+        task: 'bloodwork_spreadsheet', pet_id: petId, sheet_text: `Sheet 1 of 1: S\n${'BUN,32\n'.repeat(9000)}`,
+      });
+      assertEquals(res.status, 400);
+      assertEquals(res.json.code, 'sheet_too_large');
+      assertEquals(await countRows(rateKey(owner.userId)), 0, 'a refused sheet must not count (10-minute key)');
+      assertEquals(await countRows(dailyKey(owner.userId)), 0, 'a refused sheet must not count (daily key)');
+    });
+
+    await t.step('bloodwork_spreadsheet: only owners and co-owners; a sitter, stranger, ended sitter or removed co-owner gets 403', async () => {
+      const body = { task: 'bloodwork_spreadsheet', pet_id: petId, sheet_text: 'Sheet 1 of 1: S\nTest,Visit 1\nBUN,32' };
+      const callers = [
+        ['sitter in window', sitter],
+        ['stranger', stranger],
+        ['ended sitter', oldSitter],
+        ['removed co-owner', exCoOwner],
+      ] as const;
+      for (const [who, caller] of callers) {
+        const res = await callFunction(FN, caller.accessToken, body);
+        assertEquals(res.status, 403, `${who}: expected 403, got ${JSON.stringify(res.json)}`);
+        assertEquals(res.json.code, 'forbidden_pet', who);
+        const text = JSON.stringify(res.json);
+        assert(!text.includes(PET_NAME) && !text.includes('Secret Condition'), `${who} refusal leaked pet details`);
+        assertEquals(await countRows(rateKey(caller.userId)), 0, `${who}: a refused request must not count (10-minute key)`);
+        assertEquals(await countRows(dailyKey(caller.userId)), 0, `${who}: a refused request must not count (daily key)`);
+      }
+      // A logged-out caller.
+      const loggedOut = await callFunction(FN, requireEnv('SUPABASE_ANON_KEY'), body);
+      assertEquals(loggedOut.status, 401);
+    });
+
     await t.step('FR10: no-AI replies for a pet with no check-ins, and they do not count', async () => {
       // Runs before the daily-cap step, which seeds the owner's daily key.
       const insights = await callFunction(FN, owner.accessToken, { task: 'pet_insights', pet_id: petId });
@@ -388,12 +456,31 @@ Deno.test('ask-vet-assistant task requests (spec 0080)', async (t) => {
       }
       assertEquals(await countRows(warnedKey(owner.userId)), 1, 'expected exactly one daily-cap warning');
     });
+
+    await t.step('bloodwork_spreadsheet: the primary owner and a current co-owner get past the owner check (429 daily_limit, no AI call)', async () => {
+      // Runs after the daily-cap step, so the owner's one warning is
+      // already counted there. Each caller's daily key is filled to the cap
+      // (the co-owner's may already hold the scan step's one row), so the
+      // request passes the owner check and is refused at the rate check,
+      // which comes after it and before the AI. A 403 would mean the owner
+      // check wrongly refused them. Seeded rows are removed by key below.
+      const body = { task: 'bloodwork_spreadsheet', pet_id: petId, sheet_text: 'Sheet 1 of 1: S\nTest,Visit 1\nBUN,32' };
+      const callers = [['primary owner', owner], ['current co-owner', coOwner]] as const;
+      for (const [who, caller] of callers) {
+        const have = await countRows(dailyKey(caller.userId));
+        if (have < 100) await seedRows(dailyKey(caller.userId), 100 - have);
+        const res = await callFunction(FN, caller.accessToken, body);
+        assertEquals(res.status, 429, `${who}: expected 429, got ${res.status} ${JSON.stringify(res.json)}`);
+        assertEquals(res.json.code, 'daily_limit', `${who}: expected daily_limit`);
+        assertEquals(res.json.error, DAILY_LIMIT_MESSAGE, `${who}: expected wording A`);
+      }
+    });
   } finally {
     // Sits, invites, co-owner rows and document links cascade with the pet
     // or the user. Rate-limit rows don't, so they're removed by key.
     const petIds = [...(petId ? [petId] : []), ...extraPetIds];
     if (petIds.length) await admin.from('pets').delete().in('id', petIds);
-    await admin.storage.from('uploads').remove([`${owner.userId}/aitask-scan.png`]);
+    await admin.storage.from('uploads').remove([`${owner.userId}/aitask-scan.png`, `${coOwner.userId}/aitask-sheet.png`]);
     await admin.from('rate_limit_hits').delete().in(
       'rate_key',
       allUsers.flatMap((u) => [rateKey(u.userId), dailyKey(u.userId), warnedKey(u.userId)]),

@@ -5,7 +5,8 @@
 // database's access rules decide what the AI may be told about:
 //   - a pet the caller can't see comes back as null (index.ts answers 403);
 //   - a sitter sees a sat pet during the sit, as today (pets_select_sitter),
-//     but not its medications, baseline or weight (owner-only tables);
+//     and its check-ins and weights (observations, migration 0045), but not
+//     its medications or baseline (owner-only tables);
 //   - household chat and the multi-pet scan only ever list pets the caller
 //     owns or co-owns (spec 0076 / 0079), never sitter-only pets.
 //
@@ -14,7 +15,8 @@
 //
 // The reads mirror what the app did before spec 0080:
 //   - pet chat / insights: AskWyskerSheet.jsx (Pet.get, Medication.filter,
-//     PetOnboarding.filter, SymptomLog.filter for weight)
+//     PetOnboarding.filter); weight as src/lib/weightClient.js reads it
+//     (spec 0081, through ../_shared/weight.ts)
 //   - household chat: AskWyskerSheet.jsx (loadOwnedPets minus memorial pets)
 //   - multi-pet scan: VaccinationSection.jsx (listOwnedPets)
 //   - Trends summary: InsightSummaryCard.jsx + trendsClient.js
@@ -46,6 +48,7 @@ import {
   type WeightEntry,
   type WeightNow,
 } from './prompts.ts';
+import { currentAndDelta, loadDailyWeights, weightsInRange } from '../_shared/weight.ts';
 
 // Same as src/lib/checkin/trendsRanges.js RANGE_DAYS.
 export const RANGE_DAYS: Readonly<Record<string, number>> = { '24H': 5, '7D': 7, '30D': 30, '90D': 90, '1Y': 365 };
@@ -54,16 +57,12 @@ export const RANGE_DAYS: Readonly<Record<string, number>> = { '24H': 5, '7D': 7,
 // the caller's time zone (today and the 29 days before it).
 export const INSIGHTS_WINDOW_DAYS = 30;
 
-// AskWyskerSheet fetched this many symptom logs for Insights;
-// getWeightTrend fetches this many for the Trends weight card.
-export const INSIGHTS_WEIGHT_LOGS = 200;
-export const TRENDS_WEIGHT_LOGS = 400;
+// Insights tells the AI about at most this many days with a weight, newest
+// first (one weight per day), to keep the prompt bounded.
+export const INSIGHTS_WEIGHT_DAYS = 200;
 
 // getInsightSummary's gate: at least 2 non-skipped among the 10 newest.
 export const SUMMARY_GATE_CHECK_INS = 10;
-
-// symptom_logs.weight_grams -> lbs, same rounding as getWeightTrend.
-const toLbs = (grams: number) => Math.round((grams / 453.59237) * 10) / 10;
 
 export interface PetRecord extends PetInfo {
   id: string;
@@ -127,20 +126,12 @@ export async function loadBaseline(client: SupabaseClient, petId: string): Promi
   return data?.[0] ?? null;
 }
 
-// Weight entries from symptom_logs.weight_grams, the only place weight is
-// stored (PA-71). Like the app: the `logLimit` newest logs, keeping those
-// with a weight. Newest first.
-export async function loadWeights(client: SupabaseClient, petId: string, logLimit = INSIGHTS_WEIGHT_LOGS): Promise<WeightEntry[]> {
-  const { data, error } = await client
-    .from('symptom_logs')
-    .select('date, weight_grams')
-    .eq('pet_id', petId)
-    .order('date', { ascending: false })
-    .limit(logLimit);
-  if (error) fail('weight lookup', error);
-  return (data ?? [])
-    .filter((l) => l.weight_grams != null)
-    .map((l) => ({ date: l.date, grams: Number(l.weight_grams) }));
+// The pet's weights (spec 0081, PA-71): weight `observations` of both kinds
+// (check-in and standalone), one per day, dated and picked the same way as
+// the app (../_shared/weight.ts). At most `dayLimit` days, newest first.
+export async function loadWeights(client: SupabaseClient, petId: string, dayLimit = INSIGHTS_WEIGHT_DAYS): Promise<WeightEntry[]> {
+  const days = await loadDailyWeights(client, petId);
+  return days.slice(0, dayLimit);
 }
 
 // The caller's saved time zone (profiles.timezone), or null. The date
@@ -279,14 +270,10 @@ function attributeNow(newest: RawCheckIn | null, code: string, today: string, ca
   return describeCurrentState(point, labels);
 }
 
-// getWeightTrend's currentLbs/deltaLbs: the TRENDS_WEIGHT_LOGS newest logs,
-// those with a weight dated on or after the range's cutoff.
-function weightNow(weights: WeightEntry[], cutoff: string): WeightNow {
-  const inRange = weights.filter((w) => w.date >= cutoff); // newest first
-  if (inRange.length === 0) return { currentLbs: null, deltaLbs: null };
-  const currentLbs = toLbs(inRange[0].grams);
-  const deltaLbs = inRange.length >= 2 ? currentLbs - toLbs(inRange[1].grams) : null;
-  return { currentLbs, deltaLbs };
+// getWeightTrend's currentLbs/deltaLbs: one weight per day, those dated on
+// or after the range's cutoff, newest day versus the one before it.
+function weightNow(weightsNewestFirst: WeightEntry[], cutoff: string): WeightNow {
+  return currentAndDelta(weightsInRange(weightsNewestFirst, cutoff));
 }
 
 export type TrendsSummaryInputs = Omit<TrendsSummaryContext, 'petName'>;
@@ -326,7 +313,7 @@ export async function loadTrendsSummaryInputs(
       .order('check_in_date', { ascending: false })
       .limit(1),
     loadObservationCatalog(client),
-    loadWeights(client, petId, TRENDS_WEIGHT_LOGS),
+    loadDailyWeights(client, petId),
   ]);
   if (newestR.error) fail('check-in lookup', newestR.error);
   const newest = ((newestR.data ?? []) as RawCheckIn[])[0] ?? null;
@@ -355,8 +342,8 @@ interface OwnedPetRow {
 
 // Pets the caller created plus pets they co-own (pet_co_owners linked to
 // their account). The same set as the app's listOwnedPets(): sitter-only
-// pets are never included. Newest first, like AskWyskerSheet's
-// '-created_date' order.
+// pets are never included. Newest first (by created_at), like Home's
+// '-created_at' order.
 async function loadOwnedPetRows(client: SupabaseClient, userId: string): Promise<OwnedPetRow[]> {
   const fields = 'id, name, species, breed, conditions, is_memorial, created_at';
   const [createdR, coOwnedR] = await Promise.all([
@@ -391,4 +378,14 @@ export async function loadHouseholdPets(client: SupabaseClient, userId: string):
 export async function loadOwnedPetNames(client: SupabaseClient, userId: string): Promise<{ name: string | null }[]> {
   const rows = await loadOwnedPetRows(client, userId);
   return rows.map((p) => ({ name: p.name ?? null }));
+}
+
+// True if the caller owns or co-owns the pet (is_pet_owner(), migration
+// 0059: signed-in callable, answers only about the caller). Sitters get
+// false. Used where the result is something only owners may save, such as
+// bloodwork (owners and co-owners only, migration 0004).
+export async function callerOwnsPet(client: SupabaseClient, petId: string, userId: string): Promise<boolean> {
+  const { data, error } = await client.rpc('is_pet_owner', { p_pet_id: petId, p_user_id: userId });
+  if (error) fail('pet owner check', error);
+  return data === true;
 }

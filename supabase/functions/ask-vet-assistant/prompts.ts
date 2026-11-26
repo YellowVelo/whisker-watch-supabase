@@ -1,4 +1,5 @@
-// The AI instructions for ask-vet-assistant's 8 tasks (spec 0080, PA-11).
+// The AI instructions for ask-vet-assistant's 9 tasks (spec 0080, PA-11;
+// the 9th, bloodwork_spreadsheet, is spec 0081's).
 //
 // Before spec 0080 the app wrote these instructions itself and the server
 // passed them on, so anyone signed in could send their own. Now the app
@@ -7,7 +8,9 @@
 // sites it replaces (PetAIChat, GeneralAskWyskerChat, PetAIInsights,
 // trendsClient getInsightSummary, VaccinationSection,
 // onboarding/VaccinationEntryCard, onboarding/MedicationEntryCard,
-// BloodworkSection) and from src/lib/aiGuardrails.js.
+// BloodworkSection) and from src/lib/aiGuardrails.js. The two bloodwork
+// tasks' instructions were rewritten by spec 0081 (FR29, FR35-FR37), and
+// their answers are checked by ./bloodwork.ts before they go back.
 //
 // Pure on purpose: no network, no Supabase client, no Deno APIs, so every
 // builder and check is unit-tested directly (supabase/tests/ai_prompts.test.ts).
@@ -19,11 +22,13 @@
 //     `system` field.
 //   - user: the pet data and, for chats, the owner's own words. The owner's
 //     question and history only ever appear here, never in `system`. Empty
-//     for the scans (the file is the whole user message).
+//     for the scans (the file is the whole user message). For the
+//     spreadsheet task, the spreadsheet text the app read (never in `system`).
 //   - schema: the response shape, same as the app used to send.
 
 import {
   BLOODWORK_FIELDS,
+  URINE_PROTEIN_VALUES,
   detectEmergencyKeywords,
   HEALTH_OPTIONS,
   APPETITE_OPTIONS,
@@ -32,9 +37,11 @@ import {
   getMobilityOptions,
   getBathroomOptions,
   PET_SCREEN_NAMES,
+  LEGACY_SCREEN_NAMES,
   type OptionLabel,
 } from './rules.ts';
 import { COUNTED_ATTRIBUTES, isCountableSymptom } from '../_shared/checkinRules.ts';
+import { EQUIVALENT_UNITS } from './bloodwork.ts';
 
 // ---------------------------------------------------------------------------
 // Safety sentences (moved from src/lib/aiGuardrails.js, spec 0041).
@@ -59,7 +66,8 @@ export const TASK_NAMES = [
   'scan_vaccines', // multi-pet document scan (VaccinationSection)
   'scan_vaccine_single', // onboarding VaccinationEntryCard
   'scan_medication', // onboarding MedicationEntryCard
-  'scan_bloodwork', // BloodworkSection
+  'scan_bloodwork', // BloodworkSection (photo or PDF)
+  'bloodwork_spreadsheet', // BloodworkSection (CSV or .xlsx, read by the app; spec 0081)
 ] as const;
 
 export type TaskName = typeof TASK_NAMES[number];
@@ -67,6 +75,9 @@ export type TaskName = typeof TASK_NAMES[number];
 export const TRENDS_RANGES: readonly string[] = ['24H', '7D', '30D', '90D', '1Y'];
 
 export const MAX_QUESTION_CHARS = 2000;
+// Spec 0081 FR32: longer spreadsheet text is refused before any AI call.
+// Same limit as MAX_SHEET_TEXT_CHARS in src/lib/bloodworkSpreadsheet.js.
+export const MAX_SHEET_TEXT_CHARS = 60_000;
 // FR4: the chats send the AI only the last 20 messages. Longer chats keep
 // working (older messages are dropped), but a history of more than
 // MAX_INCOMING_HISTORY_ENTRIES entries is refused outright so a huge body
@@ -142,9 +153,11 @@ export interface CheckInDay {
   symptoms: CheckInSymptom[];
 }
 
+// One weight per day (the day's weight, _shared/weight.ts), in lbs rounded
+// to one decimal (spec 0081).
 export interface WeightEntry {
   date: string; // YYYY-MM-DD
-  grams: number;
+  lbs: number;
 }
 
 // What a Trends card shows as "now" for one attribute (getObservationTrend's
@@ -363,7 +376,7 @@ export function buildPetInsights(ctx: PetInsightsContext): BuiltPrompt {
   const baselineSummary = formatBaselineForAI(baseline, pet.name, pet.species);
   const { vibes, symptoms } = describeCheckIns(ctx.checkIns);
   const weightText = byDateDesc(ctx.weights)
-    .map((w) => `${w.date}: ${(w.grams / 453.6).toFixed(2)} lbs`)
+    .map((w) => `${w.date}: ${w.lbs.toFixed(1)} lbs`)
     .join('\n');
 
   const profile = [
@@ -492,23 +505,124 @@ export function buildScanMedication(): BuiltPrompt {
   return { system: `${prompt}\n\n${jsonInstruction(SCAN_MEDICATION_SCHEMA)}`, user: '', schema: SCAN_MEDICATION_SCHEMA };
 }
 
-// BloodworkSection.jsx
+// ---------------------------------------------------------------------------
+// Bloodwork (spec 0081, FR29, FR35-FR37). The scan and the spreadsheet
+// task ask for the same answer, and ./bloodwork.ts checks it either way:
+//   { visits: [{ date, lab_name, vet_name, notes, urine_specific_gravity,
+//                urine_protein, values: { <field>: { value, unit } },
+//                weight: { value, unit }, not_tracked: [names] }],
+//     skipped: [{ date, field, value, unit }] }
+// ---------------------------------------------------------------------------
+
+const UNIT_SCHEMA: JsonSchema = { type: ['string', 'null'] };
+
+export const BLOODWORK_ANSWER_SCHEMA: JsonSchema = {
+  type: 'object',
+  properties: {
+    visits: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          date: { type: 'string' },
+          lab_name: { type: 'string' },
+          vet_name: { type: 'string' },
+          notes: { type: 'string' },
+          urine_specific_gravity: { type: 'string' },
+          urine_protein: { type: 'string', enum: [...URINE_PROTEIN_VALUES] },
+          values: {
+            type: 'object',
+            properties: Object.fromEntries(
+              BLOODWORK_FIELDS.map((f) => [f.key, { type: 'object', properties: { value: { type: 'number' }, unit: UNIT_SCHEMA } }]),
+            ),
+          },
+          weight: { type: 'object', properties: { value: { type: 'number' }, unit: UNIT_SCHEMA } },
+          not_tracked: { type: 'array', items: { type: 'string' } },
+        },
+      },
+    },
+    skipped: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          date: { type: 'string' },
+          field: { type: 'string' },
+          value: { type: 'number' },
+          unit: UNIT_SCHEMA,
+        },
+      },
+    },
+  },
+};
+
+// The 16 tracked tests, each with the only unit the app stores it in.
+export function bloodworkFieldList(): string {
+  return BLOODWORK_FIELDS.map((f) => `${f.key} (${f.label}, ${f.unit})`).join(', ');
+}
+
+// The units that count as a field's own (./bloodwork.ts EQUIVALENT_UNITS,
+// Lynn 2026-11-25), e.g. "mmol/L for sodium and potassium (the same as
+// mEq/L), and IU/L for alt, ast and alkaline_phosphatase (the same as U/L)".
+export function equivalentUnitList(): string {
+  const groups = new Map<string, { unit: string; own: string; keys: string[] }>();
+  for (const f of BLOODWORK_FIELDS) {
+    for (const unit of EQUIVALENT_UNITS[f.key] ?? []) {
+      const id = `${unit}|${f.unit}`;
+      if (!groups.has(id)) groups.set(id, { unit, own: f.unit, keys: [] });
+      groups.get(id)!.keys.push(f.key);
+    }
+  }
+  const and = (items: string[]) => items.length < 2 ? items.join('') : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`;
+  const parts = [...groups.values()].map((g) => `${g.unit} for ${and(g.keys)} (the same as ${g.own})`);
+  return parts.length < 2 ? parts.join('') : `${parts.slice(0, -1).join(', ')}, and ${parts[parts.length - 1]}`;
+}
+
+// The reading rules both bloodwork tasks share, one per line.
+export const BLOODWORK_READING_RULES: readonly string[] = [
+  `For each visit, report each of these 16 tracked tests you find in "values", keyed by the field name, as { "value": <number>, "unit": <the unit exactly as written in the document, or null if no unit is stated anywhere for it> }: ${bloodworkFieldList()}.`,
+  `Never convert a value to another unit. These units count as the listed one, so report them in "values" with the number and the unit exactly as written: ${equivalentUnitList()}. If a tracked test is reported in any other unit than the one listed (for example creatinine in µmol/L instead of mg/dL, glucose in mmol/L instead of mg/dL, or calcium in mmol/L instead of mg/dL), leave it out of "values" and add it to "skipped" as { "date", "field", "value", "unit" }, with the unit exactly as written.`,
+  'Only report a value that is one plain number. Leave out values such as "<5", ">1000", "N/A", "see comment" or blank cells.',
+  'Reference ranges ("Range", "Reference", "Ref. interval", "Normal") and unit labels ("Measure", "Units") are labels for a test, never results: never report a number from them as a value.',
+  `Also report, when present: date (the visit or sample date, YYYY-MM-DD), lab_name, vet_name, urine_specific_gravity, urine_protein (one of: ${URINE_PROTEIN_VALUES.join(', ')}), and notes (only comments written about the results).`,
+  'Weight: if the visit records the pet\'s weight with a stated unit (for example lbs or kg), report it as "weight": { "value": <number>, "unit": <the unit as written> }. If a weight has no stated unit, leave it out of the visit and add it to "skipped" with "field": "weight" and "unit": null.',
+  'In "not_tracked", list once per visit the names (as written) of any other lab tests reported for that visit that are not among the 16 above, for example chloride, globulin, GGT, bilirubin, cholesterol, amylase, lipase, CK, blood count details, other urine tests or blood pressure. Never list one of the 16 tracked tests in "not_tracked", whatever it is called (for example TP or Total Protein for total_protein, Urea for bun, Creat for creatinine, ALKP or ALP for alkaline_phosphatase) or whatever its unit: a tracked test in another unit goes in "skipped" as described above (for example total protein in g/L instead of g/dL).',
+  'Ignore treatments, fluids, medications, supplements, diet, procedures, charges and anything else that is not a lab result: never report them anywhere, not even in "not_tracked".',
+  'Only include what is clearly present. Omit fields that are not present. If there are no bloodwork results at all, return { "visits": [], "skipped": [] }.',
+];
+
+const rulesList = (rules: readonly string[]) => rules.map((r) => `- ${r}`).join('\n');
+
+// BloodworkSection.jsx: Upload File with a photo or PDF (FR35).
 export function buildScanBloodwork(): BuiltPrompt {
-  const fieldList = BLOODWORK_FIELDS.map((f) => `${f.key} (${f.label}, ${f.unit})`).join(', ');
-  const prompt = `You are analyzing a veterinary bloodwork report (image or PDF). Extract all available values from this lab report. Return only a JSON object with these possible fields: date (YYYY-MM-DD), lab_name, vet_name, urine_specific_gravity, urine_protein (one of: Negative, Trace, 1+, 2+, 3+, 4+), notes, and numeric fields: ${fieldList}. Only include fields that are clearly visible in the document. Omit fields not present.`;
-  const schema: JsonSchema = {
-    type: 'object',
-    properties: Object.fromEntries([
-      ...BLOODWORK_FIELDS.map((f) => [f.key, { type: 'number' }]),
-      ['date', { type: 'string' }],
-      ['lab_name', { type: 'string' }],
-      ['vet_name', { type: 'string' }],
-      ['urine_specific_gravity', { type: 'string' }],
-      ['urine_protein', { type: 'string' }],
-      ['notes', { type: 'string' }],
-    ]),
+  const prompt = `You are analyzing a veterinary bloodwork report (image or PDF). It may show more than one visit, for example earlier results printed in columns beside the latest ones. Report each visit (one set of results on one date) as its own entry in "visits".
+
+Rules:
+${rulesList(BLOODWORK_READING_RULES)}`;
+  return { system: `${prompt}\n\n${jsonInstruction(BLOODWORK_ANSWER_SCHEMA)}`, user: '', schema: BLOODWORK_ANSWER_SCHEMA };
+}
+
+// The spreadsheet-only rules (FR37), before the shared ones.
+export const SPREADSHEET_LAYOUT_RULES: readonly string[] = [
+  'The layout may be one row per visit (tests across the columns) or one row per test (visits across the columns, often newest on the left, with the date and weight rows above the tests). Work out which from the headers and labels.',
+  'A workbook may have several near-identical sheets that repeat the same visits. If the same date appears on more than one sheet with the same results, report that visit once. If the same date appears with different results, report each version as a separate visit; never choose between them or combine them.',
+];
+
+// BloodworkSection.jsx: Upload File with a CSV or .xlsx (FR28, FR37). The
+// app reads the file into text (src/lib/bloodworkSpreadsheet.js); the text
+// is the owner's own content, so it goes in `user`, never in `system`.
+export function buildBloodworkSpreadsheet(sheetText: string): BuiltPrompt {
+  const prompt = `You are reading a pet owner's own veterinary bloodwork spreadsheet. The user message is the spreadsheet as plain text: each sheet starts with a line "Sheet N of M: <sheet name>", followed by that sheet's rows, one per line, as comma-separated cells (a cell containing a comma or quote is in double quotes), in the sheet's own layout. Empty cells are kept, so every value stays under its column.
+
+Find every visit (one set of lab results on one date) and report each as its own entry in "visits".
+
+Rules:
+${rulesList([...SPREADSHEET_LAYOUT_RULES, ...BLOODWORK_READING_RULES])}`;
+  return {
+    system: `${prompt}\n\n${jsonInstruction(BLOODWORK_ANSWER_SCHEMA)}`,
+    user: `The spreadsheet:\n\n${sheetText}`,
+    schema: BLOODWORK_ANSWER_SCHEMA,
   };
-  return { system: `${prompt}\n\n${jsonInstruction(schema)}`, user: '', schema };
 }
 
 // ---------------------------------------------------------------------------
@@ -522,7 +636,8 @@ export type TaskRequest =
   | { task: 'scan_vaccines'; pet_id: string; file_path: string }
   | { task: 'scan_vaccine_single'; pet_id: string | null; file_path: string }
   | { task: 'scan_medication'; pet_id: string | null; file_path: string }
-  | { task: 'scan_bloodwork'; pet_id: string | null; file_path: string };
+  | { task: 'scan_bloodwork'; pet_id: string | null; file_path: string }
+  | { task: 'bloodwork_spreadsheet'; pet_id: string; sheet_text: string };
 
 export interface TaskRequestError {
   status: 400;
@@ -593,6 +708,15 @@ function parseFilePath(body: Record<string, unknown>): string | TaskRequestError
   return p;
 }
 
+function parseSheetText(body: Record<string, unknown>): string | TaskRequestError {
+  const t = body.sheet_text;
+  if (typeof t !== 'string' || t.trim() === '') return refuse('invalid_sheet_text', 'sheet_text is required');
+  if (t.length > MAX_SHEET_TEXT_CHARS) {
+    return refuse('sheet_too_large', `sheet_text must be ${MAX_SHEET_TEXT_CHARS} characters or fewer`);
+  }
+  return t;
+}
+
 const isErr = (v: unknown): v is TaskRequestError =>
   typeof v === 'object' && v !== null && 'status' in v && 'code' in v;
 
@@ -616,10 +740,17 @@ export function parseTaskRequest(body: unknown): TaskRequest | TaskRequestError 
 
   let screen: string | null = null;
   if (b.screen !== undefined && b.screen !== null) {
-    if (typeof b.screen !== 'string' || !PET_SCREEN_NAMES.includes(b.screen)) {
+    if (typeof b.screen !== 'string') {
       return refuse('invalid_screen', 'Unknown screen');
     }
-    screen = b.screen;
+    // An old tab's retired screen name counts as its current one (spec 0081).
+    const name: string = Object.prototype.hasOwnProperty.call(LEGACY_SCREEN_NAMES, b.screen)
+      ? LEGACY_SCREEN_NAMES[b.screen]
+      : b.screen;
+    if (!PET_SCREEN_NAMES.includes(name)) {
+      return refuse('invalid_screen', 'Unknown screen');
+    }
+    screen = name;
   }
 
   const task = b.task;
@@ -668,6 +799,13 @@ export function parseTaskRequest(body: unknown): TaskRequest | TaskRequestError 
       const file_path = parseFilePath(b);
       if (isErr(file_path)) return file_path;
       return { task, pet_id, file_path };
+    }
+    case 'bloodwork_spreadsheet': {
+      const pet_id = parsePetId(b, true);
+      if (isErr(pet_id)) return pet_id;
+      const sheet_text = parseSheetText(b);
+      if (isErr(sheet_text)) return sheet_text;
+      return { task, pet_id: pet_id as string, sheet_text };
     }
   }
 }

@@ -1,11 +1,11 @@
 // Supabase Edge Function: ask-vet-assistant
 //
-// Server-side proxy to the Anthropic API for the app's 8 AI features. The
+// Server-side proxy to the Anthropic API for the app's 9 AI features. The
 // ANTHROPIC_API_KEY is read from Supabase secrets — it never reaches the
 // browser.
 //
 // Spec 0080 (PA-11, PA-52): the app no longer sends AI instructions. It
-// names one of 8 known tasks and sends only ids and the owner's own words;
+// names one of 9 known tasks and sends only ids and the owner's own words;
 // the server writes the instructions (./prompts.ts) and looks up the pet's
 // details itself (./context.ts). Anything else is refused.
 //
@@ -13,20 +13,24 @@
 //   {
 //     task: 'pet_chat' | 'household_chat' | 'pet_insights' |
 //           'trends_summary' | 'scan_vaccines' | 'scan_vaccine_single' |
-//           'scan_medication' | 'scan_bloodwork',
+//           'scan_medication' | 'scan_bloodwork' | 'bloodwork_spreadsheet',
 //     pet_id?: string,     // the pet the task is about
 //     file_path?: string,  // scans: a file in the private "uploads" bucket
 //     screen?: string,     // pet chat / insights: the screen the owner came from
 //     range?: string,      // Trends summary: 24H / 7D / 30D / 90D / 1Y
 //     question?: string,   // chats: the owner's question (max 2,000 chars)
 //     history?: [...]      // chats: the conversation so far (last 20 kept)
+//     sheet_text?: string  // bloodwork_spreadsheet: the spreadsheet as text,
+//                          // read by the app (max 60,000 chars, spec 0081)
 //   }
 // A body with `prompt`, `response_json_schema` or an unknown task is
 // refused with 400 unknown_task; `file_url` is refused with 400
 // invalid_file (spec 0071's temporary link support is gone).
 //
 // Response: the task's parsed JSON answer, in the same shape the app used
-// to ask for. Special cases that never call the AI:
+// to ask for. The two bloodwork tasks answer { visits, skipped }, checked
+// by ./bloodwork.ts (spec 0081 FR29, FR35-FR37). Special cases that never
+// call the AI:
 //   - { urgent: true }          a chat question with an emergency phrase
 //   - { summary: null }         Trends summary with too few check-ins
 //   - { not_enough_data: true } Pet Insights with too few check-ins
@@ -47,6 +51,9 @@
 //     is refused with 403 forbidden_pet. Sitters can ask about a pet
 //     during its sit, as before; household chat and the multi-pet scan
 //     only list pets the caller owns or co-owns. Loading it only reads.
+//   - The bloodwork spreadsheet task (spec 0081) is for owners and
+//     co-owners only, like bloodwork itself: a sitter or stranger gets 403
+//     forbidden_pet.
 //   - Files (spec 0071): the function never fetches a caller-supplied URL.
 //     It only reads a file_path in the caller's own folder (a scan they
 //     just uploaded) or linked in pet_documents to a pet they own, and
@@ -54,7 +61,9 @@
 //     check, so the storage rules (migration 0054) also have to allow it
 //     (spec 0082). Only paths in the shape the app's uploader creates are
 //     accepted. Size and type are checked before anything is sent to
-//     Anthropic.
+//     Anthropic. Spreadsheet files (.csv, .xlsx, .xls) are refused by name
+//     before the rate check and by stored type after the download (spec
+//     0081 FR34): spreadsheets go through bloodwork_spreadsheet as text.
 //   - The service role is used only for the rate-limit calls.
 //
 // Safety (spec 0041, enforced here by spec 0080 FR5): a chat question with
@@ -78,6 +87,7 @@ import { createClient, type SupabaseClient } from 'jsr:@supabase/supabase-js@2.1
 import { encodeBase64 } from 'jsr:@std/encoding@1.0.11/base64';
 import { reportError, serverError } from '../_shared/errorReporting.ts';
 import {
+  buildBloodworkSpreadsheet,
   buildHouseholdChat,
   buildPetChat,
   buildPetInsights,
@@ -94,7 +104,9 @@ import {
   type BuiltPrompt,
   type TaskRequest,
 } from './prompts.ts';
+import { cleanBloodworkAnswer } from './bloodwork.ts';
 import {
+  callerOwnsPet,
   loadActiveMedications,
   loadBaseline,
   loadCallerTimezone,
@@ -137,6 +149,19 @@ const PDF_TYPE = 'application/pdf';
 
 // Tasks whose answers can carry the AI's "urgent" flag (spec 0080 FR5).
 const URGENT_TASKS = new Set(['pet_chat', 'household_chat', 'pet_insights']);
+
+// Tasks whose answers are checked by ./bloodwork.ts (spec 0081).
+const BLOODWORK_TASKS = new Set(['scan_bloodwork', 'bloodwork_spreadsheet']);
+
+// Output room for the AI's answer. The bloodwork answer lists every value
+// of every visit with its unit, so it gets more than the default.
+const DEFAULT_MAX_TOKENS = 2048;
+const BLOODWORK_MAX_TOKENS = 8192;
+
+// File name endings the scans never read (spec 0081 FR34). The extension
+// is the part after the last dot, lowercased by the uploader.
+const SPREADSHEET_EXTENSIONS = new Set(['csv', 'xlsx', 'xls']);
+const UNSUPPORTED_TYPE = { error: 'Unsupported file type', code: 'unsupported_type' };
 
 const FORBIDDEN_PET = { error: 'You do not have access to this pet', code: 'forbidden_pet' };
 
@@ -196,6 +221,11 @@ async function checkScanFileAccess(
   if (!safe) {
     return { refusal: jsonResponse({ error: 'Invalid file reference', code: 'invalid_file' }, 400) };
   }
+  // FR34: a spreadsheet is never sent to the AI as if it were an image or
+  // a PDF. Refused here, before the rate check, so it doesn't count.
+  if (SPREADSHEET_EXTENSIONS.has(safe.slice(safe.lastIndexOf('.') + 1).toLowerCase())) {
+    return { refusal: jsonResponse(UNSUPPORTED_TYPE, 415) };
+  }
 
   // Allowed: the caller's own folder (a scan they just uploaded), or a
   // document linked to a pet they own. The pet_documents lookup runs as
@@ -230,8 +260,10 @@ async function downloadScanFile(
   }
   const contentType = blob.type;
   const isPdf = contentType === PDF_TYPE;
+  // Only images and PDFs: a stored spreadsheet (text/csv, the Excel types)
+  // is refused here whatever its name (FR34).
   if (!isPdf && !IMAGE_TYPES.has(contentType)) {
-    return { refusal: jsonResponse({ error: 'Unsupported file type', code: 'unsupported_type' }, 415) };
+    return { refusal: jsonResponse(UNSUPPORTED_TYPE, 415) };
   }
   if (blob.size > MAX_FILE_BYTES || (!isPdf && blob.size > MAX_IMAGE_BYTES)) {
     return {
@@ -305,11 +337,39 @@ async function buildPrompt(
       return { prompt: buildScanMedication() };
     case 'scan_bloodwork':
       return { prompt: buildScanBloodwork() };
+    case 'bloodwork_spreadsheet': {
+      // Owners and co-owners only, as for bloodwork itself (its RLS is
+      // is_pet_owner(), migration 0004): a sitter can see the pet during
+      // the sit but can't import its bloodwork.
+      const pet = await loadVisiblePet(client, req.pet_id);
+      if (!pet || !(await callerOwnsPet(client, req.pet_id, userId))) {
+        return { reply: jsonResponse(FORBIDDEN_PET, 403) };
+      }
+      return { prompt: buildBloodworkSpreadsheet(req.sheet_text) };
+    }
   }
 }
 
 interface AnthropicMessage {
   content?: { type: string; text?: string }[];
+  stop_reason?: string;
+}
+
+// The AI's answer as JSON, or undefined. If it wrote anything around the
+// JSON (a sentence before it, say), the outermost { ... } is tried too.
+function parseAnswer(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    const start = text.indexOf('{');
+    const end = text.lastIndexOf('}');
+    if (start < 0 || end <= start) return undefined;
+    try {
+      return JSON.parse(text.slice(start, end + 1));
+    } catch {
+      return undefined;
+    }
+  }
 }
 
 Deno.serve(async (req) => {
@@ -435,7 +495,7 @@ Deno.serve(async (req) => {
       },
       body: JSON.stringify({
         model: 'claude-sonnet-4-6',
-        max_tokens: 2048,
+        max_tokens: BLOODWORK_TASKS.has(task.task) ? BLOODWORK_MAX_TOKENS : DEFAULT_MAX_TOKENS,
         system,
         messages: [{ role: 'user', content: contentBlocks }],
       }),
@@ -462,14 +522,14 @@ Deno.serve(async (req) => {
 
     // Strip markdown code fences if Claude added them despite instructions.
     const cleaned = textOut.replace(/^```json\s*/i, '').replace(/```\s*$/, '').trim();
-    let result: unknown;
-    try {
-      result = JSON.parse(cleaned);
-    } catch {
-      reportError(new Error('AI returned invalid JSON'), aiTags);
+    const result = parseAnswer(cleaned);
+    if (result === undefined) {
+      // Only the stop reason goes to Sentry, never the AI's text.
+      reportError(new Error(`AI returned invalid JSON (stop_reason: ${data.stop_reason ?? 'unknown'})`), aiTags);
       return jsonResponse({ error: 'AI returned invalid JSON' }, 502);
     }
 
+    if (BLOODWORK_TASKS.has(task.task)) return jsonResponse(cleanBloodworkAnswer(result));
     return jsonResponse(URGENT_TASKS.has(task.task) ? stripUrgent(result) : result);
   } catch (err) {
     return serverError(err, { function: 'ask-vet-assistant' }, corsHeaders);

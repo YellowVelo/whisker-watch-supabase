@@ -5,80 +5,14 @@
 //
 // The retired Wellness/Appetite/Energy/Symptoms ring scores (computed
 // here at read time from computeDayScore/computeTrend) are gone along
-// with the 5-ring row itself. Only Weight-related reads remain here.
+// with the 5-ring row itself. Weight reads moved to src/lib/weightClient.js
+// (spec 0081).
 
 import { supabase } from '@/api/supabaseClient';
 import { entities } from '@/api/entities';
 import { getObservationValuesForCheckIns } from './checkinClient';
 import { COUNTED_CATEGORIES, getCategory } from './config';
 import { getChipState } from './chipLabels';
-
-// Shared by getWeightSummary/getWeightSummariesForPets — turns a pet's
-// weight-bearing symptom_logs rows (already sorted oldest-first, already
-// capped to `days`) into the ring/card shape. Kept pure/sync so the batched
-// path below can reuse it without a second round trip per pet.
-function summarizeWeightLogs(withWeight) {
-  if (withWeight.length === 0) {
-    return { currentLbs: null, deltaLbs: null, score: null, statusLabel: null, sparkline: [] };
-  }
-
-  const toLbs = (grams) => grams / 453.59237;
-  const sparkline = withWeight.map((l) => ({ date: l.date, lbs: toLbs(l.weight_grams) }));
-  const currentLbs = sparkline[sparkline.length - 1].lbs;
-
-  if (sparkline.length < 2) {
-    return { currentLbs, deltaLbs: null, score: null, statusLabel: null, sparkline };
-  }
-
-  const prevLbs = sparkline[sparkline.length - 2].lbs;
-  const deltaLbs = currentLbs - prevLbs;
-  const pctChange = (currentLbs - prevLbs) / prevLbs;
-  const deduction = Math.min(40, Math.round(Math.abs(pctChange) * 1000));
-  const score = Math.max(0, 100 - deduction);
-  const statusLabel = Math.abs(pctChange) >= 0.02 ? 'Monitor' : 'Stable';
-
-  return { currentLbs, deltaLbs, score, statusLabel, sparkline };
-}
-
-// Weight ring + card data, from symptom_logs.weight_grams — the only place
-// weight is currently written (Data Model §3.8). Score is a deterministic
-// deduction from the day-over-day percent change, not a stored value;
-// there's no baseline-weight field yet, so "trend" compares the two most
-// recent entries rather than a true baseline (documented limitation,
-// carried over from the previous Pet Profile implementation).
-export async function getWeightSummary(petId, days = 30) {
-  const logs = await entities.SymptomLog.filter({ pet_id: petId }, '-date', 200);
-  const withWeight = logs.filter((l) => l.weight_grams != null).slice(0, days).reverse();
-  return summarizeWeightLogs(withWeight);
-}
-
-// Batched equivalent of calling getWeightSummary per pet — one
-// symptom_logs query instead of N (Health Score Revision V2, Home's
-// Weight chip needs this for every active pet on every load/pull-to-
-// refresh, so the same batching discipline as getCheckInsForPets/
-// getRecentWellnessForPets applies here too).
-export async function getWeightSummariesForPets(petIds, days = 30) {
-  const result = {};
-  for (const petId of petIds) result[petId] = summarizeWeightLogs([]);
-  if (petIds.length === 0) return result;
-
-  const { data, error } = await supabase
-    .from('symptom_logs')
-    .select('pet_id, date, weight_grams')
-    .in('pet_id', petIds)
-    .not('weight_grams', 'is', null)
-    .order('date', { ascending: false });
-  if (error) throw error;
-
-  const byPet = {};
-  for (const row of data) (byPet[row.pet_id] ||= []).push(row);
-
-  for (const petId of petIds) {
-    const withWeight = (byPet[petId] || []).slice(0, days).reverse();
-    result[petId] = summarizeWeightLogs(withWeight);
-  }
-  return result;
-}
 
 // Vaccination completion summary. `vaccinations` is the pet's full shot
 // history (one row per administration, e.g. an annual booster logged
@@ -112,31 +46,13 @@ export function getVaccinationSummary(vaccinations) {
 // There is no dedicated timeline/event table (Nav & IA: Timeline was a
 // placeholder); this assembles real events from the tables that already
 // represent discrete moments in the pet's history, most-recent first.
-// Compact one-line summary of a symptom_log row's notable fields — the
-// detail PetProfileTabs' retiring "History" tab (LogHistory.jsx) used to
-// show on its own screen, now folded directly into the Timeline event row
-// instead of living in a second place (spec 0023 step 10). Deliberately a
-// condensed summary, not a full replica of the richer chip UI PetSymptoms.jsx
-// (the "Weight" card's full symptom-log history) already provides for this
-// same data — that screen stays the place for full per-log detail.
-function summarizeSymptomLog(log) {
-  const parts = [];
-  if (log.appetite) parts.push(`Appetite: ${log.appetite}`);
-  if (log.energy_level) parts.push(`Energy: ${log.energy_level}`);
-  if (log.vomiting > 0) parts.push(`Vomiting ×${log.vomiting}`);
-  if (log.stool_quality && log.stool_quality !== 'None') parts.push(`Stool: ${log.stool_quality}`);
-  if (log.pain_signs) parts.push('Pain signs');
-  if (log.medication_given) parts.push('Meds given');
-  if (log.weight_grams != null) parts.push(`${(log.weight_grams / 453.592).toFixed(1)} lbs`);
-  return parts.length ? `Symptom log — ${parts.join(', ')}` : 'Symptom log recorded';
-}
-
+// Old symptom logs (the retired Symptoms page's records, spec 0081 FR14)
+// aren't listed: their content now lives in check-ins, shown below.
 export async function getTimelineEvents(petId, limit = 200) {
-  const [checkIns, medications, vaccinations, symptomLogs] = await Promise.all([
+  const [checkIns, medications, vaccinations] = await Promise.all([
     entities.DailyCheckIn.filter({ pet_id: petId }, '-check_in_date', limit),
     entities.Medication.filter({ pet_id: petId }, '-start_date', limit),
     entities.Vaccination.filter({ pet_id: petId }, '-date_given', limit),
-    entities.SymptomLog.filter({ pet_id: petId }, '-date', limit),
   ]);
 
   const events = [
@@ -154,9 +70,6 @@ export async function getTimelineEvents(petId, limit = 200) {
     })),
     ...vaccinations.filter((v) => v.date_given).map((v) => ({
       id: `vax-${v.id}`, date: v.date_given, type: 'vaccination', title: `${v.vaccine_name} administered`,
-    })),
-    ...symptomLogs.map((s) => ({
-      id: `log-${s.id}`, date: s.date, type: 'symptom_log', title: summarizeSymptomLog(s),
     })),
   ];
 

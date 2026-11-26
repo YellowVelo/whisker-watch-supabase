@@ -22,6 +22,13 @@
 // not listed; no "Health Score" anywhere. A second pet with no check-ins
 // gets the "No daily check-ins" empty state, and a stranger gets 403.
 //
+// Weight (spec 0081, FR5/FR16): weight observations of both kinds, one per
+// day. 1 day ago has a check-in weight (10.4) and a standalone weight
+// (10.0): the standalone one is the day's weight. 2 days ago has only a
+// check-in weight (10.6). 3 days ago has an out-of-range standalone weight
+// (0.04), never shown. The Weight Trend table lists 10.0 and 10.6 once
+// each, never 10.4, and the old "Diet & Food Logs" section is gone.
+//
 // Runs a few seconds after UTC midnight could see the window shift by a
 // day between seeding and the request; the offsets above leave room.
 //
@@ -140,11 +147,14 @@ Deno.test('generate-vet-report: Wellness Overview from real check-ins (spec 0080
     const obs = (code: string, value: string) => ({
       observation_type_id: typeId(code), value, numeric_value: null, notes: null, photo_url: null,
     });
+    const weightObs = (lbs: number) => ({
+      observation_type_id: typeId('weight'), value: null, numeric_value: lbs, notes: null, photo_url: null,
+    });
     const normals = (except: string[]) =>
       ['appetite', 'water_intake', 'bathroom', 'stool', 'energy']
         .filter((c) => !except.includes(c))
         .map((c) => obs(c, 'normal'));
-    const day = (offset: number, status: string, observations: ReturnType<typeof obs>[], symptomCount: number) => ({
+    const day = (offset: number, status: string, observations: (ReturnType<typeof obs> | ReturnType<typeof weightObs>)[], symptomCount: number) => ({
       pet_id: petId,
       check_in_date: utcDate(offset),
       status,
@@ -155,8 +165,8 @@ Deno.test('generate-vet-report: Wellness Overview from real check-ins (spec 0080
     });
 
     const payloads = [
-      day(-1, 'great', [obs('appetite', 'ate_little_less'), obs('bathroom', 'not_observed'), ...normals(['appetite', 'bathroom'])], 1),
-      day(-2, 'off', [obs('appetite', 'ate_little_less'), ...normals(['appetite'])], 1),
+      day(-1, 'great', [obs('appetite', 'ate_little_less'), obs('bathroom', 'not_observed'), ...normals(['appetite', 'bathroom']), weightObs(10.4)], 1),
+      day(-2, 'off', [obs('appetite', 'ate_little_less'), ...normals(['appetite']), weightObs(10.6)], 1),
       day(-3, 'tough', [obs('appetite', 'ate_much_less'), obs('stool', 'diarrhea'), ...normals(['appetite', 'stool'])], 2),
       day(-4, 'skipped', [], 0),
       day(-5, 'great', normals([]), 0),
@@ -164,6 +174,14 @@ Deno.test('generate-vet-report: Wellness Overview from real check-ins (spec 0080
     ];
     const { error: saveError } = await owner.client.rpc('save_daily_check_ins', { payloads });
     if (saveError) throw new Error(`save_daily_check_ins failed: ${saveError.message}`);
+
+    // Standalone weights, saved as the owner the way the Log weight sheet
+    // does (observed_at = noon UTC of the chosen date).
+    const { error: weightError } = await owner.client.from('observations').insert([
+      { pet_id: petId, created_by: owner.userId, daily_check_in_id: null, observation_type_id: typeId('weight'), numeric_value: 10.0, observed_at: `${utcDate(-1)}T12:00:00.000Z` },
+      { pet_id: petId, created_by: owner.userId, daily_check_in_id: null, observation_type_id: typeId('weight'), numeric_value: 0.04, observed_at: `${utcDate(-3)}T12:00:00.000Z` },
+    ]);
+    if (weightError) throw new Error(`weight insert failed: ${weightError.message}`);
 
     await t.step('AC10: the overview shows the window, Vibe totals and only attributes with symptoms', async () => {
       const res = await downloadReport(owner, petId);
@@ -213,6 +231,31 @@ Deno.test('generate-vet-report: Wellness Overview from real check-ins (spec 0080
 
       assert(has('Blank = skipped, no check-in, or not observed'), 'missing the chart legend');
       assert(!/health score/i.test(text) && !/health score/i.test(tight), 'the report must not mention a Health Score');
+    });
+
+    await t.step('spec 0081: Weight Trend reads weight observations, one per day; no food-log section', async () => {
+      const res = await downloadReport(owner, petId);
+      assertEquals(res.status, 200, `expected 200, got ${res.status}: ${new TextDecoder().decode(res.bytes).slice(0, 300)}`);
+      const pieces = await pdfTextPieces(res.bytes);
+      const text = pieces.join(' ').replace(/\s+/g, ' ');
+      const from = text.indexOf('Weight Trend');
+      const to = text.indexOf('Medications', from);
+      assert(from >= 0, 'missing the Weight Trend heading');
+      const weights = text.slice(from, to < 0 ? undefined : to);
+      assert(!weights.includes('No weight entries recorded'), `weights should be listed: ${weights}`);
+      // The table's rows: date, then the day's weight.
+      const rows = [...weights.matchAll(/([A-Z][a-z]{2} \d{1,2}, \d{4}) (\d+\.\d)/g)].map((m) => `${m[1]} ${m[2]}`);
+      assertEquals(rows, [
+        `${shortDate(utcDate(-1), true)} 10.0`,
+        `${shortDate(utcDate(-2), true)} 10.6`,
+      ], `unexpected weight rows in: ${weights}`);
+      assert(!weights.includes('10.4'), "the check-in's 10.4 lost to the standalone 10.0 and must not be shown");
+      assert(!/food log/i.test(text), 'the food-log section should be gone');
+
+      // Weights never show up as stray rows in Daily Observations.
+      const obsFrom = text.indexOf('Daily Observations');
+      const obsSection = text.slice(obsFrom, text.indexOf('Weight Trend', obsFrom));
+      assert(!obsSection.includes('Weight') && !obsSection.includes('10.0') && !obsSection.includes('10.6'), `weights listed as observations: ${obsSection}`);
     });
 
     await t.step('a pet with no check-ins gets the "No daily check-ins" empty state', async () => {

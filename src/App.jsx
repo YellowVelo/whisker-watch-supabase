@@ -3,12 +3,9 @@ import { useEffect } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import { Sentry } from '@/lib/errorMonitoring';
 import CrashFallback from '@/components/CrashFallback';
-import { QueryClientProvider } from '@tanstack/react-query'
-import { queryClientInstance } from '@/lib/query-client'
 import { BrowserRouter as Router, Route, Routes, useLocation, useParams, Navigate, Outlet } from 'react-router-dom';
-import PageNotFound from './lib/PageNotFound';
+import PageNotFound from './pages/PageNotFound';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
-import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import AccountTypeBanner from './components/AccountTypeBanner';
 import OfflineBanner from './components/OfflineBanner';
@@ -28,7 +25,6 @@ import PetMedications from './pages/PetMedications';
 import PetVaccinations from './pages/PetVaccinations';
 import PetHealthRecords from './pages/PetHealthRecords';
 import PetSitter from './pages/PetSitter';
-import PetSymptoms from './pages/PetSymptoms';
 import PetFood from './pages/PetFood';
 import About from './pages/About';
 import VetExport from './pages/VetExport';
@@ -53,7 +49,8 @@ import AdminRoute from '@/components/AdminRoute';
 import AdminBetaSignups from './pages/admin/BetaSignups';
 
 // PetProfileTabs.jsx (the old hero-header pet profile screen) is retired
-// (spec 0028) — old /pet/:petId/profile links land on Pets instead, with
+// (spec 0028), and so is PetSymptoms.jsx (spec 0081) — old
+// /pet/:petId/profile and /pet/:petId/symptoms links land on Pets instead, with
 // that pet's card scrolled into view and expanded, same pattern already
 // used for the retired /pet/:petId route.
 const PetProfileRedirect = () => {
@@ -62,21 +59,15 @@ const PetProfileRedirect = () => {
 };
 
 const AuthenticatedApp = () => {
-  const { isLoadingAuth, isLoadingPublicSettings, authError } = useAuth();
+  const { isLoadingAuth } = useAuth();
   const location = useLocation();
 
-  if (isLoadingPublicSettings || isLoadingAuth) {
+  if (isLoadingAuth) {
     return (
       <div className="fixed inset-0 flex items-center justify-center">
         <div className="w-8 h-8 border-4 border-slate-200 border-t-slate-800 rounded-full animate-spin"></div>
       </div>
     );
-  }
-
-  if (authError) {
-    if (authError.type === 'user_not_registered') {
-      return <UserNotRegisteredError />;
-    }
   }
 
   return (
@@ -133,7 +124,9 @@ const AuthenticatedApp = () => {
             <Route path="/pet/:petId/medications" element={<PetMedications />} />
             <Route path="/pet/:petId/vaccinations" element={<PetVaccinations />} />
             <Route path="/pet/:petId/health-records" element={<PetHealthRecords />} />
-            <Route path="/pet/:petId/symptoms" element={<PetSymptoms />} />
+            {/* PetSymptoms.jsx (the old Symptoms page) is retired (spec 0081
+                FR13): old links and bookmarks open the pet's profile. */}
+            <Route path="/pet/:petId/symptoms" element={<PetProfileRedirect />} />
             <Route path="/pet/:petId/food" element={<PetFood />} />
             <Route path="/pet/:petId/export" element={<VetExport />} />
             <Route path="/about" element={<About />} />
@@ -166,14 +159,12 @@ function App() {
   return (
     <Sentry.ErrorBoundary fallback={<CrashFallback />}>
       <AuthProvider>
-        <QueryClientProvider client={queryClientInstance}>
-          <InstallPromptProvider>
-            <Router>
-              <AuthenticatedApp />
-            </Router>
-            <Toaster />
-          </InstallPromptProvider>
-        </QueryClientProvider>
+        <InstallPromptProvider>
+          <Router>
+            <AuthenticatedApp />
+          </Router>
+          <Toaster />
+        </InstallPromptProvider>
       </AuthProvider>
     </Sentry.ErrorBoundary>
   )

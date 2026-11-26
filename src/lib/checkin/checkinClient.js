@@ -6,11 +6,9 @@
 // extended here to mean "never scatter check-in persistence logic across
 // components").
 //
-// This replaces every prior scoring system. There is no wellness_scores
-// write path left in this module at all — Vibe (daily_check_ins.status)
-// and Symptom Count (daily_check_ins.symptom_count) are the only two
-// signals persisted per day, and they never inform each other (spec Core
-// Model III).
+// Vibe (daily_check_ins.status) and Symptom Count
+// (daily_check_ins.symptom_count) are the only two signals persisted per
+// day, and they never inform each other (spec Core Model III).
 //
 // Two multi-pet reads (getCheckInsForPets) use the Supabase client
 // directly rather than entities.*, because entityClient's generic filter
@@ -24,6 +22,8 @@ import { supabase } from '@/api/supabaseClient';
 import { resolveDailyAttributeCount, computeAttributeDirection, computeSymptomCount } from './scoring';
 import { CATEGORIES, getCategory, HEALTH_ATTRIBUTES, WELLBEING_ATTRIBUTES, COUNTED_CATEGORIES } from './config';
 import { todayInTimezone, yesterdayInTimezone, dateStrInTimezone, dateStrForInstant } from '@/lib/timezone';
+import { reportClientError } from '@/lib/errorMonitoring';
+import { isValidWeight } from '@/lib/weightRange';
 
 // Answer values that represent "no change from normal" across every
 // enum category — these are never worth surfacing as an observation
@@ -199,6 +199,10 @@ export async function getObservationValuesForCheckIns(checkInsByPetId) {
   const checkInIds = Object.values(checkInsByPetId).filter(Boolean).map((c) => c.id);
   if (checkInIds.length === 0) return {};
 
+  // `.in('daily_check_in_id', ...)` never matches a null, so standalone
+  // weights (no check-in, spec 0081) are never grouped into a check-in here.
+  // The other observations readers (getAttributeDirectionsForPets,
+  // trendsClient's getObservationTrend) filter the same way.
   const [{ data, error }, catalog] = await Promise.all([
     supabase
       .from('observations')
@@ -327,6 +331,156 @@ function buildBaselineObservations(catalog) {
   }).filter(Boolean);
 }
 
+// ---------------------------------------------------------------------------
+// Keeping a day's weight across re-saves (spec 0081, "Check-in edit safety"),
+// and one weight per pet per day (Lynn, 2026-11-25).
+//
+// save_daily_check_ins (migrations 0034/0046) deletes every observation of
+// a check-in and inserts the payload's rows, so a payload without the day's
+// Weight row silently deletes that weight. Weight is the one answer that
+// lives in the check-in but is shown and edited outside it (Pet Profile,
+// Trends, the Log weight sheet), and Great Day / Catch-Up have no Weight
+// box at all. So every save path here re-sends the day's existing check-in
+// weight unless the caller's `selections` contain a `weight` entry, which
+// means the owner decided this day's weight in the form: a number sets it,
+// a null `numericValue` clears it.
+//
+// At most one weight row is re-sent per day, even if older data has more,
+// so a re-save never creates or keeps duplicates. The re-inserted row gets
+// a fresh observed_at/updated_at (now()), which is why weightClient.js's
+// readers never compare a check-in weight's time with a standalone one's.
+//
+// When the owner did decide the weight in the form, the check-in weight is
+// the day's only weight: after a successful save, any standalone weight
+// for that pet and day (logged in the Log weight sheet) is removed. See
+// removeStandaloneWeights for what happens if that removal fails.
+//
+// The existing weight is read right before the save. On the single-day
+// paths that pass `expectedUpdatedAt` (spec 0043), an edit or delete in the
+// Log weight sheet moves the check-in's `updated_at` (weightClient.js), so
+// a weight change landing after the form loaded is refused as a conflict
+// rather than overwritten. The bulk Catch-Up paths are last-write-wins, as
+// before.
+// ---------------------------------------------------------------------------
+
+const WEIGHT_CODE = 'weight';
+
+// True when the owner made a decision about this day's weight in the form.
+export function hasWeightDecision(selections) {
+  return (selections || []).some((sel) => sel?.code === WEIGHT_CODE);
+}
+
+// Latest updated_at first, then the larger id, so the pick is deterministic.
+const latestSavedFirst = (a, b) => {
+  const ua = a.updated_at || '';
+  const ub = b.updated_at || '';
+  if (ua !== ub) return ua < ub ? 1 : -1;
+  const ia = a.id || '';
+  const ib = b.id || '';
+  if (ia !== ib) return ia < ib ? 1 : -1;
+  return 0;
+};
+
+// The day's existing check-in weight, as a save payload row in a
+// one-item array, keyed by check_in_date. Dates with no check-in or no
+// weight are absent. If older data has several weight rows on one day,
+// only one is kept: the latest saved with a value (ties: larger id).
+// A value outside 0.1–300 lbs (saved by the old, unchecked Weight box) is
+// never re-sent: no screen counts it as a weight (weightClient.js), so
+// re-sending it could only push out the day's real weight. Throws on a
+// read failure so the caller doesn't save (and lose the weight) blind.
+export async function loadCheckInWeightRows(petId, dates) {
+  const catalog = await loadObservationCatalog();
+  const typeId = catalog[WEIGHT_CODE]?.type?.id;
+  if (!typeId || dates.length === 0) return {};
+
+  const { data, error } = await supabase
+    .from('observations')
+    .select('id, observation_type_id, value, numeric_value, notes, updated_at, daily_check_ins!inner(check_in_date)')
+    .eq('pet_id', petId)
+    .eq('observation_type_id', typeId)
+    .in('daily_check_ins.check_in_date', dates);
+  if (error) throw error;
+
+  const byDate = {};
+  for (const row of data || []) {
+    const date = /** @type {any} */ (row).daily_check_ins?.check_in_date;
+    if (!date) continue;
+    (byDate[date] ||= []).push(row);
+  }
+  for (const date of Object.keys(byDate)) {
+    const rows = byDate[date];
+    const withValue = rows.filter((row) => row.numeric_value != null && isValidWeight(row.numeric_value));
+    const withoutValue = rows.filter((row) => row.numeric_value == null);
+    const [kept] = [...(withValue.length ? withValue : withoutValue)].sort(latestSavedFirst);
+    if (!kept) {
+      delete byDate[date];
+      continue;
+    }
+    byDate[date] = [{
+      observation_type_id: kept.observation_type_id,
+      value: kept.value ?? null,
+      numeric_value: kept.numeric_value ?? null,
+      notes: kept.notes || null,
+    }];
+  }
+  return byDate;
+}
+
+// One day's observation payload with its weight kept: unchanged when the
+// owner decided the weight in the form, otherwise with the existing weight
+// row appended.
+export function withKeptWeight(observations, existingWeightRows, weightDecided) {
+  if (weightDecided || !existingWeightRows?.length) return observations;
+  return [...observations, ...existingWeightRows];
+}
+
+// The `observed_at` range that dates a standalone weight to `date`
+// (weightClient.js's rule: the UTC date of observed_at).
+function utcDayRange(date) {
+  const start = new Date(`${date}T00:00:00.000Z`);
+  const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
+  return [start.toISOString(), end.toISOString()];
+}
+
+// Removes the pet's standalone weights (no check-in) on each of `dates`,
+// after a check-in save where the owner typed or cleared the weight.
+// Called only after the check-in itself has saved, so a failed or refused
+// (conflict) save never loses a weight.
+//
+// Never throws: the check-in is already saved, and failing now would make
+// the owner retry a save that worked (and, on the single-day paths, trip
+// spec 0043's conflict check on their own save). If a removal fails, it's
+// reported to Sentry and that day keeps its standalone weight. Nothing is
+// lost, and every reader still picks one weight for the day the same way
+// (a standalone weight first, weightClient.js compareWeightsNewestFirst),
+// so screens show the weight the day had before this save until the owner
+// fixes it in the Log weight sheet, where both are listed. Returns the
+// dates whose removal failed.
+async function removeStandaloneWeights(catalog, petId, dates) {
+  const typeId = catalog[WEIGHT_CODE]?.type?.id;
+  if (!typeId) return [];
+  const failed = [];
+  for (const date of dates) {
+    const [from, to] = utcDayRange(date);
+    try {
+      const { error } = await supabase
+        .from('observations')
+        .delete()
+        .eq('pet_id', petId)
+        .eq('observation_type_id', typeId)
+        .is('daily_check_in_id', null)
+        .gte('observed_at', from)
+        .lt('observed_at', to);
+      if (error) throw error;
+    } catch (err) {
+      failed.push(date);
+      reportClientError(err, { feature: 'daily_checkin', note: 'remove standalone weight after check-in weight save' });
+    }
+  }
+  return failed;
+}
+
 // "Great Day" — every counted category gets an explicit confirmed-normal
 // (baseline) row, not just an absent one, so direction comparisons never
 // have to infer "no row = normal" (spec: "explicit baseline row is still
@@ -347,6 +501,8 @@ function buildBaselineObservations(catalog) {
 // paths not covered by this spec.
 export async function markGreatDay(petId, date = todayStr(), source = 'app', /** @type {any} */ { expectedUpdatedAt } = {}) {
   const catalog = await loadObservationCatalog();
+  // Great Day has no Weight box, so the day's weight is always kept.
+  const keptWeights = await loadCheckInWeightRows(petId, [date]);
   const payload = {
     pet_id: petId,
     check_in_date: date,
@@ -354,7 +510,7 @@ export async function markGreatDay(petId, date = todayStr(), source = 'app', /**
     symptom_count: 0,
     completed_at: new Date().toISOString(),
     source,
-    observations: buildBaselineObservations(catalog),
+    observations: withKeptWeight(buildBaselineObservations(catalog), keptWeights[date], false),
     ...(expectedUpdatedAt !== undefined ? { expected_updated_at: expectedUpdatedAt } : {}),
   };
 
@@ -398,6 +554,9 @@ export async function markGreatDaysBulk(petId, dates, source = 'catch_up') {
 
   const checkIns = [];
   for (const dateChunk of chunkArray(dates, CHECK_IN_CHUNK_SIZE)) {
+    // Read per chunk, right before that chunk's save, so a day's weight is
+    // as fresh as possible (no Weight box here: always kept).
+    const keptWeights = await loadCheckInWeightRows(petId, dateChunk);
     const payloads = dateChunk.map((date) => ({
       pet_id: petId,
       check_in_date: date,
@@ -405,7 +564,7 @@ export async function markGreatDaysBulk(petId, dates, source = 'catch_up') {
       symptom_count: 0,
       completed_at: completedAt,
       source,
-      observations,
+      observations: withKeptWeight(observations, keptWeights[date], false),
     }));
     const { data, error } = await supabase.rpc('save_daily_check_ins', { payloads });
     if (error) throw error;
@@ -516,6 +675,8 @@ export async function markOffTough(petId, date, status, selections, source = 'ap
   // buildObservationRows), so this is always a full recalculation of the
   // day's symptom count, never an incremental patch.
   const symptomCount = computeSymptomCount(symptomCounts);
+  const weightDecided = hasWeightDecision(selections);
+  const keptWeights = weightDecided ? {} : await loadCheckInWeightRows(petId, [date]);
 
   const payload = {
     pet_id: petId,
@@ -524,7 +685,7 @@ export async function markOffTough(petId, date, status, selections, source = 'ap
     symptom_count: symptomCount,
     completed_at: new Date().toISOString(),
     source,
-    observations: rowsToObservationPayload(catalog, rows),
+    observations: withKeptWeight(rowsToObservationPayload(catalog, rows), keptWeights[date], weightDecided),
     ...(expectedUpdatedAt !== undefined ? { expected_updated_at: expectedUpdatedAt } : {}),
   };
 
@@ -533,7 +694,9 @@ export async function markOffTough(petId, date, status, selections, source = 'ap
 
   const result = data[0];
   if (result.conflict) return { conflict: true, existingCheckIn: result.check_in, existingObservations: result.observations };
-  return { checkIn: result.check_in, symptomCount };
+  // The owner typed or cleared the weight: the check-in's is the day's only one.
+  const weightCleanupFailedDates = weightDecided ? await removeStandaloneWeights(catalog, petId, [date]) : [];
+  return { checkIn: result.check_in, symptomCount, weightCleanupFailedDates };
 }
 
 // BulkApplySheet.jsx's multi-day apply (spec 0016) — every date in one
@@ -549,9 +712,14 @@ export async function markOffToughBulk(petId, dates, status, selections, source 
   const symptomCount = computeSymptomCount(symptomCounts);
   const observations = rowsToObservationPayload(catalog, rows);
   const completedAt = new Date().toISOString();
+  // A weight typed in the bulk sheet applies to every date; otherwise each
+  // date keeps its own existing weight.
+  const weightDecided = hasWeightDecision(selections);
 
   const checkIns = [];
+  const weightCleanupFailedDates = [];
   for (const dateChunk of chunkArray(dates, CHECK_IN_CHUNK_SIZE)) {
+    const keptWeights = weightDecided ? {} : await loadCheckInWeightRows(petId, dateChunk);
     const payloads = dateChunk.map((date) => ({
       pet_id: petId,
       check_in_date: date,
@@ -559,12 +727,14 @@ export async function markOffToughBulk(petId, dates, status, selections, source 
       symptom_count: symptomCount,
       completed_at: completedAt,
       source,
-      observations,
+      observations: withKeptWeight(observations, keptWeights[date], weightDecided),
     }));
     const { data, error } = await supabase.rpc('save_daily_check_ins', { payloads });
     if (error) throw error;
     checkIns.push(...data.map((result) => result.check_in));
+    // A weight typed here is each of these days' only weight.
+    if (weightDecided) weightCleanupFailedDates.push(...await removeStandaloneWeights(catalog, petId, dateChunk));
   }
 
-  return { checkIns, symptomCount };
+  return { checkIns, symptomCount, weightCleanupFailedDates };
 }

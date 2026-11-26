@@ -13,6 +13,9 @@ import { PALETTE } from '@/lib/toneColors';
 import PetIdentityFields from './fields/PetIdentityFields';
 import { resolveDate, isDateInfoValid } from './fields/DateInfoFields';
 import { reportClientError } from '@/lib/errorMonitoring';
+import { addWeight, isValidWeight, WEIGHT_MESSAGES } from '@/lib/weightClient';
+import { useAuth } from '@/lib/AuthContext';
+import { detectTimezone, dateStrInTimezone } from '@/lib/timezone';
 
 const emptyForm = {
   name: '', breed: '', photo_path: '', color_markings: '',
@@ -39,6 +42,8 @@ export default function PetInfoCard({ onCreated }) {
   const [error, setError] = useState(null);
   const [uploading, setUploading] = useState(false);
   const { toast } = useToast();
+  const { user } = useAuth();
+  const timezone = user?.timezone || detectTimezone() || 'UTC';
   const [species, setSpecies] = useState(null);
   const [form, setForm] = useState(emptyForm);
   const wasStarted = useRef(false);
@@ -84,7 +89,8 @@ export default function PetInfoCard({ onCreated }) {
 
   const lifeStage = computeLifeStage(species, resolvedBirthDate, form.birthPrecision);
 
-  const weightValid = form.starting_weight_lbs === '' || (Number(form.starting_weight_lbs) > 0 && Number(form.starting_weight_lbs) < 500);
+  // Same 0.1–300 lbs rule as every other weight entry (weightClient).
+  const weightValid = form.starting_weight_lbs === '' || isValidWeight(form.starting_weight_lbs);
 
   const canSubmit =
     form.name.trim().length > 0 && form.name.trim().length <= 100 &&
@@ -131,18 +137,16 @@ export default function PetInfoCard({ onCreated }) {
       return;
     }
 
-    // Optional starting weight logs into the real weight history
-    // (symptom_logs.weight_grams — the only place weight is tracked, see
-    // WeightCard/getWeightTrend) instead of a disconnected profile field.
+    // Optional starting weight is saved as a standalone weight for today in
+    // the owner's time zone (spec 0081 FR4), the same home every weight
+    // screen reads, instead of a disconnected profile field. A failure here
+    // doesn't undo the pet: it's reported and the owner can log the weight
+    // again from the Weight card.
     if (form.starting_weight_lbs !== '') {
       try {
-        await entities.SymptomLog.create({
-          pet_id: created.id,
-          date: new Date().toISOString().split('T')[0],
-          weight_grams: Math.round(Number(form.starting_weight_lbs) * 453.592),
-        });
+        await addWeight(created.id, { date: dateStrInTimezone(timezone, 0), lbs: form.starting_weight_lbs }, timezone);
       } catch (err) {
-        console.warn('Failed to log starting weight:', err);
+        reportClientError(err, { feature: 'onboarding_pet_info', note: 'Failed to log starting weight' });
       }
     }
 
@@ -203,9 +207,9 @@ export default function PetInfoCard({ onCreated }) {
 
       <div className="space-y-1.5">
         <Label htmlFor="starting-weight">Starting Weight (lbs)</Label>
-        <Input id="starting-weight" type="number" min="0" max="500" step="0.1" value={form.starting_weight_lbs} onChange={e => set('starting_weight_lbs', e.target.value)} placeholder="Optional" />
+        <Input id="starting-weight" type="number" min="0.1" max="300" step="0.1" value={form.starting_weight_lbs} onChange={e => set('starting_weight_lbs', e.target.value)} placeholder="Optional" />
         {!weightValid && (
-          <p className="text-base" style={{ color: PALETTE.red }}>Please enter a valid weight.</p>
+          <p role="alert" className="text-base" style={{ color: PALETTE.red }}>{WEIGHT_MESSAGES.weight_out_of_range}</p>
         )}
         <p className="text-sm text-muted-foreground">Logs today's weight to {petLabelForWeightHint(species)} Trends — you can log again anytime.</p>
       </div>

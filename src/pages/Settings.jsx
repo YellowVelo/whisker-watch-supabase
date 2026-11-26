@@ -18,7 +18,7 @@ import { SEED_SCENARIOS } from '@/lib/seedTestData';
 import { deleteAccount, resetSandboxAccount, signOutBestEffort } from '@/lib/accountClient';
 import { useInstallPrompt } from '@/lib/InstallPromptContext';
 import { PALETTE, PALETTE_SOFT, tint } from '@/lib/toneColors';
-import { functionErrorMessage } from '@/lib/errorMonitoring';
+import { functionErrorMessage, reportClientError } from '@/lib/errorMonitoring';
 
 // Design System Amendment #6 (2026-07-30) — account-type color now sourced
 // from the semantic tone tokens instead of raw Tailwind colors (spec 0028):
@@ -159,6 +159,7 @@ export default function Settings() {
       setActiveDialog(DIALOG.NONE);
       window.location.href = '/';
     } catch (e) {
+      reportClientError(e, { feature: 'sandbox_seed', note: `Seed scenario ${scenario.key} failed` });
       setSeedError('Seeding failed. Please try again.');
       setSeeding(false);
     }

@@ -1,7 +1,7 @@
 import { supabase } from './supabaseClient';
 
 /**
- * Mimics the Base44 SDK's per-entity interface:
+ * The app's per-table data helper. Each table gets the same methods:
  *   .list(sort?, limit?)
  *   .get(id)
  *   .filter(matchObj, sort?, limit?)
@@ -9,49 +9,20 @@ import { supabase } from './supabaseClient';
  *   .update(id, data)
  *   .delete(id)
  *   .bulkCreate(arrayOfData)
+ *   .upsert(data, conflictColumns)
  *
- * `sort` strings use Base44's convention: "-field" = descending,
- * "field" = ascending. created_by is set automatically on create
- * from the current authenticated user, mirroring Base44's
- * `created_by: {{user.email}}` behavior (Supabase RLS uses the
- * user's id rather than email, enforced server-side regardless of
- * what the client sends).
- *
- * This intentionally keeps the exact same call shape used throughout
- * the app (base44.entities.X.method(...)) so existing components
- * don't need to change — only the import does.
- *
- * COLUMN TRANSLATION: kept as a safety net during the Cat -> Pet
- * rename. The app now uses pet_id/pet_ids natively, but this alias
- * map stays as a harmless fallback in case any old cat_id reference
- * was missed. Safe to delete once confirmed unnecessary.
+ * `sort` is a column name, or an array of them: "-column" sorts
+ * descending, "column" ascending. Field names are the table's own column
+ * names, passed through unchanged. create/bulkCreate/upsert set
+ * `created_by` to the signed-in user's id; RLS decides server-side what
+ * the caller may actually read or write, whatever the client sends.
  */
-const FIELD_ALIASES = {
-  cat_id: 'pet_id',
-  cat_ids: 'pet_ids',
-  catId: 'pet_id',
-  catIds: 'pet_ids',
-  created_date: 'created_at', // Base44 used created_date; our schema uses created_at
-  updated_date: 'updated_at',
-};
-
-function toDbKeys(obj) {
-  if (!obj) return obj;
-  const out = {};
-  for (const [key, value] of Object.entries(obj)) {
-    const dbKey = FIELD_ALIASES[key] || key;
-    out[dbKey] = value;
-  }
-  return out;
-}
-
 function applySort(query, sort) {
   if (!sort) return query;
   const sorts = Array.isArray(sort) ? sort : [sort];
   for (const s of sorts) {
     const descending = s.startsWith('-');
-    const rawColumn = descending ? s.slice(1) : s;
-    const column = FIELD_ALIASES[rawColumn] || rawColumn;
+    const column = descending ? s.slice(1) : s;
     query = query.order(column, { ascending: !descending });
   }
   return query;
@@ -80,8 +51,7 @@ export function createEntityClient(tableName) {
 
     async filter(match = {}, sort, limit) {
       let query = supabase.from(tableName).select('*');
-      const dbMatch = toDbKeys(match);
-      for (const [key, value] of Object.entries(dbMatch)) {
+      for (const [key, value] of Object.entries(match)) {
         query = query.eq(key, value);
       }
       query = applySort(query, sort);
@@ -94,7 +64,7 @@ export function createEntityClient(tableName) {
     async create(payload) {
       const { data: userData } = await supabase.auth.getUser();
       const row = {
-        ...toDbKeys(payload),
+        ...payload,
         created_by: userData?.user?.id,
       };
       const { data, error } = await supabase
@@ -109,7 +79,7 @@ export function createEntityClient(tableName) {
     async bulkCreate(payloads) {
       const { data: userData } = await supabase.auth.getUser();
       const rows = payloads.map((p) => ({
-        ...toDbKeys(p),
+        ...p,
         created_by: userData?.user?.id,
       }));
       const { data, error } = await supabase
@@ -129,7 +99,7 @@ export function createEntityClient(tableName) {
     async upsert(payload, conflictColumns) {
       const { data: userData } = await supabase.auth.getUser();
       const row = {
-        ...toDbKeys(payload),
+        ...payload,
         created_by: userData?.user?.id,
       };
       const { data, error } = await supabase
@@ -144,7 +114,7 @@ export function createEntityClient(tableName) {
     async update(id, payload) {
       const { data, error } = await supabase
         .from(tableName)
-        .update(toDbKeys(payload))
+        .update(payload)
         .eq('id', id)
         .select()
         .single();

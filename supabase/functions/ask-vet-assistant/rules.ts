@@ -4,6 +4,7 @@
 //   - EMERGENCY_KEYWORD_PATTERNS /
 //     detectEmergencyKeywords() = src/lib/aiGuardrails.js
 //   - BLOODWORK_FIELDS          = src/lib/bloodworkFields.js (key, label, unit)
+//   - URINE_PROTEIN_VALUES      = src/lib/bloodworkFields.js
 //   - baseline option labels    = src/lib/onboardingConfig.js (used by the
 //                                 port of src/lib/baselineContext.js)
 //   - PET_SCREEN_NAMES          = src/lib/petScreenContext.js
@@ -145,6 +146,10 @@ export const BLOODWORK_FIELDS: readonly BloodworkField[] = [
   { key: 't4', label: 'T4 Thyroid', unit: 'µg/dL' },
 ];
 
+// The urine protein answers the bloodwork form offers (and the scans may
+// return).
+export const URINE_PROTEIN_VALUES: readonly string[] = ['Negative', 'Trace', '1+', '2+', '3+', '4+'];
+
 // ---------------------------------------------------------------------------
 // Baseline option labels (pet_onboarding answers), for the server port of
 // formatBaselineForAI.
@@ -222,8 +227,16 @@ export const PET_SCREEN_NAMES: readonly string[] = [
   'Overview',
   'Trends',
   'Timeline',
-  'Weight',
   'Food',
   'Vet Export',
   'Profile',
 ];
+
+// Old screen names the server still accepts from an app tab opened before a
+// release, mapped to the current screen with the same topic. The app never
+// sends these (they aren't in PET_SCREEN_NAMES or src/lib/petScreenContext.js).
+// 'Weight' was the retired Symptoms page (spec 0081); its weight card now
+// lives on Trends. TODO: remove after spec 0081 has been live a release.
+export const LEGACY_SCREEN_NAMES: Readonly<Record<string, string>> = {
+  Weight: 'Trends',
+};
