@@ -18,18 +18,29 @@ const state = {
   /** @type {Error | null} */ sitterLookupError: null,
   /** @type {Error | null} */ petListError: null,
   /** @type {Array<string | undefined>} */ listOrders: [],
+  /** @type {any[]} */ medications: [],
+  /** @type {string[]} */ medSelects: [],
 };
 
 vi.mock('@/api/supabaseClient', () => ({
   supabase: {
     auth: { getUser: async () => ({ data: { user: me } }) },
-    from: () => ({
-      select: () => ({
+    from: (table) => ({
+      select: (cols) => ({
         in: (_col, ids) => ({
-          eq: async () => ({
-            data: ids.filter((id) => state.createdByMe.includes(id)).map((id) => ({ id })),
-            error: null,
-          }),
+          eq: async (col, value) => {
+            if (table === 'medications') {
+              state.medSelects.push(cols);
+              return {
+                data: state.medications.filter((m) => ids.includes(m.pet_id) && m[col] === value),
+                error: null,
+              };
+            }
+            return {
+              data: ids.filter((id) => state.createdByMe.includes(id)).map((id) => ({ id })),
+              error: null,
+            };
+          },
         }),
       }),
     }),
@@ -57,13 +68,15 @@ vi.mock('@/api/entities', () => ({
 const reportClientError = vi.fn();
 vi.mock('@/lib/errorMonitoring', () => ({ reportClientError: (...args) => reportClientError(...args) }));
 
-const { getSitterOnlyPetIds, listOwnedPets, loadOwnedPets } = await import('./petsClient');
+const { getSitterOnlyPetIds, listOwnedPets, loadOwnedPets, getActiveMedicationCountsForPets } = await import('./petsClient');
 
 beforeEach(() => {
   state.accesses = [{ pet_sit_id: 'sit-1' }, { pet_sit_id: 'sit-2' }];
   state.sitterLookupError = null;
   state.petListError = null;
   state.listOrders = [];
+  state.medications = [];
+  state.medSelects = [];
   reportClientError.mockClear();
 });
 
@@ -176,5 +189,62 @@ describe('loadOwnedPets edge cases', () => {
     state.pets = [];
     state.accesses = [];
     expect(await loadOwnedPets('-created_at', 'home')).toEqual({ pets: [], sitterOnlyCount: 0 });
+  });
+});
+
+// Spec 0087 (AC3, AC4, AC6): Home's per-pet medication count includes only
+// current meds, judged on the viewer's today.
+describe('getActiveMedicationCountsForPets', () => {
+  const TODAY = '2026-11-27';
+
+  it('counts only current meds: ended yesterday and switched off are left out, ending today counts', async () => {
+    state.medications = [
+      { pet_id: 'pet-own', active: true, end_date: null },
+      { pet_id: 'pet-own', active: true, end_date: TODAY },
+      { pet_id: 'pet-own', active: true, end_date: '2026-11-26' },
+      { pet_id: 'pet-own', active: false, end_date: null },
+      { pet_id: 'pet-other', active: true, end_date: '2026-11-26' },
+      { pet_id: 'pet-coown', active: true, end_date: '2026-12-31' },
+    ];
+    const counts = await getActiveMedicationCountsForPets(['pet-own', 'pet-other', 'pet-coown'], TODAY);
+    expect(counts).toEqual({ 'pet-own': 2, 'pet-coown': 1 });
+    expect(state.medSelects).toEqual(['pet_id, active, end_date']);
+  });
+
+  it('uses the date it is given, not the device clock', async () => {
+    state.medications = [{ pet_id: 'pet-own', active: true, end_date: TODAY }];
+    expect(await getActiveMedicationCountsForPets(['pet-own'], TODAY)).toEqual({ 'pet-own': 1 });
+    expect(await getActiveMedicationCountsForPets(['pet-own'], '2026-11-28')).toEqual({});
+  });
+
+  it('returns nothing for no pets without querying', async () => {
+    expect(await getActiveMedicationCountsForPets([], TODAY)).toEqual({});
+    expect(state.medSelects).toEqual([]);
+  });
+});
+
+describe('getActiveMedicationCountsForPets: mixed rows (spec 0087 QA)', () => {
+  const TODAY = '2026-11-27';
+
+  it('several pets: a pet with only finished meds is absent; a malformed end date still counts', async () => {
+    state.medications = [
+      { pet_id: 'p1', active: true, end_date: '2026-11-26' },
+      { pet_id: 'p1', active: true, end_date: '2025-01-01' },
+      { pet_id: 'p2', active: true, end_date: '11/02/2026' },
+      { pet_id: 'p2', active: true, end_date: null },
+      { pet_id: 'p2', active: false, end_date: '2027-01-01' },
+      { pet_id: 'p3', active: true, end_date: '2026-11-28' },
+      { pet_id: 'not-asked', active: true, end_date: null },
+    ];
+    const counts = await getActiveMedicationCountsForPets(['p1', 'p2', 'p3'], TODAY);
+    expect(counts).toEqual({ p2: 2, p3: 1 });
+    expect(counts).not.toHaveProperty('p1');
+    expect(counts).not.toHaveProperty('not-asked');
+  });
+
+  it('no todayStr (a caller that forgot it) does not crash and hides nothing', async () => {
+    state.medications = [{ pet_id: 'p1', active: true, end_date: '2026-11-26' }];
+    // @ts-expect-error deliberately missing argument
+    expect(await getActiveMedicationCountsForPets(['p1'])).toEqual({ p1: 1 });
   });
 });

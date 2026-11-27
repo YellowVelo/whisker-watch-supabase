@@ -48,6 +48,7 @@ import { PDFDocument, StandardFonts, rgb } from 'npm:pdf-lib@1.17.1';
 import { reportError } from '../_shared/errorReporting.ts';
 import { COUNTED_ATTRIBUTES, dateStrInTimezone, type CheckInRow } from '../_shared/checkinRules.ts';
 import { loadDailyWeights, loadWeightTypeId, weightsInRange } from '../_shared/weight.ts';
+import { medicationStatus, sortCurrentFirst } from '../_shared/currentItems.ts';
 import { buildWellnessOverview, overviewWindow, type WellnessDay, type WellnessObservation } from './wellness.ts';
 import {
   humanizeCode,
@@ -497,7 +498,7 @@ Deno.serve(async (req) => {
       supabaseClient.from('pet_baselines').select('*').eq('pet_id', petId).is('effective_to', null),
       observationsQuery.order('observed_at', { ascending: false }).limit(500),
       supabaseClient.from('observation_types').select('id, code, label'),
-      supabaseClient.from('medications').select('*').eq('pet_id', petId).order('active', { ascending: false }).order('start_date', { ascending: false }),
+      supabaseClient.from('medications').select('*').eq('pet_id', petId).order('start_date', { ascending: false }),
       supabaseClient.from('vaccinations').select('*').eq('pet_id', petId).order('date_given', { ascending: false }),
       // One weight per day, newest first; throws if the read fails.
       loadDailyWeights(supabaseClient, petId, weightTypeId),
@@ -647,12 +648,16 @@ Deno.serve(async (req) => {
       r.paragraph(`No weight entries recorded in the last ${DAYS_WINDOW} days.`, { color: rgb(0.5, 0.5, 0.5) });
     }
 
-    // Medications
+    // Medications (spec 0087): current ones first (newest start first within
+    // each group); a med is "Active" only if it's switched on and its end
+    // date hasn't passed on the owner's calendar.
+    const todayStr = dateStrInTimezone(profile?.timezone, 0);
+    const medicationRows = sortCurrentFirst(medications as any[] | null, todayStr);
     r.heading('Medications');
-    if ((medications || []).length > 0) {
+    if (medicationRows.length > 0) {
       r.table(
         [{ header: 'Name', width: 110 }, { header: 'Dosage', width: 90 }, { header: 'Frequency', width: 90 }, { header: 'Prescribing Vet', width: 100 }, { header: 'Status', width: 90 }],
-        (medications ?? []).map((m: any) => [m.name, m.dosage || '—', m.frequency || '—', m.prescribing_vet || '—', m.active ? 'Active' : 'Inactive']),
+        medicationRows.map((m: any) => [m.name, m.dosage || '—', m.frequency || '—', m.prescribing_vet || '—', medicationStatus(m, todayStr)]),
       );
     } else {
       r.paragraph('No medications on file.', { color: rgb(0.5, 0.5, 0.5) });

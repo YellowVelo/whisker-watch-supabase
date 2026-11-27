@@ -32,6 +32,11 @@ import { MAX_QUESTION_CHARS as APP_MAX_QUESTION_CHARS } from '../api/aiClient';
 // context.ts's only non-relative import is a type-only one (stripped when
 // Vitest compiles it), so it loads under Node too.
 import { RANGE_DAYS as SERVER_RANGE_DAYS } from '../../supabase/functions/ask-vet-assistant/context.ts';
+import { isCurrentItem as appIsCurrent, splitCurrent as appSplit } from './currentItems';
+import {
+  isCurrentItem as serverIsCurrent, splitCurrent as serverSplit,
+  medicationStatus as serverMedicationStatus, sortCurrentFirst as serverSortCurrentFirst,
+} from '../../supabase/functions/_shared/currentItems.ts';
 
 // Spec 0080, Before You Approve item 3: some rule lists exist both in the
 // app (instant feedback) and on the server (where they're enforced). Edge
@@ -224,5 +229,51 @@ describe('app/server parity: chat question length', () => {
   it("caps the chat boxes at the server's question limit", () => {
     expect(APP_MAX_QUESTION_CHARS).toBe(SERVER_MAX_QUESTION_CHARS);
     expect(APP_MAX_QUESTION_CHARS).toBe(2000);
+  });
+});
+
+describe('app/server parity: current foods and medications (spec 0087)', () => {
+  const today = '2026-11-27';
+  const rows = [
+    { active: true, end_date: null },
+    { active: true },
+    { active: true, end_date: '' },
+    { active: true, end_date: '2026-11-26' },
+    { active: true, end_date: '2026-11-27' },
+    { active: true, end_date: '2026-11-28' },
+    { active: true, end_date: '2025-01-01' },
+    { active: true, end_date: '11/02/2026' },
+    { active: true, end_date: 'garbage' },
+    { active: true, end_date: '2026-11-27T00:00:00Z' },
+    { active: true, end_date: 20261101 },
+    { active: true, start_date: '2026-12-05', end_date: null },
+    { active: false, end_date: null },
+    { active: false, end_date: '2027-01-01' },
+    { active: null, end_date: null },
+    { active: 'true', end_date: null },
+    {},
+    null,
+  ];
+
+  it.each(rows.map((row) => [JSON.stringify(row), row]))('isCurrentItem agrees for %s', (_label, row) => {
+    expect(serverIsCurrent(row, today)).toBe(appIsCurrent(row, today));
+  });
+
+  it('splitCurrent gives the same split', () => {
+    const list = rows.filter(Boolean).map((row, i) => ({ id: i, ...row }));
+    expect(serverSplit(list, today)).toEqual(appSplit(list, today));
+  });
+
+  it("the vet report's status and order follow the same rule", () => {
+    const list = [
+      { id: 'a', active: true, end_date: '2026-11-26', start_date: '2026-11-20' },
+      { id: 'b', active: true, end_date: null, start_date: '2026-11-10' },
+      { id: 'c', active: false, end_date: null, start_date: '2026-11-05' },
+      { id: 'd', active: true, end_date: '2026-11-27', start_date: '2026-11-01' },
+    ];
+    expect(list.map((m) => serverMedicationStatus(m, today)))
+      .toEqual(list.map((m) => (appIsCurrent(m, today) ? 'Active' : 'Inactive')));
+    expect(serverSortCurrentFirst(list, today).map((m) => m.id)).toEqual(['b', 'd', 'a', 'c']);
+    expect(list.map((m) => m.id)).toEqual(['a', 'b', 'c', 'd']);
   });
 });

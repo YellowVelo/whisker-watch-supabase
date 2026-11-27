@@ -10,9 +10,11 @@ import { Plus, Pencil, X, ShieldCheck, CheckCircle2, Bug, Heart, Pill, Calendar,
 import { PALETTE, PALETTE_SOFT } from '@/lib/toneColors';
 import { format, parseISO, addMonths } from 'date-fns';
 import SmartSelect from './SmartSelect';
+import { useAuth } from '@/lib/AuthContext';
+import { splitCurrent, todayForUser } from '@/lib/currentItems';
 
-const today = () => new Date().toISOString().split('T')[0];
-const emptyMed = (petId) => ({ pet_id: petId, name: '', med_type: 'General', prescribed: false, dosage: '', frequency: '', timing_instructions: '', route: '', start_date: today(), next_due_date: '', end_date: '', prescribing_vet: '', active: true, reminder_enabled: false, notes: '' });
+// todayStr is today on the viewer's calendar (spec 0087, todayForUser).
+const emptyMed = (petId, todayStr) => ({ pet_id: petId, name: '', med_type: 'General', prescribed: false, dosage: '', frequency: '', timing_instructions: '', route: '', start_date: todayStr, next_due_date: '', end_date: '', prescribing_vet: '', active: true, reminder_enabled: false, notes: '' });
 
 const FREQUENCIES_WITH_NEXT_DUE = ['Monthly', 'Every 3 months'];
 
@@ -35,10 +37,11 @@ const MED_TYPE_BADGE = {
 const MED_TYPE_ICON = { 'Flea & Tick': Bug, 'Heartworm': Heart, 'General': Pill };
 
 export default function MedicationSection({ petId }) {
+  const { user } = useAuth();
   const [meds, setMeds] = useState([]);
   const [showDialog, setShowDialog] = useState(false);
   const [editing, setEditing] = useState(null);
-  const [form, setForm] = useState(emptyMed(petId));
+  const [form, setForm] = useState(() => emptyMed(petId, todayForUser(user)));
   const [saving, setSaving] = useState(false);
   const [showInactive, setShowInactive] = useState(false);
   const [givenToday, setGivenToday] = useState(new Set());
@@ -52,7 +55,7 @@ export default function MedicationSection({ petId }) {
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
-  const openAdd = () => { setForm(emptyMed(petId)); setEditing(null); setShowDialog(true); };
+  const openAdd = () => { setForm(emptyMed(petId, todayForUser(user))); setEditing(null); setShowDialog(true); };
   const openEdit = (med) => { setForm({ ...med }); setEditing(med.id); setShowDialog(true); };
 
   const handleSubmit = async (e) => {
@@ -81,8 +84,9 @@ export default function MedicationSection({ petId }) {
     });
   };
 
-  const active = meds.filter(m => m.active);
-  const inactive = meds.filter(m => !m.active);
+  // Spec 0087: Active / Past by the shared "is it current?" rule, on the
+  // viewer's calendar. "Given today" taps render only for current meds.
+  const { current: active, past: inactive } = splitCurrent(meds, todayForUser(user));
 
   return (
     <div className="space-y-5">

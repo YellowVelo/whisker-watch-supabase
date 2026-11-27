@@ -7,18 +7,27 @@
 import { supabase } from '@/api/supabaseClient';
 import { entities } from '@/api/entities';
 import { reportClientError } from '@/lib/errorMonitoring';
+import { isCurrentItem } from '@/lib/currentItems';
 
-export async function getActiveMedicationCountsForPets(petIds) {
+// Per-pet count of current medications (spec 0087: switched on and not past
+// its end date on todayStr, the viewer's calendar from todayForUser). The
+// query's active=true only narrows the fetch; the shared rule decides.
+/**
+ * @param {string[]} petIds
+ * @param {string} todayStr YYYY-MM-DD
+ */
+export async function getActiveMedicationCountsForPets(petIds, todayStr) {
   if (!petIds.length) return {};
   const { data, error } = await supabase
     .from('medications')
-    .select('pet_id')
+    .select('pet_id, active, end_date')
     .in('pet_id', petIds)
     .eq('active', true);
   if (error) throw error;
 
   const counts = {};
   for (const row of data) {
+    if (!isCurrentItem(row, todayStr)) continue;
     counts[row.pet_id] = (counts[row.pet_id] || 0) + 1;
   }
   return counts;

@@ -21,6 +21,7 @@ import { getActiveMedicationCountsForPets, loadOwnedPets } from '@/lib/petsClien
 import { buildGreeting } from '@/lib/greeting';
 import { useAuth } from '@/lib/AuthContext';
 import { detectTimezone } from '@/lib/timezone';
+import { todayForUser } from '@/lib/currentItems';
 import { track } from '@/lib/analytics';
 import { PALETTE, PALETTE_SOFT } from '@/lib/toneColors';
 import { reportClientError } from '@/lib/errorMonitoring';
@@ -159,7 +160,7 @@ export default function Home() {
         const [todayRowsR, yesterdayRowsR, medCountsR] = await Promise.allSettled([
           getCheckInsForPets(petIds, todayStr()),
           getCheckInsForPets(petIds, yesterdayStr()),
-          getActiveMedicationCountsForPets(petIds),
+          getActiveMedicationCountsForPets(petIds, todayForUser(user)),
         ]);
         if (isStale()) return;
 
@@ -279,7 +280,7 @@ export default function Home() {
       getCheckIn(pet.id, todayStr()),
       getCheckIn(pet.id, yesterdayStr()),
       entities.PetOnboarding.filter({ pet_id: pet.id }),
-      getActiveMedicationCountsForPets([pet.id]),
+      getActiveMedicationCountsForPets([pet.id], todayForUser(user)),
       getWeightSummariesForPets([pet.id]),
       getMissedDaysForPet(pet.id, { timezone, userCreatedAt: user?.created_at, petCreatedAt: pet.created_at }),
     ]);
