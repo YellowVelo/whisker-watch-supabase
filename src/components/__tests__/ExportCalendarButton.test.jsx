@@ -49,3 +49,28 @@ describe('buildCalendarEvents (spec 0087 AC8)', () => {
     expect(events[0]).toMatchObject({ uid: 'vax-v1', date: '2027-01-01', title: 'Tribble: Rabies due' });
   });
 });
+
+describe('buildCalendarEvents edge cases (spec 0087 QA)', () => {
+  it('a med switched off with a future end date has no event; a malformed end date keeps it', () => {
+    const events = buildCalendarEvents({
+      meds: [
+        med('offFuture', { active: false, end_date: '2027-06-01' }),
+        med('oddDate', { end_date: '11/02/2026' }),
+        med('tomorrow', { end_date: '2026-11-28' }),
+      ],
+      vaccines: [],
+      petName: 'Tribble',
+      todayStr: TODAY,
+    });
+    expect(events.map((e) => e.uid)).toEqual(['med-oddDate', 'med-tomorrow']);
+  });
+
+  it('only finished meds and no vaccines gives no events at all', () => {
+    expect(buildCalendarEvents({
+      meds: [med('a', { end_date: '2026-11-01' }), med('b', { active: false })],
+      vaccines: [],
+      petName: 'Tribble',
+      todayStr: TODAY,
+    })).toEqual([]);
+  });
+});

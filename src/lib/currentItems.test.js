@@ -148,3 +148,65 @@ describe('currentFromSettled: the pet profile meds/foods filter (spec 0087 AC3, 
     }
   });
 });
+
+// Spec 0087 QA: "ends today" across time zones and at local midnight.
+describe('current rule across time zones and midnight (spec 0087 QA, AC3/AC7)', () => {
+  afterEach(() => { vi.useRealTimers(); });
+  const endsNov27 = { active: true, end_date: '2026-11-27' };
+
+  it('the same instant is a different "today" in Kiritimati, London and Pago Pago', () => {
+    vi.useFakeTimers();
+    // 2026-11-27 11:30 UTC = 2026-11-28 01:30 in Kiritimati (UTC+14),
+    // 2026-11-27 00:30 in Pago Pago (UTC-11).
+    vi.setSystemTime(new Date('2026-11-27T11:30:00Z'));
+    expect(todayForUser({ timezone: 'Pacific/Kiritimati' })).toBe('2026-11-28');
+    expect(todayForUser({ timezone: 'Europe/London' })).toBe('2026-11-27');
+    expect(todayForUser({ timezone: 'Pacific/Pago_Pago' })).toBe('2026-11-27');
+    expect(isCurrentItem(endsNov27, todayForUser({ timezone: 'Pacific/Kiritimati' }))).toBe(false);
+    expect(isCurrentItem(endsNov27, todayForUser({ timezone: 'Europe/London' }))).toBe(true);
+    expect(isCurrentItem(endsNov27, todayForUser({ timezone: 'Pacific/Pago_Pago' }))).toBe(true);
+  });
+
+  it('flips exactly at local midnight in New York (test1@\'s saved zone)', () => {
+    vi.useFakeTimers();
+    // 2026-11-28 04:59:59 UTC = 23:59:59 on the 27th in New York (EST, UTC-5).
+    vi.setSystemTime(new Date('2026-11-28T04:59:59Z'));
+    expect(isCurrentItem(endsNov27, todayForUser({ timezone: 'America/New_York' }))).toBe(true);
+    vi.setSystemTime(new Date('2026-11-28T05:00:00Z'));
+    expect(isCurrentItem(endsNov27, todayForUser({ timezone: 'America/New_York' }))).toBe(false);
+  });
+
+  it('month and year boundaries compare correctly as strings', () => {
+    expect(isCurrentItem({ active: true, end_date: '2026-11-30' }, '2026-12-01')).toBe(false);
+    expect(isCurrentItem({ active: true, end_date: '2026-12-31' }, '2027-01-01')).toBe(false);
+    expect(isCurrentItem({ active: true, end_date: '2027-01-01' }, '2026-12-31')).toBe(true);
+    expect(isCurrentItem({ active: true, end_date: '2028-02-29' }, '2028-02-29')).toBe(true);
+  });
+});
+
+describe('current rule: more malformed rows (spec 0087 QA)', () => {
+  it('active must be exactly true: "true", 1 and "yes" are not current', () => {
+    for (const active of ['true', 1, 'yes']) {
+      expect(isCurrentItem({ active, end_date: null }, TODAY)).toBe(false);
+    }
+  });
+
+  it('a well-formed but impossible end date still compares as a string (2026-13-45 is after today)', () => {
+    // Documented behavior: only the YYYY-MM-DD shape is checked, so an
+    // impossible month counts as a later date and the item stays current.
+    expect(isCurrentItem({ active: true, end_date: '2026-13-45' }, TODAY)).toBe(true);
+    expect(isCurrentItem({ active: true, end_date: '2026-00-00' }, TODAY)).toBe(false);
+  });
+
+  it('whitespace around a date counts as malformed, not ended', () => {
+    expect(isCurrentItem({ active: true, end_date: ' 2020-01-01' }, TODAY)).toBe(true);
+    expect(isCurrentItem({ active: true, end_date: '2020-01-01 ' }, TODAY)).toBe(true);
+  });
+
+  it('splitCurrent skips nothing: null rows go to past and every row lands in one group', () => {
+    const rows = [null, { active: true }, undefined, { active: false }];
+    const { current, past } = splitCurrent(rows, TODAY);
+    expect(current).toHaveLength(1);
+    expect(past).toHaveLength(3);
+  });
+});

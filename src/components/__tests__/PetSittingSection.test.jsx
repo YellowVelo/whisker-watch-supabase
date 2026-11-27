@@ -297,3 +297,78 @@ describe('SitCard lists only current foods and medications (spec 0087)', () => {
     expect(html).not.toContain('PM Meds');
   });
 });
+
+// Spec 0087 QA: edge cases for the sit card's current foods and meds.
+describe('SitCard current foods and meds: edge cases (spec 0087 QA)', () => {
+  const TODAY = '2026-11-27';
+  const sit = { id: 's2', start_date: '2026-11-27', end_date: '2026-11-27' };
+  const logs = [{ id: 'l1', date: '2026-11-27' }];
+  const render = (sitPets, foodsByPet, medicationsByPet, todayStr = TODAY) => renderToStaticMarkup(createElement(SitCard, {
+    ...cardProps(sit, logs), sitPets, foodsByPet, medicationsByPet, todayStr,
+  }));
+
+  it('two pets: each lists only its own current items; a current twice-daily med on either pet adds PM Meds', () => {
+    const html = render(
+      [{ id: 'a', name: 'Alpha' }, { id: 'b', name: 'Bravo' }],
+      {
+        a: [{ id: 'fa1', name: 'Alpha Ended Food', active: true, end_date: '2026-11-26' }],
+        b: [{ id: 'fb1', name: 'Bravo Food', active: true, end_date: null }],
+      },
+      {
+        a: [{ id: 'ma1', name: 'Alpha Ended Pill', active: true, end_date: '2026-11-01', frequency: 'Twice daily' }],
+        b: [{ id: 'mb1', name: 'Bravo Pill', active: true, end_date: '2026-12-31', frequency: 'Twice daily' }],
+      },
+    );
+    expect(html).toContain('Alpha');
+    expect(html).toContain('Bravo Food');
+    expect(html).toContain('Bravo Pill');
+    expect(html).not.toContain('Alpha Ended Food');
+    expect(html).not.toContain('Alpha Ended Pill');
+    // Only Bravo has a Food: and Medications: block.
+    expect(html.match(/Food:/g)).toHaveLength(1);
+    expect(html.match(/Medications:/g)).toHaveLength(1);
+    expect(html).toContain('AM Meds');
+    expect(html).toContain('PM Meds');
+  });
+
+  it('switched off with a future end date is hidden; a malformed end date on a switched-on item is shown', () => {
+    const html = render(
+      [{ id: 'p', name: 'Tribble' }],
+      {
+        p: [
+          { id: 'f1', name: 'Off Future Food', active: false, end_date: '2027-06-01' },
+          { id: 'f2', name: 'Odd Date Food', active: true, end_date: '11/02/2026' },
+        ],
+      },
+      { p: [{ id: 'm1', name: 'Off Future Pill', active: false, end_date: '2027-06-01', frequency: 'Once daily' }] },
+    );
+    expect(html).not.toContain('Off Future Food');
+    expect(html).not.toContain('Off Future Pill');
+    expect(html).toContain('Odd Date Food');
+    expect(html).not.toContain('AM Meds');
+  });
+
+  it("uses the viewer's date it is given: an item ending today on the viewer's calendar stays, the next day it goes", () => {
+    const pets = [{ id: 'p', name: 'Tribble' }];
+    const foods = { p: [{ id: 'f1', name: 'Last Day Food', active: true, end_date: '2026-11-27' }] };
+    expect(render(pets, foods, {}, '2026-11-27')).toContain('Last Day Food');
+    expect(render(pets, foods, {}, '2026-11-28')).not.toContain('Last Day Food');
+  });
+
+  // A sitter can't read a pet's foods or meds today (PA-81), so on the
+  // sitter's view the maps arrive empty. The card must still render.
+  it("sitter view with no readable foods or meds: no Food/Medications blocks, no meds buttons, no crash", () => {
+    let html = '';
+    expect(() => { html = render([{ id: 'p', name: 'Tribble' }], {}, {}); }).not.toThrow();
+    expect(html).toContain('Tribble');
+    expect(html).not.toContain('Food:');
+    expect(html).not.toContain('Medications:');
+    expect(html).toContain('AM Food');
+    expect(html).not.toContain('AM Meds');
+  });
+
+  it('an item with no active flag at all (bad row) is treated as not current', () => {
+    const html = render([{ id: 'p', name: 'Tribble' }], { p: [{ id: 'f1', name: 'No Flag Food', end_date: null }] }, {});
+    expect(html).not.toContain('No Flag Food');
+  });
+});

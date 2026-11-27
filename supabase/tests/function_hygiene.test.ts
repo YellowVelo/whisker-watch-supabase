@@ -15,6 +15,8 @@
 //    or shows a Health Score (spec 0080).
 // 6. ask-vet-assistant and generate-vet-report no longer mention the
 //    retired symptom_logs or food_logs tables (spec 0081).
+// 7. generate-vet-report and ask-vet-assistant judge medications with the
+//    shared "is it current?" rule on the caller's calendar (spec 0087).
 //
 // Run: deno test --allow-read --allow-env --node-modules-dir=none supabase/tests/function_hygiene.test.ts
 
@@ -140,4 +142,65 @@ Deno.test('ask-vet-assistant and generate-vet-report never read symptom_logs or 
     }
   }
   assertEquals(offenders, [], `Retired tables still mentioned:\n${offenders.join('\n')}`);
+});
+
+// Spec 0087 QA: wiring checks for the "is it current?" rule. The rule itself
+// is unit-tested (current_items.test.ts, src/lib/aiServerParity.test.js) and
+// loadActiveMedications is tested against dev (ai_context.test.ts); these
+// catch the call sites drifting back to `m.active` or to UTC's "today".
+Deno.test('generate-vet-report marks and orders medications by the current rule on the owner\'s calendar (spec 0087 FR8)', async () => {
+  const source = await Deno.readTextFile(new URL('generate-vet-report/index.ts', FUNCTIONS_DIR));
+  assert(
+    /import\s*\{[^}]*\bmedicationStatus\b[^}]*\bsortCurrentFirst\b[^}]*\}\s*from\s*'\.\.\/_shared\/currentItems\.ts'/.test(source) ||
+      /import\s*\{[^}]*\bsortCurrentFirst\b[^}]*\bmedicationStatus\b[^}]*\}\s*from\s*'\.\.\/_shared\/currentItems\.ts'/.test(source),
+    'generate-vet-report must import medicationStatus and sortCurrentFirst from _shared/currentItems.ts',
+  );
+  const todayMatch = source.match(/const\s+(\w+)\s*=\s*dateStrInTimezone\(\s*profile\?\.timezone\s*,\s*0\s*\)/);
+  assert(todayMatch, "today for the Medications table must be dateStrInTimezone(profile?.timezone, 0)");
+  const todayVar = todayMatch[1];
+  assert(
+    new RegExp(String.raw`sortCurrentFirst\(\s*medications\b[^)]*,\s*` + todayVar + String.raw`\s*\)`).test(source),
+    'medication rows must be ordered with sortCurrentFirst(medications, <owner today>)',
+  );
+  assert(
+    new RegExp(String.raw`medicationStatus\(\s*m\s*,\s*` + todayVar + String.raw`\s*\)`).test(source),
+    "the Status column must come from medicationStatus(m, <owner today>)",
+  );
+  assert(!/m\.active\s*\?\s*'Active'/.test(source), "Status column still reads m.active directly");
+  assert(!/order\(\s*'active'/.test(source), "medications are still ordered by the raw active switch");
+});
+
+Deno.test('ask-vet-assistant passes the caller\'s today to loadActiveMedications in pet_chat and pet_insights (spec 0087 FR2/FR7)', async () => {
+  const source = await Deno.readTextFile(new URL('ask-vet-assistant/index.ts', FUNCTIONS_DIR));
+  const calls = [...source.matchAll(/loadActiveMedications\(([^)]*\([^)]*\)[^)]*|[^)]*)\)/g)].map((m) => m[1]);
+  assert(calls.length >= 2, `expected at least 2 loadActiveMedications calls, found ${calls.length}`);
+  for (const args of calls) {
+    assert(
+      /^\s*client\s*,\s*req\.pet_id\s*,\s*dateStrInTimezone\(\s*timezone\s*,\s*0\s*\)\s*$/.test(args),
+      `loadActiveMedications called without the caller's today: (${args})`,
+    );
+  }
+  for (const task of ['pet_chat', 'pet_insights']) {
+    const start = source.indexOf(`case '${task}':`);
+    assert(start >= 0, `case '${task}' not found`);
+    const next = source.indexOf('case \'', start + 1);
+    const block = source.slice(start, next < 0 ? undefined : next);
+    const tzAt = block.search(/const\s+timezone\s*=\s*await\s+loadCallerTimezone\(\s*client\s*,\s*userId\s*\)/);
+    const medsAt = block.indexOf('loadActiveMedications(');
+    assert(medsAt >= 0, `${task} no longer loads medications`);
+    assert(tzAt >= 0 && tzAt < medsAt, `${task} must load the caller's time zone before its medications`);
+  }
+});
+
+Deno.test('ask-vet-assistant loadActiveMedications filters by the shared current rule (spec 0087 FR7)', async () => {
+  const source = await Deno.readTextFile(new URL('ask-vet-assistant/context.ts', FUNCTIONS_DIR));
+  assert(/import\s*\{\s*isCurrentItem\s*\}\s*from\s*'\.\.\/_shared\/currentItems\.ts'/.test(source), 'context.ts must import isCurrentItem');
+  const fnStart = source.indexOf('export async function loadActiveMedications(');
+  assert(fnStart >= 0, 'loadActiveMedications not found');
+  const rest = source.slice(fnStart);
+  const end = rest.search(/\r?\n\}\r?\n/);
+  assert(end > 0, 'could not find the end of loadActiveMedications');
+  const body = rest.slice(0, end);
+  assert(/select\('[^']*\bend_date\b[^']*'\)/.test(body), 'loadActiveMedications must select end_date');
+  assert(/isCurrentItem\(\s*m\s*,\s*todayStr\s*\)/.test(body), 'loadActiveMedications must filter with isCurrentItem(m, todayStr)');
 });

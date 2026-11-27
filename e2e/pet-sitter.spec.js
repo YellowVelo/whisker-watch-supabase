@@ -639,12 +639,17 @@ test1('AC2/AC3: an owner can edit a sit\'s dates, see one checklist row per day,
 // ended yesterday drop off the sit card and move to "Past medications" on
 // the Medications tab; current ones stay. Seeded on the beforeAll pet without
 // check-ins (its own sit, found by a unique sitter name). "Yesterday" is on
-// test1@'s saved calendar (profiles.timezone, UTC if unset), the same zone
+// test1@'s saved calendar (profiles.timezone, else the browser's zone), the same zone
 // the app's todayForUser() reads.
 test1('spec 0087 AC1/AC2/AC4: the sit card lists only current foods and meds; an ended med is under Past medications', async ({ page }) => {
   const { supabase, userId } = await test1Client();
   const { data: profile } = await supabase.from('profiles').select('timezone').eq('id', userId).maybeSingle();
-  const tz = profile?.timezone || 'UTC';
+  // Same order as the app's todayForUser(): saved zone, else the browser's
+  // (spec 0087 QA: test1@ has America/New_York saved on dev as of
+  // 2026-11-27, but don't rely on it).
+  const tz = profile?.timezone
+    || await page.evaluate(() => Intl.DateTimeFormat().resolvedOptions().timeZone)
+    || 'UTC';
   const dateStrInTz = (instant) =>
     new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).format(instant);
   const todayStr = dateStrInTz(new Date());

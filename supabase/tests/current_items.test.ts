@@ -8,6 +8,7 @@
 
 import { assertEquals } from 'https://deno.land/std@0.224.0/assert/mod.ts';
 import { medicationStatus, sortCurrentFirst } from '../functions/_shared/currentItems.ts';
+import { dateStrInTimezone } from '../functions/_shared/checkinRules.ts';
 
 const TODAY = '2026-11-27';
 
@@ -68,4 +69,34 @@ Deno.test('sortCurrentFirst: null or empty input gives an empty list', () => {
   assertEquals(sortCurrentFirst(null, TODAY), []);
   assertEquals(sortCurrentFirst(undefined, TODAY), []);
   assertEquals(sortCurrentFirst([], TODAY), []);
+});
+
+// Spec 0087 QA: the server's "today" (FR2) is the caller's saved time zone,
+// UTC if unset or not a real zone, as generate-vet-report and
+// ask-vet-assistant compute it with dateStrInTimezone(timezone, 0).
+Deno.test('server today: a med ending today is Active at 9pm in Los Angeles, Inactive by UTC (AC7 server side)', () => {
+  // 2026-11-28 05:00 UTC = 2026-11-27 21:00 in Los Angeles.
+  const nowMs = Date.parse('2026-11-28T05:00:00Z');
+  const med = { active: true, end_date: '2026-11-27' };
+  assertEquals(medicationStatus(med, dateStrInTimezone('America/Los_Angeles', 0, nowMs)), 'Active');
+  assertEquals(medicationStatus(med, dateStrInTimezone('UTC', 0, nowMs)), 'Inactive');
+});
+
+Deno.test('server today: no saved zone or a bad one falls back to UTC', () => {
+  const nowMs = Date.parse('2026-11-28T05:00:00Z');
+  for (const tz of [null, undefined, '', 'Not/AZone']) {
+    assertEquals(dateStrInTimezone(tz, 0, nowMs), '2026-11-28', `zone ${String(tz)}`);
+  }
+});
+
+Deno.test('sortCurrentFirst: every row is kept exactly once, malformed rows included', () => {
+  const rows = [
+    { id: 'off-future', active: false, end_date: '2027-01-01' },
+    { id: 'odd', active: true, end_date: '11/02/2026' },
+    { id: 'ended', active: true, end_date: '2026-11-26' },
+    { id: 'no-flag', end_date: null },
+  ];
+  const sorted = sortCurrentFirst(rows, TODAY).map((r) => r.id);
+  assertEquals(sorted, ['odd', 'off-future', 'ended', 'no-flag']);
+  assertEquals(rows.map((r) => medicationStatus(r, TODAY)), ['Inactive', 'Active', 'Inactive', 'Inactive']);
 });

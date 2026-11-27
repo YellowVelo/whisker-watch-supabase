@@ -222,3 +222,29 @@ describe('getActiveMedicationCountsForPets', () => {
     expect(state.medSelects).toEqual([]);
   });
 });
+
+describe('getActiveMedicationCountsForPets: mixed rows (spec 0087 QA)', () => {
+  const TODAY = '2026-11-27';
+
+  it('several pets: a pet with only finished meds is absent; a malformed end date still counts', async () => {
+    state.medications = [
+      { pet_id: 'p1', active: true, end_date: '2026-11-26' },
+      { pet_id: 'p1', active: true, end_date: '2025-01-01' },
+      { pet_id: 'p2', active: true, end_date: '11/02/2026' },
+      { pet_id: 'p2', active: true, end_date: null },
+      { pet_id: 'p2', active: false, end_date: '2027-01-01' },
+      { pet_id: 'p3', active: true, end_date: '2026-11-28' },
+      { pet_id: 'not-asked', active: true, end_date: null },
+    ];
+    const counts = await getActiveMedicationCountsForPets(['p1', 'p2', 'p3'], TODAY);
+    expect(counts).toEqual({ p2: 2, p3: 1 });
+    expect(counts).not.toHaveProperty('p1');
+    expect(counts).not.toHaveProperty('not-asked');
+  });
+
+  it('no todayStr (a caller that forgot it) does not crash and hides nothing', async () => {
+    state.medications = [{ pet_id: 'p1', active: true, end_date: '2026-11-26' }];
+    // @ts-expect-error deliberately missing argument
+    expect(await getActiveMedicationCountsForPets(['p1'])).toEqual({ p1: 1 });
+  });
+});
