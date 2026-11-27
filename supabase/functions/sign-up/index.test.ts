@@ -109,17 +109,109 @@ Deno.test('sign-up: resend for an email with no account is enumeration-safe (sam
   assertEquals(profile, null);
 });
 
-Deno.test('sign-up: rejects a request with no password on signup', async () => {
-  const email = scratchEmail('signup-no-password');
+Deno.test('sign-up: sending a password still leaves the account with no password (spec 0086)', async () => {
+  // An old cached sign-up page still sends password + accepted_terms. The
+  // request must still work, and the account must not get that password:
+  // only the inbox owner sets one, on the finish page.
+  const email = scratchEmail('signup-ignores-password');
+  let userId: string | null = null;
+  try {
+    const { status, json } = await callFunction('sign-up', '', {
+      action: 'signup',
+      email,
+      password: 'a-scratch-password-123',
+      accepted_terms: true,
+      marketing_opt_in: true,
+      first_name: 'Scratch',
+    });
+    assertEquals(status, 200);
+    assertEquals(json.sent, true);
+    assertEquals(Object.keys(json).length, 1);
 
-  const { status, json } = await callFunction('sign-up', '', { action: 'signup', email });
+    const admin = adminClient();
+    const { data: profile } = await admin.from('profiles').select('id').eq('email', email).maybeSingle();
+    assertExists(profile);
+    userId = profile!.id as string;
 
-  assertEquals(status, 400);
-  assertExists(json.error);
+    const { data: hasPassword, error: hasPasswordError } = await admin.rpc('email_has_password', { p_email: email });
+    assertEquals(hasPasswordError, null);
+    assertEquals(hasPassword, false);
 
+    // Metadata keeps only first_name; no consent or marketing fields.
+    const { data: authUser } = await admin.auth.admin.getUserById(userId);
+    assertEquals(authUser?.user?.user_metadata?.first_name, 'Scratch');
+    assertEquals(authUser?.user?.user_metadata?.terms_accepted_at, undefined);
+    assertEquals(authUser?.user?.user_metadata?.terms_version, undefined);
+    assertEquals(authUser?.user?.user_metadata?.privacy_version, undefined);
+    assertEquals(authUser?.user?.user_metadata?.marketing_opt_in, undefined);
+  } finally {
+    if (userId) await deleteScratchUser(userId);
+  }
+});
+
+// sendEmail() writes an email_logs row for every attempt (sent, failed or
+// suppressed), so a verify-email row for the address is the observable
+// that a link was (or wasn't) sent.
+async function verifyEmailLogCount(email: string): Promise<number> {
+  const { data, error } = await adminClient()
+    .from('email_logs')
+    .select('id')
+    .eq('recipient_email', email)
+    .eq('template_name', 'verify-email');
+  if (error) throw new Error(`email_logs lookup failed: ${error.message}`);
+  return data?.length ?? 0;
+}
+
+async function deleteEmailLogs(email: string): Promise<void> {
+  await adminClient().from('email_logs').delete().eq('recipient_email', email);
+}
+
+Deno.test('sign-up: resend sends a fresh link to a confirmed account that has no password (spec 0086 decision 1)', async () => {
+  const email = scratchEmail('resend-confirmed-no-password');
   const admin = adminClient();
-  const { data: profile } = await admin.from('profiles').select('id').eq('email', email).maybeSingle();
-  assertEquals(profile, null);
+  const { data: created, error: createError } = await admin.auth.admin.createUser({
+    email,
+    email_confirm: true,
+  });
+  if (createError || !created?.user) throw new Error(`Failed to create scratch user: ${createError?.message}`);
+  const userId = created.user.id;
+  try {
+    const { data: hasPassword } = await admin.rpc('email_has_password', { p_email: email });
+    assertEquals(hasPassword, false);
+
+    const { status, json } = await callFunction('sign-up', '', { action: 'resend', email });
+    assertEquals(status, 200);
+    assertEquals(json.sent, true);
+    assertEquals(Object.keys(json).length, 1);
+
+    assertEquals(await verifyEmailLogCount(email), 1);
+  } finally {
+    await deleteEmailLogs(email);
+    await deleteScratchUser(userId);
+  }
+});
+
+Deno.test('sign-up: resend sends nothing to a confirmed account that has a password (same generic response)', async () => {
+  const email = scratchEmail('resend-confirmed-with-password');
+  const admin = adminClient();
+  const { data: created, error: createError } = await admin.auth.admin.createUser({
+    email,
+    password: 'a-scratch-password-123',
+    email_confirm: true,
+  });
+  if (createError || !created?.user) throw new Error(`Failed to create scratch user: ${createError?.message}`);
+  const userId = created.user.id;
+  try {
+    const { status, json } = await callFunction('sign-up', '', { action: 'resend', email });
+    assertEquals(status, 200);
+    assertEquals(json.sent, true);
+    assertEquals(Object.keys(json).length, 1);
+
+    assertEquals(await verifyEmailLogCount(email), 0);
+  } finally {
+    await deleteEmailLogs(email);
+    await deleteScratchUser(userId);
+  }
 });
 
 Deno.test('sign-up: rate limit blocks repeated attempts for the same email within the window', async () => {
