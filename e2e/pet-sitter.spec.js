@@ -343,3 +343,110 @@ test('AC3: Ask Wysker\'s general chat does not tell the AI about a sat pet', asy
     expect(capturedRaw).not.toContain(id);
   }
 });
+
+// Spec 0085: the owner's sit list (as test1@, who created the sit seeded in
+// beforeAll). Cards are found by this run's unique pet name, since older
+// runs may have left "E2E Sitter" sits behind on dev.
+function sitCard(page, petName) {
+  return page.locator('div.rounded-xl', { hasText: petName });
+}
+
+async function countTest1Sits() {
+  const supabase = newClient();
+  await signInAsTest1(supabase);
+  const { data: userData } = await supabase.auth.getUser();
+  const { count, error } = await supabase
+    .from('pet_sits')
+    .select('id', { count: 'exact', head: true })
+    .eq('created_by', userData.user.id);
+  if (error) throw error;
+  return count;
+}
+
+test1('AC4: a start year of 2101 typed on the keyboard shows the date message and saves nothing', async ({ page }) => {
+  const before = await countTest1Sits();
+
+  await page.goto('/pet-sitter');
+  await expect(sitCard(page, PET_WITH_CHECKIN_NAME)).toBeVisible({ timeout: 15000 });
+  await page.getByRole('button', { name: 'New Pet Sit' }).click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog.getByText('New Pet Sitting Period')).toBeVisible();
+
+  const petPill = dialog.getByRole('button', { name: PET_NO_CHECKIN_NAME });
+  if (await petPill.count()) await petPill.click();
+
+  // focus() rather than click(): a click opens the calendar (openDatePicker).
+  const [startInput, endInput] = await dialog.locator('input[type="date"]').all();
+  await startInput.focus();
+  await page.keyboard.type('01012101');
+  await endInput.focus();
+  await page.keyboard.type('01022026');
+  await expect(startInput).toHaveValue('2101-01-01');
+  await expect(endInput).toHaveValue('2026-01-02');
+
+  await dialog.getByRole('button', { name: 'Create & Generate Checklist' }).click();
+  await expect(dialog.getByText('Please enter a real date with a 4-digit year.')).toBeVisible();
+  await expect(dialog).toBeVisible();
+
+  expect(await countTest1Sits()).toBe(before);
+});
+
+test1('AC11: Share, Edit and Delete on a sit are each at least 44x44px', async ({ page }) => {
+  await page.goto('/pet-sitter');
+  const card = sitCard(page, PET_WITH_CHECKIN_NAME);
+  await expect(card).toBeVisible({ timeout: 15000 });
+  for (const name of ['Share with sitter', 'Edit sit', 'Delete sit']) {
+    const box = await card.getByRole('button', { name, exact: true }).boundingBox();
+    expect(box, name).not.toBeNull();
+    expect(box?.width, name).toBeGreaterThanOrEqual(44);
+    expect(box?.height, name).toBeGreaterThanOrEqual(44);
+  }
+});
+
+// AC2/AC3 regression on a valid sit. Uses its own sit (on the seeded pet
+// without check-ins) so deleting it can't affect the sitter tests above.
+test1('AC2/AC3: an owner can edit a sit\'s dates, see one checklist row per day, then delete it', async ({ page }) => {
+  const supabase = newClient();
+  await signInAsTest1(supabase);
+  const { data: userData } = await supabase.auth.getUser();
+  const sitterName = `E2E Edit Sit ${RUN_ID}`;
+  const { data: sit, error } = await supabase
+    .from('pet_sits')
+    .insert({
+      created_by: userData.user.id,
+      pet_ids: [petNoCheckinId],
+      sitter_name: sitterName,
+      start_date: '2026-03-01',
+      end_date: '2026-03-01',
+    })
+    .select('id')
+    .single();
+  if (error) throw error;
+
+  try {
+    await page.goto('/pet-sitter');
+    const card = page.locator('div.rounded-xl', { hasText: sitterName });
+    await expect(card).toBeVisible({ timeout: 15000 });
+
+    await card.getByRole('button', { name: 'Edit sit', exact: true }).click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog.getByText('Edit Pet Sitting Period')).toBeVisible();
+    await dialog.locator('input[type="date"]').nth(1).fill('2026-03-03');
+    await dialog.getByRole('button', { name: 'Save Changes' }).click();
+    await expect(dialog).toHaveCount(0);
+
+    await expect(card.getByText('Mar 1 – Mar 3, 2026')).toBeVisible({ timeout: 15000 });
+    for (const day of ['Sunday, March 1', 'Monday, March 2', 'Tuesday, March 3']) {
+      await expect(card.getByText(day, { exact: true })).toBeVisible({ timeout: 15000 });
+    }
+    await expect(card.getByText(/^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday), /)).toHaveCount(3);
+
+    await card.getByRole('button', { name: 'Delete sit', exact: true }).click();
+    await page.getByRole('alertdialog').getByRole('button', { name: 'Remove' }).click();
+    await expect(page.locator('div.rounded-xl', { hasText: sitterName })).toHaveCount(0, { timeout: 15000 });
+    const { data: rows } = await supabase.from('pet_sits').select('id').eq('id', sit.id);
+    expect(rows ?? []).toHaveLength(0);
+  } finally {
+    await supabase.from('pet_sits').delete().eq('id', sit.id);
+  }
+});

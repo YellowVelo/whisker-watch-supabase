@@ -190,11 +190,15 @@ export default function PetSittingSection({ petId = undefined }) {
       const result = await saveSit({ form, selectedPetIds, editing });
       if (result.dateError) { setDateError(result.dateError); return; }
       if (result.error) {
-        // The sit exists even though a later step failed: a retry updates it.
-        // Reload so the new sit shows in the list: closing the dialog and
-        // tapping New Pet Sit again then can't create a duplicate (FR8).
-        // Quietly, so the open dialog isn't unmounted behind the toast.
-        if (result.sit) { setEditing(result.sit); load({ quiet: true }); }
+        // The sit exists even though a later step failed: keeping it as
+        // `editing` makes a retry update it instead of creating a duplicate
+        // (FR8). The quiet reload only makes the new sit visible in the list;
+        // it doesn't stop New Pet Sit from creating another one. Quietly, so
+        // the open dialog isn't unmounted behind the toast.
+        if (result.sit) {
+          setEditing(result.sit);
+          load({ quiet: true }).catch(err => reportClientError(err, { feature: 'pet-sitting', note: 'reload' }));
+        }
         toast({ variant: 'destructive', title: "Couldn't save this pet sit", description: 'Please try again.' });
         return;
       }
@@ -430,8 +434,8 @@ export function SitCard({
 
   return (
     <div className="bg-card border border-border rounded-xl overflow-hidden">
-      <div className="flex items-center justify-between px-4 py-3 cursor-pointer" onClick={onToggleExpand}>
-        <div>
+      <div className="flex items-center justify-between gap-2 px-4 py-3 cursor-pointer" onClick={onToggleExpand}>
+        <div className="min-w-0 flex-1 break-words">
           <p className="font-medium text-sm">
             {formatSitRange(sit)}
           </p>
