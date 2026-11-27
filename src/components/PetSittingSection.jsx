@@ -12,7 +12,8 @@ import {
 } from 'lucide-react';
 import InviteSitterDialog from './InviteSitterDialog';
 import PillToggle from './PillToggle';
-import { format, parseISO, eachDayOfInterval } from 'date-fns';
+import { format } from 'date-fns';
+import { sitDays, formatSitRange } from '@/lib/sitDates';
 
 const EMPTY_FORM = {
   sitter_name: '', start_date: '', end_date: '',
@@ -86,8 +87,8 @@ export default function PetSittingSection({ petId = undefined }) {
   };
 
   const ensureLogsForSit = async (sit) => {
-    if (!sit.start_date || !sit.end_date) return;
-    const days = eachDayOfInterval({ start: parseISO(sit.start_date), end: parseISO(sit.end_date) });
+    const days = sitDays(sit);
+    if (days.length === 0) return;
     const existing = await entities.PetSitLog.filter({ pet_sit_id: sit.id });
     const existingDates = new Set(existing.map(l => l.date));
     // Create one log per day (not per pet — the checklist is sit-level)
@@ -203,144 +204,23 @@ export default function PetSittingSection({ petId = undefined }) {
         <div className="space-y-2">
           {sits.map(sit => {
             const sitPetIds = sit.pet_ids || [];
-            const sitPets = allPets.filter(c => sitPetIds.includes(c.id));
-            const days = (sit.start_date && sit.end_date)
-              ? eachDayOfInterval({ start: parseISO(sit.start_date), end: parseISO(sit.end_date) })
-              : [];
-            const logs = sitLogs[sit.id] || [];
-            const customTasks = sit.custom_tasks || [];
-            const hasPmMed = sitPets.some(pet => (medicationsByPet[pet.id] || []).some(m => m.frequency === 'Twice daily'));
-
             return (
-              <div key={sit.id} className="bg-card border border-border rounded-xl overflow-hidden">
-                <div className="flex items-center justify-between px-4 py-3 cursor-pointer" onClick={() => toggleExpand(sit.id)}>
-                  <div>
-                    <p className="font-medium text-sm">
-                      {sit.start_date && sit.end_date
-                        ? `${format(parseISO(sit.start_date), 'MMM d')} – ${format(parseISO(sit.end_date), 'MMM d, yyyy')}`
-                        : 'Dates not set'}
-                    </p>
-                    <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                      {sit.sitter_name && <p className="text-sm text-muted-foreground">Sitter: {sit.sitter_name}</p>}
-                      {sitPets.length > 0 && (
-                        <p className="flex items-center gap-1 text-sm text-muted-foreground">
-                          <PawPrint className="h-3.5 w-3.5" /> {sitPets.map(c => c.name).join(', ')}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={e => { e.stopPropagation(); setInviteSitId(sit.id); setInviteOpen(true); }}
-                      className="text-muted-foreground hover:text-primary transition-colors"
-                      title="Share with sitter"
-                    >
-                      <UserPlus className="h-3.5 w-3.5" />
-                    </button>
-                    <button onClick={e => { e.stopPropagation(); openEdit(sit); }} className="text-muted-foreground hover:text-foreground">
-                      <Pencil className="h-3.5 w-3.5" />
-                    </button>
-                    <button onClick={e => { e.stopPropagation(); setDeleteConfirmId(sit.id); }} className="text-muted-foreground hover:text-destructive">
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
-                    {expandedId === sit.id ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
-                  </div>
-                </div>
-
-                {expandedId === sit.id && (
-                  <div className="border-t border-border px-4 py-4 space-y-5">
-                    {/* Instructions summary — per pet */}
-                    <div className="bg-secondary/50 rounded-lg p-3 space-y-3 text-sm">
-                      <p className="font-semibold text-[13px] uppercase tracking-wider text-muted-foreground">Sitter Instructions</p>
-                      {sitPets.map(pet => {
-                        const meds = medicationsByPet[pet.id] || [];
-                        const foods = foodsByPet[pet.id] || [];
-                        const vacs = vaccinationsByPet[pet.id] || [];
-                        return (
-                          <div key={pet.id} className="space-y-1.5 border-l-2 border-primary/30 pl-3">
-                            <p className="flex items-center gap-1 font-semibold text-sm"><PawPrint className="h-3.5 w-3.5" /> {pet.name}</p>
-                            {foods.length > 0 && (
-                              <div>
-                                <p className="flex items-center gap-1 font-medium text-sm"><UtensilsCrossed className="h-3.5 w-3.5" /> Food:</p>
-                                <ul className="ml-3 text-muted-foreground text-sm space-y-0.5">
-                                  {foods.map(f => <li key={f.id}>• {f.name}{f.brand ? ` (${f.brand})` : ''}{f.food_type ? ` — ${f.food_type}` : ''}</li>)}
-                                </ul>
-                              </div>
-                            )}
-                            {meds.length > 0 && (
-                              <div>
-                                <p className="flex items-center gap-1 font-medium text-sm"><Pill className="h-3.5 w-3.5" /> Medications:</p>
-                                <ul className="ml-3 text-muted-foreground text-sm space-y-0.5">
-                                  {meds.map(m => <li key={m.id}>• {m.name}{m.dosage ? ` — ${m.dosage}` : ''}{m.frequency ? `, ${m.frequency}` : ''}{m.timing_instructions ? ` (${m.timing_instructions})` : ''}</li>)}
-                                </ul>
-                              </div>
-                            )}
-                            {vacs.length > 0 && (
-                              <div>
-                                <p className="flex items-center gap-1 font-medium text-sm"><Syringe className="h-3.5 w-3.5" /> Vaccinations on file:</p>
-                                <ul className="ml-3 text-muted-foreground text-sm space-y-0.5">
-                                  {vacs.map(v => <li key={v.id}>• {v.vaccine_name}{v.next_due_date ? ` · due ${v.next_due_date}` : ''}</li>)}
-                                </ul>
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                      {customTasks.length > 0 && (
-                        <div>
-                          <p className="flex items-center gap-1 font-medium text-sm"><ClipboardList className="h-3.5 w-3.5" /> Daily Tasks:</p>
-                          <ul className="ml-3 text-muted-foreground text-sm space-y-0.5">{customTasks.map((t, i) => <li key={i}>• {t}</li>)}</ul>
-                        </div>
-                      )}
-                      {sit.emergency_contact && <p className="flex items-center gap-1 text-sm"><span className="flex items-center gap-1 font-medium"><Siren className="h-3.5 w-3.5" /> Emergency:</span> <span className="text-muted-foreground">{sit.emergency_contact}</span></p>}
-                      {sit.vet_contact && <p className="flex items-center gap-1 text-sm"><span className="flex items-center gap-1 font-medium"><Stethoscope className="h-3.5 w-3.5" /> Vet:</span> <span className="text-muted-foreground">{sit.vet_contact}</span></p>}
-                      {sit.additional_instructions && (
-                        <div>
-                          <p className="flex items-center gap-1 font-medium text-sm"><FileText className="h-3.5 w-3.5" /> Additional Notes:</p>
-                          <p className="text-muted-foreground text-sm ml-3">{sit.additional_instructions}</p>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Daily Checklist */}
-                    {days.length > 0 && (
-                      <div>
-                        <p className="font-semibold text-[13px] uppercase tracking-wider text-muted-foreground mb-3">Daily Checklist</p>
-                        <div className="space-y-3">
-                          {days.map(day => {
-                            const dateStr = format(day, 'yyyy-MM-dd');
-                            const log = logs.find(l => l.date === dateStr);
-                            if (!log) return (
-                              <div key={dateStr} className="text-sm text-muted-foreground py-1">{format(day, 'EEE M/d')} — loading...</div>
-                            );
-                            return (
-                              <div key={dateStr} className="space-y-2">
-                                <p className="text-sm font-medium text-muted-foreground">{format(day, 'EEEE, MMMM d')}</p>
-                                <div className="flex gap-2 flex-wrap">
-                                  <CheckBtn label="AM Food" checked={!!log.am_food_given} onToggle={() => toggleBoolField(sit, log, 'am_food_given')} />
-                                  <CheckBtn label="PM Food" checked={!!log.pm_food_given} onToggle={() => toggleBoolField(sit, log, 'pm_food_given')} />
-                                  {sitPets.some(pet => (medicationsByPet[pet.id] || []).length > 0) && (
-                                    <CheckBtn label="AM Meds" checked={!!log.am_meds_given} onToggle={() => toggleBoolField(sit, log, 'am_meds_given')} />
-                                  )}
-                                  {hasPmMed && <CheckBtn label="PM Meds" checked={!!log.pm_meds_given} onToggle={() => toggleBoolField(sit, log, 'pm_meds_given')} />}
-                                  {customTasks.map(task => (
-                                    <CheckBtn
-                                      key={task}
-                                      label={task}
-                                      checked={(log.completed_tasks || []).includes(task)}
-                                      onToggle={() => toggleTask(sit, log, task)}
-                                    />
-                                  ))}
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
+              <SitCard
+                key={sit.id}
+                sit={sit}
+                sitPets={allPets.filter(c => sitPetIds.includes(c.id))}
+                logs={sitLogs[sit.id] || []}
+                expanded={expandedId === sit.id}
+                medicationsByPet={medicationsByPet}
+                foodsByPet={foodsByPet}
+                vaccinationsByPet={vaccinationsByPet}
+                onToggleExpand={() => toggleExpand(sit.id)}
+                onInvite={() => { setInviteSitId(sit.id); setInviteOpen(true); }}
+                onEdit={() => openEdit(sit)}
+                onDelete={() => setDeleteConfirmId(sit.id)}
+                onToggleBool={(log, field) => toggleBoolField(sit, log, field)}
+                onToggleTask={(log, task) => toggleTask(sit, log, task)}
+              />
             );
           })}
         </div>
@@ -455,6 +335,149 @@ export default function PetSittingSection({ petId = undefined }) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+    </div>
+  );
+}
+
+// One sit's header and (when expanded) its instructions and daily checklist.
+// Exported so it can be render-tested without the page's data load (spec 0085).
+// The dates go through sitDates.js, so an unusable saved date shows
+// "Dates not set" and builds no checklist instead of crashing the page.
+export function SitCard({
+  sit, sitPets, logs, expanded, medicationsByPet, foodsByPet, vaccinationsByPet,
+  onToggleExpand, onInvite, onEdit, onDelete, onToggleBool, onToggleTask,
+}) {
+  const days = sitDays(sit);
+  const customTasks = sit.custom_tasks || [];
+  const hasPmMed = sitPets.some(pet => (medicationsByPet[pet.id] || []).some(m => m.frequency === 'Twice daily'));
+
+  return (
+    <div className="bg-card border border-border rounded-xl overflow-hidden">
+      <div className="flex items-center justify-between px-4 py-3 cursor-pointer" onClick={onToggleExpand}>
+        <div>
+          <p className="font-medium text-sm">
+            {formatSitRange(sit)}
+          </p>
+          <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+            {sit.sitter_name && <p className="text-sm text-muted-foreground">Sitter: {sit.sitter_name}</p>}
+            {sitPets.length > 0 && (
+              <p className="flex items-center gap-1 text-sm text-muted-foreground">
+                <PawPrint className="h-3.5 w-3.5" /> {sitPets.map(c => c.name).join(', ')}
+              </p>
+            )}
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={e => { e.stopPropagation(); onInvite(); }}
+            className="text-muted-foreground hover:text-primary transition-colors"
+            title="Share with sitter"
+          >
+            <UserPlus className="h-3.5 w-3.5" />
+          </button>
+          <button onClick={e => { e.stopPropagation(); onEdit(); }} className="text-muted-foreground hover:text-foreground">
+            <Pencil className="h-3.5 w-3.5" />
+          </button>
+          <button onClick={e => { e.stopPropagation(); onDelete(); }} className="text-muted-foreground hover:text-destructive">
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+          {expanded ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+        </div>
+      </div>
+
+      {expanded && (
+        <div className="border-t border-border px-4 py-4 space-y-5">
+          {/* Instructions summary — per pet */}
+          <div className="bg-secondary/50 rounded-lg p-3 space-y-3 text-sm">
+            <p className="font-semibold text-[13px] uppercase tracking-wider text-muted-foreground">Sitter Instructions</p>
+            {sitPets.map(pet => {
+              const meds = medicationsByPet[pet.id] || [];
+              const foods = foodsByPet[pet.id] || [];
+              const vacs = vaccinationsByPet[pet.id] || [];
+              return (
+                <div key={pet.id} className="space-y-1.5 border-l-2 border-primary/30 pl-3">
+                  <p className="flex items-center gap-1 font-semibold text-sm"><PawPrint className="h-3.5 w-3.5" /> {pet.name}</p>
+                  {foods.length > 0 && (
+                    <div>
+                      <p className="flex items-center gap-1 font-medium text-sm"><UtensilsCrossed className="h-3.5 w-3.5" /> Food:</p>
+                      <ul className="ml-3 text-muted-foreground text-sm space-y-0.5">
+                        {foods.map(f => <li key={f.id}>• {f.name}{f.brand ? ` (${f.brand})` : ''}{f.food_type ? ` — ${f.food_type}` : ''}</li>)}
+                      </ul>
+                    </div>
+                  )}
+                  {meds.length > 0 && (
+                    <div>
+                      <p className="flex items-center gap-1 font-medium text-sm"><Pill className="h-3.5 w-3.5" /> Medications:</p>
+                      <ul className="ml-3 text-muted-foreground text-sm space-y-0.5">
+                        {meds.map(m => <li key={m.id}>• {m.name}{m.dosage ? ` — ${m.dosage}` : ''}{m.frequency ? `, ${m.frequency}` : ''}{m.timing_instructions ? ` (${m.timing_instructions})` : ''}</li>)}
+                      </ul>
+                    </div>
+                  )}
+                  {vacs.length > 0 && (
+                    <div>
+                      <p className="flex items-center gap-1 font-medium text-sm"><Syringe className="h-3.5 w-3.5" /> Vaccinations on file:</p>
+                      <ul className="ml-3 text-muted-foreground text-sm space-y-0.5">
+                        {vacs.map(v => <li key={v.id}>• {v.vaccine_name}{v.next_due_date ? ` · due ${v.next_due_date}` : ''}</li>)}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+            {customTasks.length > 0 && (
+              <div>
+                <p className="flex items-center gap-1 font-medium text-sm"><ClipboardList className="h-3.5 w-3.5" /> Daily Tasks:</p>
+                <ul className="ml-3 text-muted-foreground text-sm space-y-0.5">{customTasks.map((t, i) => <li key={i}>• {t}</li>)}</ul>
+              </div>
+            )}
+            {sit.emergency_contact && <p className="flex items-center gap-1 text-sm"><span className="flex items-center gap-1 font-medium"><Siren className="h-3.5 w-3.5" /> Emergency:</span> <span className="text-muted-foreground">{sit.emergency_contact}</span></p>}
+            {sit.vet_contact && <p className="flex items-center gap-1 text-sm"><span className="flex items-center gap-1 font-medium"><Stethoscope className="h-3.5 w-3.5" /> Vet:</span> <span className="text-muted-foreground">{sit.vet_contact}</span></p>}
+            {sit.additional_instructions && (
+              <div>
+                <p className="flex items-center gap-1 font-medium text-sm"><FileText className="h-3.5 w-3.5" /> Additional Notes:</p>
+                <p className="text-muted-foreground text-sm ml-3">{sit.additional_instructions}</p>
+              </div>
+            )}
+          </div>
+
+          {/* Daily Checklist */}
+          {days.length > 0 && (
+            <div>
+              <p className="font-semibold text-[13px] uppercase tracking-wider text-muted-foreground mb-3">Daily Checklist</p>
+              <div className="space-y-3">
+                {days.map(day => {
+                  const dateStr = format(day, 'yyyy-MM-dd');
+                  const log = logs.find(l => l.date === dateStr);
+                  if (!log) return (
+                    <div key={dateStr} className="text-sm text-muted-foreground py-1">{format(day, 'EEE M/d')} — loading...</div>
+                  );
+                  return (
+                    <div key={dateStr} className="space-y-2">
+                      <p className="text-sm font-medium text-muted-foreground">{format(day, 'EEEE, MMMM d')}</p>
+                      <div className="flex gap-2 flex-wrap">
+                        <CheckBtn label="AM Food" checked={!!log.am_food_given} onToggle={() => onToggleBool(log, 'am_food_given')} />
+                        <CheckBtn label="PM Food" checked={!!log.pm_food_given} onToggle={() => onToggleBool(log, 'pm_food_given')} />
+                        {sitPets.some(pet => (medicationsByPet[pet.id] || []).length > 0) && (
+                          <CheckBtn label="AM Meds" checked={!!log.am_meds_given} onToggle={() => onToggleBool(log, 'am_meds_given')} />
+                        )}
+                        {hasPmMed && <CheckBtn label="PM Meds" checked={!!log.pm_meds_given} onToggle={() => onToggleBool(log, 'pm_meds_given')} />}
+                        {customTasks.map(task => (
+                          <CheckBtn
+                            key={task}
+                            label={task}
+                            checked={(log.completed_tasks || []).includes(task)}
+                            onToggle={() => onToggleTask(log, task)}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

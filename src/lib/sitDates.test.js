@@ -83,8 +83,22 @@ describe('validateSitDates (AC4–AC6)', () => {
   });
 
   it('counts calendar days across a DST change', () => {
-    expect(validateSitDates('2026-03-01', '2026-03-31')).toBeNull();
-    expect(validateSitDates('2026-03-01', '2026-04-01')).toBe(TOO_LONG);
+    // CI runs in UTC, which has no DST, so force a zone that changes clocks
+    // on 2026-03-08 (Node applies a runtime TZ change immediately).
+    const originalTz = process.env.TZ;
+    process.env.TZ = 'America/New_York';
+    try {
+      const before = parseSitDate('2026-03-01');
+      const after = parseSitDate('2026-03-31');
+      // Proves the range really crosses a DST change in this run.
+      expect(before.getTimezoneOffset()).not.toBe(after.getTimezoneOffset());
+      expect(validateSitDates('2026-03-01', '2026-03-31')).toBeNull();
+      expect(validateSitDates('2026-03-01', '2026-04-01')).toBe(TOO_LONG);
+      expect(sitDays({ start_date: '2026-03-01', end_date: '2026-03-31' })).toHaveLength(31);
+    } finally {
+      if (originalTz === undefined) delete process.env.TZ;
+      else process.env.TZ = originalTz;
+    }
   });
 });
 
