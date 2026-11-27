@@ -1,6 +1,6 @@
 # 0087_Current_Foods_And_Medications_Specification_v1
 
-**Status:** Approved by Lynn 2026-11-27 (no new copy).
+**Status:** Built 2026-11-27 on `claude/spec-0087-current-foods-meds`. Every task passed review on the first round; QA and the final review passed. Waiting for Lynn's PROTECTED merge OK (Ask Wysker change). Approved by Lynn 2026-11-27 (no new copy).
 **Date:** 2026-11-27
 **Branch:** `claude/spec-0087-current-foods-meds` (off `main` at `2b2774c`)
 **Migration:** none
