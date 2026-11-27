@@ -106,13 +106,14 @@ jobs:
             supabase/tests/error_reporting.test.ts
 
       # Pure unit tests, no secrets: no network, file or env permission.
-      - name: Run check-in counting rules, AI prompt, Vet Report overview and pet photo unit tests (spec 0080)
+      - name: Run check-in counting rules, AI prompt, Vet Report overview, pet photo and current-items unit tests (spec 0080, spec 0087)
         run: |
           deno test --node-modules-dir=none \
             supabase/tests/checkin_rules.test.ts \
             supabase/tests/ai_prompts.test.ts \
             supabase/tests/vet_report_wellness.test.ts \
-            supabase/tests/pet_photo.test.ts
+            supabase/tests/pet_photo.test.ts \
+            supabase/tests/current_items.test.ts
 
       - name: Run resend-webhook integration tests
         env:
