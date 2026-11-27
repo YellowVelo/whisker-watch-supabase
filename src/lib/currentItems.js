@@ -6,7 +6,7 @@
 // The server keeps an identical copy in
 // supabase/functions/_shared/currentItems.ts (Edge Functions can't import
 // app files); src/lib/aiServerParity.test.js fails if the two drift apart.
-import { dateStrInTimezone, detectTimezone } from './timezone';
+import { dateStrInTimezone, detectTimezone, isValidIanaTimezone } from './timezone';
 
 const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -35,7 +35,9 @@ export function splitCurrent(rows, todayStr) {
 }
 
 // Today's date (YYYY-MM-DD) on the viewer's calendar: their saved time zone,
-// else the device's, else UTC.
+// else the device's, else UTC. A saved zone that isn't a real IANA name
+// is treated as unset, so a bad profile value never breaks the page.
 export function todayForUser(user) {
-  return dateStrInTimezone(user?.timezone || detectTimezone() || 'UTC', 0);
+  const saved = isValidIanaTimezone(user?.timezone) ? user.timezone : null;
+  return dateStrInTimezone(saved || detectTimezone() || 'UTC', 0);
 }

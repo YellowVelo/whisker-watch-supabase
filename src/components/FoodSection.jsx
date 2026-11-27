@@ -9,9 +9,11 @@ import { Plus, Pencil, X, ShieldCheck, Utensils } from 'lucide-react';
 import { PALETTE, PALETTE_SOFT } from '@/lib/toneColors';
 import { format, parseISO } from 'date-fns';
 import SmartSelect from './SmartSelect';
+import { useAuth } from '@/lib/AuthContext';
+import { splitCurrent, todayForUser } from '@/lib/currentItems';
 
-const today = () => new Date().toISOString().split('T')[0];
-const emptyFood = (petId) => ({ pet_id: petId, name: '', brand: '', food_type: '', prescription: false, start_date: today(), end_date: '', active: true, notes: '' });
+// todayStr is today on the viewer's calendar (spec 0087, todayForUser).
+const emptyFood = (petId, todayStr) => ({ pet_id: petId, name: '', brand: '', food_type: '', prescription: false, start_date: todayStr, end_date: '', active: true, notes: '' });
 
 // Design System Amendment #5/#6 (2026-07-30) — sourced from the semantic
 // tone tokens (via inline style) instead of raw light-mode Tailwind
@@ -27,10 +29,11 @@ const typeColors = {
 };
 
 export default function FoodSection({ petId }) {
+  const { user } = useAuth();
   const [foods, setFoods] = useState([]);
   const [showDialog, setShowDialog] = useState(false);
   const [editing, setEditing] = useState(null);
-  const [form, setForm] = useState(emptyFood(petId));
+  const [form, setForm] = useState(() => emptyFood(petId, todayForUser(user)));
   const [saving, setSaving] = useState(false);
   const [showInactive, setShowInactive] = useState(false);
 
@@ -43,7 +46,7 @@ export default function FoodSection({ petId }) {
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
-  const openAdd = () => { setForm(emptyFood(petId)); setEditing(null); setShowDialog(true); };
+  const openAdd = () => { setForm(emptyFood(petId, todayForUser(user))); setEditing(null); setShowDialog(true); };
   const openEdit = (food) => { setForm({ ...food }); setEditing(food.id); setShowDialog(true); };
 
   const handleSubmit = async (e) => {
@@ -68,9 +71,8 @@ export default function FoodSection({ petId }) {
     load();
   };
 
-  const todayStr = today();
-  const active = foods.filter(f => f.active && (!f.end_date || f.end_date >= todayStr));
-  const inactive = foods.filter(f => !f.active || (f.end_date && f.end_date < todayStr));
+  // Spec 0087: the shared "is it current?" rule, on the viewer's calendar.
+  const { current: active, past: inactive } = splitCurrent(foods, todayForUser(user));
 
   return (
     <div className="space-y-5">

@@ -30,6 +30,7 @@ import { computeDetailedAge } from '@/lib/lifeStage';
 import { PALETTE, RING_COLOR, PALETTE_SOFT, tint } from '@/lib/toneColors';
 import { useAuth } from '@/lib/AuthContext';
 import { detectTimezone, dateStrInTimezone } from '@/lib/timezone';
+import { splitCurrent } from '@/lib/currentItems';
 import WellbeingChipGrid from '@/components/WellbeingChipGrid';
 import PetPhoto from '@/components/PetPhoto';
 import { reportClientError, functionErrorMessage } from '@/lib/errorMonitoring';
@@ -268,11 +269,13 @@ export default function PetProfileContent({ petId, onReload = undefined, expande
 
     const nextErrors = {};
 
-    setMedications(medsR.status === 'fulfilled' ? medsR.value : []);
+    // Spec 0087: only current meds and foods (the shared rule, on the
+    // viewer's calendar); the query's active:true just narrows the fetch.
+    const todayStrVal = todayStr(timezone);
+    setMedications(medsR.status === 'fulfilled' ? splitCurrent(medsR.value, todayStrVal).current : []);
     if (medsR.status === 'rejected') { reportClientError(medsR.reason, { feature: 'pet_profile' }); nextErrors.medications = true; }
 
-    const todayStrVal = todayStr(timezone);
-    setFoods(foodsR.status === 'fulfilled' ? foodsR.value.filter((f) => f.active && (!f.end_date || f.end_date >= todayStrVal)) : []);
+    setFoods(foodsR.status === 'fulfilled' ? splitCurrent(foodsR.value, todayStrVal).current : []);
     if (foodsR.status === 'rejected') { reportClientError(foodsR.reason, { feature: 'pet_profile' }); nextErrors.food = true; }
 
     setVaccinations(vaxR.status === 'fulfilled' ? vaxR.value : []);

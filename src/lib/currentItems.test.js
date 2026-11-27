@@ -84,4 +84,14 @@ describe('todayForUser (spec 0087)', () => {
     expect(todayForUser(null)).toBe(expected);
     expect(todayForUser({ timezone: null })).toBe(expected);
   });
+
+  it("falls back to the device's time zone, then UTC, when the saved one isn't a real time zone", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-11-28T05:00:00Z'));
+    const expected = dateStrInTimezone(detectTimezone() || 'UTC', 0);
+    expect(() => todayForUser({ timezone: 'Not/AZone' })).not.toThrow();
+    expect(todayForUser({ timezone: 'Not/AZone' })).toBe(expected);
+    expect(todayForUser({ timezone: 'garbage' })).toBe(expected);
+    expect(todayForUser({ timezone: 42 })).toBe(expected);
+  });
 });
