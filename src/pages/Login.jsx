@@ -9,9 +9,6 @@ import { Loader2, Heart, CheckCircle2 } from 'lucide-react';
 import AuthLayout from '@/components/AuthLayout';
 import { resetSandboxAccount } from '@/lib/accountClient';
 import { SEED_SCENARIOS } from '@/lib/seedTestData';
-import { TOS_LAST_UPDATED } from '@/lib/termsOfServiceContent';
-import { PRIVACY_POLICY_LAST_UPDATED } from '@/lib/privacyPolicyContent';
-import { setPendingOAuthConsent } from '@/lib/pendingOAuthConsent';
 import { GOOGLE_SIGN_IN_ENABLED } from '@/lib/authProviders';
 import { reportClientError, functionErrorMessage } from '@/lib/errorMonitoring';
 
@@ -131,18 +128,8 @@ export default function Login() {
   };
 
   const handleGoogleLogin = async () => {
-    // Google sign-in can create a brand-new account for a first-time
-    // Google user (same as Register.jsx's button) — persist the agreement
-    // answer before the redirect so AuthContext.jsx can record it if this
-    // turns out to be a first-time signup, not just a returning sign-in.
-    // No marketing checkbox here (Login isn't the signup form) — a
-    // first-time Google signup from this page is simply recorded as
-    // marketingOptIn: false, same as leaving it unchecked on Register.
-    setPendingOAuthConsent({
-      termsVersion: TOS_LAST_UPDATED,
-      privacyVersion: PRIVACY_POLICY_LAST_UPDATED,
-      marketingOptIn: false,
-    });
+    // A first-time Google user's consent is recorded on the consent
+    // screen after sign-in (spec 0086), not carried across the redirect.
     await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: { redirectTo: window.location.origin },

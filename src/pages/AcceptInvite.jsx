@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { supabase } from '@/api/supabaseClient';
-import SetPasswordForm from '@/components/SetPasswordForm';
 import AuthLayout from '@/components/AuthLayout';
+import FinishAccountSetupForm from '@/components/FinishAccountSetupForm';
+import { getAccountSetupStatus, GENERIC_ERROR } from '@/lib/accountSetup';
 import { Loader2, Mail } from 'lucide-react';
 
 // Landing page for the co-owner invite email (sent via the send-email
@@ -21,10 +22,15 @@ import { Loader2, Mail } from 'lucide-react';
 // redirects to the Pets screen, since a pet-sit can cover multiple pets
 // with no single profile to land on.
 //
-// Once redeemed, the invited co-owner is asked to set a password (via
-// the shared SetPasswordForm, also used by ResetPassword.jsx) rather
-// than being silently dropped into the app with a passwordless session
-// they'd have no way to log back into later.
+// Once redeemed, this asks finish-account-setup (status) what's left to
+// do before showing anything (spec 0086), since the form reads
+// needsPassword once. A new invitee creates a password and agrees to the
+// Terms on the shared FinishAccountSetupForm (also used by
+// /verify-email). Someone whose account is already finished (password
+// set, consent recorded) skips the form and goes straight to the pet or
+// the Pet Sitter page (planning decision 2). Every exit is a full-page
+// load, so AuthContext runs the invite claims again now that the email
+// is confirmed.
 //
 // `type` is 'invite' for a first-time invite, or 'recovery' when
 // invite-co-owner/index.ts is re-inviting someone who was invited before
@@ -40,7 +46,8 @@ export default function AcceptInvite() {
   const petId = searchParams.get('petId');
   const isSitterInvite = searchParams.get('role') === 'sitter';
 
-  const [status, setStatus] = useState('verifying'); // verifying | ready | invalid
+  const [status, setStatus] = useState('verifying'); // verifying | ready | invalid | error | done
+  const [needsPassword, setNeedsPassword] = useState(false);
 
   useEffect(() => {
     const tokenHash = searchParams.get('token_hash');
@@ -51,19 +58,35 @@ export default function AcceptInvite() {
     }
 
     supabase.auth.verifyOtp({ token_hash: tokenHash, type }).then(async ({ error }) => {
-      if (!error) {
-        setStatus('ready');
+      if (error) {
+        // A single-use token can fail to redeem here without the invite
+        // itself having failed — e.g. the link was opened in two tabs, or
+        // an email client's link-preview/security scanner prefetched it
+        // before the real click. In that case the first redemption already
+        // succeeded and established a session, so check for one before
+        // concluding the invite is actually invalid.
+        const { data: sessionData } = await supabase.auth.getSession();
+        if (!sessionData?.session) {
+          setStatus('invalid');
+          return;
+        }
+      }
+
+      const setup = await getAccountSetupStatus();
+      if (!setup.ok) {
+        setStatus('error');
         return;
       }
-      // A single-use token can fail to redeem here without the invite
-      // itself having failed — e.g. the link was opened in two tabs, or
-      // an email client's link-preview/security scanner prefetched it
-      // before the real click. In that case the first redemption already
-      // succeeded and established a session, so check for one before
-      // concluding the invite is actually invalid.
-      const { data: sessionData } = await supabase.auth.getSession();
-      setStatus(sessionData?.session ? 'ready' : 'invalid');
+      if (!setup.needsPassword && !setup.needsConsent) {
+        setStatus('done');
+        handleSuccess();
+        return;
+      }
+      setNeedsPassword(setup.needsPassword);
+      setStatus('ready');
     });
+    // handleSuccess only reads searchParams-derived values.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
 
   const handleSuccess = () => {
@@ -81,7 +104,9 @@ export default function AcceptInvite() {
     window.location.href = petId ? `/pets?highlight=${petId}` : '/';
   };
 
-  if (status === 'verifying') {
+  const goToLogin = () => { window.location.href = '/login'; };
+
+  if (status === 'verifying' || status === 'done') {
     return (
       <div className="min-h-screen flex items-center justify-center px-4 bg-background">
         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -99,9 +124,23 @@ export default function AcceptInvite() {
     );
   }
 
+  if (status === 'error') {
+    return (
+      <AuthLayout icon={Mail} title="Welcome to Wysker Watch">
+        <p className="text-base text-destructive text-center">{GENERIC_ERROR}</p>
+      </AuthLayout>
+    );
+  }
+
   return (
-    <AuthLayout icon={Mail} title="Welcome to Wysker Watch" subtitle="Create a password to finish accepting your invitation.">
-      <SetPasswordForm submitLabel="Continue" onSuccess={handleSuccess} />
+    <AuthLayout icon={Mail} title="Welcome to Wysker Watch" subtitle="Create a password and review our terms to finish accepting your invitation.">
+      <FinishAccountSetupForm
+        needsPassword={needsPassword}
+        showMarketing
+        submitLabel="Continue"
+        onSuccess={handleSuccess}
+        onSignedOut={goToLogin}
+      />
     </AuthLayout>
   );
 }

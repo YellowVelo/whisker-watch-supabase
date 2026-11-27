@@ -7,8 +7,9 @@ import { fileURLToPath } from 'node:url';
 const invoke = vi.fn();
 const getSession = vi.fn();
 const signInWithPassword = vi.fn();
+const signOut = vi.fn();
 vi.mock('@/api/supabaseClient', () => ({
-  supabase: { functions: { invoke }, auth: { getSession, signInWithPassword } },
+  supabase: { functions: { invoke }, auth: { getSession, signInWithPassword, signOut } },
 }));
 const reportClientError = vi.fn();
 vi.mock('@/lib/errorMonitoring', async () => {
@@ -37,6 +38,8 @@ beforeEach(() => {
   invoke.mockReset();
   getSession.mockReset();
   signInWithPassword.mockReset();
+  signOut.mockReset();
+  signOut.mockResolvedValue({ error: null });
   reportClientError.mockReset();
   getSession.mockResolvedValue({ data: { session: { user: { email: 'owner@example.com' } } } });
   signInWithPassword.mockResolvedValue({ data: {}, error: null });
@@ -98,12 +101,20 @@ describe('finishAccountSetup: signing in again (build note 8)', () => {
     expect(getSession).not.toHaveBeenCalled();
   });
 
-  it('reports a failed re-sign-in and returns the generic error', async () => {
+  it('marks signedOut, clears the ended session and reports when setup finished but the re-sign-in failed', async () => {
     invoke.mockResolvedValue({ data: { finished: true }, error: null });
     signInWithPassword.mockResolvedValue({ data: {}, error: { message: 'Invalid login credentials' } });
     const result = await finishAccountSetup({ acceptedTerms: true, password: 'correct horse battery' });
-    expect(result).toEqual({ ok: false, error: GENERIC_ERROR, passwordSaved: false });
+    expect(result).toEqual({ ok: false, error: GENERIC_ERROR, passwordSaved: false, signedOut: true });
+    expect(signOut).toHaveBeenCalledWith({ scope: 'local' });
     expect(reportClientError).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ feature: 'account_setup' }));
+  });
+
+  it('does not mark signedOut after a successful finish and re-sign-in', async () => {
+    invoke.mockResolvedValue({ data: { finished: true }, error: null });
+    const result = await finishAccountSetup({ acceptedTerms: true, password: 'correct horse battery' });
+    expect(result).toEqual({ ok: true });
+    expect(signOut).not.toHaveBeenCalled();
   });
 
   it('refuses to send a password when no signed-in email is known', async () => {
@@ -119,7 +130,7 @@ describe('finishAccountSetup: errors', () => {
   it.each([PASSWORD_LENGTH_ERROR, PASSWORD_BREACHED_ERROR])('shows the server password message "%s" without reporting it', async (msg) => {
     invoke.mockResolvedValue(httpError(400, { error: msg }));
     const result = await finishAccountSetup({ acceptedTerms: true, password: 'short' });
-    expect(result).toEqual({ ok: false, error: msg, passwordSaved: false });
+    expect(result).toEqual({ ok: false, error: msg, passwordSaved: false, signedOut: false });
     expect(reportClientError).not.toHaveBeenCalled();
     // A 400 is refused before anything changes, so no re-sign-in attempt.
     expect(signInWithPassword).not.toHaveBeenCalled();
@@ -137,7 +148,7 @@ describe('finishAccountSetup: errors', () => {
     invoke.mockResolvedValue(httpError(500, { error: GENERIC_ERROR }));
     const result = await finishAccountSetup({ acceptedTerms: true, password: 'correct horse battery' });
     expect(signInWithPassword).toHaveBeenCalledWith({ email: 'owner@example.com', password: 'correct horse battery' });
-    expect(result).toEqual({ ok: false, error: GENERIC_ERROR, passwordSaved: true });
+    expect(result).toEqual({ ok: false, error: GENERIC_ERROR, passwordSaved: true, signedOut: false });
     expect(reportClientError).toHaveBeenCalled();
   });
 
@@ -145,13 +156,26 @@ describe('finishAccountSetup: errors', () => {
     invoke.mockResolvedValue(httpError(502, { error: GENERIC_ERROR }));
     signInWithPassword.mockResolvedValue({ data: {}, error: { message: 'Invalid login credentials' } });
     const result = await finishAccountSetup({ acceptedTerms: true, password: 'correct horse battery' });
-    expect(result).toEqual({ ok: false, error: GENERIC_ERROR, passwordSaved: false });
+    expect(result).toEqual({ ok: false, error: GENERIC_ERROR, passwordSaved: false, signedOut: false });
+    expect(signOut).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['with a password', 'correct horse battery'],
+    ['without a password', undefined],
+  ])('marks signedOut and clears the session on a 401 (%s): the session is gone', async (_label, password) => {
+    invoke.mockResolvedValue(httpError(401, { error: GENERIC_ERROR }));
+    const result = await finishAccountSetup({ acceptedTerms: true, password });
+    expect(result).toEqual({ ok: false, error: GENERIC_ERROR, passwordSaved: false, signedOut: true });
+    expect(signOut).toHaveBeenCalledWith({ scope: 'local' });
+    // A 401 is refused before anything changes, so no re-sign-in attempt.
+    expect(signInWithPassword).not.toHaveBeenCalled();
   });
 
   it('returns the generic error if the call throws', async () => {
     invoke.mockRejectedValue(new Error('network down'));
     const result = await finishAccountSetup({ acceptedTerms: true });
-    expect(result).toEqual({ ok: false, error: GENERIC_ERROR, passwordSaved: false });
+    expect(result).toEqual({ ok: false, error: GENERIC_ERROR, passwordSaved: false, signedOut: false });
     expect(reportClientError).toHaveBeenCalled();
   });
 });

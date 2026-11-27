@@ -2,8 +2,9 @@ import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { supabase } from '@/api/supabaseClient';
 import AuthLayout from '@/components/AuthLayout';
+import FinishAccountSetupForm from '@/components/FinishAccountSetupForm';
+import { getAccountSetupStatus, GENERIC_ERROR } from '@/lib/accountSetup';
 import { Loader2, Mail } from 'lucide-react';
-import { reportClientError } from '@/lib/errorMonitoring';
 
 // Landing page for the branded signup-confirmation email (sent via the
 // sign-up Edge Function — see supabase/functions/sign-up/index.ts) and
@@ -24,16 +25,22 @@ import { reportClientError } from '@/lib/errorMonitoring';
 // recorded yet.
 // 'invite' is also accepted for completeness.
 //
-// After verifyOtp() succeeds, this also calls the confirm-email Edge
-// Function once — see that function's header comment for why: a
-// 'recovery'-type token isn't guaranteed to also flip
-// auth.users.email_confirmed_at the way a 'signup'-type token does, so
-// confirmation is made explicit here rather than assumed.
+// After verifyOtp() succeeds, this asks finish-account-setup (status)
+// what's left to do, and only then shows the finish form, since the form
+// reads needsPassword once. The account is confirmed only when the person
+// finishes (the server sets email_confirm then), so there's no separate
+// confirm call here any more. Finishing does a full-page load to '/', so
+// AuthContext runs the invite claims again now that the email is
+// confirmed (migration 0064 links invites only to confirmed accounts).
 const ALLOWED_TYPES = ['signup', 'recovery', 'invite'];
+
+const goHome = () => { window.location.href = '/'; };
+const goToLogin = () => { window.location.href = '/login'; };
 
 export default function VerifyEmail() {
   const [searchParams] = useSearchParams();
-  const [status, setStatus] = useState('verifying'); // verifying | ready | invalid
+  const [status, setStatus] = useState('verifying'); // verifying | ready | invalid | error | done
+  const [needsPassword, setNeedsPassword] = useState(false);
 
   useEffect(() => {
     const tokenHash = searchParams.get('token_hash');
@@ -58,38 +65,54 @@ export default function VerifyEmail() {
         }
       }
 
-      // Make confirmation explicit and self-controlled rather than
-      // relying on which token type redeemed the session — see this
-      // component's header comment. Best-effort: a failure here still
-      // leaves the user with a working session (verifyOtp already
-      // succeeded), so it doesn't block them from continuing into the
-      // app; it's logged server-side for follow-up instead.
-      const { data: sessionData } = await supabase.auth.getSession();
-      const token = sessionData?.session?.access_token;
-      const { error: confirmError } = await supabase.functions.invoke('confirm-email', {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
-      if (confirmError) {
-        reportClientError(confirmError, { feature: 'verify_email', note: 'confirm-email function error' });
+      const setup = await getAccountSetupStatus();
+      if (!setup.ok) {
+        setStatus('error');
+        return;
       }
-
+      if (!setup.needsPassword && !setup.needsConsent) {
+        setStatus('done');
+        goHome();
+        return;
+      }
+      setNeedsPassword(setup.needsPassword);
       setStatus('ready');
     });
   }, [searchParams]);
 
-  useEffect(() => {
-    if (status === 'ready') {
-      window.location.href = '/';
-    }
-  }, [status]);
-
   if (status === 'invalid') {
     return (
       <AuthLayout icon={Mail} title="Link Invalid">
+        {/* Copy pending Lynn's approval (spec 0086 T6) */}
         <p className="text-sm text-muted-foreground text-center">
-          This confirmation link is invalid or has expired. Try signing up again, or use "Resend confirmation
-          email" from the login screen.
+          This link is invalid or has expired. To get a new one, sign up again with the same email address.
         </p>
+      </AuthLayout>
+    );
+  }
+
+  if (status === 'error') {
+    return (
+      <AuthLayout icon={Mail} title="Finish setting up your account">
+        <p className="text-base text-destructive text-center">{GENERIC_ERROR}</p>
+      </AuthLayout>
+    );
+  }
+
+  if (status === 'ready') {
+    return (
+      <AuthLayout
+        icon={Mail}
+        title="Finish setting up your account"
+        subtitle="Create a password and review our terms to start using Wysker Watch."
+      >
+        <FinishAccountSetupForm
+          needsPassword={needsPassword}
+          showMarketing
+          submitLabel="Finish"
+          onSuccess={goHome}
+          onSignedOut={goToLogin}
+        />
       </AuthLayout>
     );
   }

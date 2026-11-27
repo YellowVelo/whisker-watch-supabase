@@ -18,13 +18,17 @@ import { finishAccountSetup, getAccountSetupStatus } from '@/lib/accountSetup';
 //                  for accounts that already have a password)
 //   submitLabel    'Finish' or 'Continue' (approved copy)
 //   onSuccess      called once setup is done and the browser is signed in
+//   onSignedOut    optional; called instead of showing an error when this
+//                  browser no longer has a session (accountSetup.js's
+//                  `signedOut`, e.g. the password was saved but signing in
+//                  again failed). Pages send the person to /login.
 //
 // Partial failure (planning decision 3): if the finish call fails after
 // the password was saved, accountSetup.js has already signed in with it,
 // so this form drops the password fields, re-checks status, and finishes
 // with just the checkbox (or calls onSuccess if status says nothing is
 // left to do).
-export default function FinishAccountSetupForm({ needsPassword, showMarketing, submitLabel = 'Finish', onSuccess }) {
+export default function FinishAccountSetupForm({ needsPassword, showMarketing, submitLabel = 'Finish', onSuccess, onSignedOut }) {
   const id = useId();
   const [askPassword, setAskPassword] = useState(needsPassword === true);
   const [password, setPassword] = useState('');
@@ -45,8 +49,12 @@ export default function FinishAccountSetupForm({ needsPassword, showMarketing, s
       acceptedTerms: true,
       marketingOptIn: showMarketing ? marketingOptIn : undefined,
     });
-    if (result.ok) {
+    if (result.ok === true) {
       onSuccess();
+      return;
+    }
+    if (result.signedOut && onSignedOut) {
+      onSignedOut();
       return;
     }
     if (result.passwordSaved) {

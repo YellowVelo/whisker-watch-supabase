@@ -12,7 +12,7 @@ import { functionErrorMessage, reportClientError } from '@/lib/errorMonitoring';
 //   getAccountSetupStatus() -> { ok: true, needsPassword, needsConsent }
 //                            | { ok: false, error }
 //   finishAccountSetup(...)  -> { ok: true }
-//                            | { ok: false, error, passwordSaved }
+//                            | { ok: false, error, passwordSaved, signedOut }
 // `error` is always approved copy: one of the two password messages the
 // server sends, or GENERIC_ERROR.
 
@@ -63,11 +63,20 @@ export async function getAccountSetupStatus() {
  * password session, and the caller should continue without password
  * fields (FinishAccountSetupForm does this and re-checks status).
  *
+ * Signed out (`signedOut: true`): this browser no longer has a working
+ * session, so the caller should send the person to /login (a full-page
+ * load). Two cases: setup finished and the password was saved but the
+ * re-sign-in failed (Supabase Auth had already ended this session), or
+ * the server answered 401 (it only does that when the session's token is
+ * missing or no longer valid, e.g. a retry after an earlier attempt saved
+ * the password and ended the session). The dead session is cleared from
+ * this browser first, so /login starts clean.
+ *
  * `marketingOptIn` is sent only when it's a boolean; leaving it out keeps
  * the person's current setting (planning decision 4).
  *
  * @param {{ password?: string, acceptedTerms: boolean, marketingOptIn?: boolean }} args
- * @returns {Promise<{ ok: true } | { ok: false, error: string, passwordSaved: boolean }>}
+ * @returns {Promise<{ ok: true } | { ok: false, error: string, passwordSaved: boolean, signedOut: boolean }>}
  */
 export async function finishAccountSetup({ password, acceptedTerms, marketingOptIn }) {
   const sendsPassword = typeof password === 'string' && password.length > 0;
@@ -81,7 +90,7 @@ export async function finishAccountSetup({ password, acceptedTerms, marketingOpt
           feature: FEATURE,
           note: 'Account setup finish had no session email',
         });
-        return { ok: false, error: GENERIC_ERROR, passwordSaved: false };
+        return { ok: false, error: GENERIC_ERROR, passwordSaved: false, signedOut: false };
       }
     }
 
@@ -103,12 +112,15 @@ export async function finishAccountSetup({ password, acceptedTerms, marketingOpt
         });
       }
       const status = error?.context?.status;
-      const refusedBeforeChanges = status === 400 || status === 401;
-      if (sendsPassword && !refusedBeforeChanges) {
-        const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
-        if (!signInError) return { ok: false, error: result, passwordSaved: true };
+      if (status === 401) {
+        await clearLocalSession();
+        return { ok: false, error: result, passwordSaved: false, signedOut: true };
       }
-      return { ok: false, error: result, passwordSaved: false };
+      if (sendsPassword && status !== 400) {
+        const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
+        if (!signInError) return { ok: false, error: result, passwordSaved: true, signedOut: false };
+      }
+      return { ok: false, error: result, passwordSaved: false, signedOut: false };
     }
 
     if (sendsPassword) {
@@ -118,15 +130,27 @@ export async function finishAccountSetup({ password, acceptedTerms, marketingOpt
           feature: FEATURE,
           note: 'Sign-in after account setup failed',
         });
-        // Setup itself finished, but this browser is now signed out. Shown
-        // as the generic error; passwordSaved stays false because there's
-        // no session to continue with.
-        return { ok: false, error: GENERIC_ERROR, passwordSaved: false };
+        // Setup itself finished, but this browser is now signed out
+        // (Supabase Auth ended this session when the password changed).
+        // The caller sends the person to /login to sign in with the new
+        // password.
+        await clearLocalSession();
+        return { ok: false, error: GENERIC_ERROR, passwordSaved: false, signedOut: true };
       }
     }
     return { ok: true };
   } catch (err) {
     reportClientError(err, { feature: FEATURE, note: 'Account setup finish failed' });
-    return { ok: false, error: GENERIC_ERROR, passwordSaved: false };
+    return { ok: false, error: GENERIC_ERROR, passwordSaved: false, signedOut: false };
+  }
+}
+
+// Removes a session the server has already ended from this browser only
+// (scope 'local' makes no server call), so /login starts clean.
+async function clearLocalSession() {
+  try {
+    await supabase.auth.signOut({ scope: 'local' });
+  } catch (err) {
+    reportClientError(err, { feature: FEATURE, note: 'Clearing an ended session failed' });
   }
 }
