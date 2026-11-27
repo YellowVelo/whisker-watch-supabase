@@ -3,7 +3,7 @@ import { Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '@/lib/AuthContext';
 import AppShell from '@/components/AppShell';
 import ConsentGate from '@/components/ConsentGate';
-import { shouldShowConsentGate } from '@/lib/consentGate';
+import { legalPageWithoutShell, shouldShowConsentGate } from '@/lib/consentGate';
 
 const DefaultFallback = () => (
   <div className="fixed inset-0 flex items-center justify-center">
@@ -33,11 +33,21 @@ export default function ProtectedRoute({ fallback = <DefaultFallback />, unauthe
     return unauthenticatedElement;
   }
 
+  const gateArgs = { isAuthenticated, user, profileLoadError, pathname };
+
+  // Spec 0086 FR6/AC12: with no consent on record, Terms and Privacy stay
+  // readable, but bare, the way a signed-out visitor sees them (App.jsx's
+  // unauthenticatedElement={<Outlet />}): no App Shell, so its header
+  // (Ask Wysker, notifications) and nav can't be used before agreeing.
+  if (legalPageWithoutShell(gateArgs)) {
+    return <Outlet />;
+  }
+
   const page = shell ? <AppShell><Outlet /></AppShell> : <Outlet />;
 
   // Spec 0086 FR6: no consent on record -> the consent screen instead of
-  // the page (Terms and Privacy stay readable; see consentGate.js).
-  if (shouldShowConsentGate({ isAuthenticated, user, profileLoadError, pathname })) {
+  // the page (see consentGate.js).
+  if (shouldShowConsentGate(gateArgs)) {
     return <ConsentGate>{page}</ConsentGate>;
   }
 

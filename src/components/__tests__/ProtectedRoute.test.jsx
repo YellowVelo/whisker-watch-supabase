@@ -133,6 +133,28 @@ describe('ProtectedRoute consent gate (spec 0086 FR6, AC10, AC12)', () => {
     },
   );
 
+  it.each(['/terms', '/terms/data-we-collect', '/privacy', '/privacy/your-rights'])(
+    'shows %s without the App Shell (no header, Ask Wysker or notifications) to someone with no consent',
+    (path) => {
+      authState = { ...base, isAuthenticated: true, user: NO_CONSENT };
+      const html = render(path);
+      expect(html).toBe('<p>PAGE</p>');
+      expect(html).not.toContain('data-shell');
+    },
+  );
+
+  it.each(['/terms', '/privacy/your-rights'])('still shows %s inside the App Shell once consent is on record', (path) => {
+    authState = { ...base, isAuthenticated: true, user: CONSENTED };
+    const html = render(path);
+    expect(html).toContain('PAGE');
+    expect(html).toContain('data-shell="yes"');
+  });
+
+  it('keeps the App Shell on legal pages when the profile failed to load', () => {
+    authState = { ...base, isAuthenticated: true, profileLoadError: true, user: { id: 'u1', role: 'user' } };
+    expect(render('/terms')).toContain('data-shell="yes"');
+  });
+
   it('stays out of the way when the profile failed to load (profileLoadError)', () => {
     authState = { ...base, isAuthenticated: true, profileLoadError: true, user: { id: 'u1', email: 'a@b.c', role: 'user' } };
     const html = render('/');

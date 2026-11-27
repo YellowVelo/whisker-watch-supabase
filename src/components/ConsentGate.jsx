@@ -1,10 +1,12 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useReducer } from 'react';
 import { Loader2, ShieldCheck } from 'lucide-react';
 import AuthLayout from '@/components/AuthLayout';
 import FinishAccountSetupForm from '@/components/FinishAccountSetupForm';
 import SignOutButton from '@/components/SignOutButton';
+import { Button } from '@/components/ui/button';
 import { useAuth } from '@/lib/AuthContext';
-import { getAccountSetupStatus, setupScreenFor, GENERIC_ERROR } from '@/lib/accountSetup';
+import { getAccountSetupStatus, GENERIC_ERROR } from '@/lib/accountSetup';
+import { INITIAL_GATE_STATE, nextGateState } from '@/lib/consentGateState';
 import { reportClientError } from '@/lib/errorMonitoring';
 
 // The blocking consent screen (spec 0086 FR6, AC10-AC12). ProtectedRoute
@@ -23,10 +25,12 @@ import { reportClientError } from '@/lib/errorMonitoring';
 //   'skip'        nothing left to do (the profile was stale): refresh it
 //                 and show the page
 //   'signedOut'   the session is gone: full-page load to /login
-//   'error'       the generic error, with Sign out so it isn't a dead end
+//   'error'       the generic error, with Try again (asks status again)
+//                 and Sign out, so it isn't a dead end
 // Once setup is done the page shows straight away and the profile is
 // refreshed so the gate goes away for good; if that refresh fails, the
-// page reloads.
+// page reloads. The transitions live in nextGateState()
+// (src/lib/consentGateState.js); this component only runs its actions.
 
 const goToLogin = () => { window.location.href = '/login'; };
 
@@ -34,9 +38,9 @@ const goToLogin = () => { window.location.href = '/login'; };
  * What the gate shows for a given screen. Split out so each state can be
  * rendered in tests without running the status call.
  *
- * @param {{ screen: 'loading' | 'finish' | 'consentOnly' | 'error', onSuccess: () => void, onSignedOut: () => void }} props
+ * @param {{ screen: 'loading' | 'finish' | 'consentOnly' | 'error', onSuccess: () => void, onSignedOut: () => void, onRetry?: () => void }} props
  */
-export function ConsentGateScreen({ screen, onSuccess, onSignedOut }) {
+export function ConsentGateScreen({ screen, onSuccess, onSignedOut, onRetry = () => {} }) {
   if (screen === 'finish') {
     return (
       <AuthLayout
@@ -51,6 +55,9 @@ export function ConsentGateScreen({ screen, onSuccess, onSignedOut }) {
           onSuccess={onSuccess}
           onSignedOut={onSignedOut}
         />
+        {/* Copy/UX pending Lynn's approval (spec 0086 T7): every app page
+            is gated, so Settings' log-out can't be reached from here. */}
+        <SignOutButton />
       </AuthLayout>
     );
   }
@@ -78,6 +85,10 @@ export function ConsentGateScreen({ screen, onSuccess, onSignedOut }) {
     return (
       <AuthLayout icon={ShieldCheck} title="One quick thing before you continue">
         <p className="text-base text-destructive text-center">{GENERIC_ERROR}</p>
+        {/* Copy pending Lynn's approval (spec 0086 T7) */}
+        <Button type="button" className="w-full mt-4" onClick={onRetry}>
+          Try again
+        </Button>
         <SignOutButton />
       </AuthLayout>
     );
@@ -92,39 +103,38 @@ export function ConsentGateScreen({ screen, onSuccess, onSignedOut }) {
 
 export default function ConsentGate({ children }) {
   const { refreshProfile } = useAuth();
-  // loading | finish | consentOnly | error | done
-  const [screen, setScreen] = useState('loading');
+  const [state, dispatch] = useReducer(nextGateState, INITIAL_GATE_STATE);
 
-  const finished = async () => {
-    setScreen('done');
-    try {
-      await refreshProfile();
-    } catch (err) {
-      reportClientError(err, { feature: 'account_setup', note: 'Profile refresh after consent failed' });
-      window.location.reload();
-    }
-  };
-
+  // Runs each action nextGateState() asks for, once (seq changes with
+  // every new one).
   useEffect(() => {
     let cancelled = false;
-    getAccountSetupStatus().then((status) => {
-      if (cancelled) return;
-      const next = setupScreenFor(status);
-      if (next === 'signedOut') {
-        goToLogin();
-        return;
-      }
-      if (next === 'skip') {
-        finished();
-        return;
-      }
-      setScreen(next);
-    });
+    if (state.action === 'check') {
+      getAccountSetupStatus().then((status) => {
+        if (!cancelled) dispatch({ type: 'status', status });
+      });
+    } else if (state.action === 'refresh') {
+      refreshProfile().catch((err) => {
+        reportClientError(err, { feature: 'account_setup', note: 'Profile refresh after consent failed' });
+        if (!cancelled) dispatch({ type: 'refreshFailed' });
+      });
+    } else if (state.action === 'redirect') {
+      goToLogin();
+    } else if (state.action === 'reload') {
+      window.location.reload();
+    }
     return () => { cancelled = true; };
-    // Runs once per gate: the form reads needsPassword once.
+    // Keyed on seq only: each action runs once.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [state.seq]);
 
-  if (screen === 'done') return children;
-  return <ConsentGateScreen screen={/** @type {any} */ (screen)} onSuccess={finished} onSignedOut={goToLogin} />;
+  if (state.screen === 'done') return children;
+  return (
+    <ConsentGateScreen
+      screen={/** @type {any} */ (state.screen)}
+      onSuccess={() => dispatch({ type: 'finished' })}
+      onSignedOut={() => dispatch({ type: 'signedOut' })}
+      onRetry={() => dispatch({ type: 'retry' })}
+    />
+  );
 }

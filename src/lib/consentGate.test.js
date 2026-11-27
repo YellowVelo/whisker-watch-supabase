@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { isLegalPath, shouldShowConsentGate } from './consentGate';
+import { isLegalPath, legalPageWithoutShell, shouldShowConsentGate } from './consentGate';
 
 // When the consent screen replaces a page (spec 0086 FR6, AC10, AC12).
 const signedIn = (user, extra = {}) => ({
@@ -41,5 +41,25 @@ describe('shouldShowConsentGate', () => {
 
   it.each(['/terms', '/terms/x', '/privacy', '/privacy/x'])('does not show on %s', (pathname) => {
     expect(shouldShowConsentGate(signedIn({ id: 'u', terms_accepted_at: null }, { pathname }))).toBe(false);
+  });
+});
+
+describe('legalPageWithoutShell', () => {
+  const noConsent = { id: 'u', terms_accepted_at: null };
+
+  it.each(['/terms', '/terms/x', '/privacy', '/privacy/x'])('is true on %s for someone with no consent', (pathname) => {
+    expect(legalPageWithoutShell(signedIn(noConsent, { pathname }))).toBe(true);
+  });
+
+  it('is false off the legal pages (the consent screen shows there instead)', () => {
+    expect(legalPageWithoutShell(signedIn(noConsent, { pathname: '/' }))).toBe(false);
+    expect(legalPageWithoutShell(signedIn(noConsent, { pathname: '/pets' }))).toBe(false);
+  });
+
+  it('is false with consent on record, a failed profile load, or no session', () => {
+    expect(legalPageWithoutShell(signedIn({ id: 'u', terms_accepted_at: '2026-11-27T00:00:00Z' }, { pathname: '/terms' }))).toBe(false);
+    expect(legalPageWithoutShell(signedIn(noConsent, { pathname: '/terms', profileLoadError: true }))).toBe(false);
+    expect(legalPageWithoutShell(signedIn(noConsent, { pathname: '/terms', isAuthenticated: false }))).toBe(false);
+    expect(legalPageWithoutShell(signedIn(null, { pathname: '/terms' }))).toBe(false);
   });
 });

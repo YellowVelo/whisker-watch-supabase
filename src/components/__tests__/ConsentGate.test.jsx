@@ -76,6 +76,11 @@ describe('ConsentGateScreen finish (email-link session, AC11)', () => {
     expect((html.match(/type="password"/g) ?? []).length).toBe(2);
     expect(html).toContain(MARKETING_TEXT);
   });
+
+  it('has an outline Sign out under the form, since every app page is gated', () => {
+    expect(html).toMatch(/<button class="[^"]*border-input[^"]*" type="button">Sign out<\/button>/);
+    expect(html.indexOf('>Sign out</button>')).toBeGreaterThan(html.indexOf('>Finish</button>'));
+  });
 });
 
 describe('ConsentGateScreen error', () => {
@@ -84,6 +89,16 @@ describe('ConsentGateScreen error', () => {
     expect(html).toContain('Something went wrong. Please try again.');
     expect(html).toMatch(SIGN_OUT);
     expect(html).not.toContain('<form');
+  });
+
+  it('offers a primary full-width Try again above Sign out', () => {
+    const html = renderScreen('error');
+    const tryAgain = html.match(/<button class="([^"]*)" type="button">Try again<\/button>/);
+    expect(tryAgain).not.toBeNull();
+    expect(tryAgain[1]).toContain('border-primary');
+    expect(tryAgain[1]).toContain('w-full');
+    expect(tryAgain[1]).not.toContain('border-input');
+    expect(html.indexOf('>Try again</button>')).toBeLessThan(html.indexOf('>Sign out</button>'));
   });
 });
 
