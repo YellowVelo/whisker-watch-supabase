@@ -1,6 +1,6 @@
 # 0087_Current_Foods_And_Medications_Specification_v1
 
-**Status:** Draft, 2026-11-27. Waiting for Lynn's review.
+**Status:** Approved by Lynn 2026-11-27 (no new copy).
 **Date:** 2026-11-27
 **Branch:** `claude/spec-0087-current-foods-meds` (off `main` at `2b2774c`)
 **Migration:** none
@@ -9,7 +9,7 @@
 
 ## Lynn — what I need from you
 
-1. **Review this spec**, especially flags 1–4 below. Blocks the build.
+1. ~~Review this spec~~ Approved 2026-11-27.
 2. After merge: **promote branch `main`'s build in Cloudflare** (commit message will start "Merge pull request" and name this branch). Doesn't block the server-function deploys.
 
 ## Before You Approve This
