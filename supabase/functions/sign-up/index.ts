@@ -49,24 +49,15 @@ import { scopedCorsHeaders } from '../_shared/cors.ts';
 import { getValidatedAppUrl } from '../_shared/appUrl.ts';
 import { isAlreadyRegisteredError } from '../_shared/authErrors.ts';
 import { serverError } from '../_shared/errorReporting.ts';
+// The Terms/Privacy versions a signup is recorded as having agreed to
+// (spec 0047); kept equal to the app's by src/lib/legalVersionsParity.test.js.
+import { PRIVACY_VERSION, TOS_VERSION } from '../_shared/legalVersions.ts';
+import { PASSWORD_BREACHED_ERROR, isPasswordPwned, passwordLengthError } from '../_shared/passwordPolicy.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
 const MAX_FIRST_NAME_LENGTH = 100; // mirrors Register.jsx's existing maxLength
-const MIN_PASSWORD_LENGTH = 8;
-const MAX_PASSWORD_LENGTH = 128;
-
-// The "Last updated" strings a signup is recorded as having agreed to
-// (spec 0047). Deliberately this function's own copy, not something the
-// client sends — a modified client shouldn't be able to claim it agreed
-// to a different version than what's actually live. Must be kept in sync
-// by hand with TOS_LAST_UPDATED (src/lib/termsOfServiceContent.js) and
-// PRIVACY_POLICY_LAST_UPDATED (src/lib/privacyPolicyContent.js) — this
-// Edge Function runs on Deno and can't share an import with the Vite
-// frontend bundle.
-const TOS_VERSION = 'July 10, 2026';
-const PRIVACY_VERSION = 'November 20, 2026';
 
 // Rate limits (see check_and_record_rate_limits, migration 0039). Shared
 // across both 'signup' and 'resend' actions for the same key — a
@@ -107,39 +98,6 @@ function getRequestIp(req: Request): string {
   if (!forwardedFor) return 'unknown';
   const parts = forwardedFor.split(',').map((p) => p.trim()).filter(Boolean);
   return parts[parts.length - 1] || 'unknown';
-}
-
-// Best-effort check against the Have I Been Pwned "Pwned Passwords"
-// range API (k-anonymity: only a 5-character SHA-1 prefix is sent, never
-// the password or its full hash) — a partial substitute for the
-// leaked-password protection Supabase's own dashboard may otherwise
-// enforce on the public signup surface, which admin.generateLink()
-// bypasses (see this file's header comment). Fails OPEN (treats a
-// network/API error as "not known to be pwned") rather than blocking
-// signup entirely if a third-party service hiccups — a leaked-password
-// check that occasionally misses is a much smaller risk than signup
-// going down whenever HIBP is slow or unreachable.
-async function isPasswordPwned(password: string): Promise<boolean> {
-  try {
-    const bytes = new TextEncoder().encode(password);
-    const digest = await crypto.subtle.digest('SHA-1', bytes);
-    const hashHex = Array.from(new Uint8Array(digest))
-      .map((b) => b.toString(16).padStart(2, '0'))
-      .join('')
-      .toUpperCase();
-    const prefix = hashHex.slice(0, 5);
-    const suffix = hashHex.slice(5);
-
-    const res = await fetch(`https://api.pwnedpasswords.com/range/${prefix}`, {
-      headers: { 'Add-Padding': 'true' },
-    });
-    if (!res.ok) return false;
-    const body = await res.text();
-    return body.split('\n').some((line) => line.split(':')[0]?.trim() === suffix);
-  } catch (err) {
-    console.error('isPasswordPwned check failed (failing open):', (err as Error).message);
-    return false;
-  }
 }
 
 // Row shape returned by the get_auth_user_confirmation_state() RPC.
@@ -233,21 +191,14 @@ Deno.serve(async (req) => {
         : undefined;
 
     if (action === 'signup') {
-      if (typeof password !== 'string' || password.length < MIN_PASSWORD_LENGTH || password.length > MAX_PASSWORD_LENGTH) {
-        // Not an enumeration concern — this is rejecting the request's
-        // own shape, not conditioned on whether the email exists.
-        return jsonResponse(
-          { error: `Password must be between ${MIN_PASSWORD_LENGTH} and ${MAX_PASSWORD_LENGTH} characters` },
-          400,
-          cors,
-        );
+      // Not an enumeration concern — this is rejecting the request's
+      // own shape, not conditioned on whether the email exists.
+      const lengthError = passwordLengthError(password);
+      if (lengthError) {
+        return jsonResponse({ error: lengthError }, 400, cors);
       }
-      if (await isPasswordPwned(password)) {
-        return jsonResponse(
-          { error: 'This password has appeared in a data breach. Please choose a different password.' },
-          400,
-          cors,
-        );
+      if (await isPasswordPwned(password as string)) {
+        return jsonResponse({ error: PASSWORD_BREACHED_ERROR }, 400, cors);
       }
       // Server-side enforcement of the signup consent gate (spec 0047) —
       // the Register.jsx checkbox/disabled-button is the normal path, but
