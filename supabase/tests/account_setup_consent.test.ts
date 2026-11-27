@@ -9,8 +9,9 @@
 //     unconfirmed account has no normal way to sign in, so this can't be
 //     run as that account; it's a wording check on the newest migration
 //     that defines each function (spec 0086, Before You Approve #9).
-//   * AC16: after the migration, no unconfirmed account has a password and
-//     every test/demo fixture account has consent recorded.
+//   * AC16: after the migration, no unconfirmed account (other than test
+//     scratch users and accounts under an hour old) has a password, and
+//     every allowlisted test/demo fixture account has consent recorded.
 //
 // Two scratch users are created and signed in once for the whole file
 // (Supabase Auth's sign-in limit, see co_owner_access.test.ts). Each check
@@ -215,16 +216,57 @@ for (const fn of ['claim_pending_co_owner_invites', 'claim_pending_sitter_invite
   });
 }
 
+// AC16 checks only what migration 0064 is responsible for, not a global
+// invariant over shared dev. Other test files deliberately create the very
+// accounts these checks forbid (finish-account-setup/index.test.ts makes an
+// unconfirmed account with a password; invite_emails.test.ts and others set
+// scratch users to account_type 'test' without consent; the sign-up tests
+// create unconfirmed accounts), dev's public sign-up is open, and the
+// edge-functions CI job has no concurrency group. A whole-project scan
+// would flake whenever another run is in flight or a killed run left
+// scratch users behind.
+
+// The fixed fixture accounts on the allowlist: every address
+// classify_account_type() maps to 'test' or 'demo' (newest definition:
+// migration 0053). Migration 0064 fills consent for exactly these. Keep in
+// step with any later allowlist migration.
+const ALLOWLIST_FIXTURE_EMAILS = [
+  'test1@wyskerwatch.com',
+  'test2@wyskerwatch.com',
+  'test3@wyskerwatch.com',
+  'test4@wyskerwatch.com',
+  'coowner1@wyskerwatch.com',
+  'coowner2@wyskerwatch.com',
+  'petsitter1@wyskerwatch.com',
+  'petsitter2@wyskerwatch.com',
+  'demo1@wyskerwatch.com',
+];
+
+// Addresses this repo's Deno tests create for themselves
+// (_shared/testHelpers.ts createScratchUser and every scratchEmail helper
+// use `ci-scratch-<time>-...@wyskerwatch.com`).
+const SCRATCH_EMAIL = /^ci-scratch-.*@wyskerwatch\.com$/i;
+
+// Only accounts older than this are checked by the password half. Excluding
+// the scratch pattern covers this repo's tests; the age cut-off also covers
+// anything another in-flight run (or a sign-up on dev's open page) made
+// after the migration ran, which 0064's one-time wipe can't have touched.
+const MIN_ACCOUNT_AGE_MS = 60 * 60 * 1000;
+
 Deno.test('AC16: no unconfirmed account has a password', async () => {
   // listUsers shows confirmation but not passwords; email_has_password()
   // (server-only, migration 0020) answers the password half.
   const admin = adminClient();
+  const cutoff = Date.now() - MIN_ACCOUNT_AGE_MS;
   const unconfirmed: string[] = [];
   for (let page = 1; ; page += 1) {
     const { data, error } = await admin.auth.admin.listUsers({ page, perPage: 1000 });
     if (error) throw new Error(`listUsers failed: ${error.message}`);
     for (const user of data.users) {
-      if (!user.email_confirmed_at && user.email) unconfirmed.push(user.email);
+      if (user.email_confirmed_at || !user.email) continue;
+      if (SCRATCH_EMAIL.test(user.email)) continue;
+      if (new Date(user.created_at).getTime() > cutoff) continue;
+      unconfirmed.push(user.email);
     }
     if (data.users.length < 1000) break;
   }
@@ -238,11 +280,14 @@ Deno.test('AC16: no unconfirmed account has a password', async () => {
 });
 
 Deno.test('AC16: every test/demo fixture account has consent recorded', async () => {
+  // Only the fixed allowlist accounts; scratch users other tests set to
+  // 'test' are not fixtures. An address with no account on this project
+  // simply returns no row and is skipped.
   const { data, error } = await adminClient()
     .from('profiles')
-    .select('email, account_type')
-    .in('account_type', ['test', 'demo'])
-    .is('terms_accepted_at', null);
+    .select('email, account_type, terms_accepted_at')
+    .in('email', ALLOWLIST_FIXTURE_EMAILS);
   if (error) throw new Error(`profiles read failed: ${error.message}`);
-  assertEquals(data, [], 'test/demo accounts with no consent recorded');
+  const missing = (data ?? []).filter((row) => row.terms_accepted_at === null).map((row) => row.email);
+  assertEquals(missing, [], 'allowlisted fixture accounts with no consent recorded');
 });
