@@ -11,6 +11,9 @@
 //     index.ts answers 403.
 //   - A sitter still gets the pet during the sit (today's behavior), but
 //     not its owner-only medications.
+//   - Medications (spec 0087): only current ones, i.e. switched on and not
+//     ended before today on the caller's calendar. A switched-on med whose
+//     end date was yesterday is left out; one ending today is kept.
 //   - Check-ins come only from the 30-day window ending today on the
 //     caller's calendar, with only the 11 counted attributes.
 //   - Weight (spec 0081) comes from weight observations of both kinds
@@ -154,6 +157,17 @@ Deno.test('ask-vet-assistant context loaders (spec 0080)', async (t) => {
     const { error: medError } = await owner.client.from('medications').insert([
       { pet_id: sharedPet, created_by: owner.userId, name: 'Ctx Active Med', active: true },
       { pet_id: sharedPet, created_by: owner.userId, name: 'Ctx Stopped Med', active: false },
+      // Spec 0087: switched on, but its end date was yesterday on the
+      // owner's calendar, so it is no longer current.
+      {
+        pet_id: sharedPet, created_by: owner.userId, name: 'Ctx Ended Med', active: true,
+        start_date: today(-10), end_date: today(-1),
+      },
+      // Switched on and ends today: still current.
+      {
+        pet_id: sharedPet, created_by: owner.userId, name: 'Ctx Ends Today Med', active: true,
+        start_date: today(-20), end_date: today(0),
+      },
     ]);
     if (medError) throw new Error(`medication insert failed: ${medError.message}`);
 
@@ -181,11 +195,18 @@ Deno.test('ask-vet-assistant context loaders (spec 0080)', async (t) => {
     await t.step('sitter still gets the sat pet during the sit, but not its medications', async () => {
       const pet = await loadPet(sitter.client, sharedPet);
       assertEquals(pet?.id, sharedPet, 'sitter can ask about the pet they sit for');
-      assertEquals(await loadActiveMedications(sitter.client, sharedPet), [], 'medications stay owner-only');
+      assertEquals(await loadActiveMedications(sitter.client, sharedPet, today(0)), [], 'medications stay owner-only');
     });
 
     await t.step('stranger and logged-out caller get null for the pet (AC2)', async () => {
       assertEquals(await loadPet(stranger.client, sharedPet), null);
+      assertEquals(await loadActiveMedications(stranger.client, sharedPet, today(0)), [], 'stranger gets no medications');
+      const anonMeds = await loadActiveMedications(loggedOut, sharedPet, today(0)).then(
+        (meds) => ({ meds, error: null as string | null }),
+        (err: Error) => ({ meds: [], error: err.message }),
+      );
+      assertEquals(anonMeds.meds, [], 'logged-out caller gets no medications');
+      if (anonMeds.error) assert(anonMeds.error.includes('permission denied'), `unexpected error: ${anonMeds.error}`);
       // A logged-out caller never reaches context.ts (index.ts answers 401
       // first). If it did, the database refuses it outright: the anon role
       // can't run the access-rule helpers (migration 0059), so the read
@@ -201,14 +222,21 @@ Deno.test('ask-vet-assistant context loaders (spec 0080)', async (t) => {
       assertEquals(await loadTrendsSummaryInputs(stranger.client, sharedPet, '7D', 'UTC'), null);
     });
 
-    await t.step('owner and co-owner get the pet and only its active medications', async () => {
+    await t.step('owner and co-owner get the pet and only its current medications (spec 0087)', async () => {
       for (const user of [owner, coOwner]) {
         const pet = await loadPet(user.client, sharedPet);
         assertEquals(pet?.name, 'Ctx Shared Pet');
-        assertEquals(await loadActiveMedications(user.client, sharedPet), [
+        // Newest start first; the med that ended yesterday and the switched-off
+        // one are left out.
+        assertEquals(await loadActiveMedications(user.client, sharedPet, today(0)), [
           { name: 'Ctx Active Med', dosage: null, frequency: null, active: true },
+          { name: 'Ctx Ends Today Med', dosage: null, frequency: null, active: true },
         ]);
       }
+      // "Today" is the caller's: passed tomorrow's date, the med
+      // ending today has ended too.
+      const later = (await loadActiveMedications(owner.client, sharedPet, today(1))).map((m) => m.name);
+      assertEquals(later, ['Ctx Active Med']);
     });
 
     await t.step('check-ins: only the caller-timezone 30-day window, only counted attributes', async () => {

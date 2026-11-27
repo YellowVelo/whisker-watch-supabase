@@ -105,6 +105,7 @@ import {
   type TaskRequest,
 } from './prompts.ts';
 import { cleanBloodworkAnswer } from './bloodwork.ts';
+import { dateStrInTimezone } from '../_shared/checkinRules.ts';
 import {
   callerOwnsPet,
   loadActiveMedications,
@@ -290,8 +291,9 @@ async function buildPrompt(
     case 'pet_chat': {
       const pet = await loadVisiblePet(client, req.pet_id);
       if (!pet) return { reply: jsonResponse(FORBIDDEN_PET, 403) };
+      const timezone = await loadCallerTimezone(client, userId);
       const [medications, baseline] = await Promise.all([
-        loadActiveMedications(client, req.pet_id),
+        loadActiveMedications(client, req.pet_id, dateStrInTimezone(timezone, 0)),
         loadBaseline(client, req.pet_id),
       ]);
       return {
@@ -309,7 +311,7 @@ async function buildPrompt(
       const checkIns = await loadRecentCheckIns(client, req.pet_id, timezone);
       if (!hasEnoughCheckIns(checkIns)) return { reply: jsonResponse({ not_enough_data: true }) };
       const [medications, baseline, weights] = await Promise.all([
-        loadActiveMedications(client, req.pet_id),
+        loadActiveMedications(client, req.pet_id, dateStrInTimezone(timezone, 0)),
         loadBaseline(client, req.pet_id),
         loadWeights(client, req.pet_id),
       ]);
