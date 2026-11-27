@@ -86,10 +86,10 @@ psql "$RESTORE_TEST_DB_URL" -v ON_ERROR_STOP=1 -q -c "
 # run's backup. auth's own FK cascades clear identities/sessions/etc.
 psql "$RESTORE_TEST_DB_URL" -v ON_ERROR_STOP=1 -q -c "DELETE FROM auth.users;"
 
-# Two migrations refuse to run until a deploy marker says that
-# environment's frontend is live: 0055 (spec 0071) and 0061 (spec 0081).
-# The scratch database has no frontend to wait for, so mark both before
-# replaying. Same snippet as those migrations' headers. The private schema
+# Three migrations refuse to run until a deploy marker says that
+# environment's frontend is live: 0055 (spec 0071), 0061 (spec 0081) and
+# 0063 (spec 0085). The scratch database has no frontend to wait for, so
+# mark all three before replaying. Same snippet as those migrations' headers. The private schema
 # isn't reset above, so each line is safe to rerun on a later drill.
 echo "== Setting deploy markers for gated migrations =="
 psql "$RESTORE_TEST_DB_URL" -v ON_ERROR_STOP=1 -q -c "
@@ -101,7 +101,8 @@ psql "$RESTORE_TEST_DB_URL" -v ON_ERROR_STOP=1 -q -c "
   REVOKE ALL ON SCHEMA private FROM anon, authenticated;
   REVOKE ALL ON private.deploy_markers FROM anon, authenticated;
   INSERT INTO private.deploy_markers (key)
-  VALUES ('spec_0071_frontend_live'), ('spec_0081_frontend_live')
+  VALUES ('spec_0071_frontend_live'), ('spec_0081_frontend_live'),
+         ('spec_0085_frontend_live')
   ON CONFLICT (key) DO NOTHING;
 "
 
