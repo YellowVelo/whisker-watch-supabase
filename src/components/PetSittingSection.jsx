@@ -94,8 +94,10 @@ export default function PetSittingSection({ petId = undefined }) {
   const [dateError, setDateError] = useState(null);
   const { toast } = useToast();
 
-  const load = async () => {
-    setLoading(true);
+  // quiet: refresh without the full-section "Loading..." swap, so an open
+  // dialog stays mounted (used after a partial save failure).
+  const load = async ({ quiet = false } = {}) => {
+    if (!quiet) setLoading(true);
     const [pets, sitData] = await Promise.all([
       entities.Pet.list('-created_at'),
       entities.PetSit.list('-start_date', 50),
@@ -125,7 +127,7 @@ export default function PetSittingSection({ petId = undefined }) {
       ? sitData.filter(s => (s.pet_ids || []).includes(petId))
       : sitData;
     setSits(filtered);
-    setLoading(false);
+    if (!quiet) setLoading(false);
   };
 
   const loadSitLogs = async (sitId) => {
@@ -191,7 +193,8 @@ export default function PetSittingSection({ petId = undefined }) {
         // The sit exists even though a later step failed: a retry updates it.
         // Reload so the new sit shows in the list: closing the dialog and
         // tapping New Pet Sit again then can't create a duplicate (FR8).
-        if (result.sit) { setEditing(result.sit); load(); }
+        // Quietly, so the open dialog isn't unmounted behind the toast.
+        if (result.sit) { setEditing(result.sit); load({ quiet: true }); }
         toast({ variant: 'destructive', title: "Couldn't save this pet sit", description: 'Please try again.' });
         return;
       }
