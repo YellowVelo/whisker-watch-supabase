@@ -409,13 +409,16 @@ test1('AC4: a start year of 2101 typed on the keyboard shows the date message an
   try {
     const { dialog, startInput, endInput } = await openNewSitDialog(page);
 
-    // focus() rather than click(): a click opens the calendar (openDatePicker).
-    await startInput.focus();
+    // Spec 0088 AC1: a real click on the box puts the cursor there (it no
+    // longer opens the calendar), so the date can be typed. Clicked on the
+    // month (the left of the box): Chromium sends a click on the empty space
+    // to the right of the date to the year part instead.
+    await startInput.click({ position: { x: 20, y: 22 } });
     await page.keyboard.type('01012101');
-    await endInput.focus();
-    await page.keyboard.type('01022026');
+    await endInput.click({ position: { x: 20, y: 22 } });
+    await page.keyboard.type('11282026');
     await expect(startInput).toHaveValue('2101-01-01');
-    await expect(endInput).toHaveValue('2026-01-02');
+    await expect(endInput).toHaveValue('2026-11-28');
 
     await dialog.getByRole('button', { name: 'Create & Generate Checklist' }).click();
     await expect(dialog.getByText('Please enter a real date with a 4-digit year.')).toBeVisible();
@@ -427,17 +430,19 @@ test1('AC4: a start year of 2101 typed on the keyboard shows the date message an
   }
 });
 
-// AC12 wiring (the real calendar is drawn outside the page, so Lynn checks
-// that by hand): clicking the middle of each date box calls showPicker(), and
-// a showPicker() that throws causes no page error. Then AC5/AC6 through the
-// real dialog, ending with a 30-day sit that saves with 31 checklist days.
-test1('AC5/AC6/AC12: date box clicks open the calendar; reversed and 31-day sits are refused; 30 days saves with 31 rows', async ({ page }) => {
+// Spec 0088 AC3/AC4/AC6 (the real calendar is drawn outside the page, so
+// Lynn checks that it appears by hand): with showPicker() stubbed, clicking a
+// date box never calls it, each calendar button calls it once for its own
+// box, and a showPicker() that throws causes no page error and typing still
+// works. Then spec 0085 AC5/AC6 through the real dialog, ending with a 30-day
+// sit that saves with 31 checklist days.
+test1('0088 AC3/AC4/AC6 + 0085 AC5/AC6: only the calendar button opens the calendar; reversed and 31-day sits are refused; 30 days saves with 31 rows', async ({ page }) => {
   await page.addInitScript(() => {
     const w = /** @type {any} */ (window);
-    w.__showPickerCalls = 0;
+    w.__showPickerCalls = [];
     w.__showPickerThrows = false;
     HTMLInputElement.prototype.showPicker = function showPicker() {
-      w.__showPickerCalls += 1;
+      w.__showPickerCalls.push(this.id);
       if (w.__showPickerThrows) throw new DOMException('not allowed', 'NotAllowedError');
     };
   });
@@ -450,16 +455,32 @@ test1('AC5/AC6/AC12: date box clicks open the calendar; reversed and 31-day sits
   try {
     const { dialog, startInput, endInput } = await openNewSitDialog(page);
     await dialog.getByPlaceholder('e.g. Sarah').fill(sitterName);
+    const startButton = dialog.getByRole('button', { name: 'Choose start date', exact: true });
+    const endButton = dialog.getByRole('button', { name: 'Choose end date', exact: true });
 
-    await startInput.click(); // Playwright clicks the centre of the box
-    await expect.poll(pickerCalls).toBe(1);
-    await endInput.click();
-    await expect.poll(pickerCalls).toBe(2);
-    await page.evaluate(() => { /** @type {any} */ (window).__showPickerThrows = true; });
+    // AC4: clicking inside each box (left part and centre) opens nothing.
+    await startInput.click({ position: { x: 20, y: 22 } });
     await startInput.click();
-    await expect.poll(pickerCalls).toBe(3);
+    await endInput.click({ position: { x: 20, y: 22 } });
+    await endInput.click();
+    expect(await pickerCalls()).toEqual([]);
+
+    // AC3: each button opens the calendar for its own box, once.
+    await startButton.click();
+    await expect.poll(pickerCalls).toEqual(['sit-start-date']);
+    await endButton.click();
+    await expect.poll(pickerCalls).toEqual(['sit-start-date', 'sit-end-date']);
+
+    // AC6: a calendar that can't open causes no error, and typing still works.
+    await page.evaluate(() => { /** @type {any} */ (window).__showPickerThrows = true; });
+    await endButton.click();
+    await expect.poll(pickerCalls).toEqual(['sit-start-date', 'sit-end-date', 'sit-end-date']);
+    await endInput.click({ position: { x: 20, y: 22 } });
+    await page.keyboard.type('11282026');
+    await expect(endInput).toHaveValue('2026-11-28');
     await page.evaluate(() => { /** @type {any} */ (window).__showPickerThrows = false; });
     expect(pageErrors).toEqual([]);
+    await expect(dialog.getByRole('alert')).toHaveCount(0);
 
     const save = dialog.getByRole('button', { name: 'Create & Generate Checklist' });
 
@@ -492,6 +513,116 @@ test1('AC5/AC6/AC12: date box clicks open the calendar; reversed and 31-day sits
   } finally {
     await deleteSitsCreatedSince(before);
   }
+});
+
+// Spec 0088 AC2: a saved sit's wrong year is fixed by clicking the year and
+// typing over it. Dev's 0063 rule stops a 6-digit year being planted, so the
+// sit is seeded a year early and both years are retyped (changing only the
+// end year would break the 30-day rule). Lynn's 272026 sit is checked on prod.
+test1('0088 AC2: clicking the year in a saved sit\'s dates and typing a new one saves the new dates', async ({ page }) => {
+  const { supabase, userId } = await test1Client();
+  const sitterName = `E2E Retype Year Sit ${RUN_ID}`;
+  const { data: sit, error } = await supabase
+    .from('pet_sits')
+    .insert({
+      created_by: userId,
+      pet_ids: [petNoCheckinId],
+      sitter_name: sitterName,
+      start_date: '2025-11-20',
+      end_date: '2025-11-28',
+    })
+    .select('id')
+    .single();
+  if (error) throw error;
+
+  try {
+    await page.goto('/pet-sitter');
+    const card = sitCard(page, sitterName);
+    await expect(card).toBeVisible({ timeout: 15000 });
+    await card.getByRole('button', { name: 'Edit sit', exact: true }).click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog.getByText('Edit Pet Sitting Period')).toBeVisible();
+    const startInput = dialog.locator('#sit-start-date');
+    const endInput = dialog.locator('#sit-end-date');
+    await expect(endInput).toHaveValue('2025-11-28');
+
+    // The year is the third part of MM/DD/YYYY; click on it, then type.
+    for (const input of [startInput, endInput]) {
+      const yearX = await input.evaluate((el) => {
+        const style = getComputedStyle(el);
+        const ctx = document.createElement('canvas').getContext('2d');
+        ctx.font = style.font;
+        const padLeft = parseFloat(style.paddingLeft) + parseFloat(style.borderLeftWidth);
+        return padLeft + ctx.measureText('11/20/').width + ctx.measureText('20').width;
+      });
+      await input.click({ position: { x: yearX, y: 22 } });
+      await page.keyboard.type('2026');
+    }
+    await expect(startInput).toHaveValue('2026-11-20');
+    await expect(endInput).toHaveValue('2026-11-28');
+
+    await dialog.getByRole('button', { name: 'Save Changes' }).click();
+    await expect(dialog).toHaveCount(0, { timeout: 15000 });
+    await expect(card.getByText('Nov 20 – Nov 28, 2026')).toBeVisible({ timeout: 15000 });
+    const { data: saved, error: readError } = await supabase
+      .from('pet_sits').select('start_date, end_date').eq('id', sit.id).single();
+    if (readError) throw readError;
+    expect(saved).toEqual({ start_date: '2026-11-20', end_date: '2026-11-28' });
+  } finally {
+    const { error: cleanupError } = await supabase.from('pet_sits').delete().eq('id', sit.id);
+    if (cleanupError) console.warn(`cleanup: could not delete pet sit ${sit.id}: ${cleanupError.message}`);
+  }
+});
+
+// Spec 0088 AC5: each calendar button has a 44px tap area and its approved label.
+test1('0088 AC5: the calendar buttons are at least 44x44px with the approved labels', async ({ page }) => {
+  const { dialog } = await openNewSitDialog(page);
+  for (const label of ['Choose start date', 'Choose end date']) {
+    const button = dialog.getByRole('button', { name: label, exact: true });
+    await expect(button).toHaveAttribute('aria-label', label);
+    await expect(button).toHaveAttribute('type', 'button');
+    const box = await button.boundingBox();
+    expect(box, label).not.toBeNull();
+    expect(box?.width, label).toBeGreaterThanOrEqual(44);
+    expect(box?.height, label).toBeGreaterThanOrEqual(44);
+  }
+});
+
+// Spec 0088 AC7: at phone width the two date boxes sit side by side with
+// their buttons, nothing overlaps, and the full date text isn't clipped.
+test1('0088 AC7: at 375px both date boxes and their calendar buttons fit without overlap or clipped dates', async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 375, height: 812 });
+  const { dialog, startInput, endInput } = await openNewSitDialog(page);
+  // The widest dates (two-digit month and day).
+  await startInput.fill('2026-12-28');
+  await endInput.fill('2026-12-30');
+
+  const startBox = await startInput.boundingBox();
+  const endBox = await endInput.boundingBox();
+  const startButton = await dialog.getByRole('button', { name: 'Choose start date', exact: true }).boundingBox();
+  const endButton = await dialog.getByRole('button', { name: 'Choose end date', exact: true }).boundingBox();
+  for (const [name, b] of [['start box', startBox], ['end box', endBox], ['start button', startButton], ['end button', endButton]]) {
+    expect(b, name).not.toBeNull();
+    expect(b.x, `${name} left edge`).toBeGreaterThanOrEqual(0);
+    expect(b.x + b.width, `${name} right edge`).toBeLessThanOrEqual(375 + 0.5);
+  }
+  // Side by side, on the same row.
+  expect(Math.abs(startBox.y - endBox.y)).toBeLessThan(1);
+  expect(overlaps(startBox, endBox), 'the two boxes overlap').toBe(false);
+  expect(overlaps(startButton, endButton), 'the two buttons overlap').toBe(false);
+  expect(overlaps(startButton, endBox), 'start button covers the end box').toBe(false);
+  expect(overlaps(endButton, startBox), 'end button covers the start box').toBe(false);
+  // Each button sits at the right end inside its own box.
+  for (const [name, button, box] of [['start', startButton, startBox], ['end', endButton, endBox]]) {
+    expect(button.x, `${name} button inside its box`).toBeGreaterThanOrEqual(box.x - 0.5);
+    expect(button.x + button.width, `${name} button inside its box`).toBeLessThanOrEqual(box.x + box.width + 0.5);
+  }
+  for (const [name, input] of [['start', startInput], ['end', endInput]]) {
+    const { scrollWidth, clientWidth } = await input.evaluate((el) => ({ scrollWidth: el.scrollWidth, clientWidth: el.clientWidth }));
+    expect(scrollWidth, `${name} date text clipped`).toBeLessThanOrEqual(clientWidth);
+  }
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(375);
+  await testInfo.attach('sit-dates-375', { body: await dialog.screenshot(), contentType: 'image/png' });
 });
 
 test1('AC11: Share, Edit and Delete on a sit are each at least 44x44px', async ({ page }) => {

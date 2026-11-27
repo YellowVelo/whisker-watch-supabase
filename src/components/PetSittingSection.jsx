@@ -409,13 +409,6 @@ export default function PetSittingSection({ petId = undefined }) {
   );
 }
 
-// One sit's header and (when expanded) its instructions and daily checklist.
-// Exported so it can be render-tested without the page's data load (spec 0085).
-// The dates go through sitDates.js, so an unusable saved date shows
-// "Dates not set" and builds no checklist instead of crashing the page.
-// Spec 0087: only current foods and meds (isCurrentItem on todayStr, the
-// viewer's calendar) are listed or drive the AM/PM Meds buttons, on owners'
-// and sitters' views alike.
 // Spec 0088: the sit dialog's Start/End Date boxes. Typing goes into the box;
 // the calendar button beside each one opens the browser's calendar.
 export function SitDateFields({ startDate, endDate, onDateChange }) {
@@ -447,6 +440,13 @@ export function SitDateFields({ startDate, endDate, onDateChange }) {
   );
 }
 
+// One sit's header and (when expanded) its instructions and daily checklist.
+// Exported so it can be render-tested without the page's data load (spec 0085).
+// The dates go through sitDates.js, so an unusable saved date shows
+// "Dates not set" and builds no checklist instead of crashing the page.
+// Spec 0087: only current foods and meds (isCurrentItem on todayStr, the
+// viewer's calendar) are listed or drive the AM/PM Meds buttons, on owners'
+// and sitters' views alike.
 export function SitCard({
   sit, sitPets, logs, expanded, medicationsByPet, foodsByPet, vaccinationsByPet, todayStr,
   onToggleExpand, onInvite, onEdit, onDelete, onToggleBool, onToggleTask,
