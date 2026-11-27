@@ -23,8 +23,9 @@
 6. **Too-short years were worse than they looked.** A year like 0202 to 2026 is about 667,000 days. The page would try to create that many checklist rows in one go and draw that many on screen. The 30-day limit caps it at 31.
 7. **"End before start" was silently accepted.** The date library in use (date-fns v3) quietly lists the days backwards instead of complaining, so a reversed sit saved and showed a backwards checklist. Now refused.
 8. **Desktop typing can't be fully stopped in the box itself.** I'll set the date boxes' earliest/latest allowed dates, which stops the date picker and usually limits the year to 4 digits, but browsers differ. The check on Save (and the database rule behind it) is the real guard.
-9. **Small extra fix you approved:** the Share, Edit and Delete icons on each sit are 14px and unlabeled. They become the shared `IconButton` (44px tap area, screen-reader label).
-10. **Self-review:** no duplicate date-checking helper exists in the app (searched; the only `min`/`max` date use is onboarding's birthday field). No new debt. One existing gap noticed but not fixed: if loading the sits fails, the page stays on "Loading..." forever (listed under Findings). The sitter's own view uses this same component, so sitters get the crash fix too.
+9. **Calendar opens on click (added 2026-11-26 at your request):** clicking anywhere in a date box opens the browser's own calendar, not just the small icon at its right edge. Typing still works, so the Save check stays the real guard. A custom calendar dropdown was considered and left out: the app has no calendar component yet, so it would be its own spec.
+10. **Small extra fix you approved:** the Share, Edit and Delete icons on each sit are 14px and unlabeled. They become the shared `IconButton` (44px tap area, screen-reader label).
+11. **Self-review:** no duplicate date-checking helper exists in the app (searched; the only `min`/`max` date use is onboarding's birthday field). No new debt. One existing gap noticed but not fixed: if loading the sits fails, the page stays on "Loading..." forever (listed under Findings). The sitter's own view uses this same component, so sitters get the crash fix too.
 
 ## Copy for approval
 
@@ -44,6 +45,7 @@
 4. If saving fails for any other reason (network, database), the owner sees a "Couldn't save" message, the button stops saying "Saving…", the dialog stays open with what they typed, and the error is reported to Sentry.
 5. The database itself refuses the same impossible dates, so no other path (old open tab, future screen, script) can store one.
 6. Each sit's Share, Edit and Delete buttons meet the 44px tap size and have screen-reader labels.
+7. Clicking or tapping anywhere in the Start or End date box opens the calendar, so owners can pick a date instead of typing one. Typing still works.
 
 ## Acceptance Criteria
 
@@ -58,6 +60,7 @@
 - **AC9** 0063 stops with a clear message if the frontend marker is missing or any existing sit breaks the rule, and changes nothing in either case.
 - **AC10** Account deletion and the ownership hand-off still work for an owner with sits (no regression from the new rule).
 - **AC11** Share, Edit and Delete on a sit are each at least 44×44px and have the labels "Share with sitter", "Edit sit", "Delete sit".
+- **AC12** On desktop Chrome, clicking the middle of the Start or End date box opens the browser's calendar. Picking a day fills the box. In a browser without this ability, clicking does nothing extra and the page shows no error.
 
 ## Test Plan
 
@@ -69,6 +72,7 @@
 - AC9 → manual on dev during the build: run 0063 without the marker (refused), with a planted bad row inserted before the rule (refused, row listed), then clean and run. Not automated: needs to run the migration itself.
 - AC10 → existing `supabase/tests/account_deletion.test.ts` and `delete-account`/`delete-pet` `index.test.ts` must stay green after 0063 is on dev.
 - AC11 → **Playwright**, measure the three buttons' size on one sit in `pet-sitter.spec.js`.
+- AC12 → **Vitest** render test: clicking a date input calls its `showPicker()` (mocked), and a mocked `showPicker` that throws, or one that's missing, causes no error. The real calendar popup can't be checked by Playwright, because it's drawn by the browser outside the page. Lynn's desktop check after promotion is the real-world test.
 - **Order safety:** the new Playwright test creates nothing (Save is refused) and checks the sit count before and after, so it can't affect later tests.
 - **Seeding/access constraints:** bad saved dates can't be seeded once 0063 is on dev, which is why AC1 is a render test with mocked data.
 - QA plan: add these cases to the Pet Sitter section of `docs/testing/QA_Test_Plan.md` in the same PR.
@@ -89,6 +93,7 @@ None provided. No layout change: messages appear under the date fields in the ex
   - Header and checklist use the helpers above, so the day formats at ~311/318 only ever see valid days.
   - `handleSave`: run `validateSitDates` first and show the message inline; wrap the create/update + `ensureLogsForSit` in `try/catch/finally` (`setSaving(false)` in `finally`); on error show the destructive toast and call `reportClientError(err, { feature: 'pet-sitting', note: editing ? 'update' : 'create' })`. Clear the message when either date changes.
   - Date inputs get `min={SIT_MIN_DATE}` / `max={SIT_MAX_DATE}`, and the end input `min={form.start_date || SIT_MIN_DATE}`.
+  - Both date inputs get `onClick={openDatePicker}`, a small helper in `sitDates.js`: `e.currentTarget.showPicker?.()` inside `try/catch`, since some browsers don't have `showPicker` and it throws if called without a click. Mouse only: keyboard focus and typing are unchanged. No new library or component.
   - Share/Edit/Delete become `IconButton` (`variant="plain"`, 44px, `aria-label`s from AC11), keeping `stopPropagation`.
 - **Migration `0063_pet_sit_date_check.sql`:**
   - Gate: refuse unless `private.deploy_markers` has `spec_0085_frontend_live` (same pattern and header snippet as 0055/0061).
