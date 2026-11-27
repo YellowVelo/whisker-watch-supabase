@@ -1,6 +1,6 @@
 # 0085_Pet_Sit_Date_Validation_And_Crash_Fix_Specification_v1
 
-**Status:** Draft, waiting for Lynn's review. No code written.
+**Status:** Approved by Lynn 2026-11-26, including the error copy and the click-to-open calendar. Building.
 **Date:** 2026-11-26
 **Branch:** `claude/spec-0085-sit-date-crash` (off `main` at `1ce9a31`)
 **Migration:** `0063_pet_sit_date_check.sql` (reserved)
@@ -9,7 +9,7 @@
 
 ## Lynn — what I need from you
 
-1. **Review this spec**, especially the error messages in "Copy for approval" below. Blocks all building.
+1. ~~Review this spec~~ Approved 2026-11-26.
 2. **After the frontend is promoted to production**, open Pet Sitter on prod (desktop is fine). Your bad sit will show **"Dates not set"**. Tap its pencil and enter the right dates, or tap its trash can to delete it. Blocks the migration on prod: 0063 refuses to run while any bad sit exists (see flag 3).
 3. **After merge, promote branch `main`'s build in Cloudflare** (commit message will start "Spec 0085"). Then I'll add the deploy marker and push 0063 to each project.
 
@@ -27,7 +27,7 @@
 10. **Small extra fix you approved:** the Share, Edit and Delete icons on each sit are 14px and unlabeled. They become the shared `IconButton` (44px tap area, screen-reader label).
 11. **Self-review:** no duplicate date-checking helper exists in the app (searched; the only `min`/`max` date use is onboarding's birthday field). No new debt. One existing gap noticed but not fixed: if loading the sits fails, the page stays on "Loading..." forever (listed under Findings). The sitter's own view uses this same component, so sitters get the crash fix too.
 
-## Copy for approval
+## Copy for approval (approved by Lynn 2026-11-26)
 
 | Where | Text |
 |---|---|
