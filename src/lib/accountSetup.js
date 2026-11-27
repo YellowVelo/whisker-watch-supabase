@@ -10,7 +10,7 @@ import { functionErrorMessage, reportClientError } from '@/lib/errorMonitoring';
 //
 // Both functions return a result object and never throw:
 //   getAccountSetupStatus() -> { ok: true, needsPassword, needsConsent }
-//                            | { ok: false, error }
+//                            | { ok: false, error, signedOut }
 //   finishAccountSetup(...)  -> { ok: true }
 //                            | { ok: false, error, passwordSaved, signedOut }
 // `error` is always approved copy: one of the two password messages the
@@ -29,21 +29,32 @@ const EXPECTED_ERRORS = [PASSWORD_LENGTH_ERROR, PASSWORD_BREACHED_ERROR];
 const FUNCTION_NAME = 'finish-account-setup';
 const FEATURE = 'account_setup';
 
-/** @returns {Promise<{ ok: true, needsPassword: boolean, needsConsent: boolean } | { ok: false, error: string }>} */
+/**
+ * `signedOut: true` means the server answered 401 (this browser's session
+ * is missing or no longer valid). The dead session is cleared from this
+ * browser, and the caller should send the person to /login. Not reported
+ * to Sentry: an ended session is expected, not a bug.
+ *
+ * @returns {Promise<{ ok: true, needsPassword: boolean, needsConsent: boolean } | { ok: false, error: string, signedOut: boolean }>}
+ */
 export async function getAccountSetupStatus() {
   try {
     const { data, error } = await supabase.functions.invoke(FUNCTION_NAME, { body: { action: 'status' } });
+    if (error?.context?.status === 401) {
+      await clearLocalSession();
+      return { ok: false, error: GENERIC_ERROR, signedOut: true };
+    }
     if (error || !data || typeof data.needs_password !== 'boolean' || typeof data.needs_consent !== 'boolean') {
       reportClientError(error ?? new Error('finish-account-setup status: unexpected reply'), {
         feature: FEATURE,
         note: 'Account setup status check failed',
       });
-      return { ok: false, error: GENERIC_ERROR };
+      return { ok: false, error: GENERIC_ERROR, signedOut: false };
     }
     return { ok: true, needsPassword: data.needs_password, needsConsent: data.needs_consent };
   } catch (err) {
     reportClientError(err, { feature: FEATURE, note: 'Account setup status check failed' });
-    return { ok: false, error: GENERIC_ERROR };
+    return { ok: false, error: GENERIC_ERROR, signedOut: false };
   }
 }
 
@@ -153,4 +164,37 @@ async function clearLocalSession() {
   } catch (err) {
     reportClientError(err, { feature: FEATURE, note: 'Clearing an ended session failed' });
   }
+}
+
+/**
+ * Which screen /verify-email and /accept-invite show once the link is
+ * redeemed, from getAccountSetupStatus()'s result (spec 0086):
+ *   'signedOut'   the session is gone: go to /login
+ *   'error'       the status check failed: show the generic error
+ *   'skip'        nothing left to do: go straight on (planning decision 2)
+ *   'finish'      password needed: the full finish form
+ *   'consentOnly' consent needed but no password (e.g. a password session
+ *                 was already in this browser): the existing-account
+ *                 consent copy with just the Terms checkbox
+ *
+ * @param {{ ok: boolean, needsPassword?: boolean, needsConsent?: boolean, signedOut?: boolean }} status
+ * @returns {'signedOut' | 'error' | 'skip' | 'finish' | 'consentOnly'}
+ */
+export function setupScreenFor(status) {
+  if (!status?.ok) return status?.signedOut ? 'signedOut' : 'error';
+  if (status.needsPassword) return 'finish';
+  if (status.needsConsent) return 'consentOnly';
+  return 'skip';
+}
+
+/**
+ * Where /accept-invite sends someone once they're done. A sitter invite
+ * goes to the household Pet Sitter page (a sit can cover several pets);
+ * a co-owner invite lands on Pets with that pet's card highlighted.
+ *
+ * @param {{ isSitterInvite: boolean, petId?: string | null }} args
+ */
+export function inviteDestination({ isSitterInvite, petId }) {
+  if (isSitterInvite) return '/pet-sitter';
+  return petId ? `/pets?highlight=${encodeURIComponent(petId)}` : '/';
 }

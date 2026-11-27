@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Loader2 } from 'lucide-react';
 import PasswordFields from '@/components/PasswordFields';
-import { finishAccountSetup, getAccountSetupStatus } from '@/lib/accountSetup';
+import { finishAccountSetup, getAccountSetupStatus, setupScreenFor } from '@/lib/accountSetup';
 
 // The one form that finishes an account (spec 0086): optional password,
 // the required Terms checkbox and the optional marketing checkbox. Used by
@@ -64,6 +64,10 @@ export default function FinishAccountSetupForm({ needsPassword, showMarketing, s
       const status = await getAccountSetupStatus();
       if (status.ok && !status.needsConsent) {
         onSuccess();
+        return;
+      }
+      if (setupScreenFor(status) === 'signedOut' && onSignedOut) {
+        onSignedOut();
         return;
       }
     }

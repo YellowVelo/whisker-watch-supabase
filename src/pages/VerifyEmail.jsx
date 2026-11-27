@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { supabase } from '@/api/supabaseClient';
 import AuthLayout from '@/components/AuthLayout';
 import FinishAccountSetupForm from '@/components/FinishAccountSetupForm';
-import { getAccountSetupStatus, GENERIC_ERROR } from '@/lib/accountSetup';
+import { getAccountSetupStatus, setupScreenFor, GENERIC_ERROR } from '@/lib/accountSetup';
 import { Loader2, Mail } from 'lucide-react';
 
 // Landing page for the branded signup-confirmation email (sent via the
@@ -32,6 +32,12 @@ import { Loader2, Mail } from 'lucide-react';
 // confirm call here any more. Finishing does a full-page load to '/', so
 // AuthContext runs the invite claims again now that the email is
 // confirmed (migration 0064 links invites only to confirmed accounts).
+// setupScreenFor() (accountSetup.js) picks the screen: the full finish
+// form, the consent-only form (consent missing but this browser already
+// has a password session), straight on to Home, /login if the session is
+// gone, or the generic error. A 'recovery' link's PASSWORD_RECOVERY event
+// is deliberately not redirected to /reset-password on this page
+// (passwordRecovery.js).
 const ALLOWED_TYPES = ['signup', 'recovery', 'invite'];
 
 const goHome = () => { window.location.href = '/'; };
@@ -39,8 +45,8 @@ const goToLogin = () => { window.location.href = '/login'; };
 
 export default function VerifyEmail() {
   const [searchParams] = useSearchParams();
-  const [status, setStatus] = useState('verifying'); // verifying | ready | invalid | error | done
-  const [needsPassword, setNeedsPassword] = useState(false);
+  // verifying | finish | consentOnly | invalid | error | done
+  const [status, setStatus] = useState('verifying');
 
   useEffect(() => {
     const tokenHash = searchParams.get('token_hash');
@@ -65,18 +71,18 @@ export default function VerifyEmail() {
         }
       }
 
-      const setup = await getAccountSetupStatus();
-      if (!setup.ok) {
-        setStatus('error');
-        return;
-      }
-      if (!setup.needsPassword && !setup.needsConsent) {
+      const screen = setupScreenFor(await getAccountSetupStatus());
+      if (screen === 'skip') {
         setStatus('done');
         goHome();
         return;
       }
-      setNeedsPassword(setup.needsPassword);
-      setStatus('ready');
+      if (screen === 'signedOut') {
+        setStatus('done');
+        goToLogin();
+        return;
+      }
+      setStatus(screen);
     });
   }, [searchParams]);
 
@@ -86,6 +92,8 @@ export default function VerifyEmail() {
         {/* Copy pending Lynn's approval (spec 0086 T6) */}
         <p className="text-sm text-muted-foreground text-center">
           This link is invalid or has expired. To get a new one, sign up again with the same email address.
+          If you've already finished setting up,{' '}
+          <Link to="/login" className="text-primary hover:underline">sign in</Link> instead.
         </p>
       </AuthLayout>
     );
@@ -99,7 +107,25 @@ export default function VerifyEmail() {
     );
   }
 
-  if (status === 'ready') {
+  if (status === 'consentOnly') {
+    return (
+      <AuthLayout
+        icon={Mail}
+        title="One quick thing before you continue"
+        subtitle="We need your OK on our Terms of Service and Privacy Policy. It only takes a moment."
+      >
+        <FinishAccountSetupForm
+          needsPassword={false}
+          showMarketing={false}
+          submitLabel="Continue"
+          onSuccess={goHome}
+          onSignedOut={goToLogin}
+        />
+      </AuthLayout>
+    );
+  }
+
+  if (status === 'finish') {
     return (
       <AuthLayout
         icon={Mail}
@@ -107,7 +133,7 @@ export default function VerifyEmail() {
         subtitle="Create a password and review our terms to start using Wysker Watch."
       >
         <FinishAccountSetupForm
-          needsPassword={needsPassword}
+          needsPassword
           showMarketing
           submitLabel="Finish"
           onSuccess={goHome}

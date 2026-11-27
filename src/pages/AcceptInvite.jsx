@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { supabase } from '@/api/supabaseClient';
 import AuthLayout from '@/components/AuthLayout';
 import FinishAccountSetupForm from '@/components/FinishAccountSetupForm';
-import { getAccountSetupStatus, GENERIC_ERROR } from '@/lib/accountSetup';
+import { getAccountSetupStatus, inviteDestination, setupScreenFor, GENERIC_ERROR } from '@/lib/accountSetup';
 import { Loader2, Mail } from 'lucide-react';
 
 // Landing page for the co-owner invite email (sent via the send-email
@@ -30,7 +30,12 @@ import { Loader2, Mail } from 'lucide-react';
 // set, consent recorded) skips the form and goes straight to the pet or
 // the Pet Sitter page (planning decision 2). Every exit is a full-page
 // load, so AuthContext runs the invite claims again now that the email
-// is confirmed.
+// is confirmed. setupScreenFor() and inviteDestination() (accountSetup.js)
+// make those choices: the full finish form, the consent-only form (consent
+// missing but this browser already has a password session), straight on,
+// /login if the session is gone, or the generic error. A 're-invite'
+// recovery link's PASSWORD_RECOVERY event is deliberately not redirected
+// to /reset-password on this page (passwordRecovery.js).
 //
 // `type` is 'invite' for a first-time invite, or 'recovery' when
 // invite-co-owner/index.ts is re-inviting someone who was invited before
@@ -46,8 +51,8 @@ export default function AcceptInvite() {
   const petId = searchParams.get('petId');
   const isSitterInvite = searchParams.get('role') === 'sitter';
 
-  const [status, setStatus] = useState('verifying'); // verifying | ready | invalid | error | done
-  const [needsPassword, setNeedsPassword] = useState(false);
+  // verifying | finish | consentOnly | invalid | error | done
+  const [status, setStatus] = useState('verifying');
 
   useEffect(() => {
     const tokenHash = searchParams.get('token_hash');
@@ -72,36 +77,28 @@ export default function AcceptInvite() {
         }
       }
 
-      const setup = await getAccountSetupStatus();
-      if (!setup.ok) {
-        setStatus('error');
-        return;
-      }
-      if (!setup.needsPassword && !setup.needsConsent) {
+      const screen = setupScreenFor(await getAccountSetupStatus());
+      if (screen === 'skip') {
         setStatus('done');
         handleSuccess();
         return;
       }
-      setNeedsPassword(setup.needsPassword);
-      setStatus('ready');
+      if (screen === 'signedOut') {
+        setStatus('done');
+        goToLogin();
+        return;
+      }
+      setStatus(screen);
     });
     // handleSuccess only reads searchParams-derived values.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
 
+  // Sitters go to the household Pet Sitter page (spec 0023 step 6), since a
+  // pet-sit can cover several pets; co-owners land on Pets with the pet's
+  // card scrolled into view (collapsed, spec 0023 decision).
   const handleSuccess = () => {
-    if (isSitterInvite) {
-      // The household Pet Sitter page (spec 0023 step 6) — not /pets,
-      // since that screen's own "My Pets" list only distinguishes
-      // owned/co-owned pets from sitter-only ones for the bottom-nav case
-      // (see src/lib/petsClient.js's getSitterOnlyPetIds and Pets.jsx).
-      window.location.href = '/pet-sitter';
-      return;
-    }
-    // Lands on Pets with the pet's card scrolled into view (collapsed, not
-    // expanded — spec 0023 decision) rather than the retiring standalone
-    // /pet/:petId page.
-    window.location.href = petId ? `/pets?highlight=${petId}` : '/';
+    window.location.href = inviteDestination({ isSitterInvite, petId });
   };
 
   const goToLogin = () => { window.location.href = '/login'; };
@@ -132,10 +129,28 @@ export default function AcceptInvite() {
     );
   }
 
+  if (status === 'consentOnly') {
+    return (
+      <AuthLayout
+        icon={Mail}
+        title="One quick thing before you continue"
+        subtitle="We need your OK on our Terms of Service and Privacy Policy. It only takes a moment."
+      >
+        <FinishAccountSetupForm
+          needsPassword={false}
+          showMarketing={false}
+          submitLabel="Continue"
+          onSuccess={handleSuccess}
+          onSignedOut={goToLogin}
+        />
+      </AuthLayout>
+    );
+  }
+
   return (
     <AuthLayout icon={Mail} title="Welcome to Wysker Watch" subtitle="Create a password and review our terms to finish accepting your invitation.">
       <FinishAccountSetupForm
-        needsPassword={needsPassword}
+        needsPassword
         showMarketing
         submitLabel="Continue"
         onSuccess={handleSuccess}

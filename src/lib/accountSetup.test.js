@@ -20,6 +20,8 @@ vi.mock('@/lib/errorMonitoring', async () => {
 const {
   finishAccountSetup,
   getAccountSetupStatus,
+  setupScreenFor,
+  inviteDestination,
   GENERIC_ERROR,
   PASSWORD_LENGTH_ERROR,
   PASSWORD_BREACHED_ERROR,
@@ -188,9 +190,67 @@ describe('getAccountSetupStatus', () => {
   });
 
   it('returns the generic error and reports a failure', async () => {
-    invoke.mockResolvedValue(httpError(401, { error: GENERIC_ERROR }));
-    expect(await getAccountSetupStatus()).toEqual({ ok: false, error: GENERIC_ERROR });
+    invoke.mockResolvedValue(httpError(500, { error: GENERIC_ERROR }));
+    expect(await getAccountSetupStatus()).toEqual({ ok: false, error: GENERIC_ERROR, signedOut: false });
     expect(reportClientError).toHaveBeenCalled();
+    expect(signOut).not.toHaveBeenCalled();
+  });
+
+  it('treats an unexpected reply as the generic error', async () => {
+    invoke.mockResolvedValue({ data: { needs_password: 'yes' }, error: null });
+    expect(await getAccountSetupStatus()).toEqual({ ok: false, error: GENERIC_ERROR, signedOut: false });
+    expect(reportClientError).toHaveBeenCalled();
+  });
+
+  it('treats a thrown error as the generic error', async () => {
+    invoke.mockRejectedValue(new Error('network down'));
+    expect(await getAccountSetupStatus()).toEqual({ ok: false, error: GENERIC_ERROR, signedOut: false });
+  });
+
+  it('on a 401 reports signedOut and clears the local session', async () => {
+    invoke.mockResolvedValue(httpError(401, { error: GENERIC_ERROR }));
+    expect(await getAccountSetupStatus()).toEqual({ ok: false, error: GENERIC_ERROR, signedOut: true });
+    expect(signOut).toHaveBeenCalledWith({ scope: 'local' });
+    expect(reportClientError).not.toHaveBeenCalled();
+  });
+});
+
+describe('setupScreenFor (spec 0086 finish pages)', () => {
+  it('skips the form when nothing is needed (planning decision 2)', () => {
+    expect(setupScreenFor({ ok: true, needsPassword: false, needsConsent: false })).toBe('skip');
+  });
+
+  it('shows the full finish form when a password is needed', () => {
+    expect(setupScreenFor({ ok: true, needsPassword: true, needsConsent: true })).toBe('finish');
+    expect(setupScreenFor({ ok: true, needsPassword: true, needsConsent: false })).toBe('finish');
+  });
+
+  it('shows the consent-only form when only consent is needed', () => {
+    expect(setupScreenFor({ ok: true, needsPassword: false, needsConsent: true })).toBe('consentOnly');
+  });
+
+  it('sends a signed-out session to login', () => {
+    expect(setupScreenFor({ ok: false, error: GENERIC_ERROR, signedOut: true })).toBe('signedOut');
+  });
+
+  it('shows the generic error for any other failure', () => {
+    expect(setupScreenFor({ ok: false, error: GENERIC_ERROR, signedOut: false })).toBe('error');
+    expect(setupScreenFor({ ok: false, error: GENERIC_ERROR })).toBe('error');
+  });
+});
+
+describe('inviteDestination', () => {
+  it('sends a sitter to the Pet Sitter page, even with a petId', () => {
+    expect(inviteDestination({ isSitterInvite: true, petId: null })).toBe('/pet-sitter');
+    expect(inviteDestination({ isSitterInvite: true, petId: 'abc' })).toBe('/pet-sitter');
+  });
+
+  it("sends a co-owner to Pets with the pet's card highlighted", () => {
+    expect(inviteDestination({ isSitterInvite: false, petId: '3f2a-uuid' })).toBe('/pets?highlight=3f2a-uuid');
+  });
+
+  it('sends a co-owner with no petId to Home', () => {
+    expect(inviteDestination({ isSitterInvite: false, petId: null })).toBe('/');
   });
 });
 
