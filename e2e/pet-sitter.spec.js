@@ -548,14 +548,19 @@ test1('0088 AC2: clicking the year in a saved sit\'s dates and typing a new one 
 
     // The year is the third part of MM/DD/YYYY; click on it, then type.
     for (const input of [startInput, endInput]) {
-      const yearX = await input.evaluate((el) => {
+      // Measure this box's own displayed MM/DD/ prefix, from its value.
+      const { yearX, y } = await input.evaluate((el) => {
+        const [, mm, dd] = el.value.split('-');
         const style = getComputedStyle(el);
         const ctx = document.createElement('canvas').getContext('2d');
         ctx.font = style.font;
         const padLeft = parseFloat(style.paddingLeft) + parseFloat(style.borderLeftWidth);
-        return padLeft + ctx.measureText('11/20/').width + ctx.measureText('20').width;
+        return {
+          yearX: padLeft + ctx.measureText(`${mm}/${dd}/`).width + ctx.measureText('20').width,
+          y: el.getBoundingClientRect().height / 2,
+        };
       });
-      await input.click({ position: { x: yearX, y: 22 } });
+      await input.click({ position: { x: yearX, y } });
       await page.keyboard.type('2026');
     }
     await expect(startInput).toHaveValue('2026-11-20');
@@ -617,9 +622,26 @@ test1('0088 AC7: at 375px both date boxes and their calendar buttons fit without
     expect(button.x, `${name} button inside its box`).toBeGreaterThanOrEqual(box.x - 0.5);
     expect(button.x + button.width, `${name} button inside its box`).toBeLessThanOrEqual(box.x + box.width + 0.5);
   }
-  for (const [name, input] of [['start', startInput], ['end', endInput]]) {
-    const { scrollWidth, clientWidth } = await input.evaluate((el) => ({ scrollWidth: el.scrollWidth, clientWidth: el.clientWidth }));
-    expect(scrollWidth, `${name} date text clipped`).toBeLessThanOrEqual(clientWidth);
+  // The full MM/DD/YYYY text fits in the box's content area, and the button
+  // starts at or right of where the text ends. (A date input's scrollWidth
+  // always equals its clientWidth in Chromium, so it can't show clipping.)
+  for (const [name, input, button] of [['start', startInput, startButton], ['end', endInput, endButton]]) {
+    const m = await input.evaluate((el) => {
+      const [yyyy, mm, dd] = el.value.split('-');
+      const style = getComputedStyle(el);
+      const ctx = document.createElement('canvas').getContext('2d');
+      ctx.font = style.font;
+      const padLeft = parseFloat(style.paddingLeft);
+      const padRight = parseFloat(style.paddingRight);
+      const textWidth = ctx.measureText(`${mm}/${dd}/${yyyy}`).width;
+      return {
+        textWidth,
+        contentWidth: el.clientWidth - padLeft - padRight,
+        textEnd: el.getBoundingClientRect().left + el.clientLeft + padLeft + textWidth,
+      };
+    });
+    expect(m.textWidth, `${name} date text cut off`).toBeLessThanOrEqual(m.contentWidth);
+    expect(button.x, `${name} button covers the date text`).toBeGreaterThanOrEqual(m.textEnd - 0.5);
   }
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(375);
   await testInfo.attach('sit-dates-375', { body: await dialog.screenshot(), contentType: 'image/png' });
