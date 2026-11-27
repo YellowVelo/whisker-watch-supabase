@@ -68,7 +68,7 @@
 3. Accepting a co-owner or sitter invite uses the same page and records consent too.
 4. Finishing that page signs out every other session on the account.
 5. If someone signs up at another person's address, the real inbox owner, by finishing the page, ends up with the only working password. The person who filled in the form never gets in.
-6. Anyone signed in with no consent on record sees a blocking consent screen before any app page. If the account has no password yet, the screen asks for one too. The Terms and Privacy pages stay readable from that screen.
+6. Anyone signed in with no consent on record sees a blocking consent screen before any app page. If they signed in from an email link (sign-up, invite or reset) and haven't finished setup, the screen asks for a password too. The Terms and Privacy pages stay readable from that screen.
 7. Consent is recorded by the server, with the server's own version dates, and can't be edited or erased by the user afterward.
 8. An account only receives shared pets (co-owner or sitter invites) once its email is confirmed.
 9. Existing unconfirmed accounts lose any password they were created with, so they also have to go through the new finish page.
@@ -85,9 +85,9 @@
 8. **Given** consent is already recorded, **when** the finish call runs again, **then** the original record is kept.
 9. **Given** a signed-in user, **when** they try to change their own consent fields directly, **then** the database refuses.
 10. **Given** an account with a password and no consent, **when** it opens any app page, **then** it sees the consent screen; Continue records consent and opens the app; Sign out signs out.
-11. **Given** an account with no password and no consent, **then** the consent screen asks for a password too.
+11. **Given** a session opened from an email link (session sign-in method `otp`) on an account with no consent, **then** the consent screen asks for a password too; a session signed in with a password sees consent only.
 12. **Given** the consent screen, **when** the person opens Terms or Privacy, **then** the page opens instead of the consent screen.
-13. **Given** an account that already has a password, **when** the finish call includes a password, **then** the server refuses (this screen never changes an existing password).
+13. **Given** a session signed in with a password, or an account whose consent is already recorded, **when** the finish call includes a password, **then** the server refuses (this screen is never a way to change a password).
 14. **Given** an invite for address X, **when** an account at X is unconfirmed, **then** the invite-claim functions don't link it.
 15. **Given** the app's Terms/Privacy version dates and the server's, **when** they differ, **then** a unit test fails.
 16. **Given** the migration has run, **then** no unconfirmed account has a password, and every test and demo account has consent recorded.
@@ -121,7 +121,7 @@ No mockups. The finish page and consent screen reuse `AuthLayout` (the same fram
   - One-time: fill consent for `profiles.account_type in ('test','demo')` where it's null, with the current versions. Comment says these are fixture accounts.
 - **New Edge Function `finish-account-setup`** (replaces `confirm-email`):
   - Caller identified from their own JWT only. Body: `{ action: 'status' }` → `{ needs_password, needs_consent }`; or `{ action: 'finish', password?, accepted_terms, marketing_opt_in? }`.
-  - `finish`: `accepted_terms` must be `true`. If the account has no password, `password` is required and checked (8–128, breached check); if it has one, a `password` is refused. Then one `admin.updateUserById(id, { password?, email_confirm: true })`, then the consent write (`.is('terms_accepted_at', null)`, versions from `_shared/legalVersions.ts`), then `admin.signOut(callerJwt, 'others')`.
+  - `finish`: `accepted_terms` must be `true`. If the session came from an email link (JWT `amr` method `otp`) and consent isn't recorded yet, `password` is required and checked (8–128, breached check); otherwise a `password` is refused. `status` returns `needs_password` on the same rule. Never use `email_has_password()` for this (see Planning decision 7). Then one `admin.updateUserById(id, { password?, email_confirm: true })`, then the consent write (`.is('terms_accepted_at', null)`, versions from `_shared/legalVersions.ts`), then `admin.signOut(callerJwt, 'others')`.
   - Uses `serverError()` and plain error copy (spec 0078); exact `npm:`/`jsr:` versions; `verify_jwt` default (true), recorded in `config.toml`.
 - **`sign-up`:** create the user with no password, ignoring any `password` or `accepted_terms` sent (old cached pages keep working). Metadata keeps only `first_name`. The breached-password check moves to `_shared/passwordPolicy.ts`, shared with the new function.
 - **`confirm-email`:** deleted from all three projects after the frontend is promoted. Its tests in `sign-up/index.test.ts` move to the new function's tests.
@@ -158,12 +158,13 @@ No mockups. The finish page and consent screen reuse `AuthLayout` (the same fram
 
 ## Planning decisions (Lynn, 2026-11-27)
 
-1. **Resend:** the sign-up function's "resend" (and its already-registered branch) sends a fresh link to any account that is unconfirmed **or has no password**, so someone whose link-click already confirmed them but who closed the page early can still get back in. Still enumeration-safe (same generic response).
+1. **Resend:** the sign-up function's "resend" (and its already-registered branch) sends a fresh link to any account that is unconfirmed **or has no consent recorded** (changed by decision 7; it originally said "has no password"), so someone whose link-click already confirmed them but who closed the page early can still get back in. Still enumeration-safe (same generic response).
 2. **Invite link for a finished account:** if `status` says no password and no consent are needed, `/accept-invite` skips the form and goes straight to the pet (or Pet Sitter page).
 3. **Partial failure:** if a password was saved but consent wasn't, the form re-checks `status` and shows just the Terms checkbox.
 4. **Marketing on the existing-account screen:** a finish call with no `marketing_opt_in` leaves the person's current setting unchanged.
 5. **Build finding (T2 review, 2026-11-27):** on dev, `admin.createUser()` with no password still stores a random password hash, so `email_has_password()` says the account has one. New sign-ups are therefore created with `admin.generateLink({ type: 'invite', email, options: { data: { first_name }, redirectTo } })`, the same call `invite-co-owner` already uses, which creates the account with no password and returns the link token. The email link carries `type=signup` (verified on dev: an invite-minted token redeems as `signup`), so it works on both the old and new `/verify-email` page and the deploy order is unaffected; `/verify-email` also accepts `invite`. If the address already has an account, sign-up skips the invite call and sends a recovery link (so a pending co-owner/sitter invite link keeps working). No behavior change for people.
-6. No rate limit on `finish-account-setup` (sign-in required). Sign-up integration tests stay local-only, as today.
+7. **Signal for "needs a password" (Lynn, 2026-11-27, after the T2 review):** verified on dev that redeeming a sign-up or invite link makes Supabase store a random password (upstream `verify.go`, invited users), so `email_has_password()` is true for every account after its link is clicked. "Needs a password" is therefore decided by how the session signed in: the JWT's `amr` claim is `otp` for every email-link session (sign-up, invite, recovery; survives refresh) and `password` for a password login (both verified on dev). Email-link session + no consent → password required; anything else → password refused. Tests must redeem real links with `verifyOtp`, never fake the state with `updateUserById`.
+8. No rate limit on `finish-account-setup` (sign-in required). Sign-up integration tests stay local-only, as today.
 
 ## Open Questions
 
