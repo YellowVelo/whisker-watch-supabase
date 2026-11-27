@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { supabase } from '@/api/supabaseClient';
 import AuthLayout from '@/components/AuthLayout';
+import { Button } from '@/components/ui/button';
+import { useAuth } from '@/lib/AuthContext';
 import FinishAccountSetupForm from '@/components/FinishAccountSetupForm';
 import { getAccountSetupStatus, setupScreenFor, GENERIC_ERROR } from '@/lib/accountSetup';
 import { Loader2, Mail } from 'lucide-react';
@@ -27,11 +29,13 @@ import { Loader2, Mail } from 'lucide-react';
 //
 // After verifyOtp() succeeds, this asks finish-account-setup (status)
 // what's left to do, and only then shows the finish form, since the form
-// reads needsPassword once. The account is confirmed only when the person
-// finishes (the server sets email_confirm then), so there's no separate
-// confirm call here any more. Finishing does a full-page load to '/', so
+// reads needsPassword once. Supabase confirms the email itself when the
+// signup or invite link is redeemed here; finish-account-setup also sets
+// email_confirm when the person finishes, so there's no separate confirm
+// call on this page. Finishing does a full-page load to '/', so
 // AuthContext runs the invite claims again now that the email is
 // confirmed (migration 0064 links invites only to confirmed accounts).
+// The consent-only screen also offers Sign out (AuthContext's logout()).
 // setupScreenFor() (accountSetup.js) picks the screen: the full finish
 // form, the consent-only form (consent missing but this browser already
 // has a password session), straight on to Home, /login if the session is
@@ -45,6 +49,7 @@ const goToLogin = () => { window.location.href = '/login'; };
 
 export default function VerifyEmail() {
   const [searchParams] = useSearchParams();
+  const { logout } = useAuth();
   // verifying | finish | consentOnly | invalid | error | done
   const [status, setStatus] = useState('verifying');
 
@@ -121,6 +126,7 @@ export default function VerifyEmail() {
           onSuccess={goHome}
           onSignedOut={goToLogin}
         />
+        <Button type="button" variant="outline" className="w-full mt-3" onClick={logout}>Sign out</Button>
       </AuthLayout>
     );
   }

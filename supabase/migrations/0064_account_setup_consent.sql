@@ -17,6 +17,15 @@
 --     browser sent. Anyone could write or rewrite their own record.
 --
 -- What this does:
+--   0. One-time, before anything else: consent recorded on accounts whose
+--      email isn't confirmed is cleared (terms_accepted_at, terms_version,
+--      privacy_version set to null). The old sign-up form wrote it from
+--      metadata, so it was given by whoever filled in the form, not a
+--      proven inbox owner. Without this, step 4 wipes their password but
+--      finish-account-setup still says nothing is needed, and they reach
+--      the app with no usable password (spec 0086 FR9). Clearing it sends
+--      the inbox owner to the finish page instead. Confirmed accounts are
+--      not touched.
 --   1. protect_privileged_profile_fields() (last defined in 0057) also
 --      refuses any change to terms_accepted_at, terms_version and
 --      privacy_version unless it comes from the service role (only
@@ -61,10 +70,11 @@
 --        revoke execute on function public.claim_pending_sitter_invites() from public, anon;
 --        grant execute on function public.claim_pending_co_owner_invites() to authenticated, service_role;
 --        grant execute on function public.claim_pending_sitter_invites() to authenticated, service_role;
---   4. The two one-time updates can't be undone and don't need to be: a
---      wiped password belonged to an account nobody had confirmed (the
---      person sets one on the finish page), and the fixture consent rows
---      are test/demo accounts only. To clear the fixture consent anyway:
+--   4. The three one-time updates can't be undone and don't need to be: a
+--      wiped password and the cleared consent both belonged to accounts
+--      nobody had confirmed (the inbox owner sets a password and agrees on
+--      the finish page), and the fixture consent rows are test/demo
+--      accounts only. To clear the fixture consent anyway:
 --        update public.profiles set terms_accepted_at = null,
 --          terms_version = null, privacy_version = null
 --        where account_type in ('test', 'demo');
@@ -102,6 +112,14 @@
 --     ('spec_0085_frontend_live'), ('spec_0086_frontend_live')
 --   on conflict do nothing;
 --
+-- Restoring a backup taken before this migration ran: a restore replays
+-- the migrations first and loads the data after, so the one-time steps
+-- (0 and 4) never see the restored rows. After the data is loaded, run
+-- step 0's and step 4's update statements below once more, as the service
+-- role or in the SQL editor (both are safe to repeat). Step 0 must run
+-- before anyone signs in, or an unconfirmed account restored with old
+-- consent skips the finish page with no usable password.
+--
 -- Rollout order on each project (spec 0086): PA-19 off → functions
 -- (sign-up, finish-account-setup) deployed → frontend promoted (Cloudflare,
 -- branch main, "Spec 0086 ...") → marker set (snippet above) →
@@ -128,6 +146,25 @@ begin
       'in the header of 0064_account_setup_consent.sql, then push again.';
   end if;
 end $$;
+
+-- 0. One-time: clear consent on unconfirmed accounts -----------------------
+-- Runs before step 1 redefines the protect trigger. The old sign-up form
+-- copied consent from metadata, so on an unconfirmed account it was given
+-- by whoever filled in the form, who may not own the inbox. Step 4 wipes
+-- the same accounts' passwords; if their consent stayed,
+-- finish-account-setup would report nothing left to do and they'd reach
+-- the app with no usable password (spec 0086 FR9). With it cleared, the
+-- inbox owner lands on the finish page, sets a password and agrees there.
+update public.profiles p
+set terms_accepted_at = null,
+    terms_version = null,
+    privacy_version = null
+from auth.users u
+where u.id = p.id
+  and u.email_confirmed_at is null
+  and (p.terms_accepted_at is not null
+       or p.terms_version is not null
+       or p.privacy_version is not null);
 
 -- 1. Consent is written only by the server ----------------------------------
 -- Same trigger as 0057, three more columns. marketing_opt_in is

@@ -10,7 +10,8 @@
 //     run as that account; it's a wording check on the newest migration
 //     that defines each function (spec 0086, Before You Approve #9).
 //   * AC16: after the migration, no unconfirmed account (other than test
-//     scratch users and accounts under an hour old) has a password, and
+//     scratch users and accounts under an hour old) has a password or a
+//     consent record (FR9), 0064 contains the step that clears it, and
 //     every allowlisted test/demo fixture account has consent recorded.
 //
 // Two scratch users are created and signed in once for the whole file
@@ -253,12 +254,11 @@ const SCRATCH_EMAIL = /^ci-scratch-.*@wyskerwatch\.com$/i;
 // after the migration ran, which 0064's one-time wipe can't have touched.
 const MIN_ACCOUNT_AGE_MS = 60 * 60 * 1000;
 
-Deno.test('AC16: no unconfirmed account has a password', async () => {
-  // listUsers shows confirmation but not passwords; email_has_password()
-  // (server-only, migration 0020) answers the password half.
+// Unconfirmed accounts older than MIN_ACCOUNT_AGE_MS, scratch users left out.
+async function oldUnconfirmedAccounts(): Promise<{ id: string; email: string }[]> {
   const admin = adminClient();
   const cutoff = Date.now() - MIN_ACCOUNT_AGE_MS;
-  const unconfirmed: string[] = [];
+  const unconfirmed: { id: string; email: string }[] = [];
   for (let page = 1; ; page += 1) {
     const { data, error } = await admin.auth.admin.listUsers({ page, perPage: 1000 });
     if (error) throw new Error(`listUsers failed: ${error.message}`);
@@ -266,10 +266,18 @@ Deno.test('AC16: no unconfirmed account has a password', async () => {
       if (user.email_confirmed_at || !user.email) continue;
       if (SCRATCH_EMAIL.test(user.email)) continue;
       if (new Date(user.created_at).getTime() > cutoff) continue;
-      unconfirmed.push(user.email);
+      unconfirmed.push({ id: user.id, email: user.email });
     }
     if (data.users.length < 1000) break;
   }
+  return unconfirmed;
+}
+
+Deno.test('AC16: no unconfirmed account has a password', async () => {
+  // listUsers shows confirmation but not passwords; email_has_password()
+  // (server-only, migration 0020) answers the password half.
+  const admin = adminClient();
+  const unconfirmed = (await oldUnconfirmedAccounts()).map((user) => user.email);
   const withPassword: string[] = [];
   for (const email of unconfirmed) {
     const { data, error } = await admin.rpc('email_has_password', { p_email: email });
@@ -277,6 +285,37 @@ Deno.test('AC16: no unconfirmed account has a password', async () => {
     if (data === true) withPassword.push(email);
   }
   assertEquals(withPassword, [], 'unconfirmed accounts that still have a password');
+});
+
+Deno.test('AC16 (FR9): no unconfirmed account has consent recorded', async () => {
+  // Consent on an unconfirmed account came from whoever filled in the old
+  // sign-up form. 0064 clears it so the inbox owner gets the finish page
+  // instead of reaching the app with a wiped password.
+  const ids = (await oldUnconfirmedAccounts()).map((user) => user.id);
+  const withConsent: string[] = [];
+  for (let i = 0; i < ids.length; i += 100) {
+    const { data, error } = await adminClient()
+      .from('profiles')
+      .select('email, terms_accepted_at, terms_version, privacy_version')
+      .in('id', ids.slice(i, i + 100));
+    if (error) throw new Error(`profiles read failed: ${error.message}`);
+    for (const row of data ?? []) {
+      if (row.terms_accepted_at !== null || row.terms_version !== null || row.privacy_version !== null) {
+        withConsent.push(row.email);
+      }
+    }
+  }
+  assertEquals(withConsent, [], 'unconfirmed accounts that still have consent recorded');
+});
+
+Deno.test('AC16 (FR9): migration 0064 clears consent on unconfirmed accounts before the trigger change', async () => {
+  const sql = await Deno.readTextFile(new URL('0064_account_setup_consent.sql', MIGRATIONS_DIR));
+  const clearing = /update\s+public\.profiles\s+p\s+set\s+terms_accepted_at\s*=\s*null\s*,\s*terms_version\s*=\s*null\s*,\s*privacy_version\s*=\s*null\s+from\s+auth\.users\s+u\s+where\s+u\.id\s*=\s*p\.id\s+and\s+u\.email_confirmed_at\s+is\s+null/i;
+  const match = clearing.exec(sql);
+  assert(match, '0064 must clear terms_accepted_at, terms_version and privacy_version where email_confirmed_at is null');
+  const trigger = sql.search(/create\s+or\s+replace\s+function\s+public\.protect_privileged_profile_fields/i);
+  assert(trigger > 0, '0064 must redefine protect_privileged_profile_fields()');
+  assert(match.index < trigger, 'the clearing step must come before the protect-trigger redefinition');
 });
 
 Deno.test('AC16: every test/demo fixture account has consent recorded', async () => {
