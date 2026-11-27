@@ -169,6 +169,22 @@ echo "== Restoring data into scratch project =="
 # --data-only: only public/auth data, matching how backup-db.sh dumps it.
 # --no-owner/--no-acl: source roles don't exist in the scratch project.
 # -L: restore only the entries in the list built above.
+# Migration 0063 (spec 0085) adds the check constraint pet_sits_dates_sane.
+# Any backup taken before prod's bad sit was fixed still contains that sit,
+# so restoring its pet_sits data fails this rule (and its child tables,
+# pet_sit_logs and pet_sitter_access, then fail their foreign keys).
+# Backups are kept 30 days, so this can only happen with a backup from that
+# window; the risk was accepted (Lynn, 2026-11-26), not engineered around.
+# If a restore or drill fails on pet_sits_dates_sane:
+#   alter table public.pet_sits drop constraint if exists pet_sits_dates_sane;
+#   -- run the restore / data load again
+#   -- fix (update ... set start_date = ..., end_date = ...) or delete the bad sit(s)
+#   alter table public.pet_sits add constraint pet_sits_dates_sane check (
+#     start_date between '2000-01-01' and '2100-12-31'
+#     and end_date between '2000-01-01' and '2100-12-31'
+#     and end_date >= start_date
+#     and end_date - start_date <= 30
+#   );
 pg_restore --data-only --no-owner --no-acl \
   -L "$RESTORE_LIST" \
   -d "$RESTORE_TEST_DB_URL" "$DUMP_FILE"

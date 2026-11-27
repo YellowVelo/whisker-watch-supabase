@@ -22,6 +22,23 @@
 -- UNDO:
 --   alter table public.pet_sits drop constraint if exists pet_sits_dates_sane;
 --
+-- RESTORING A BACKUP (risk accepted by Lynn, 2026-11-26: prod has no active
+-- users): any backup taken before prod's bad sit is fixed still contains it,
+-- so restoring that backup's pet_sits data fails this rule, and its child
+-- tables (pet_sit_logs, pet_sitter_access) then fail their foreign keys.
+-- Backups are kept 30 days. If a restore or the restore drill
+-- (scripts/restore-test.sh) fails on pet_sits_dates_sane:
+--   1. alter table public.pet_sits drop constraint if exists pet_sits_dates_sane;
+--   2. Load the data again.
+--   3. Fix (update public.pet_sits set start_date = ..., end_date = ...
+--      where id = ...) or delete the bad sit(s).
+--   4. alter table public.pet_sits add constraint pet_sits_dates_sane check (
+--        start_date between '2000-01-01' and '2100-12-31'
+--        and end_date between '2000-01-01' and '2100-12-31'
+--        and end_date >= start_date
+--        and end_date - start_date <= 30
+--      );
+--
 -- SAFETY CHECK 1: this must run only after the spec-0085 frontend is live on
 -- that environment, because the old Pet Sitter page has no error handling on
 -- Save: an owner who typed a bad date would be left on "Saving..." with no
@@ -85,10 +102,11 @@ begin
   );
 
   if bad_count > 0 then
-    select string_agg(format('%s (start %s, end %s)', id, start_date, end_date), '; ')
+    select string_agg(format('%s (start %s, end %s)', id, start_date, end_date), '; '
+                      order by created_at, id)
       into bad_list
     from (
-      select id, start_date, end_date
+      select id, start_date, end_date, created_at
       from public.pet_sits
       where not (
         start_date between date '2000-01-01' and date '2100-12-31'
