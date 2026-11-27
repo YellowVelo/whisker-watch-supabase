@@ -13,9 +13,10 @@ import {
 import InviteSitterDialog from './InviteSitterDialog';
 import PillToggle from './PillToggle';
 import IconButton from './IconButton';
+import DateField from './DateField';
 import { format } from 'date-fns';
 import {
-  sitDays, formatSitRange, validateSitDates, parseSitDate, openDatePicker,
+  sitDays, formatSitRange, validateSitDates, parseSitDate,
   SIT_MIN_DATE, SIT_MAX_DATE,
 } from '@/lib/sitDates';
 import { useToast } from '@/components/ui/use-toast';
@@ -331,30 +332,11 @@ export default function PetSittingSection({ petId = undefined }) {
               <Label>Sitter Name</Label>
               <Input value={form.sitter_name} onChange={e => setField('sitter_name', e.target.value)} placeholder="e.g. Sarah" />
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label>Start Date *</Label>
-                <Input
-                  type="date"
-                  value={form.start_date}
-                  min={SIT_MIN_DATE}
-                  max={SIT_MAX_DATE}
-                  onClick={openDatePicker}
-                  onChange={e => setDateField('start_date', e.target.value)}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label>End Date *</Label>
-                <Input
-                  type="date"
-                  value={form.end_date}
-                  min={parseSitDate(form.start_date) ? form.start_date : SIT_MIN_DATE}
-                  max={SIT_MAX_DATE}
-                  onClick={openDatePicker}
-                  onChange={e => setDateField('end_date', e.target.value)}
-                />
-              </div>
-            </div>
+            <SitDateFields
+              startDate={form.start_date}
+              endDate={form.end_date}
+              onDateChange={setDateField}
+            />
             {dateError && <p role="alert" className="text-[13px] text-destructive -mt-2">{dateError}</p>}
             <div className="space-y-1.5">
               <Label>Emergency Contact</Label>
@@ -434,6 +416,37 @@ export default function PetSittingSection({ petId = undefined }) {
 // Spec 0087: only current foods and meds (isCurrentItem on todayStr, the
 // viewer's calendar) are listed or drive the AM/PM Meds buttons, on owners'
 // and sitters' views alike.
+// Spec 0088: the sit dialog's Start/End Date boxes. Typing goes into the box;
+// the calendar button beside each one opens the browser's calendar.
+export function SitDateFields({ startDate, endDate, onDateChange }) {
+  return (
+    <div className="grid grid-cols-2 gap-3">
+      <div className="space-y-1.5">
+        <Label htmlFor="sit-start-date">Start Date *</Label>
+        <DateField
+          id="sit-start-date"
+          value={startDate}
+          min={SIT_MIN_DATE}
+          max={SIT_MAX_DATE}
+          onChange={e => onDateChange('start_date', e.target.value)}
+          buttonLabel="Choose start date"
+        />
+      </div>
+      <div className="space-y-1.5">
+        <Label htmlFor="sit-end-date">End Date *</Label>
+        <DateField
+          id="sit-end-date"
+          value={endDate}
+          min={parseSitDate(startDate) ? startDate : SIT_MIN_DATE}
+          max={SIT_MAX_DATE}
+          onChange={e => onDateChange('end_date', e.target.value)}
+          buttonLabel="Choose end date"
+        />
+      </div>
+    </div>
+  );
+}
+
 export function SitCard({
   sit, sitPets, logs, expanded, medicationsByPet, foodsByPet, vaccinationsByPet, todayStr,
   onToggleExpand, onInvite, onEdit, onDelete, onToggleBool, onToggleTask,
