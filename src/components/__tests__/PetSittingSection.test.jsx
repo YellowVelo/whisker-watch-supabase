@@ -74,6 +74,18 @@ describe('SitCard with unusable saved dates (spec 0085 AC1)', () => {
   });
 });
 
+describe('SitCard header actions (spec 0085 T4)', () => {
+  it('renders Share/Edit/Delete as labelled 44px IconButtons', () => {
+    const html = renderCards([goodSit, goodLogs]);
+    for (const label of ['Share with sitter', 'Edit sit', 'Delete sit']) {
+      expect(html).toContain(`aria-label="${label}"`);
+    }
+    const buttons = html.match(/<button[^>]*aria-label="(Share with sitter|Edit sit|Delete sit)"[^>]*>/g) || [];
+    expect(buttons).toHaveLength(3);
+    for (const b of buttons) expect(b).toMatch(/h-11 w-11/);
+  });
+});
+
 // Spec 0085 AC4-AC7, AC13: the dialog's Save steps, tested without rendering.
 const validForm = {
   sitter_name: 'Sam', start_date: '2026-12-01', end_date: '2026-12-03',

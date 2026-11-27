@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import InviteSitterDialog from './InviteSitterDialog';
 import PillToggle from './PillToggle';
+import IconButton from './IconButton';
 import { format } from 'date-fns';
 import {
   sitDays, formatSitRange, validateSitDates, parseSitDate, openDatePicker,
@@ -188,7 +189,9 @@ export default function PetSittingSection({ petId = undefined }) {
       if (result.dateError) { setDateError(result.dateError); return; }
       if (result.error) {
         // The sit exists even though a later step failed: a retry updates it.
-        if (result.sit) setEditing(result.sit);
+        // Reload so the new sit shows in the list: closing the dialog and
+        // tapping New Pet Sit again then can't create a duplicate (FR8).
+        if (result.sit) { setEditing(result.sit); load(); }
         toast({ variant: 'destructive', title: "Couldn't save this pet sit", description: 'Please try again.' });
         return;
       }
@@ -355,9 +358,14 @@ export default function PetSittingSection({ petId = undefined }) {
                   {form.custom_tasks.map((t, i) => (
                     <span key={i} className="flex items-center gap-1 text-[13px] bg-secondary px-2.5 py-1 rounded-full">
                       {t}
-                      <button onClick={() => removeTask(i)} className="text-muted-foreground hover:text-destructive ml-0.5">
-                        <X className="h-3 w-3" />
-                      </button>
+                      <IconButton
+                        variant="plain"
+                        icon={X}
+                        iconClassName="h-3.5 w-3.5 text-muted-foreground group-hover:text-destructive transition-colors"
+                        className="group -my-3 -mr-3"
+                        aria-label={`Remove ${t}`}
+                        onClick={() => removeTask(i)}
+                      />
                     </span>
                   ))}
                 </div>
@@ -433,21 +441,33 @@ export function SitCard({
             )}
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={e => { e.stopPropagation(); onInvite(); }}
-            className="text-muted-foreground hover:text-primary transition-colors"
+        <div className="flex items-center flex-shrink-0">
+          <IconButton
+            variant="plain"
+            icon={UserPlus}
+            className="group"
+            iconClassName="h-3.5 w-3.5 text-muted-foreground group-hover:text-primary transition-colors"
+            aria-label="Share with sitter"
             title="Share with sitter"
-          >
-            <UserPlus className="h-3.5 w-3.5" />
-          </button>
-          <button onClick={e => { e.stopPropagation(); onEdit(); }} className="text-muted-foreground hover:text-foreground">
-            <Pencil className="h-3.5 w-3.5" />
-          </button>
-          <button onClick={e => { e.stopPropagation(); onDelete(); }} className="text-muted-foreground hover:text-destructive">
-            <Trash2 className="h-3.5 w-3.5" />
-          </button>
-          {expanded ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+            onClick={e => { e.stopPropagation(); onInvite(); }}
+          />
+          <IconButton
+            variant="plain"
+            icon={Pencil}
+            className="group"
+            iconClassName="h-3.5 w-3.5 text-muted-foreground group-hover:text-foreground transition-colors"
+            aria-label="Edit sit"
+            onClick={e => { e.stopPropagation(); onEdit(); }}
+          />
+          <IconButton
+            variant="plain"
+            icon={Trash2}
+            className="group"
+            iconClassName="h-3.5 w-3.5 text-muted-foreground group-hover:text-destructive transition-colors"
+            aria-label="Delete sit"
+            onClick={e => { e.stopPropagation(); onDelete(); }}
+          />
+          {expanded ? <ChevronUp className="h-4 w-4 ml-1 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 ml-1 text-muted-foreground" />}
         </div>
       </div>
 
