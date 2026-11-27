@@ -1,6 +1,6 @@
 # 0085_Pet_Sit_Date_Validation_And_Crash_Fix_Specification_v1
 
-**Status:** Approved by Lynn 2026-11-26, including the error copy and the click-to-open calendar. Building.
+**Status:** Built 2026-11-27 on `claude/spec-0085-sit-date-crash`. Every task passed review; QA and the final review passed. Migration 0063 is live on dev only. Waiting for Lynn's PROTECTED merge OK. Approved by Lynn 2026-11-26, including the error copy and the click-to-open calendar.
 **Date:** 2026-11-26
 **Branch:** `claude/spec-0085-sit-date-crash` (off `main` at `1ce9a31`)
 **Migration:** `0063_pet_sit_date_check.sql` (reserved)
