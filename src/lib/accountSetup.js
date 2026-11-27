@@ -31,7 +31,8 @@ const FEATURE = 'account_setup';
 
 /**
  * `signedOut: true` means the server answered 401 (this browser's session
- * is missing or no longer valid). The dead session is cleared from this
+ * is missing or no longer valid) and either no session is left or one
+ * retry also answered 401. The dead session is cleared from this
  * browser, and the caller should send the person to /login. Not reported
  * to Sentry: an ended session is expected, not a bug.
  *
@@ -39,10 +40,23 @@ const FEATURE = 'account_setup';
  */
 export async function getAccountSetupStatus() {
   try {
-    const { data, error } = await supabase.functions.invoke(FUNCTION_NAME, { body: { action: 'status' } });
+    const askStatus = () => supabase.functions.invoke(FUNCTION_NAME, { body: { action: 'status' } });
+    let { data, error } = await askStatus();
     if (error?.context?.status === 401) {
-      await clearLocalSession();
-      return { ok: false, error: GENERIC_ERROR, signedOut: true };
+      // A passing Auth hiccup can also answer 401, and clearing the
+      // session then would sign a brand-new person out of the only
+      // session they have (their email link is single-use). So only
+      // treat it as signed out if this browser has no session left, or
+      // the one retry (after getSession(), which refreshes an expired
+      // token) is refused too.
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (sessionData?.session) {
+        ({ data, error } = await askStatus());
+      }
+      if (!sessionData?.session || error?.context?.status === 401) {
+        await clearLocalSession();
+        return { ok: false, error: GENERIC_ERROR, signedOut: true };
+      }
     }
     if (error || !data || typeof data.needs_password !== 'boolean' || typeof data.needs_consent !== 'boolean') {
       reportClientError(error ?? new Error('finish-account-setup status: unexpected reply'), {

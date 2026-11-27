@@ -2,8 +2,7 @@ import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { supabase } from '@/api/supabaseClient';
 import AuthLayout from '@/components/AuthLayout';
-import { Button } from '@/components/ui/button';
-import { useAuth } from '@/lib/AuthContext';
+import SignOutButton from '@/components/SignOutButton';
 import FinishAccountSetupForm from '@/components/FinishAccountSetupForm';
 import { getAccountSetupStatus, inviteDestination, setupScreenFor, GENERIC_ERROR } from '@/lib/accountSetup';
 import { Loader2, Mail } from 'lucide-react';
@@ -52,7 +51,6 @@ export default function AcceptInvite() {
   const [searchParams] = useSearchParams();
   const petId = searchParams.get('petId');
   const isSitterInvite = searchParams.get('role') === 'sitter';
-  const { logout } = useAuth();
 
   // verifying | finish | consentOnly | invalid | error | done
   const [status, setStatus] = useState('verifying');
@@ -146,7 +144,7 @@ export default function AcceptInvite() {
           onSuccess={handleSuccess}
           onSignedOut={goToLogin}
         />
-        <Button type="button" variant="outline" className="w-full mt-3" onClick={logout}>Sign out</Button>
+        <SignOutButton />
       </AuthLayout>
     );
   }

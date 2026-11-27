@@ -207,11 +207,45 @@ describe('getAccountSetupStatus', () => {
     expect(await getAccountSetupStatus()).toEqual({ ok: false, error: GENERIC_ERROR, signedOut: false });
   });
 
-  it('on a 401 reports signedOut and clears the local session', async () => {
+  it('on a 401 that the one retry also gets, reports signedOut and clears the local session', async () => {
     invoke.mockResolvedValue(httpError(401, { error: GENERIC_ERROR }));
     expect(await getAccountSetupStatus()).toEqual({ ok: false, error: GENERIC_ERROR, signedOut: true });
+    expect(invoke).toHaveBeenCalledTimes(2);
+    expect(getSession).toHaveBeenCalledTimes(1);
     expect(signOut).toHaveBeenCalledWith({ scope: 'local' });
     expect(reportClientError).not.toHaveBeenCalled();
+  });
+
+  it('keeps the session when a 401 was passing: the retry succeeds', async () => {
+    invoke
+      .mockResolvedValueOnce(httpError(401, { error: GENERIC_ERROR }))
+      .mockResolvedValueOnce({ data: { needs_password: true, needs_consent: true }, error: null });
+    expect(await getAccountSetupStatus()).toEqual({ ok: true, needsPassword: true, needsConsent: true });
+    expect(invoke).toHaveBeenCalledTimes(2);
+    expect(signOut).not.toHaveBeenCalled();
+  });
+
+  it('keeps the session when the retry fails some other way (generic error, not signed out)', async () => {
+    invoke
+      .mockResolvedValueOnce(httpError(401, { error: GENERIC_ERROR }))
+      .mockResolvedValueOnce(httpError(500, { error: GENERIC_ERROR }));
+    expect(await getAccountSetupStatus()).toEqual({ ok: false, error: GENERIC_ERROR, signedOut: false });
+    expect(signOut).not.toHaveBeenCalled();
+  });
+
+  it('on a 401 with no session left in this browser, reports signedOut without retrying', async () => {
+    invoke.mockResolvedValue(httpError(401, { error: GENERIC_ERROR }));
+    getSession.mockResolvedValue({ data: { session: null } });
+    expect(await getAccountSetupStatus()).toEqual({ ok: false, error: GENERIC_ERROR, signedOut: true });
+    expect(invoke).toHaveBeenCalledTimes(1);
+    expect(signOut).toHaveBeenCalledWith({ scope: 'local' });
+  });
+
+  it('keeps the session if checking for it throws after a 401', async () => {
+    invoke.mockResolvedValue(httpError(401, { error: GENERIC_ERROR }));
+    getSession.mockRejectedValue(new Error('storage unavailable'));
+    expect(await getAccountSetupStatus()).toEqual({ ok: false, error: GENERIC_ERROR, signedOut: false });
+    expect(signOut).not.toHaveBeenCalled();
   });
 });
 

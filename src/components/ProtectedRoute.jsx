@@ -1,7 +1,9 @@
 import { useEffect } from 'react';
-import { Outlet } from 'react-router-dom';
+import { Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '@/lib/AuthContext';
 import AppShell from '@/components/AppShell';
+import ConsentGate from '@/components/ConsentGate';
+import { shouldShowConsentGate } from '@/lib/consentGate';
 
 const DefaultFallback = () => (
   <div className="fixed inset-0 flex items-center justify-center">
@@ -12,7 +14,8 @@ const DefaultFallback = () => (
 // shell=false is used for authenticated routes that sit outside the App
 // Shell by design (spec 0023) — currently just Pet Onboarding.
 export default function ProtectedRoute({ fallback = <DefaultFallback />, unauthenticatedElement, shell = true }) {
-  const { isAuthenticated, isLoadingAuth, authChecked, authError, checkUserAuth } = useAuth();
+  const { user, isAuthenticated, isLoadingAuth, authChecked, authError, profileLoadError, checkUserAuth } = useAuth();
+  const { pathname } = useLocation();
 
   useEffect(() => {
     if (!authChecked && !isLoadingAuth) {
@@ -30,5 +33,13 @@ export default function ProtectedRoute({ fallback = <DefaultFallback />, unauthe
     return unauthenticatedElement;
   }
 
-  return shell ? <AppShell><Outlet /></AppShell> : <Outlet />;
+  const page = shell ? <AppShell><Outlet /></AppShell> : <Outlet />;
+
+  // Spec 0086 FR6: no consent on record -> the consent screen instead of
+  // the page (Terms and Privacy stay readable; see consentGate.js).
+  if (shouldShowConsentGate({ isAuthenticated, user, profileLoadError, pathname })) {
+    return <ConsentGate>{page}</ConsentGate>;
+  }
+
+  return page;
 }
