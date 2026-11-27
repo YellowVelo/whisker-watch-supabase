@@ -1,6 +1,6 @@
 # 0088_Date_Box_Typing_And_Calendar_Button_Specification_v1
 
-**Status:** Draft, 2026-11-27. Waiting for Lynn's review.
+**Status:** Approved by Lynn 2026-11-27, including both button labels.
 **Date:** 2026-11-27
 **Branch:** `claude/spec-0088-date-box-typing` (off `main` at `749e084`)
 **Migration:** none
@@ -9,7 +9,7 @@
 
 ## Lynn — what I need from you
 
-1. **Review this spec and approve the two button labels in "Copy for approval".** Blocks the build.
+1. ~~Review this spec and approve the labels~~ Approved 2026-11-27.
 2. After merge: **promote branch `main`'s build in Cloudflare** (commit message will start "Merge pull request" and name this branch).
 
 ## Before You Approve This
@@ -21,7 +21,7 @@
 5. **Your bad prod sit.** Once this is live you can click the end date's year, retype 2026 and save. Until then, deleting and re-adding the sit is the way through, and 0063 can't go on prod until that sit is fixed or gone.
 6. **Self-review:** no other component opens a date picker (searched `showPicker`/`openDatePicker`: only these two boxes). `openDatePicker` stays and moves to the button. The 0085 date checks on Save and the database rule are unchanged. No new debt.
 
-## Copy for approval
+## Copy for approval (approved by Lynn 2026-11-27)
 
 | Where | Text |
 |---|---|
