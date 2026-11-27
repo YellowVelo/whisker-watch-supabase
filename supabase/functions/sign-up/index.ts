@@ -332,6 +332,12 @@ Deno.serve(async (req) => {
         if (linkError) {
           if (!isAlreadyRegisteredError(linkError)) {
             console.error('generateLink (invite, signup) error:', linkError);
+            // Sentry gets a report too, like the lookup failure above.
+            // The reply text is unchanged.
+            reportError(new Error('sign-up: generateLink (invite) failed'), {
+              function: 'sign-up',
+              step: 'generate_invite_link',
+            });
             return jsonResponse({ error: 'Unable to process this request right now' }, 500, cors);
           }
 
