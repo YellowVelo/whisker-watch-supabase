@@ -35,6 +35,7 @@
 | Under the date fields, end before start | "The end date can't be before the start date." |
 | Under the date fields, longer than 30 days | "A pet sit can be up to 30 days. For a longer trip, add a second sit." |
 | Toast when saving fails for any other reason | Title "Couldn't save this pet sit", body "Please try again." |
+| Toast when removing a sit fails (approved by Lynn 2026-11-26, during the build) | Title "Couldn't remove this sit", body "Please try again." |
 | A saved sit with an unusable date (list header) | "Dates not set" (already used today for a sit with no dates) |
 
 ## Functional Requirements
