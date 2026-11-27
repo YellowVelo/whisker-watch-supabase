@@ -7,13 +7,15 @@ import { renderToStaticMarkup } from 'react-dom/server';
 // effect, so this renders the per-sit card (SitCard) directly to HTML.
 vi.mock('@/api/entities', () => ({ entities: {} }));
 vi.mock('../InviteSitterDialog', () => ({ default: () => null }));
+const reportClientError = vi.fn();
+vi.mock('@/lib/errorMonitoring', () => ({ reportClientError: (...args) => reportClientError(...args) }));
 /** @type {any} */ (globalThis).React = React;
 // src/lib/utils.js (imported by the ui primitives) reads window at load time.
 if (typeof globalThis.window === 'undefined') {
   /** @type {any} */ (globalThis).window = { self: globalThis, top: globalThis };
 }
 
-const { SitCard } = await import('../PetSittingSection.jsx');
+const { SitCard, saveSit, ensureLogsForSit } = await import('../PetSittingSection.jsx');
 
 const noop = () => {};
 const cardProps = (sit, logs = []) => ({
@@ -69,5 +71,93 @@ describe('SitCard with unusable saved dates (spec 0085 AC1)', () => {
     const html = renderCards([backwards], [tooLong]);
     expect(html).not.toContain('Daily Checklist');
     expect(html).not.toContain('loading...');
+  });
+});
+
+// Spec 0085 AC4-AC7, AC13: the dialog's Save steps, tested without rendering.
+const validForm = {
+  sitter_name: 'Sam', start_date: '2026-12-01', end_date: '2026-12-03',
+  additional_instructions: '', emergency_contact: '', vet_contact: '', custom_tasks: [],
+};
+const fakeEntities = (overrides = {}) => ({
+  PetSit: {
+    create: vi.fn(async (data) => ({ id: 'new-sit', ...data })),
+    update: vi.fn(async () => ({})),
+    ...overrides.PetSit,
+  },
+  PetSitLog: {
+    filter: vi.fn(async () => []),
+    bulkCreate: vi.fn(async () => []),
+    ...overrides.PetSitLog,
+  },
+});
+
+describe('saveSit (spec 0085)', () => {
+  it('a date validation message stops every write (AC4-AC6)', async () => {
+    for (const [start, end, message] of [
+      ['20266-12-01', '2026-12-02', 'Please enter a real date with a 4-digit year.'],
+      ['2026-12-05', '2026-12-01', "The end date can't be before the start date."],
+      ['2026-12-01', '2027-01-01', 'A pet sit can be up to 30 days. For a longer trip, add a second sit.'],
+    ]) {
+      const ents = fakeEntities();
+      const ensureLogs = vi.fn();
+      const result = await saveSit({ form: { ...validForm, start_date: start, end_date: end }, selectedPetIds: ['p1'], editing: null, ents, ensureLogs });
+      expect(result.dateError).toBe(message);
+      expect(result.sit).toBeNull();
+      expect(ents.PetSit.create).not.toHaveBeenCalled();
+      expect(ents.PetSit.update).not.toHaveBeenCalled();
+      expect(ensureLogs).not.toHaveBeenCalled();
+    }
+  });
+
+  it('a rejected create returns the error and reports it under pet-sitting (AC7)', async () => {
+    reportClientError.mockClear();
+    const boom = new Error('network down');
+    const ents = fakeEntities({ PetSit: { create: vi.fn(async () => { throw boom; }) } });
+    const result = await saveSit({ form: validForm, selectedPetIds: ['p1'], editing: null, ents });
+    expect(result.error).toBe(boom);
+    expect(result.sit).toBeNull();
+    expect(result.dateError).toBeNull();
+    expect(reportClientError).toHaveBeenCalledWith(boom, { feature: 'pet-sitting', note: 'create' });
+  });
+
+  it('a rejected update is reported with note "update"', async () => {
+    reportClientError.mockClear();
+    const boom = new Error('db error');
+    const ents = fakeEntities({ PetSit: { update: vi.fn(async () => { throw boom; }) } });
+    const result = await saveSit({ form: validForm, selectedPetIds: ['p1'], editing: { id: 'old' }, ents });
+    expect(result.error).toBe(boom);
+    expect(reportClientError).toHaveBeenCalledWith(boom, { feature: 'pet-sitting', note: 'update' });
+  });
+
+  it('create OK but checklist failing: the retry updates the same sit, never creates a second (AC13)', async () => {
+    reportClientError.mockClear();
+    const ents = fakeEntities({ PetSitLog: { bulkCreate: vi.fn(async () => { throw new Error('logs failed'); }) } });
+    const first = await saveSit({ form: validForm, selectedPetIds: ['p1'], editing: null, ents });
+    expect(first.error).toBeTruthy();
+    expect(first.sit?.id).toBe('new-sit');
+    expect(ents.PetSit.create).toHaveBeenCalledTimes(1);
+
+    // The component sets editing = first.sit on this outcome.
+    ents.PetSitLog.bulkCreate = vi.fn(async () => []);
+    const retry = await saveSit({ form: validForm, selectedPetIds: ['p1'], editing: first.sit, ents });
+    expect(retry.error).toBeNull();
+    expect(ents.PetSit.create).toHaveBeenCalledTimes(1);
+    expect(ents.PetSit.update).toHaveBeenCalledWith('new-sit', expect.objectContaining({ start_date: '2026-12-01', pet_ids: ['p1'] }));
+    expect(retry.sit.id).toBe('new-sit');
+  });
+
+  it('a valid create builds one checklist row per day (30-day span gives 31)', async () => {
+    const ents = fakeEntities();
+    const result = await saveSit({ form: { ...validForm, start_date: '2026-12-01', end_date: '2026-12-31' }, selectedPetIds: ['p1'], editing: null, ents });
+    expect(result.error).toBeNull();
+    expect(ents.PetSitLog.bulkCreate).toHaveBeenCalledTimes(1);
+    expect(ents.PetSitLog.bulkCreate.mock.calls[0][0]).toHaveLength(31);
+  });
+
+  it('ensureLogsForSit skips days that already have a row', async () => {
+    const ents = fakeEntities({ PetSitLog: { filter: vi.fn(async () => [{ date: '2026-12-01' }]) } });
+    await ensureLogsForSit({ id: 's', pet_ids: ['p1'], start_date: '2026-12-01', end_date: '2026-12-02' }, ents);
+    expect(ents.PetSitLog.bulkCreate).toHaveBeenCalledWith([{ pet_sit_id: 's', pet_id: 'p1', date: '2026-12-02' }]);
   });
 });

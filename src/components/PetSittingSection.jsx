@@ -13,13 +13,63 @@ import {
 import InviteSitterDialog from './InviteSitterDialog';
 import PillToggle from './PillToggle';
 import { format } from 'date-fns';
-import { sitDays, formatSitRange } from '@/lib/sitDates';
+import {
+  sitDays, formatSitRange, validateSitDates, parseSitDate, openDatePicker,
+  SIT_MIN_DATE, SIT_MAX_DATE,
+} from '@/lib/sitDates';
+import { useToast } from '@/components/ui/use-toast';
+import { reportClientError } from '@/lib/errorMonitoring';
 
 const EMPTY_FORM = {
   sitter_name: '', start_date: '', end_date: '',
   additional_instructions: '', emergency_contact: '', vet_contact: '',
   custom_tasks: [],
 };
+
+// Create one checklist log per sit day that doesn't have one yet (the
+// checklist is sit-level, not per pet). sitDays() caps it at 31 days.
+export async function ensureLogsForSit(sit, ents = entities) {
+  const days = sitDays(sit);
+  if (days.length === 0) return;
+  const existing = await ents.PetSitLog.filter({ pet_sit_id: sit.id });
+  const existingDates = new Set(existing.map(l => l.date));
+  const toCreate = days
+    .map(d => format(d, 'yyyy-MM-dd'))
+    .filter(d => !existingDates.has(d))
+    .map(d => ({ pet_sit_id: sit.id, pet_id: (sit.pet_ids || [])[0] || '', date: d }));
+  if (toCreate.length > 0) await ents.PetSitLog.bulkCreate(toCreate);
+}
+
+/**
+ * The Save steps of the sit dialog (spec 0085), kept out of the component so
+ * they can be unit-tested. Never throws.
+ * - dateError: a validateSitDates() message; nothing was written.
+ * - error: a write failed; it has already been reported. If `sit` is also set,
+ *   the sit exists (create succeeded but its checklist didn't), and the caller
+ *   must use it as `editing` so a retry updates it instead of creating a
+ *   duplicate (FR8, AC13).
+ * @param {{ form: any, selectedPetIds: string[], editing: any, ents?: any, ensureLogs?: (sit: any, ents?: any) => Promise<void> }} args
+ * @returns {Promise<{ sit: any, error: unknown, dateError: string | null }>}
+ */
+export async function saveSit({ form, selectedPetIds, editing, ents = entities, ensureLogs = ensureLogsForSit }) {
+  const dateError = validateSitDates(form.start_date, form.end_date);
+  if (dateError) return { sit: null, error: null, dateError };
+  const data = { ...form, pet_ids: selectedPetIds };
+  let sit = null;
+  try {
+    if (editing) {
+      await ents.PetSit.update(editing.id, data);
+      sit = { ...editing, ...data };
+    } else {
+      sit = await ents.PetSit.create(data);
+    }
+    await ensureLogs(sit, ents);
+    return { sit, error: null, dateError: null };
+  } catch (err) {
+    reportClientError(err, { feature: 'pet-sitting', note: editing ? 'update' : 'create' });
+    return { sit, error: err, dateError: null };
+  }
+}
 
 // petId is optional — if provided, filters sits to those that include this pet
 export default function PetSittingSection({ petId = undefined }) {
@@ -40,6 +90,8 @@ export default function PetSittingSection({ petId = undefined }) {
   const [sitLogs, setSitLogs] = useState({});
   const [newTask, setNewTask] = useState('');
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
+  const [dateError, setDateError] = useState(null);
+  const { toast } = useToast();
 
   const load = async () => {
     setLoading(true);
@@ -86,22 +138,10 @@ export default function PetSittingSection({ petId = undefined }) {
     loadSitLogs(id);
   };
 
-  const ensureLogsForSit = async (sit) => {
-    const days = sitDays(sit);
-    if (days.length === 0) return;
-    const existing = await entities.PetSitLog.filter({ pet_sit_id: sit.id });
-    const existingDates = new Set(existing.map(l => l.date));
-    // Create one log per day (not per pet — the checklist is sit-level)
-    const toCreate = days
-      .map(d => format(d, 'yyyy-MM-dd'))
-      .filter(d => !existingDates.has(d))
-      .map(d => ({ pet_sit_id: sit.id, pet_id: (sit.pet_ids || [])[0] || '', date: d }));
-    if (toCreate.length > 0) await entities.PetSitLog.bulkCreate(toCreate);
-  };
-
   useEffect(() => { load(); }, [petId]);
 
   const setField = (k, v) => setForm(f => ({ ...f, [k]: v }));
+  const setDateField = (k, v) => { setDateError(null); setField(k, v); };
 
   const addTask = () => {
     const t = newTask.trim();
@@ -118,6 +158,7 @@ export default function PetSittingSection({ petId = undefined }) {
     // Default: no pets selected
     setSelectedPetIds(petId ? [petId] : []);
     setNewTask('');
+    setDateError(null);
     setDialogOpen(true);
   };
 
@@ -134,31 +175,41 @@ export default function PetSittingSection({ petId = undefined }) {
     });
     setSelectedPetIds(s.pet_ids || allPets.map(c => c.id));
     setNewTask('');
+    setDateError(null);
     setDialogOpen(true);
   };
 
   const handleSave = async () => {
+    const message = validateSitDates(form.start_date, form.end_date);
+    if (message) { setDateError(message); return; }
     setSaving(true);
-    const data = { ...form, pet_ids: selectedPetIds };
-    let sit;
-    if (editing) {
-      await entities.PetSit.update(editing.id, data);
-      sit = { ...editing, ...data };
-    } else {
-      sit = await entities.PetSit.create(data);
+    try {
+      const result = await saveSit({ form, selectedPetIds, editing });
+      if (result.dateError) { setDateError(result.dateError); return; }
+      if (result.error) {
+        // The sit exists even though a later step failed: a retry updates it.
+        if (result.sit) setEditing(result.sit);
+        toast({ variant: 'destructive', title: "Couldn't save this pet sit", description: 'Please try again.' });
+        return;
+      }
+      setDialogOpen(false);
+      load();
+      setExpandedId(result.sit.id);
+      loadSitLogs(result.sit.id);
+    } finally {
+      setSaving(false);
     }
-    await ensureLogsForSit(sit);
-    setSaving(false);
-    setDialogOpen(false);
-    load();
-    setExpandedId(sit.id);
-    loadSitLogs(sit.id);
   };
 
   const handleDelete = async (id) => {
-    await entities.PetSit.delete(id);
-    setDeleteConfirmId(null);
-    load();
+    try {
+      await entities.PetSit.delete(id);
+      setDeleteConfirmId(null);
+      load();
+    } catch (err) {
+      reportClientError(err, { feature: 'pet-sitting', note: 'delete' });
+      toast({ variant: 'destructive', title: "Couldn't remove this sit", description: 'Please try again.' });
+    }
   };
 
   const toggleBoolField = async (sit, log, field) => {
@@ -266,13 +317,28 @@ export default function PetSittingSection({ petId = undefined }) {
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label>Start Date *</Label>
-                <Input type="date" value={form.start_date} onChange={e => setField('start_date', e.target.value)} />
+                <Input
+                  type="date"
+                  value={form.start_date}
+                  min={SIT_MIN_DATE}
+                  max={SIT_MAX_DATE}
+                  onClick={openDatePicker}
+                  onChange={e => setDateField('start_date', e.target.value)}
+                />
               </div>
               <div className="space-y-1.5">
                 <Label>End Date *</Label>
-                <Input type="date" value={form.end_date} onChange={e => setField('end_date', e.target.value)} />
+                <Input
+                  type="date"
+                  value={form.end_date}
+                  min={parseSitDate(form.start_date) ? form.start_date : SIT_MIN_DATE}
+                  max={SIT_MAX_DATE}
+                  onClick={openDatePicker}
+                  onChange={e => setDateField('end_date', e.target.value)}
+                />
               </div>
             </div>
+            {dateError && <p role="alert" className="text-[13px] text-destructive -mt-2">{dateError}</p>}
             <div className="space-y-1.5">
               <Label>Emergency Contact</Label>
               <Input value={form.emergency_contact} onChange={e => setField('emergency_contact', e.target.value)} placeholder="Name & phone" />
