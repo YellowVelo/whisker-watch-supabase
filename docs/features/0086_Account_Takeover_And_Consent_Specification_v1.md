@@ -162,7 +162,8 @@ No mockups. The finish page and consent screen reuse `AuthLayout` (the same fram
 2. **Invite link for a finished account:** if `status` says no password and no consent are needed, `/accept-invite` skips the form and goes straight to the pet (or Pet Sitter page).
 3. **Partial failure:** if a password was saved but consent wasn't, the form re-checks `status` and shows just the Terms checkbox.
 4. **Marketing on the existing-account screen:** a finish call with no `marketing_opt_in` leaves the person's current setting unchanged.
-5. No rate limit on `finish-account-setup` (sign-in required). Sign-up integration tests stay local-only, as today.
+5. **Build finding (T2 review, 2026-11-27):** on dev, `admin.createUser()` with no password still stores a random password hash, so `email_has_password()` says the account has one. New sign-ups are therefore created with `admin.generateLink({ type: 'invite', email, options: { data: { first_name }, redirectTo } })`, the same call `invite-co-owner` already uses, which creates the account with no password and returns the link token (`type=invite`, so `/verify-email` accepts `invite` alongside `signup`/`recovery`). The "already registered" branch is unchanged (recovery link). No behavior change for people.
+6. No rate limit on `finish-account-setup` (sign-in required). Sign-up integration tests stay local-only, as today.
 
 ## Open Questions
 
