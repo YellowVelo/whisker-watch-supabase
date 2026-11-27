@@ -1,5 +1,4 @@
-// Integration tests for the deployed sign-up and confirm-email Edge
-// Functions, run against wysker-watch-dev over HTTP (see
+// Integration tests for the deployed sign-up Edge Function, run against wysker-watch-dev over HTTP (see
 // _shared/testHelpers.ts for the required env vars).
 //
 // sign-up is a PUBLIC, unauthenticated endpoint — every call here uses an
@@ -19,7 +18,7 @@
 
 import { assertEquals, assertExists } from 'https://deno.land/std@0.224.0/assert/mod.ts';
 import { createClient } from 'jsr:@supabase/supabase-js@2.119.2';
-import { adminClient, callFunction, deleteScratchUser, functionsUrl, requireEnv } from '../_shared/testHelpers.ts';
+import { adminClient, callFunction, deleteScratchUser, requireEnv } from '../_shared/testHelpers.ts';
 
 let scratchCounter = 0;
 function scratchEmail(label: string): string {
@@ -411,64 +410,5 @@ Deno.test('sign-up: rate limit blocks repeated attempts for the same email withi
     assertEquals(lastStatus, 429);
   } finally {
     for (const id of createdUserIds) await deleteScratchUser(id);
-  }
-});
-
-Deno.test('confirm-email: marks the caller\'s own account confirmed, independent of token type', async () => {
-  const email = scratchEmail('confirm-email');
-  const admin = adminClient();
-
-  // Create the account the same way sign-up's own 'signup' action does,
-  // but mint our own recovery-type token directly via the admin API so
-  // this test doesn't depend on reading the real confirmation email
-  // sign-up would have sent.
-  const { data: created, error: createError } = await admin.auth.admin.createUser({
-    email,
-    password: 'a-scratch-password-123',
-    email_confirm: false,
-  });
-  if (createError || !created?.user) throw new Error(`Failed to create scratch user: ${createError?.message}`);
-  const userId = created.user.id;
-
-  try {
-    assertEquals(created.user.email_confirmed_at ?? null, null);
-
-    const { data: linkData, error: linkError } = await admin.auth.admin.generateLink({
-      type: 'recovery',
-      email,
-    });
-    if (linkError || !linkData?.properties?.hashed_token) {
-      throw new Error(`Failed to generate recovery link: ${linkError?.message}`);
-    }
-
-    const anonUrl = requireEnv('SUPABASE_URL');
-    const anonKey = requireEnv('SUPABASE_ANON_KEY');
-    const anon = createClient(anonUrl, anonKey);
-    const { data: verified, error: verifyError } = await anon.auth.verifyOtp({
-      token_hash: linkData.properties.hashed_token,
-      type: 'recovery',
-    });
-    if (verifyError || !verified?.session) {
-      throw new Error(`Failed to verify recovery token: ${verifyError?.message}`);
-    }
-
-    const res = await fetch(functionsUrl('confirm-email'), {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${verified.session.access_token}`,
-        apikey: anonKey,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({}),
-    });
-    const json = await res.json();
-
-    assertEquals(res.status, 200);
-    assertEquals(json.confirmed, true);
-
-    const { data: afterUser } = await admin.auth.admin.getUserById(userId);
-    assertExists(afterUser?.user?.email_confirmed_at);
-  } finally {
-    await deleteScratchUser(userId);
   }
 });

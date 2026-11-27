@@ -44,7 +44,8 @@
 --   5. One-time: the test/demo fixture accounts (account_type 'test' or
 --      'demo', the allowlist in classify_account_type) get consent filled
 --      in with the current versions, so the new consent screen doesn't
---      block the e2e suite or the shared demo account. Real people's
+--      block the e2e suite or the shared demo account. Only confirmed
+--      accounts are filled in, so this can't undo step 0. Real people's
 --      accounts are never filled in; they agree on the consent screen.
 --
 -- Who can see or do what, after this:
@@ -277,9 +278,13 @@ where email_confirmed_at is null
 -- Real people's accounts are never filled in: they agree on the consent
 -- screen. Versions must equal supabase/functions/_shared/legalVersions.ts
 -- (TOS_VERSION, PRIVACY_VERSION) as of this migration.
-update public.profiles
+-- Confirmed accounts only, so this can't undo step 0.
+update public.profiles p
 set terms_accepted_at = now(),
     terms_version = 'July 10, 2026',
     privacy_version = 'November 21, 2026'
-where account_type in ('test', 'demo')
-  and terms_accepted_at is null;
+from auth.users u
+where u.id = p.id
+  and u.email_confirmed_at is not null
+  and p.account_type in ('test', 'demo')
+  and p.terms_accepted_at is null;
