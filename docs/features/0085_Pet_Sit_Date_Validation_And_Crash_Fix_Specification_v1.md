@@ -46,6 +46,7 @@
 5. The database itself refuses the same impossible dates, so no other path (old open tab, future screen, script) can store one.
 6. Each sit's Share, Edit and Delete buttons meet the 44px tap size and have screen-reader labels.
 7. Clicking or tapping anywhere in the Start or End date box opens the calendar, so owners can pick a date instead of typing one. Typing still works.
+8. (Added 2026-11-26, Lynn approved during planning.) If a new sit saves but its checklist fails to build, a second tap on Save updates that same sit instead of creating a duplicate.
 
 ## Acceptance Criteria
 
@@ -61,6 +62,7 @@
 - **AC10** Account deletion and the ownership hand-off still work for an owner with sits (no regression from the new rule).
 - **AC11** Share, Edit and Delete on a sit are each at least 44×44px and have the labels "Share with sitter", "Edit sit", "Delete sit".
 - **AC12** On desktop Chrome, clicking the middle of the Start or End date box opens the browser's calendar. Picking a day fills the box. In a browser without this ability, clicking does nothing extra and the page shows no error.
+- **AC13** Given a new sit whose create succeeds but whose checklist step fails, when the owner taps Save again, then the existing sit is updated, not created again (one sit, not two).
 
 ## Test Plan
 
