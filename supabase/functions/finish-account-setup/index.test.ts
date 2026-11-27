@@ -14,7 +14,7 @@
 //
 // The first test calls the deployed sign-up function, which sends a real
 // email to a synthetic address. Like sign-up/index.test.ts it is
-// local-only (planning decision 8) and skipped in CI; the test after it
+// local-only (planning decision 9) and skipped in CI; the test after it
 // covers the same takeover in CI without sending email.
 //
 // Run: deno test --allow-net --allow-env --node-modules-dir=none supabase/functions/finish-account-setup/index.test.ts
