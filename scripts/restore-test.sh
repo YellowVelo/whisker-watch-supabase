@@ -172,9 +172,14 @@ echo "== Restoring data into scratch project =="
 # -L: restore only the entries in the list built above.
 # Migration 0063 (spec 0085) adds the check constraint pet_sits_dates_sane.
 # Any backup taken before prod's bad sit was fixed still contains that sit,
-# so restoring its pet_sits data fails this rule (and its child tables,
-# pet_sit_logs and pet_sitter_access, then fail their foreign keys). The
-# risk was accepted (Lynn, 2026-11-26), not engineered around.
+# so restoring its pet_sits data fails this rule. pg_restore loads a table's
+# rows in one go, so one bad sit makes the WHOLE pet_sits load fail: every
+# sit in that backup is lost, not just the bad one, and then every checklist
+# row (pet_sit_logs) and sitter-access row (pet_sitter_access) fails its
+# foreign key and is lost too. The risk was accepted (Lynn, 2026-11-26), not
+# engineered around. (In Pet Sitter, a sit with a date outside 2000-2100
+# reads "Dates not set"; a backwards or over-30-day sit shows its real dates
+# but no checklist. Either kind fails this rule.)
 # Once 0063 is on main, every drill (by hand or the quarterly 15 Jan/Apr/
 # Jul/Oct run) restores prod's NEWEST backup by default, so it fails here
 # from the merge until prod's bad sit is fixed and at least one nightly
@@ -184,7 +189,9 @@ echo "== Restoring data into scratch project =="
 # with its backup_key input set to a backup taken after the bad sit was
 # fixed. A failed run stops before handle_new_user is reinstated below; that
 # only matters for this disposable scratch database.
-# Real restore by hand: replay the migrations, then drop the constraint
+# Real restore by hand onto a fresh project: first set the deploy markers
+# for 0055, 0061 and 0063 (the "Setting deploy markers" step above), or
+# those migrations refuse to run; then replay the migrations, drop the constraint
 # BEFORE the first data load (not after a failed one: a second pg_restore
 # hits duplicate keys), load, fix or delete the bad sit(s), then re-add it:
 #   alter table public.pet_sits drop constraint if exists pet_sits_dates_sane;

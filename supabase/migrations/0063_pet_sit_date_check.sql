@@ -17,15 +17,21 @@
 -- leftover bad sit would make deleting that person's account fail. Instead
 -- this file refuses to run while any bad sit exists (check 2 below), and it
 -- never edits or deletes data itself: fix or delete the bad sits in the app
--- (Pet Sitter shows them as "Dates not set"), then push again.
+-- (pencil or trash can on the sit's card in Pet Sitter), then push again.
+-- In Pet Sitter, a sit with a date outside 2000-2100 reads "Dates not set";
+-- a sit that ends before it starts, or runs over 30 days, shows its real
+-- dates but no daily checklist. Either kind blocks this file.
 --
 -- UNDO:
 --   alter table public.pet_sits drop constraint if exists pet_sits_dates_sane;
 --
 -- RESTORING A BACKUP (risk accepted by Lynn, 2026-11-26: prod has no active
 -- users): any backup taken before prod's bad sit is fixed still contains it,
--- so restoring that backup's pet_sits data fails this rule, and its child
--- tables (pet_sit_logs, pet_sitter_access) then fail their foreign keys.
+-- so restoring that backup's pet_sits data fails this rule. pg_restore loads
+-- a table's rows in one go, so one bad sit makes the WHOLE pet_sits load
+-- fail: every sit in that backup is lost, not just the bad one, and then
+-- every checklist row (pet_sit_logs) and sitter-access row
+-- (pet_sitter_access) fails its foreign key and is lost too.
 --
 -- Once this file is on main, every restore drill (scripts/restore-test.sh,
 -- run by hand or by the quarterly 15 Jan/Apr/Jul/Oct schedule) restores
@@ -41,7 +47,18 @@
 -- stops before handle_new_user is switched back on; that only matters for
 -- the disposable scratch database, and the next successful run fixes it.)
 --
--- For a real restore by hand:
+-- For a real restore by hand (onto a fresh project):
+--   0. FIRST set the deploy markers for every gated migration, or 0055,
+--      0061 and this file refuse to run during the replay (the same step
+--      scripts/restore-test.sh does):
+--        create schema if not exists private;
+--        create table if not exists private.deploy_markers (key text primary key, created_at timestamptz not null default now());
+--        revoke all on schema private from anon, authenticated;
+--        revoke all on private.deploy_markers from anon, authenticated;
+--        insert into private.deploy_markers (key) values
+--          ('spec_0071_frontend_live'), ('spec_0081_frontend_live'),
+--          ('spec_0085_frontend_live')
+--        on conflict do nothing;
 --   1. Replay the migrations (including this one).
 --   2. BEFORE the first data load:
 --        alter table public.pet_sits drop constraint if exists pet_sits_dates_sane;
@@ -80,7 +97,9 @@
 --   1. Frontend promoted (Cloudflare, branch main, "Spec 0085 ...").
 --   2. Marker set (snippet above).
 --   3. Any bad sits fixed or deleted in the app (Pet Sitter, pencil or
---      trash can on the "Dates not set" card).
+--      trash can on the sit's card: "Dates not set" for an out-of-range
+--      date; real dates but no checklist for a backwards or over-30-day
+--      sit).
 --   4. `supabase db push`.
 --
 -- `supabase db push` applies this file as one transaction: a blocked or
@@ -137,7 +156,7 @@ begin
     ) bad;
 
     raise exception 'Spec 0085 migration 0063 blocked: % pet sit(s) have dates that break the new rule. '
-      'Fix or delete them in the app (Pet Sitter shows them as "Dates not set"), then push again. '
+      'Fix or delete them in Pet Sitter (an out-of-range date reads "Dates not set"; a backwards or over-30-day sit shows its dates but no checklist), then push again. '
       'First up to 20: %', bad_count, bad_list;
   end if;
 end $$;
