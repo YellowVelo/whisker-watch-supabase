@@ -11,13 +11,17 @@ import { reportClientError } from '@/lib/errorMonitoring';
 // (manual token_hash redemption via verifyOtp(), rather than Supabase's
 // auto-URL-fragment session flow used by ResetPassword.jsx). Since spec
 // 0086 no password is set at sign-up: the account is created with no
-// password and no consent; the inbox owner sets both on spec 0086's
-// finish step, after the link is redeemed.
+// password and no consent. Redeeming the link gives it a random password
+// nobody knows (Supabase does this itself); the inbox owner sets the real
+// one, and agrees to the Terms, on spec 0086's finish step. That step
+// asks for a password because this session signed in from an email link
+// (JWT amr 'otp'), not because of anything stored (planning decision 7).
 //
 // `type` is 'signup' for a new sign-up's link (sign-up/index.ts mints it
 // with generateLink({type:'invite'}), and the invite token redeems as
 // 'signup'), or 'recovery' when sign-up/index.ts sends a fresh link to an
-// account that already exists but is unconfirmed or has no password yet.
+// account that already exists but is unconfirmed or has no consent
+// recorded yet.
 // 'invite' is also accepted for completeness.
 //
 // After verifyOtp() succeeds, this also calls the confirm-email Edge

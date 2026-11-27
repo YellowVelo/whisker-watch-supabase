@@ -18,6 +18,7 @@
 // Run: deno test --allow-net --allow-env supabase/functions/sign-up/index.test.ts
 
 import { assertEquals, assertExists } from 'https://deno.land/std@0.224.0/assert/mod.ts';
+import { createClient } from 'jsr:@supabase/supabase-js@2.119.2';
 import { adminClient, callFunction, deleteScratchUser, functionsUrl, requireEnv } from '../_shared/testHelpers.ts';
 
 let scratchCounter = 0;
@@ -43,19 +44,32 @@ async function deleteEmailLogs(email: string): Promise<void> {
   await adminClient().from('email_logs').delete().eq('recipient_email', email);
 }
 
-// Makes a confirmed account with no password the same way sign-up does
-// (an invite link, spec 0086 planning decision 5), then confirms it, as
-// if the link had been clicked but the finish page never completed.
-// admin.createUser() can't be used: it stores a random password hash.
-async function createConfirmedPasswordlessUser(email: string): Promise<string> {
+function anonClient() {
+  return createClient(requireEnv('SUPABASE_URL'), requireEnv('SUPABASE_ANON_KEY'), {
+    auth: { persistSession: false },
+  });
+}
+
+// Makes an account the way sign-up does (an invite link, spec 0086
+// planning decision 5) and then really redeems that link with verifyOtp,
+// as the inbox owner's click on /verify-email does (type=signup, the type
+// the sign-up email carries). Nothing is faked with updateUserById: the
+// click confirms the account and Supabase stores its own random password
+// (decision 7). No consent is recorded, as if the finish page was closed.
+async function createClickedSignupUser(email: string): Promise<string> {
   const admin = adminClient();
   const { data: linkData, error: linkError } = await admin.auth.admin.generateLink({ type: 'invite', email });
-  if (linkError || !linkData?.user) throw new Error(`Failed to create scratch user: ${linkError?.message}`);
+  if (linkError || !linkData?.user || !linkData.properties?.hashed_token) {
+    throw new Error(`Failed to create scratch user: ${linkError?.message}`);
+  }
   const userId = linkData.user.id;
-  const { error: confirmError } = await admin.auth.admin.updateUserById(userId, { email_confirm: true });
-  if (confirmError) {
+  const { data: verified, error: verifyError } = await anonClient().auth.verifyOtp({
+    token_hash: linkData.properties.hashed_token,
+    type: 'signup',
+  });
+  if (verifyError || verified?.session?.user?.id !== userId) {
     await deleteScratchUser(userId);
-    throw new Error(`Failed to confirm scratch user: ${confirmError.message}`);
+    throw new Error(`Failed to redeem the scratch user's link: ${verifyError?.message}`);
   }
   return userId;
 }
@@ -127,7 +141,7 @@ Deno.test('sign-up: signing up twice for the same (still-unconfirmed) email does
     const { data: allProfiles } = await admin.from('profiles').select('id').eq('email', email);
     assertEquals(allProfiles?.length, 1);
 
-    // Still unconfirmed with no password, so the second call resends.
+    // Still unconfirmed, so the second call resends.
     assertEquals(await verifyEmailLogCount(email), 2);
   } finally {
     await deleteEmailLogs(email);
@@ -172,9 +186,33 @@ Deno.test('sign-up: sending a password still leaves the account with no password
     assertExists(profile);
     userId = profile!.id as string;
 
+    // Before any link is clicked, nothing is stored as a password.
     const { data: hasPassword, error: hasPasswordError } = await admin.rpc('email_has_password', { p_email: email });
     assertEquals(hasPasswordError, null);
     assertEquals(hasPassword, false);
+
+    // Redeem a real link for the account (a recovery link, the kind the
+    // resend path sends; the sign-up email's own token can't be read
+    // here). Once confirmed, the password the old page sent still fails.
+    const { data: linkData, error: linkError } = await admin.auth.admin.generateLink({ type: 'recovery', email });
+    if (linkError || !linkData?.properties?.hashed_token) {
+      throw new Error(`Failed to generate recovery link: ${linkError?.message}`);
+    }
+    const { data: verified, error: verifyError } = await anonClient().auth.verifyOtp({
+      token_hash: linkData.properties.hashed_token,
+      type: 'recovery',
+    });
+    assertEquals(verifyError, null);
+    assertEquals(verified?.session?.user?.id, userId);
+    const { data: confirmedUser } = await admin.auth.admin.getUserById(userId);
+    assertExists(confirmedUser?.user?.email_confirmed_at);
+
+    const { data: signInData, error: signInError } = await anonClient().auth.signInWithPassword({
+      email,
+      password: 'a-scratch-password-123',
+    });
+    assertExists(signInError);
+    assertEquals(signInData?.session ?? null, null);
 
     // Metadata keeps only first_name; no consent or marketing fields.
     const { data: authUser } = await admin.auth.admin.getUserById(userId);
@@ -189,15 +227,15 @@ Deno.test('sign-up: sending a password still leaves the account with no password
   }
 });
 
-Deno.test('sign-up: resend sends a fresh link to a confirmed account that has no password (spec 0086 decision 1)', async () => {
-  const email = scratchEmail('resend-confirmed-no-password');
+Deno.test('sign-up: resend sends a fresh link after a real link click when no consent is recorded (spec 0086 decisions 1, 7)', async () => {
+  const email = scratchEmail('resend-clicked-no-consent');
   const admin = adminClient();
-  const userId = await createConfirmedPasswordlessUser(email);
+  const userId = await createClickedSignupUser(email);
   try {
     const { data: authUser } = await admin.auth.admin.getUserById(userId);
     assertExists(authUser?.user?.email_confirmed_at);
-    const { data: hasPassword } = await admin.rpc('email_has_password', { p_email: email });
-    assertEquals(hasPassword, false);
+    const { data: profile } = await admin.from('profiles').select('terms_accepted_at').eq('id', userId).single();
+    assertEquals(profile?.terms_accepted_at ?? null, null);
 
     const { status, json } = await callFunction('sign-up', '', { action: 'resend', email });
     assertEquals(status, 200);
@@ -211,14 +249,11 @@ Deno.test('sign-up: resend sends a fresh link to a confirmed account that has no
   }
 });
 
-Deno.test('sign-up: signup for a confirmed account that has no password sends a fresh link (spec 0086 decision 1)', async () => {
-  const email = scratchEmail('signup-confirmed-no-password');
+Deno.test('sign-up: signup sends a fresh link after a real link click when no consent is recorded (spec 0086 decisions 1, 7)', async () => {
+  const email = scratchEmail('signup-clicked-no-consent');
   const admin = adminClient();
-  const userId = await createConfirmedPasswordlessUser(email);
+  const userId = await createClickedSignupUser(email);
   try {
-    const { data: hasPassword } = await admin.rpc('email_has_password', { p_email: email });
-    assertEquals(hasPassword, false);
-
     const { status, json } = await callFunction('sign-up', '', { action: 'signup', email, first_name: 'Scratch' });
     assertEquals(status, 200);
     assertEquals(json.sent, true);
@@ -235,21 +270,27 @@ Deno.test('sign-up: signup for a confirmed account that has no password sends a 
   }
 });
 
-Deno.test('sign-up: resend sends nothing to a confirmed account that has a password (same generic response)', async () => {
-  const email = scratchEmail('resend-confirmed-with-password');
+Deno.test('sign-up: signup and resend send nothing to a confirmed account with consent recorded (same generic response)', async () => {
+  const email = scratchEmail('confirmed-with-consent');
   const admin = adminClient();
-  const { data: created, error: createError } = await admin.auth.admin.createUser({
-    email,
-    password: 'a-scratch-password-123',
-    email_confirm: true,
-  });
-  if (createError || !created?.user) throw new Error(`Failed to create scratch user: ${createError?.message}`);
-  const userId = created.user.id;
+  const userId = await createClickedSignupUser(email);
   try {
-    const { status, json } = await callFunction('sign-up', '', { action: 'resend', email });
-    assertEquals(status, 200);
-    assertEquals(json.sent, true);
-    assertEquals(Object.keys(json).length, 1);
+    // Fixture: the finish page's consent write, done with the service role.
+    const { error: consentError } = await admin
+      .from('profiles')
+      .update({ terms_accepted_at: new Date().toISOString(), terms_version: 'test', privacy_version: 'test' })
+      .eq('id', userId);
+    assertEquals(consentError, null);
+
+    const resend = await callFunction('sign-up', '', { action: 'resend', email });
+    assertEquals(resend.status, 200);
+    assertEquals(resend.json.sent, true);
+    assertEquals(Object.keys(resend.json).length, 1);
+
+    const signup = await callFunction('sign-up', '', { action: 'signup', email, first_name: 'Scratch' });
+    assertEquals(signup.status, 200);
+    assertEquals(signup.json.sent, true);
+    assertEquals(Object.keys(signup.json).length, 1);
 
     assertEquals(await verifyEmailLogCount(email), 0);
   } finally {
@@ -315,10 +356,7 @@ Deno.test('sign-up: signup for a pending invitee does not replace their invite l
     assertEquals(await verifyEmailLogCount(email), 1);
 
     // A re-minted invite token would have replaced this one.
-    const { createClient } = await import('jsr:@supabase/supabase-js@2.119.2');
-    const anon = createClient(requireEnv('SUPABASE_URL'), requireEnv('SUPABASE_ANON_KEY'), {
-      auth: { persistSession: false },
-    });
+    const anon = anonClient();
     const { data: verified, error: verifyError } = await anon.auth.verifyOtp({ token_hash: inviteHash, type: 'invite' });
     assertEquals(verifyError, null);
     assertEquals(verified?.session?.user?.id, userId);
@@ -341,10 +379,7 @@ Deno.test('sign-up: an invite-minted token redeems as type signup (the link type
   }
   const userId = linkData.user.id;
   try {
-    const { createClient } = await import('jsr:@supabase/supabase-js@2.119.2');
-    const anon = createClient(requireEnv('SUPABASE_URL'), requireEnv('SUPABASE_ANON_KEY'), {
-      auth: { persistSession: false },
-    });
+    const anon = anonClient();
     const { data: verified, error: verifyError } = await anon.auth.verifyOtp({
       token_hash: linkData.properties.hashed_token,
       type: 'signup',
@@ -408,7 +443,6 @@ Deno.test('confirm-email: marks the caller\'s own account confirmed, independent
 
     const anonUrl = requireEnv('SUPABASE_URL');
     const anonKey = requireEnv('SUPABASE_ANON_KEY');
-    const { createClient } = await import('jsr:@supabase/supabase-js@2.119.2');
     const anon = createClient(anonUrl, anonKey);
     const { data: verified, error: verifyError } = await anon.auth.verifyOtp({
       token_hash: linkData.properties.hashed_token,

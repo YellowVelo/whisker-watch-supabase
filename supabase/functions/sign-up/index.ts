@@ -12,9 +12,13 @@
 // authenticated caller's implicit trust.
 //
 // Spec 0086 (account takeover, PA-13): the account is created with NO
-// password and no consent. Whoever controls the inbox clicks the emailed
-// link, lands on the finish page (/verify-email), and only then sets the
-// password and agrees to the Terms (finish-account-setup). Before 0086,
+// password and no consent. When the emailed link is clicked, Supabase
+// itself gives the account a random password nobody knows (planning
+// decision 7). Whoever controls the inbox lands on the finish page
+// (/verify-email) and sets the real password and agrees to the Terms
+// there (finish-account-setup); that step asks for a password because the
+// session signed in from an email link, not because of what's stored.
+// Before 0086,
 // anyone could sign up with someone else's address and a password of
 // their choosing, and that password still worked after the real owner
 // confirmed. Any `password`, `accepted_terms` or `marketing_opt_in` an
@@ -40,9 +44,11 @@
 //
 // Both 'resend' and a 'signup' for an address that already has an
 // account send a fresh link when that account is unconfirmed OR has no
-// password yet (spec 0086 planning decision 1: someone whose link click
-// confirmed them but who closed the finish page early can still get back
-// in). A confirmed account that already has a password gets nothing.
+// consent recorded (profiles.terms_accepted_at is null) — spec 0086
+// planning decisions 1 and 7: someone whose link click confirmed them but
+// who closed the finish page early can still get back in. "Has a
+// password" can't be used: every clicked link leaves a random one. A
+// confirmed account with consent recorded gets nothing.
 //
 // Response is deliberately the SAME generic shape regardless of whether
 // the account is brand new, already confirmed, already has a stuck
@@ -61,7 +67,7 @@ import { isValidEmail, normalizeEmail } from '../_shared/email/utils.ts';
 import { scopedCorsHeaders } from '../_shared/cors.ts';
 import { getValidatedAppUrl } from '../_shared/appUrl.ts';
 import { isAlreadyRegisteredError } from '../_shared/authErrors.ts';
-import { serverError } from '../_shared/errorReporting.ts';
+import { reportError, serverError } from '../_shared/errorReporting.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -141,9 +147,10 @@ async function lookupConfirmationState(
 
 // Shared by the 'resend' action and the 'signup' action whenever the
 // email already has an account. Sends when the account is unconfirmed
-// or has no password yet (spec 0086 planning decision 1). Returns null
-// when there's genuinely nothing to send (no such account, confirmed
-// with a password, a lookup failed, or the recovery link itself couldn't
+// or has no consent recorded (spec 0086 planning decisions 1 and 7).
+// Returns null when there's genuinely nothing to send (no such account,
+// confirmed with consent recorded, a lookup failed, or the recovery link
+// itself couldn't
 // be generated) — callers treat null as "respond with the generic
 // success shape", never as an error, to preserve enumeration safety.
 // `knownState` skips the lookup when the caller has already done it.
@@ -162,17 +169,23 @@ async function resolveConfirmationResend(
     state = lookup.state;
   }
   if (state.email_confirmed) {
-    // Confirmed, but the finish page may never have been completed —
-    // email_has_password() (migration 0020) is the same check the invite
-    // functions use. Fails closed: on a lookup error, send nothing.
-    const { data: hasPassword, error: hasPasswordError } = await adminClient.rpc('email_has_password', {
-      p_email: cleanEmail,
-    });
-    if (hasPasswordError) {
-      console.error('email_has_password error:', hasPasswordError);
+    // Confirmed, but the finish page may never have been completed. Its
+    // consent write is the one reliable sign it was: email_has_password()
+    // is true for every account once its link is clicked (Supabase stores
+    // a random password then; spec 0086 planning decision 7). Read with
+    // the service role, by the id the lookup above returned. Fails
+    // closed: on a lookup error, send nothing. A missing profile row has
+    // no consent recorded, so it gets a link (it goes only to the inbox).
+    const { data: profile, error: profileError } = await adminClient
+      .from('profiles')
+      .select('terms_accepted_at')
+      .eq('id', state.user_id)
+      .maybeSingle();
+    if (profileError) {
+      console.error('profiles consent lookup error:', profileError);
       return null;
     }
-    if (hasPassword !== false) {
+    if (profile?.terms_accepted_at) {
       return null;
     }
   }
@@ -275,6 +288,12 @@ Deno.serve(async (req) => {
       // generateLink.
       const existing = await lookupConfirmationState(adminClient, cleanEmail);
       if (existing.failed) {
+        // The detail is already in the function log; Sentry gets a
+        // report too. The reply text is unchanged.
+        reportError(new Error('sign-up: get_auth_user_confirmation_state lookup failed'), {
+          function: 'sign-up',
+          step: 'lookup_confirmation_state',
+        });
         return jsonResponse({ error: 'Unable to process this request right now' }, 500, cors);
       }
       if (existing.state) {
@@ -294,9 +313,13 @@ Deno.serve(async (req) => {
         //
         // Also deliberately NOT admin.createUser() (spec 0086 planning
         // decision 5): with no password it still stores a random password
-        // hash, so email_has_password() would say the account has one. An
-        // invite-created account has no password and no consent (spec
-        // 0086); both are set later by the inbox owner on the finish page.
+        // hash, so email_has_password() would say a never-clicked account
+        // already has one. An invite-created
+        // account starts with no password and no consent. Clicking the
+        // link gives it a random password nobody knows (Supabase does
+        // this for invited users, decision 7); the inbox owner then sets
+        // the real one on the finish page, which asks for it because the
+        // session came from an email link (JWT amr 'otp').
         const { data: linkData, error: linkError } = await adminClient.auth.admin.generateLink({
           type: 'invite',
           email: cleanEmail,
