@@ -9,15 +9,16 @@ import { reportClientError } from '@/lib/errorMonitoring';
 // sign-up Edge Function — see supabase/functions/sign-up/index.ts) and
 // its resend variant. Mirrors src/pages/AcceptInvite.jsx's structure
 // (manual token_hash redemption via verifyOtp(), rather than Supabase's
-// auto-URL-fragment session flow used by ResetPassword.jsx) but skips
-// AcceptInvite's SetPasswordForm step, since a signup already set a
-// password before this page is ever reached.
+// auto-URL-fragment session flow used by ResetPassword.jsx). Since spec
+// 0086 no password is set at sign-up: the account is created with no
+// password and no consent; the inbox owner sets both on spec 0086's
+// finish step, after the link is redeemed.
 //
-// `type` is 'signup' for a first confirmation, or 'recovery' when
-// sign-up/index.ts's resend path re-issued the link for an account that
-// was already created but never confirmed (generateLink's 'signup' type
-// only works for an email with no existing auth.users row — see that
-// function's header comment).
+// `type` is 'signup' for a new sign-up's link (sign-up/index.ts mints it
+// with generateLink({type:'invite'}), and the invite token redeems as
+// 'signup'), or 'recovery' when sign-up/index.ts sends a fresh link to an
+// account that already exists but is unconfirmed or has no password yet.
+// 'invite' is also accepted for completeness.
 //
 // After verifyOtp() succeeds, this also calls the confirm-email Edge
 // Function once — see that function's header comment for why: a

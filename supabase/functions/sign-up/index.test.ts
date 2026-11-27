@@ -258,6 +258,108 @@ Deno.test('sign-up: resend sends nothing to a confirmed account that has a passw
   }
 });
 
+Deno.test('sign-up: signup and resend send a link to an older unconfirmed account that has a password (same generic response)', async () => {
+  // Accounts made before spec 0086 were created with a password and left
+  // unconfirmed until the link was clicked.
+  const email = scratchEmail('unconfirmed-with-password');
+  const admin = adminClient();
+  const { data: created, error: createError } = await admin.auth.admin.createUser({
+    email,
+    password: 'a-scratch-password-123',
+    email_confirm: false,
+  });
+  if (createError || !created?.user) throw new Error(`Failed to create scratch user: ${createError?.message}`);
+  const userId = created.user.id;
+  try {
+    assertEquals(created.user.email_confirmed_at ?? null, null);
+
+    const signup = await callFunction('sign-up', '', { action: 'signup', email, first_name: 'Scratch' });
+    assertEquals(signup.status, 200);
+    assertEquals(signup.json.sent, true);
+    assertEquals(Object.keys(signup.json).length, 1);
+    assertEquals(await verifyEmailLogCount(email), 1);
+
+    const resend = await callFunction('sign-up', '', { action: 'resend', email });
+    assertEquals(resend.status, 200);
+    assertEquals(resend.json.sent, true);
+    assertEquals(Object.keys(resend.json).length, 1);
+    assertEquals(await verifyEmailLogCount(email), 2);
+
+    // Still one account.
+    const { data: allProfiles } = await admin.from('profiles').select('id').eq('email', email);
+    assertEquals(allProfiles?.length, 1);
+  } finally {
+    await deleteEmailLogs(email);
+    await deleteScratchUser(userId);
+  }
+});
+
+Deno.test('sign-up: signup for a pending invitee does not replace their invite link', async () => {
+  // invite-co-owner/invite-sitter create the invitee's account with an
+  // invite link. A sign-up for that address must go to the resend path
+  // (a recovery link) without minting a new invite token, so the link in
+  // the invite email still works.
+  const email = scratchEmail('signup-pending-invitee');
+  const admin = adminClient();
+  const { data: linkData, error: linkError } = await admin.auth.admin.generateLink({ type: 'invite', email });
+  if (linkError || !linkData?.user || !linkData.properties?.hashed_token) {
+    throw new Error(`Failed to create scratch invitee: ${linkError?.message}`);
+  }
+  const userId = linkData.user.id;
+  const inviteHash = linkData.properties.hashed_token;
+  try {
+    const { status, json } = await callFunction('sign-up', '', { action: 'signup', email, first_name: 'Scratch' });
+    assertEquals(status, 200);
+    assertEquals(json.sent, true);
+    assertEquals(Object.keys(json).length, 1);
+    assertEquals(await verifyEmailLogCount(email), 1);
+
+    // A re-minted invite token would have replaced this one.
+    const { createClient } = await import('jsr:@supabase/supabase-js@2.119.2');
+    const anon = createClient(requireEnv('SUPABASE_URL'), requireEnv('SUPABASE_ANON_KEY'), {
+      auth: { persistSession: false },
+    });
+    const { data: verified, error: verifyError } = await anon.auth.verifyOtp({ token_hash: inviteHash, type: 'invite' });
+    assertEquals(verifyError, null);
+    assertEquals(verified?.session?.user?.id, userId);
+  } finally {
+    await deleteEmailLogs(email);
+    await deleteScratchUser(userId);
+  }
+});
+
+Deno.test('sign-up: an invite-minted token redeems as type signup (the link type new sign-ups are sent)', async () => {
+  // New sign-ups are created with generateLink({type:'invite'}) but the
+  // emailed link says type=signup, because the frontend live before spec
+  // 0086's is promoted accepts only signup/recovery. GoTrue stores both as
+  // a confirmation token, so verifyOtp must accept it as 'signup'.
+  const email = scratchEmail('invite-redeems-as-signup');
+  const admin = adminClient();
+  const { data: linkData, error: linkError } = await admin.auth.admin.generateLink({ type: 'invite', email });
+  if (linkError || !linkData?.user || !linkData.properties?.hashed_token) {
+    throw new Error(`Failed to create scratch user: ${linkError?.message}`);
+  }
+  const userId = linkData.user.id;
+  try {
+    const { createClient } = await import('jsr:@supabase/supabase-js@2.119.2');
+    const anon = createClient(requireEnv('SUPABASE_URL'), requireEnv('SUPABASE_ANON_KEY'), {
+      auth: { persistSession: false },
+    });
+    const { data: verified, error: verifyError } = await anon.auth.verifyOtp({
+      token_hash: linkData.properties.hashed_token,
+      type: 'signup',
+    });
+    assertEquals(verifyError, null);
+    assertExists(verified?.session);
+    assertEquals(verified!.session!.user.id, userId);
+
+    const { data: afterUser } = await admin.auth.admin.getUserById(userId);
+    assertExists(afterUser?.user?.email_confirmed_at);
+  } finally {
+    await deleteScratchUser(userId);
+  }
+});
+
 Deno.test('sign-up: rate limit blocks repeated attempts for the same email within the window', async () => {
   const email = scratchEmail('rate-limited');
   const createdUserIds: string[] = [];

@@ -121,29 +121,45 @@ interface ResendResult {
   sentByUserId: string;
 }
 
-// Shared by both the 'resend' action and the 'signup' action's
-// already-registered fallback — previously duplicated near-verbatim in
-// both branches. Sends when the account is unconfirmed or has no
-// password yet (spec 0086 planning decision 1). Returns null when
-// there's genuinely nothing to send (no such account, confirmed with a
-// password, a lookup failed, or the recovery link itself couldn't be
-// generated) — callers treat null as "respond with the generic success
-// shape", never as an error, to preserve enumeration safety.
-async function resolveConfirmationResend(
+// Looks up whether an auth.users row exists for the email (and whether
+// it's confirmed). `failed` is true only when the lookup itself errored;
+// `state` is null when there's simply no account.
+async function lookupConfirmationState(
   adminClient: SupabaseClient,
   cleanEmail: string,
-  verifyPageUrl: string,
-): Promise<ResendResult | null> {
+): Promise<{ failed: boolean; state: ConfirmationStateRow | null }> {
   const { data: stateRows, error: stateError } = await adminClient.rpc('get_auth_user_confirmation_state', {
     p_email: cleanEmail,
   });
   if (stateError) {
     console.error('get_auth_user_confirmation_state error:', stateError);
-    return null;
+    return { failed: true, state: null };
   }
   const state = (Array.isArray(stateRows) ? stateRows[0] : stateRows) as ConfirmationStateRow | null | undefined;
+  return { failed: false, state: state ?? null };
+}
+
+// Shared by the 'resend' action and the 'signup' action whenever the
+// email already has an account. Sends when the account is unconfirmed
+// or has no password yet (spec 0086 planning decision 1). Returns null
+// when there's genuinely nothing to send (no such account, confirmed
+// with a password, a lookup failed, or the recovery link itself couldn't
+// be generated) — callers treat null as "respond with the generic
+// success shape", never as an error, to preserve enumeration safety.
+// `knownState` skips the lookup when the caller has already done it.
+async function resolveConfirmationResend(
+  adminClient: SupabaseClient,
+  cleanEmail: string,
+  verifyPageUrl: string,
+  knownState?: ConfirmationStateRow,
+): Promise<ResendResult | null> {
+  let state = knownState ?? null;
   if (!state) {
-    return null;
+    const lookup = await lookupConfirmationState(adminClient, cleanEmail);
+    if (lookup.failed || !lookup.state) {
+      return null;
+    }
+    state = lookup.state;
   }
   if (state.email_confirmed) {
     // Confirmed, but the finish page may never have been completed —
@@ -245,53 +261,79 @@ Deno.serve(async (req) => {
     const verifyPageUrl = `${appUrl}/verify-email`;
 
     let tokenHash: string | undefined;
-    let tokenType: 'invite' | 'recovery' | undefined;
+    let tokenType: 'signup' | 'recovery' | undefined;
     let sentByUserId: string | undefined;
 
     if (action === 'signup') {
-      // Deliberately NOT generateLink({type:'signup'}) — that call turned
-      // out (verified in production 2026-07-26, not just documented
-      // behavior) to still trigger Supabase's own built-in confirmation
-      // email, so the user got BOTH Supabase's default email AND our
-      // branded one. The 'invite' type is the same call invite-co-owner
-      // already uses: it creates the auth user and mints a token but,
-      // unlike admin.inviteUserByEmail(), sends no email itself.
-      //
-      // Also deliberately NOT admin.createUser() (spec 0086 planning
-      // decision 5): with no password it still stores a random password
-      // hash, so email_has_password() would say the account has one. An
-      // invite-created account has no password and no consent (spec
-      // 0086); both are set later by the inbox owner on the finish page.
-      const { data: linkData, error: linkError } = await adminClient.auth.admin.generateLink({
-        type: 'invite',
-        email: cleanEmail,
-        options: {
-          data: firstName ? { first_name: firstName } : {},
-          redirectTo: verifyPageUrl,
-        },
-      });
-
-      if (linkError) {
-        if (!isAlreadyRegisteredError(linkError)) {
-          console.error('generateLink (invite, signup) error:', linkError);
-          return jsonResponse({ error: 'Unable to process this request right now' }, 500, cors);
-        }
-
-        // Already has an auth.users row — same "finished vs still needs
-        // a link" question the 'resend' action answers below.
-        const resend = await resolveConfirmationResend(adminClient, cleanEmail, verifyPageUrl);
+      // An address that already has an account (including a pending
+      // co-owner/sitter invitee, whose account invite-co-owner/
+      // invite-sitter created) never gets a fresh invite token minted
+      // here: it goes straight to the same resend decision as 'resend'.
+      // The response is identical either way (enumeration safety). The
+      // "already registered" fallback below stays as a backstop for a
+      // race where the account appears between this lookup and
+      // generateLink.
+      const existing = await lookupConfirmationState(adminClient, cleanEmail);
+      if (existing.failed) {
+        return jsonResponse({ error: 'Unable to process this request right now' }, 500, cors);
+      }
+      if (existing.state) {
+        const resend = await resolveConfirmationResend(adminClient, cleanEmail, verifyPageUrl, existing.state);
         if (!resend) {
           return genericSent(cors);
         }
         ({ tokenHash, tokenType, sentByUserId } = resend);
       } else {
-        if (!linkData?.properties?.hashed_token) {
-          console.error('generateLink (invite, signup) returned no token');
-          return jsonResponse({ error: 'Unable to process this request right now' }, 500, cors);
+        // Deliberately NOT generateLink({type:'signup'}) — that call turned
+        // out (verified in production 2026-07-26, not just documented
+        // behavior) to still trigger Supabase's own built-in confirmation
+        // email, so the user got BOTH Supabase's default email AND our
+        // branded one. The 'invite' type is the same call invite-co-owner
+        // already uses: it creates the auth user and mints a token but,
+        // unlike admin.inviteUserByEmail(), sends no email itself.
+        //
+        // Also deliberately NOT admin.createUser() (spec 0086 planning
+        // decision 5): with no password it still stores a random password
+        // hash, so email_has_password() would say the account has one. An
+        // invite-created account has no password and no consent (spec
+        // 0086); both are set later by the inbox owner on the finish page.
+        const { data: linkData, error: linkError } = await adminClient.auth.admin.generateLink({
+          type: 'invite',
+          email: cleanEmail,
+          options: {
+            data: firstName ? { first_name: firstName } : {},
+            redirectTo: verifyPageUrl,
+          },
+        });
+
+        if (linkError) {
+          if (!isAlreadyRegisteredError(linkError)) {
+            console.error('generateLink (invite, signup) error:', linkError);
+            return jsonResponse({ error: 'Unable to process this request right now' }, 500, cors);
+          }
+
+          // Race backstop: the account appeared after the lookup above.
+          // Same "finished vs still needs a link" question the 'resend'
+          // action answers below.
+          const resend = await resolveConfirmationResend(adminClient, cleanEmail, verifyPageUrl);
+          if (!resend) {
+            return genericSent(cors);
+          }
+          ({ tokenHash, tokenType, sentByUserId } = resend);
+        } else {
+          if (!linkData?.properties?.hashed_token) {
+            console.error('generateLink (invite, signup) returned no token');
+            return jsonResponse({ error: 'Unable to process this request right now' }, 500, cors);
+          }
+          sentByUserId = linkData.user?.id;
+          tokenHash = linkData.properties.hashed_token;
+          // The email link says type=signup, not invite: GoTrue stores an
+          // invite token as a confirmation token, so verifyOtp redeems it
+          // as 'signup' too (checked on dev, see index.test.ts). The
+          // frontend that's live before spec 0086's is promoted only
+          // accepts signup/recovery, and functions deploy first.
+          tokenType = 'signup';
         }
-        sentByUserId = linkData.user?.id;
-        tokenHash = linkData.properties.hashed_token;
-        tokenType = 'invite';
       }
     } else {
       // action === 'resend'
