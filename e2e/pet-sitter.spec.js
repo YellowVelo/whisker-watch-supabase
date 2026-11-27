@@ -647,6 +647,364 @@ test1('0088 AC7: at 375px both date boxes and their calendar buttons fit without
   await testInfo.attach('sit-dates-375', { body: await dialog.screenshot(), contentType: 'image/png' });
 });
 
+// ---- Spec 0088 QA ----------------------------------------------------------
+
+// What Chromium actually draws inside a date box. The month/day/year parts
+// live in the browser's own (user-agent) shadow tree, which page scripts
+// can't reach, so this reads it over the DevTools protocol (Chromium only).
+// Returns the drawn text (e.g. "11/28/2026", or "mm/dd/yyyy" when empty),
+// where that text starts and ends on screen, the input's content box (inside
+// its padding, so the calendar button's pr-11 area is excluded), and the
+// width of the browser's own calendar icon (0 when hidden).
+async function dateBoxRendering(page, inputId) {
+  const cdp = await page.context().newCDPSession(page);
+  try {
+    const { root } = await cdp.send('DOM.getDocument', { depth: -1, pierce: true });
+    const attrs = (n) => {
+      const out = {};
+      const a = n.attributes || [];
+      for (let i = 0; i < a.length; i += 2) out[a[i]] = a[i + 1];
+      return out;
+    };
+    const kids = (n) => [...(n.children || []), ...(n.shadowRoots || [])];
+    const find = (n, pred) => {
+      if (pred(n)) return n;
+      for (const c of kids(n)) {
+        const hit = find(c, pred);
+        if (hit) return hit;
+      }
+      return null;
+    };
+    const texts = (n) => (n.nodeType === 3 ? [n.nodeValue] : kids(n).flatMap(texts));
+    const xs = (q) => [q[0], q[2], q[4], q[6]];
+    const box = async (n) => (await cdp.send('DOM.getBoxModel', { nodeId: n.nodeId })).model;
+
+    const input = find(root, (n) => n.nodeName === 'INPUT' && attrs(n).id === inputId);
+    if (!input) throw new Error(`no input #${inputId}`);
+    const wrapper = find(input, (n) => attrs(n).pseudo === '-webkit-datetime-edit-fields-wrapper');
+    if (!wrapper) throw new Error(`#${inputId} has no datetime fields (not Chromium?)`);
+    const parts = (wrapper.children || []).filter((c) => c.nodeType === 1);
+    const first = await box(parts[0]);
+    const last = await box(parts[parts.length - 1]);
+    const inputModel = await box(input);
+    const indicator = find(input, (n) => attrs(n).pseudo === '-webkit-calendar-picker-indicator');
+    let indicatorWidth = 0;
+    if (indicator) {
+      // A display:none node has no box, and DevTools says so with an error.
+      indicatorWidth = await box(indicator).then((m) => m.width, () => 0);
+    }
+    return {
+      text: texts(wrapper).join(''),
+      textLeft: Math.min(...xs(first.border)),
+      textRight: Math.max(...xs(last.border)),
+      contentLeft: Math.min(...xs(inputModel.content)),
+      contentRight: Math.max(...xs(inputModel.content)),
+      borderLeft: Math.min(...xs(inputModel.border)),
+      indicatorWidth,
+    };
+  } finally {
+    await cdp.detach();
+  }
+}
+
+// Clicks the month part (left of the box), as the 0085 AC4 test does.
+const clickMonth = (input) => input.click({ position: { x: 20, y: 22 } });
+
+// Spec 0088 AC1, on the drawn text rather than the stored value (reviewer
+// item), plus FR3 keyboard-only use: Tab from the Sitter Name box goes
+// through the start box's parts, then "Choose start date", then the end
+// box, then "Choose end date"; Enter and Space on each button open that
+// box's calendar (showPicker stubbed: the real one is drawn outside the
+// page). Dates typed with the keyboard alone land in the right boxes.
+test1('0088 QA: keyboard only: Tab reaches each box and calendar button in order, Enter/Space open the calendar, typed dates show as MM/DD/YYYY', async ({ page }) => {
+  await page.addInitScript(() => {
+    const w = /** @type {any} */ (window);
+    w.__showPickerCalls = [];
+    HTMLInputElement.prototype.showPicker = function showPicker() {
+      w.__showPickerCalls.push(this.id);
+    };
+  });
+  const pickerCalls = () => page.evaluate(() => /** @type {any} */ (window).__showPickerCalls);
+  const focused = () => page.evaluate(() => {
+    const el = document.activeElement;
+    return el?.id || el?.getAttribute('aria-label') || el?.tagName || '';
+  });
+
+  const { dialog, startInput, endInput } = await openNewSitDialog(page);
+  // Empty boxes show the placeholder, and the browser's own icon is hidden (FR7).
+  for (const id of ['sit-start-date', 'sit-end-date']) {
+    const r = await dateBoxRendering(page, id);
+    expect(r.text, `${id} empty`).toBe('mm/dd/yyyy');
+    expect(r.indicatorWidth, `${id} browser calendar icon`).toBe(0);
+  }
+
+  await dialog.getByPlaceholder('e.g. Sarah').focus();
+  const order = [];
+  for (let i = 0; i < 12 && !order.includes('Choose end date'); i++) {
+    await page.keyboard.press('Tab');
+    order.push(await focused());
+  }
+  const seq = order.join(' > ');
+  const at = (name) => order.indexOf(name);
+  expect(at('sit-start-date'), seq).toBeGreaterThanOrEqual(0);
+  expect(at('Choose start date'), seq).toBeGreaterThan(order.lastIndexOf('sit-start-date'));
+  expect(at('sit-end-date'), seq).toBeGreaterThan(at('Choose start date'));
+  expect(at('Choose end date'), seq).toBeGreaterThan(order.lastIndexOf('sit-end-date'));
+  // Nothing opened the calendar just by tabbing through.
+  expect(await pickerCalls()).toEqual([]);
+
+  // Enter on the end button (focused now), Space on the start button.
+  await page.keyboard.press('Enter');
+  await expect.poll(pickerCalls).toEqual(['sit-end-date']);
+  await dialog.getByRole('button', { name: 'Choose start date', exact: true }).focus();
+  await page.keyboard.press('Space');
+  await expect.poll(pickerCalls).toEqual(['sit-end-date', 'sit-start-date']);
+  // The buttons are type="button", so Enter/Space never submitted anything.
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole('alert')).toHaveCount(0);
+
+  // Keyboard-only typing: Shift+Tab from the start button back into the
+  // start box (its year), back twice more to its month, then type.
+  await page.keyboard.press('Shift+Tab');
+  expect(await focused()).toBe('sit-start-date');
+  await page.keyboard.press('Shift+Tab');
+  await page.keyboard.press('Shift+Tab');
+  await page.keyboard.type('11202026');
+  await expect(startInput).toHaveValue('2026-11-20');
+  // Tab: start box's year -> start button -> end box (month).
+  await page.keyboard.press('Tab');
+  expect(await focused()).toBe('Choose start date');
+  await page.keyboard.press('Tab');
+  expect(await focused()).toBe('sit-end-date');
+  await page.keyboard.type('11282026');
+  await expect(endInput).toHaveValue('2026-11-28');
+
+  expect((await dateBoxRendering(page, 'sit-start-date')).text).toBe('11/20/2026');
+  expect((await dateBoxRendering(page, 'sit-end-date')).text).toBe('11/28/2026');
+  // Typing never opened the calendar either.
+  expect(await pickerCalls()).toEqual(['sit-end-date', 'sit-start-date']);
+});
+
+// Spec 0088 AC1 in the Edit dialog (the case Lynn hit), plus FR6: after a
+// bad year is typed through the new box, 0085's Save checks still fire and
+// nothing is written; the message clears on the next keystroke; a fixed
+// date then saves. Chromium lets a 6-digit year be typed, so this replays
+// Lynn's 272026 mistake from the keyboard and checks Save refuses it.
+test1('0088 QA: Edit dialog: typed dates show in the box; a 6-digit year can\'t be typed; 0001, 1999, 2101 and reversed dates are refused on Save; a failed save keeps the typed dates; the fix saves', async ({ page }) => {
+  const { supabase, userId } = await test1Client();
+  const sitterName = `E2E Typed Bad Year Sit ${RUN_ID}`;
+  const { data: sit, error } = await supabase
+    .from('pet_sits')
+    .insert({
+      created_by: userId,
+      pet_ids: [petNoCheckinId],
+      sitter_name: sitterName,
+      start_date: '2026-03-01',
+      end_date: '2026-03-03',
+    })
+    .select('id')
+    .single();
+  if (error) throw error;
+  const stored = async () => {
+    const { data, error: readError } = await supabase
+      .from('pet_sits').select('start_date, end_date').eq('id', sit.id).single();
+    if (readError) throw readError;
+    return data;
+  };
+
+  try {
+    await page.goto('/pet-sitter');
+    const card = sitCard(page, sitterName);
+    await expect(card).toBeVisible({ timeout: 15000 });
+    await card.getByRole('button', { name: 'Edit sit', exact: true }).click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog.getByText('Edit Pet Sitting Period')).toBeVisible();
+    const startInput = dialog.locator('#sit-start-date');
+    const endInput = dialog.locator('#sit-end-date');
+    const save = dialog.getByRole('button', { name: 'Save Changes' });
+    const alert = dialog.getByRole('alert');
+    expect((await dateBoxRendering(page, 'sit-end-date')).text).toBe('03/03/2026');
+
+    // A whole date typed over a saved one, from the month.
+    await clickMonth(startInput);
+    await page.keyboard.type('11202026');
+    await clickMonth(endInput);
+    await page.keyboard.type('11282026');
+    expect((await dateBoxRendering(page, 'sit-start-date')).text).toBe('11/20/2026');
+    expect((await dateBoxRendering(page, 'sit-end-date')).text).toBe('11/28/2026');
+
+    // Lynn's 6-digit end year, typed into the year part (month, Tab, Tab).
+    // With 0085's max="2100-12-31" Chromium caps the year part at 4 digits,
+    // so 272026 can't be typed any more: the box keeps a 4-digit year.
+    await clickMonth(endInput);
+    await page.keyboard.press('Tab');
+    await page.keyboard.press('Tab');
+    await page.keyboard.type('272026');
+    expect((await dateBoxRendering(page, 'sit-end-date')).text).toMatch(/^11\/28\/\d{4}$/);
+    await expect(endInput).toHaveValue(/^\d{4}-11-28$/);
+
+    // Years outside 2000-2100 can still be typed, and Save refuses them
+    // with 0085's message, writing nothing.
+    for (const typed of ['11280001', '11281999', '11282101']) {
+      await clickMonth(endInput);
+      await page.keyboard.type(typed);
+      await expect(endInput).toHaveValue(`${typed.slice(4)}-11-28`);
+      // Typing cleared any message from the previous round.
+      await expect(alert).toHaveCount(0);
+      await save.click();
+      await expect(alert, typed).toHaveText('Please enter a real date with a 4-digit year.');
+      await expect(dialog).toBeVisible();
+    }
+    expect(await stored()).toEqual({ start_date: '2026-03-01', end_date: '2026-03-03' });
+
+    // End before start.
+    await clickMonth(endInput);
+    await page.keyboard.type('11192026');
+    await save.click();
+    await expect(alert).toHaveText("The end date can't be before the start date.");
+    expect(await stored()).toEqual({ start_date: '2026-03-01', end_date: '2026-03-03' });
+
+    // Fixed by typing. A network failure on the first Save keeps the dialog
+    // open with the typed dates still in the boxes; the retry saves.
+    await clickMonth(endInput);
+    await page.keyboard.type('11282026');
+    await expect(endInput).toHaveValue('2026-11-28');
+    const dropWrite = (route) => (route.request().method() === 'GET' ? route.continue() : route.abort('internetdisconnected'));
+    await page.route('**/rest/v1/pet_sits?*', dropWrite);
+    await save.click();
+    await expect(page.getByText("Couldn't save this pet sit").first()).toBeVisible({ timeout: 15000 });
+    await expect(dialog.getByText('Edit Pet Sitting Period')).toBeVisible();
+    await expect(startInput).toHaveValue('2026-11-20');
+    await expect(endInput).toHaveValue('2026-11-28');
+    expect(await stored()).toEqual({ start_date: '2026-03-01', end_date: '2026-03-03' });
+    await page.unroute('**/rest/v1/pet_sits?*', dropWrite);
+    await save.click();
+    await expect(dialog).toHaveCount(0, { timeout: 15000 });
+    await expect(card.getByText('Nov 20 – Nov 28, 2026')).toBeVisible({ timeout: 15000 });
+    expect(await stored()).toEqual({ start_date: '2026-11-20', end_date: '2026-11-28' });
+  } finally {
+    const { error: cleanupError } = await supabase.from('pet_sits').delete().eq('id', sit.id);
+    if (cleanupError) console.warn(`cleanup: could not delete pet sit ${sit.id}: ${cleanupError.message}`);
+  }
+});
+
+// Spec 0088 AC2, Lynn's exact case. Dev's 0063 rule won't store a year of
+// 272026, so the sit is saved with valid dates and only the page's read of
+// it is altered in the browser to end 272026-11-28 (as prod's sit does).
+// The owner clicks the year, types 2026 and saves; the real save goes to
+// dev, which stores 2026-11-28.
+test1('0088 QA AC2: a sit loaded with end year 272026 can be fixed by clicking the year and typing 2026', async ({ page }) => {
+  const { supabase, userId } = await test1Client();
+  const sitterName = `E2E Six Digit Year Sit ${RUN_ID}`;
+  const { data: sit, error } = await supabase
+    .from('pet_sits')
+    .insert({
+      created_by: userId,
+      pet_ids: [petNoCheckinId],
+      sitter_name: sitterName,
+      start_date: '2026-11-20',
+      end_date: '2026-11-28',
+    })
+    .select('id')
+    .single();
+  if (error) throw error;
+
+  const alterRead = async (route) => {
+    if (route.request().method() !== 'GET') return route.continue();
+    const response = await route.fetch();
+    const rows = await response.json();
+    if (Array.isArray(rows)) {
+      for (const row of rows) if (row.id === sit.id) row.end_date = '272026-11-28';
+    }
+    return route.fulfill({ response, json: rows });
+  };
+  await page.route('**/rest/v1/pet_sits?*', alterRead);
+
+  try {
+    await page.goto('/pet-sitter');
+    const card = sitCard(page, sitterName);
+    await expect(card).toBeVisible({ timeout: 15000 });
+    // 0085: an unusable saved date shows as "Dates not set", not a crash.
+    await expect(card.getByText('Dates not set')).toBeVisible();
+    await card.getByRole('button', { name: 'Edit sit', exact: true }).click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog.getByText('Edit Pet Sitting Period')).toBeVisible();
+    const endInput = dialog.locator('#sit-end-date');
+    await expect(endInput).toHaveValue('272026-11-28');
+    expect((await dateBoxRendering(page, 'sit-end-date')).text).toBe('11/28/272026');
+
+    // Click inside the year part (measured from the box's own drawn parts).
+    const drawn = await dateBoxRendering(page, 'sit-end-date');
+    const endBox = await endInput.boundingBox();
+    await endInput.click({ position: { x: drawn.textRight - endBox.x - 10, y: 22 } });
+    await page.keyboard.type('2026');
+    await expect(endInput).toHaveValue('2026-11-28');
+    expect((await dateBoxRendering(page, 'sit-end-date')).text).toBe('11/28/2026');
+
+    // From here the page reads dev as it really is.
+    await page.unroute('**/rest/v1/pet_sits?*', alterRead);
+    await dialog.getByRole('button', { name: 'Save Changes' }).click();
+    await expect(dialog).toHaveCount(0, { timeout: 15000 });
+    await expect(card.getByText('Nov 20 – Nov 28, 2026')).toBeVisible({ timeout: 15000 });
+    const { data: saved, error: readError } = await supabase
+      .from('pet_sits').select('start_date, end_date').eq('id', sit.id).single();
+    if (readError) throw readError;
+    expect(saved).toEqual({ start_date: '2026-11-20', end_date: '2026-11-28' });
+  } finally {
+    await page.unroute('**/rest/v1/pet_sits?*', alterRead).catch(() => {});
+    const { error: cleanupError } = await supabase.from('pet_sits').delete().eq('id', sit.id);
+    if (cleanupError) console.warn(`cleanup: could not delete pet sit ${sit.id}: ${cleanupError.message}`);
+  }
+});
+
+// Spec 0088 AC7 on what Chromium really draws (reviewer item: the canvas
+// estimate in the AC7 test above was only shown to work with scratch
+// changes). At desktop and 375px, the drawn MM/DD/YYYY ends inside the
+// input's content box and left of the calendar button, and the browser's
+// own icon is hidden. Then a negative control: widening the boxes' right
+// padding with test-only CSS really clips the date, and this check sees it.
+test1('0088 QA: the drawn date isn\'t clipped or covered at desktop and 375px, and the check catches a clipped one', async ({ page }) => {
+  const check = async (label) => {
+    const out = [];
+    for (const [id, name] of [['sit-start-date', 'Choose start date'], ['sit-end-date', 'Choose end date']]) {
+      const r = await dateBoxRendering(page, id);
+      const button = await page.getByRole('dialog').getByRole('button', { name, exact: true }).boundingBox();
+      const input = await page.locator(`#${id}`).boundingBox();
+      out.push({
+        ...r,
+        id,
+        label,
+        buttonX: button.x,
+        inputX: input.x,
+        fits: r.textRight <= r.contentRight + 0.5 && r.textRight <= button.x + 0.5,
+      });
+    }
+    return out;
+  };
+
+  for (const width of [1280, 375]) {
+    await page.setViewportSize({ width, height: 812 });
+    const { startInput, endInput } = await openNewSitDialog(page);
+    await startInput.fill('2026-12-28');
+    await endInput.fill('2026-12-30');
+    for (const r of await check(`${width}px`)) {
+      const where = `${r.label} ${r.id}`;
+      expect(r.text, where).toBe(r.id === 'sit-start-date' ? '12/28/2026' : '12/30/2026');
+      expect(r.indicatorWidth, `${where} browser icon`).toBe(0);
+      // DevTools and Playwright agree on where the box is.
+      expect(Math.abs(r.borderLeft - r.inputX), `${where} coordinates`).toBeLessThan(1);
+      expect(r.textLeft, `${where} text starts inside the box`).toBeGreaterThanOrEqual(r.contentLeft - 0.5);
+      expect(r.fits, `${where}: text ends at ${r.textRight}, content ends at ${r.contentRight}, button at ${r.buttonX}`).toBe(true);
+    }
+  }
+
+  // Negative control at 375px: leave too little room and the date is cut off.
+  await page.addStyleTag({ content: '#sit-start-date, #sit-end-date { padding-right: 120px !important; }' });
+  for (const r of await check('375px clipped')) {
+    expect(r.fits, `${r.id} clipped date not detected (ends ${r.textRight}, content ends ${r.contentRight})`).toBe(false);
+  }
+});
+
 test1('AC11: Share, Edit and Delete on a sit are each at least 44x44px', async ({ page }) => {
   await page.goto('/pet-sitter');
   const card = sitCard(page, PET_WITH_CHECKIN_NAME);
