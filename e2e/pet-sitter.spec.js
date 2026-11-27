@@ -634,3 +634,99 @@ test1('AC2/AC3: an owner can edit a sit\'s dates, see one checklist row per day,
     if (cleanupError) console.warn(`cleanup: could not delete pet sit ${sit.id}: ${cleanupError.message}`);
   }
 });
+
+// Spec 0087 AC1/AC2/AC4: a food and a medication that are switched on but
+// ended yesterday drop off the sit card and move to "Past medications" on
+// the Medications tab; current ones stay. Seeded on the beforeAll pet without
+// check-ins (its own sit, found by a unique sitter name). "Yesterday" is on
+// test1@'s saved calendar (profiles.timezone, UTC if unset), the same zone
+// the app's todayForUser() reads.
+test1('spec 0087 AC1/AC2/AC4: the sit card lists only current foods and meds; an ended med is under Past medications', async ({ page }) => {
+  const { supabase, userId } = await test1Client();
+  const { data: profile } = await supabase.from('profiles').select('timezone').eq('id', userId).maybeSingle();
+  const tz = profile?.timezone || 'UTC';
+  const dateStrInTz = (instant) =>
+    new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).format(instant);
+  const todayStr = dateStrInTz(new Date());
+  const yesterdayStr = dateStrInTz(new Date(Date.now() - 86400000));
+
+  const currentFood = `E2E Current Food ${RUN_ID}`;
+  const endedFood = `E2E Ended Food ${RUN_ID}`;
+  const currentMed = `E2E Current Med ${RUN_ID}`;
+  const endedMed = `E2E Ended Med ${RUN_ID}`;
+  const sitterName = `E2E Current Items Sit ${RUN_ID}`;
+  let foodIds = [];
+  let medIds = [];
+  let sitId = null;
+
+  try {
+    const { data: foods, error: foodsError } = await supabase
+      .from('pet_foods')
+      .insert([
+        { pet_id: petNoCheckinId, name: currentFood, active: true, start_date: yesterdayStr, end_date: null },
+        { pet_id: petNoCheckinId, name: endedFood, active: true, start_date: yesterdayStr, end_date: yesterdayStr },
+      ])
+      .select('id');
+    if (foodsError) throw foodsError;
+    foodIds = foods.map((r) => r.id);
+
+    const { data: meds, error: medsError } = await supabase
+      .from('medications')
+      .insert([
+        { pet_id: petNoCheckinId, name: currentMed, active: true, start_date: yesterdayStr, end_date: null },
+        { pet_id: petNoCheckinId, name: endedMed, active: true, start_date: yesterdayStr, end_date: yesterdayStr },
+      ])
+      .select('id');
+    if (medsError) throw medsError;
+    medIds = meds.map((r) => r.id);
+
+    const { data: sit, error: sitError } = await supabase
+      .from('pet_sits')
+      .insert({
+        created_by: userId,
+        pet_ids: [petNoCheckinId],
+        sitter_name: sitterName,
+        start_date: todayStr,
+        end_date: todayStr,
+      })
+      .select('id')
+      .single();
+    if (sitError) throw sitError;
+    sitId = sit.id;
+
+    // AC1/AC2: the sit card.
+    await page.goto('/pet-sitter');
+    const card = page.locator('div.rounded-xl', { hasText: sitterName });
+    await expect(card).toBeVisible({ timeout: 15000 });
+    await card.getByText(sitterName).click();
+    await expect(card.getByText('Sitter Instructions')).toBeVisible({ timeout: 15000 });
+    await expect(card.getByText(currentFood)).toBeVisible();
+    await expect(card.getByText(currentMed)).toBeVisible();
+    await expect(card.getByText(endedFood)).toHaveCount(0);
+    await expect(card.getByText(endedMed)).toHaveCount(0);
+
+    // AC4: the Medications tab.
+    await page.goto(`/pet/${petNoCheckinId}/medications`);
+    await dismissAnyOpenSheet(page);
+    await expect(page.getByText('Active Medications (1)')).toBeVisible({ timeout: 15000 });
+    await expect(page.getByText(currentMed)).toBeVisible();
+    await expect(page.getByText(endedMed)).toHaveCount(0);
+    const pastToggle = page.getByRole('button', { name: /Past medications \(1\)/ });
+    await expect(pastToggle).toBeVisible();
+    await pastToggle.click();
+    await expect(page.getByText(endedMed)).toBeVisible();
+  } finally {
+    if (sitId) {
+      const { error } = await supabase.from('pet_sits').delete().eq('id', sitId);
+      if (error) console.warn(`cleanup: could not delete pet sit ${sitId}: ${error.message}`);
+    }
+    if (medIds.length) {
+      const { error } = await supabase.from('medications').delete().in('id', medIds);
+      if (error) console.warn(`cleanup: could not delete medications: ${error.message}`);
+    }
+    if (foodIds.length) {
+      const { error } = await supabase.from('pet_foods').delete().in('id', foodIds);
+      if (error) console.warn(`cleanup: could not delete foods: ${error.message}`);
+    }
+  }
+});

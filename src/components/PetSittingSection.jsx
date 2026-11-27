@@ -20,6 +20,8 @@ import {
 } from '@/lib/sitDates';
 import { useToast } from '@/components/ui/use-toast';
 import { reportClientError } from '@/lib/errorMonitoring';
+import { useAuth } from '@/lib/AuthContext';
+import { isCurrentItem, todayForUser } from '@/lib/currentItems';
 
 const EMPTY_FORM = {
   sitter_name: '', start_date: '', end_date: '',
@@ -93,6 +95,10 @@ export default function PetSittingSection({ petId = undefined }) {
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
   const [dateError, setDateError] = useState(null);
   const { toast } = useToast();
+  const { user } = useAuth();
+  // Today on the viewer's calendar (spec 0087), for the cards' current
+  // foods/meds rule.
+  const todayStr = todayForUser(user);
 
   // quiet: refresh without the full-section "Loading..." swap, so an open
   // dialog stays mounted (used after a partial save failure).
@@ -275,6 +281,7 @@ export default function PetSittingSection({ petId = undefined }) {
                 medicationsByPet={medicationsByPet}
                 foodsByPet={foodsByPet}
                 vaccinationsByPet={vaccinationsByPet}
+                todayStr={todayStr}
                 onToggleExpand={() => toggleExpand(sit.id)}
                 onInvite={() => { setInviteSitId(sit.id); setInviteOpen(true); }}
                 onEdit={() => openEdit(sit)}
@@ -424,13 +431,19 @@ export default function PetSittingSection({ petId = undefined }) {
 // Exported so it can be render-tested without the page's data load (spec 0085).
 // The dates go through sitDates.js, so an unusable saved date shows
 // "Dates not set" and builds no checklist instead of crashing the page.
+// Spec 0087: only current foods and meds (isCurrentItem on todayStr, the
+// viewer's calendar) are listed or drive the AM/PM Meds buttons, on owners'
+// and sitters' views alike.
 export function SitCard({
-  sit, sitPets, logs, expanded, medicationsByPet, foodsByPet, vaccinationsByPet,
+  sit, sitPets, logs, expanded, medicationsByPet, foodsByPet, vaccinationsByPet, todayStr,
   onToggleExpand, onInvite, onEdit, onDelete, onToggleBool, onToggleTask,
 }) {
   const days = sitDays(sit);
   const customTasks = sit.custom_tasks || [];
-  const hasPmMed = sitPets.some(pet => (medicationsByPet[pet.id] || []).some(m => m.frequency === 'Twice daily'));
+  const currentMeds = (petId) => (medicationsByPet[petId] || []).filter(m => isCurrentItem(m, todayStr));
+  const currentFoods = (petId) => (foodsByPet[petId] || []).filter(f => isCurrentItem(f, todayStr));
+  const hasPmMed = sitPets.some(pet => currentMeds(pet.id).some(m => m.frequency === 'Twice daily'));
+  const hasAnyMed = sitPets.some(pet => currentMeds(pet.id).length > 0);
 
   return (
     <div className="bg-card border border-border rounded-xl overflow-hidden">
@@ -484,8 +497,8 @@ export function SitCard({
           <div className="bg-secondary/50 rounded-lg p-3 space-y-3 text-sm">
             <p className="font-semibold text-[13px] uppercase tracking-wider text-muted-foreground">Sitter Instructions</p>
             {sitPets.map(pet => {
-              const meds = medicationsByPet[pet.id] || [];
-              const foods = foodsByPet[pet.id] || [];
+              const meds = currentMeds(pet.id);
+              const foods = currentFoods(pet.id);
               const vacs = vaccinationsByPet[pet.id] || [];
               return (
                 <div key={pet.id} className="space-y-1.5 border-l-2 border-primary/30 pl-3">
@@ -550,7 +563,7 @@ export function SitCard({
                       <div className="flex gap-2 flex-wrap">
                         <CheckBtn label="AM Food" checked={!!log.am_food_given} onToggle={() => onToggleBool(log, 'am_food_given')} />
                         <CheckBtn label="PM Food" checked={!!log.pm_food_given} onToggle={() => onToggleBool(log, 'pm_food_given')} />
-                        {sitPets.some(pet => (medicationsByPet[pet.id] || []).length > 0) && (
+                        {hasAnyMed && (
                           <CheckBtn label="AM Meds" checked={!!log.am_meds_given} onToggle={() => onToggleBool(log, 'am_meds_given')} />
                         )}
                         {hasPmMed && <CheckBtn label="PM Meds" checked={!!log.pm_meds_given} onToggle={() => onToggleBool(log, 'pm_meds_given')} />}

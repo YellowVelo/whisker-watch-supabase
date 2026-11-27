@@ -41,3 +41,13 @@ export function todayForUser(user) {
   const saved = isValidIanaTimezone(user?.timezone) ? user.timezone : null;
   return dateStrInTimezone(saved || detectTimezone() || 'UTC', 0);
 }
+
+// The pet profile's meds and foods lists (spec 0087 FR4, FR6): only the
+// current rows of a Promise.allSettled result; a failed load shows nothing.
+/**
+ * @param {PromiseSettledResult<any[]> | null | undefined} result
+ * @param {string} todayStr YYYY-MM-DD
+ */
+export function currentFromSettled(result, todayStr) {
+  return result?.status === 'fulfilled' ? splitCurrent(result.value, todayStr).current : [];
+}

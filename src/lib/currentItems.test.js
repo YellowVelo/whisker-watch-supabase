@@ -1,6 +1,14 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { isCurrentItem, splitCurrent, todayForUser } from './currentItems';
-import { dateStrInTimezone, detectTimezone } from './timezone';
+
+// The device's time zone is stubbed so the fallback tests tell "device zone"
+// apart from "UTC" even on a CI runner whose own zone is UTC.
+const device = vi.hoisted(() => ({ zone: /** @type {string | null} */ ('America/Los_Angeles') }));
+vi.mock('./timezone', async (importOriginal) => ({
+  .../** @type {any} */ (await importOriginal()),
+  detectTimezone: () => device.zone,
+}));
+
+const { isCurrentItem, splitCurrent, todayForUser, currentFromSettled } = await import('./currentItems');
 
 const TODAY = '2026-11-27';
 
@@ -77,21 +85,66 @@ describe('todayForUser (spec 0087)', () => {
     expect(isCurrentItem(food, todayForUser({ timezone: 'UTC' }))).toBe(false);
   });
 
-  it("falls back to the device's time zone, then UTC, when none is saved", () => {
+  // 2026-11-28 05:00 UTC is still 2026-11-27 on the stubbed device (Los
+  // Angeles), so each fallback gives a different date.
+  it("falls back to the device's time zone when none is saved", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-11-28T05:00:00Z'));
-    const expected = dateStrInTimezone(detectTimezone() || 'UTC', 0);
-    expect(todayForUser(null)).toBe(expected);
-    expect(todayForUser({ timezone: null })).toBe(expected);
+    device.zone = 'America/Los_Angeles';
+    expect(todayForUser(null)).toBe('2026-11-27');
+    expect(todayForUser({ timezone: null })).toBe('2026-11-27');
   });
 
-  it("falls back to the device's time zone, then UTC, when the saved one isn't a real time zone", () => {
+  it("falls back to the device's time zone when the saved one isn't a real time zone", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-11-28T05:00:00Z'));
-    const expected = dateStrInTimezone(detectTimezone() || 'UTC', 0);
+    device.zone = 'America/Los_Angeles';
     expect(() => todayForUser({ timezone: 'Not/AZone' })).not.toThrow();
-    expect(todayForUser({ timezone: 'Not/AZone' })).toBe(expected);
-    expect(todayForUser({ timezone: 'garbage' })).toBe(expected);
-    expect(todayForUser({ timezone: 42 })).toBe(expected);
+    expect(todayForUser({ timezone: 'Not/AZone' })).toBe('2026-11-27');
+    expect(todayForUser({ timezone: 'garbage' })).toBe('2026-11-27');
+    expect(todayForUser({ timezone: 42 })).toBe('2026-11-27');
+  });
+
+  it('falls back to UTC when neither a saved nor a device time zone is available', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-11-28T05:00:00Z'));
+    device.zone = null;
+    try {
+      expect(todayForUser(null)).toBe('2026-11-28');
+      expect(todayForUser({ timezone: 'Not/AZone' })).toBe('2026-11-28');
+    } finally {
+      device.zone = 'America/Los_Angeles';
+    }
+  });
+});
+
+describe('currentFromSettled: the pet profile meds/foods filter (spec 0087 AC3, AC4, AC6)', () => {
+  const rows = [
+    { id: 'now', active: true, end_date: null },
+    { id: 'today', active: true, end_date: TODAY },
+    { id: 'ended', active: true, end_date: '2026-11-26' },
+    { id: 'off', active: false, end_date: null },
+  ];
+
+  it('keeps only current rows: ending today stays, ended yesterday and switched off drop', () => {
+    const result = currentFromSettled({ status: 'fulfilled', value: rows }, TODAY);
+    expect(result.map((r) => r.id)).toEqual(['now', 'today']);
+  });
+
+  it('shows nothing when the load failed', () => {
+    expect(currentFromSettled({ status: 'rejected', reason: new Error('x') }, TODAY)).toEqual([]);
+    expect(currentFromSettled(undefined, TODAY)).toEqual([]);
+  });
+
+  it("uses the viewer's calendar via todayForUser (AC7)", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-11-28T05:00:00Z'));
+    try {
+      const food = [{ id: 'f', active: true, end_date: '2026-11-27' }];
+      expect(currentFromSettled({ status: 'fulfilled', value: food }, todayForUser({ timezone: 'America/Los_Angeles' }))).toHaveLength(1);
+      expect(currentFromSettled({ status: 'fulfilled', value: food }, todayForUser({ timezone: 'UTC' }))).toHaveLength(0);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
