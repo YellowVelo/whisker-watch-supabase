@@ -24,7 +24,7 @@ import { reportClientError } from '@/lib/errorMonitoring';
 // 'recovery'-type token isn't guaranteed to also flip
 // auth.users.email_confirmed_at the way a 'signup'-type token does, so
 // confirmation is made explicit here rather than assumed.
-const ALLOWED_TYPES = ['signup', 'recovery'];
+const ALLOWED_TYPES = ['signup', 'recovery', 'invite'];
 
 export default function VerifyEmail() {
   const [searchParams] = useSearchParams();

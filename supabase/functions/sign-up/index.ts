@@ -22,7 +22,7 @@
 // is never checked, because nothing from it is stored.
 //
 // Also worth knowing: account creation here goes through
-// adminClient.auth.admin.generateLink({type:'signup', ...}), a
+// adminClient.auth.admin.generateLink({type:'invite', ...}), a
 // privileged service-role call, rather than the public
 // supabase.auth.signUp() API the old Register.jsx used directly. That
 // call is documented to bypass whatever CAPTCHA/rate-limiting Supabase's
@@ -245,32 +245,35 @@ Deno.serve(async (req) => {
     const verifyPageUrl = `${appUrl}/verify-email`;
 
     let tokenHash: string | undefined;
-    let tokenType: 'signup' | 'recovery' | undefined;
+    let tokenType: 'invite' | 'recovery' | undefined;
     let sentByUserId: string | undefined;
 
     if (action === 'signup') {
-      // Deliberately NOT generateLink({type:'signup'}) — despite mirroring
-      // invite-co-owner's admin-API pattern, that call turned out (verified
-      // in production 2026-07-26, not just documented behavior) to still
-      // trigger Supabase's own built-in confirmation email, unlike
-      // 'invite'/'recovery' types. That defeated the entire point of this
-      // spec: the user got BOTH Supabase's generic default email AND our
-      // branded one for the same signup. createUser() is a pure admin
-      // operation with no email side effect, and the 'recovery'-type
-      // generateLink call below is the same mechanism the 'resend' path
-      // already uses safely — see resolveConfirmationResend().
+      // Deliberately NOT generateLink({type:'signup'}) — that call turned
+      // out (verified in production 2026-07-26, not just documented
+      // behavior) to still trigger Supabase's own built-in confirmation
+      // email, so the user got BOTH Supabase's default email AND our
+      // branded one. The 'invite' type is the same call invite-co-owner
+      // already uses: it creates the auth user and mints a token but,
+      // unlike admin.inviteUserByEmail(), sends no email itself.
       //
-      // No password and no consent (spec 0086): both are set later by the
-      // inbox owner on the finish page.
-      const { data: createData, error: createError } = await adminClient.auth.admin.createUser({
+      // Also deliberately NOT admin.createUser() (spec 0086 planning
+      // decision 5): with no password it still stores a random password
+      // hash, so email_has_password() would say the account has one. An
+      // invite-created account has no password and no consent (spec
+      // 0086); both are set later by the inbox owner on the finish page.
+      const { data: linkData, error: linkError } = await adminClient.auth.admin.generateLink({
+        type: 'invite',
         email: cleanEmail,
-        email_confirm: false,
-        user_metadata: firstName ? { first_name: firstName } : {},
+        options: {
+          data: firstName ? { first_name: firstName } : {},
+          redirectTo: verifyPageUrl,
+        },
       });
 
-      if (createError) {
-        if (!isAlreadyRegisteredError(createError)) {
-          console.error('createUser (signup) error:', createError);
+      if (linkError) {
+        if (!isAlreadyRegisteredError(linkError)) {
+          console.error('generateLink (invite, signup) error:', linkError);
           return jsonResponse({ error: 'Unable to process this request right now' }, 500, cors);
         }
 
@@ -282,18 +285,13 @@ Deno.serve(async (req) => {
         }
         ({ tokenHash, tokenType, sentByUserId } = resend);
       } else {
-        sentByUserId = createData?.user?.id;
-        const { data: linkData, error: linkError } = await adminClient.auth.admin.generateLink({
-          type: 'recovery',
-          email: cleanEmail,
-          options: { redirectTo: verifyPageUrl },
-        });
-        if (linkError || !linkData?.properties?.hashed_token) {
-          console.error('generateLink (recovery, post-createUser) error:', linkError);
+        if (!linkData?.properties?.hashed_token) {
+          console.error('generateLink (invite, signup) returned no token');
           return jsonResponse({ error: 'Unable to process this request right now' }, 500, cors);
         }
+        sentByUserId = linkData.user?.id;
         tokenHash = linkData.properties.hashed_token;
-        tokenType = 'recovery';
+        tokenType = 'invite';
       }
     } else {
       // action === 'resend'

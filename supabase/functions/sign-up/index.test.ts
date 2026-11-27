@@ -26,14 +26,49 @@ function scratchEmail(label: string): string {
   return `ci-scratch-${Date.now()}-${scratchCounter}-${label}@wyskerwatch.com`;
 }
 
-Deno.test('sign-up: signup creates an unconfirmed account and returns the generic success shape', async () => {
+// sendEmail() writes an email_logs row for every attempt (sent, failed or
+// suppressed), so a verify-email row for the address is the observable
+// that a link was (or wasn't) sent.
+async function verifyEmailLogCount(email: string): Promise<number> {
+  const { data, error } = await adminClient()
+    .from('email_logs')
+    .select('id')
+    .eq('recipient_email', email)
+    .eq('template_name', 'verify-email');
+  if (error) throw new Error(`email_logs lookup failed: ${error.message}`);
+  return data?.length ?? 0;
+}
+
+async function deleteEmailLogs(email: string): Promise<void> {
+  await adminClient().from('email_logs').delete().eq('recipient_email', email);
+}
+
+// Makes a confirmed account with no password the same way sign-up does
+// (an invite link, spec 0086 planning decision 5), then confirms it, as
+// if the link had been clicked but the finish page never completed.
+// admin.createUser() can't be used: it stores a random password hash.
+async function createConfirmedPasswordlessUser(email: string): Promise<string> {
+  const admin = adminClient();
+  const { data: linkData, error: linkError } = await admin.auth.admin.generateLink({ type: 'invite', email });
+  if (linkError || !linkData?.user) throw new Error(`Failed to create scratch user: ${linkError?.message}`);
+  const userId = linkData.user.id;
+  const { error: confirmError } = await admin.auth.admin.updateUserById(userId, { email_confirm: true });
+  if (confirmError) {
+    await deleteScratchUser(userId);
+    throw new Error(`Failed to confirm scratch user: ${confirmError.message}`);
+  }
+  return userId;
+}
+
+Deno.test('sign-up: signup creates an unconfirmed account with no password and returns the generic success shape', async () => {
+  // The current sign-up page's request: first name and email only, no
+  // password field (spec 0086).
   const email = scratchEmail('signup-happy');
   let userId: string | null = null;
   try {
     const { status, json } = await callFunction('sign-up', '', {
       action: 'signup',
       email,
-      password: 'a-scratch-password-123',
       first_name: 'Scratch',
     });
 
@@ -57,7 +92,15 @@ Deno.test('sign-up: signup creates an unconfirmed account and returns the generi
 
     const { data: authUser } = await admin.auth.admin.getUserById(userId);
     assertEquals(authUser?.user?.email_confirmed_at ?? null, null);
+
+    const { data: hasPassword, error: hasPasswordError } = await admin.rpc('email_has_password', { p_email: email });
+    assertEquals(hasPasswordError, null);
+    assertEquals(hasPassword, false);
+
+    // A link was sent (sendEmail logs every attempt).
+    assertEquals(await verifyEmailLogCount(email), 1);
   } finally {
+    await deleteEmailLogs(email);
     if (userId) await deleteScratchUser(userId);
   }
 });
@@ -66,11 +109,7 @@ Deno.test('sign-up: signing up twice for the same (still-unconfirmed) email does
   const email = scratchEmail('signup-dupe');
   let userId: string | null = null;
   try {
-    const first = await callFunction('sign-up', '', {
-      action: 'signup',
-      email,
-      password: 'a-scratch-password-123',
-    });
+    const first = await callFunction('sign-up', '', { action: 'signup', email });
     assertEquals(first.status, 200);
 
     const admin = adminClient();
@@ -78,11 +117,7 @@ Deno.test('sign-up: signing up twice for the same (still-unconfirmed) email does
     assertExists(firstProfile);
     userId = firstProfile!.id as string;
 
-    const second = await callFunction('sign-up', '', {
-      action: 'signup',
-      email,
-      password: 'a-different-scratch-pw-456',
-    });
+    const second = await callFunction('sign-up', '', { action: 'signup', email });
 
     // Same generic shape as the first call — a caller can't tell "brand
     // new" from "already has an unconfirmed row" apart.
@@ -91,7 +126,11 @@ Deno.test('sign-up: signing up twice for the same (still-unconfirmed) email does
 
     const { data: allProfiles } = await admin.from('profiles').select('id').eq('email', email);
     assertEquals(allProfiles?.length, 1);
+
+    // Still unconfirmed with no password, so the second call resends.
+    assertEquals(await verifyEmailLogCount(email), 2);
   } finally {
+    await deleteEmailLogs(email);
     if (userId) await deleteScratchUser(userId);
   }
 });
@@ -145,37 +184,18 @@ Deno.test('sign-up: sending a password still leaves the account with no password
     assertEquals(authUser?.user?.user_metadata?.privacy_version, undefined);
     assertEquals(authUser?.user?.user_metadata?.marketing_opt_in, undefined);
   } finally {
+    await deleteEmailLogs(email);
     if (userId) await deleteScratchUser(userId);
   }
 });
 
-// sendEmail() writes an email_logs row for every attempt (sent, failed or
-// suppressed), so a verify-email row for the address is the observable
-// that a link was (or wasn't) sent.
-async function verifyEmailLogCount(email: string): Promise<number> {
-  const { data, error } = await adminClient()
-    .from('email_logs')
-    .select('id')
-    .eq('recipient_email', email)
-    .eq('template_name', 'verify-email');
-  if (error) throw new Error(`email_logs lookup failed: ${error.message}`);
-  return data?.length ?? 0;
-}
-
-async function deleteEmailLogs(email: string): Promise<void> {
-  await adminClient().from('email_logs').delete().eq('recipient_email', email);
-}
-
 Deno.test('sign-up: resend sends a fresh link to a confirmed account that has no password (spec 0086 decision 1)', async () => {
   const email = scratchEmail('resend-confirmed-no-password');
   const admin = adminClient();
-  const { data: created, error: createError } = await admin.auth.admin.createUser({
-    email,
-    email_confirm: true,
-  });
-  if (createError || !created?.user) throw new Error(`Failed to create scratch user: ${createError?.message}`);
-  const userId = created.user.id;
+  const userId = await createConfirmedPasswordlessUser(email);
   try {
+    const { data: authUser } = await admin.auth.admin.getUserById(userId);
+    assertExists(authUser?.user?.email_confirmed_at);
     const { data: hasPassword } = await admin.rpc('email_has_password', { p_email: email });
     assertEquals(hasPassword, false);
 
@@ -185,6 +205,30 @@ Deno.test('sign-up: resend sends a fresh link to a confirmed account that has no
     assertEquals(Object.keys(json).length, 1);
 
     assertEquals(await verifyEmailLogCount(email), 1);
+  } finally {
+    await deleteEmailLogs(email);
+    await deleteScratchUser(userId);
+  }
+});
+
+Deno.test('sign-up: signup for a confirmed account that has no password sends a fresh link (spec 0086 decision 1)', async () => {
+  const email = scratchEmail('signup-confirmed-no-password');
+  const admin = adminClient();
+  const userId = await createConfirmedPasswordlessUser(email);
+  try {
+    const { data: hasPassword } = await admin.rpc('email_has_password', { p_email: email });
+    assertEquals(hasPassword, false);
+
+    const { status, json } = await callFunction('sign-up', '', { action: 'signup', email, first_name: 'Scratch' });
+    assertEquals(status, 200);
+    assertEquals(json.sent, true);
+    assertEquals(Object.keys(json).length, 1);
+
+    assertEquals(await verifyEmailLogCount(email), 1);
+
+    // No second account.
+    const { data: allProfiles } = await admin.from('profiles').select('id').eq('email', email);
+    assertEquals(allProfiles?.length, 1);
   } finally {
     await deleteEmailLogs(email);
     await deleteScratchUser(userId);
