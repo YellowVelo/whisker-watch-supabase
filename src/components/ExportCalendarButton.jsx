@@ -4,6 +4,8 @@ import { Button } from '@/components/ui/button';
 import IconButton from './IconButton';
 import { CalendarDays, Loader2 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
+import { useAuth } from '@/lib/AuthContext';
+import { isCurrentItem, todayForUser } from '@/lib/currentItems';
 
 function toICSDate(dateStr) {
   // Convert YYYY-MM-DD to YYYYMMDD (all-day event)
@@ -45,7 +47,51 @@ function buildICS(events) {
   return lines.join('\r\n');
 }
 
+// The calendar's due-date events (pure, so spec 0087 AC8 is unit-testable):
+// one per current medication and per vaccination with a next due date.
+/**
+ * @param {{ meds: any[], vaccines: any[], petName: string, todayStr: string }} args
+ */
+export function buildCalendarEvents({ meds, vaccines, petName, todayStr }) {
+  const events = [];
+
+  // Medications with next_due_date, current ones only (spec 0087 FR9).
+  meds.forEach((med) => {
+    if (med.next_due_date && isCurrentItem(med, todayStr)) {
+      events.push({
+        uid: `med-${med.id}`,
+        date: med.next_due_date,
+        title: `${petName}: ${med.name} due`,
+        description: [
+          med.dosage && `Dosage: ${med.dosage}`,
+          med.frequency && `Frequency: ${med.frequency}`,
+          med.prescribing_vet && `Vet: ${med.prescribing_vet}`,
+          med.notes,
+        ].filter(Boolean).join('\n'),
+      });
+    }
+  });
+
+  // Vaccinations with next_due_date
+  vaccines.forEach((vax) => {
+    if (vax.next_due_date) {
+      events.push({
+        uid: `vax-${vax.id}`,
+        date: vax.next_due_date,
+        title: `${petName}: ${vax.vaccine_name} due`,
+        description: [
+          vax.administered_by && `Vet: ${vax.administered_by}`,
+          vax.notes,
+        ].filter(Boolean).join('\n'),
+      });
+    }
+  });
+
+  return events;
+}
+
 export default function ExportCalendarButton({ petId, petName, iconOnly = false }) {
+  const { user } = useAuth();
   const [loading, setLoading] = useState(false);
 
   const handleExport = async () => {
@@ -56,39 +102,7 @@ export default function ExportCalendarButton({ petId, petName, iconOnly = false 
         entities.Vaccination.filter({ pet_id: petId }),
       ]);
 
-      const events = [];
-
-      // Medications with next_due_date
-      meds.forEach((med) => {
-        if (med.next_due_date) {
-          events.push({
-            uid: `med-${med.id}`,
-            date: med.next_due_date,
-            title: `${petName}: ${med.name} due`,
-            description: [
-              med.dosage && `Dosage: ${med.dosage}`,
-              med.frequency && `Frequency: ${med.frequency}`,
-              med.prescribing_vet && `Vet: ${med.prescribing_vet}`,
-              med.notes,
-            ].filter(Boolean).join('\n'),
-          });
-        }
-      });
-
-      // Vaccinations with next_due_date
-      vaccines.forEach((vax) => {
-        if (vax.next_due_date) {
-          events.push({
-            uid: `vax-${vax.id}`,
-            date: vax.next_due_date,
-            title: `${petName}: ${vax.vaccine_name} due`,
-            description: [
-              vax.administered_by && `Vet: ${vax.administered_by}`,
-              vax.notes,
-            ].filter(Boolean).join('\n'),
-          });
-        }
-      });
+      const events = buildCalendarEvents({ meds, vaccines, petName, todayStr: todayForUser(user) });
 
       if (events.length === 0) {
         alert('No upcoming due dates found. Add next due dates to medications or vaccines first.');

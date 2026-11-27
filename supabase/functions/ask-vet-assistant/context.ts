@@ -49,6 +49,7 @@ import {
   type WeightNow,
 } from './prompts.ts';
 import { currentAndDelta, loadDailyWeights, weightsInRange } from '../_shared/weight.ts';
+import { isCurrentItem } from '../_shared/currentItems.ts';
 
 // Same as src/lib/checkin/trendsRanges.js RANGE_DAYS.
 export const RANGE_DAYS: Readonly<Record<string, number>> = { '24H': 5, '7D': 7, '30D': 30, '90D': 90, '1Y': 365 };
@@ -98,16 +99,23 @@ export async function loadPet(client: SupabaseClient, petId: string): Promise<Pe
   };
 }
 
-// Active medications only (the prompts only ever used active ones).
-export async function loadActiveMedications(client: SupabaseClient, petId: string): Promise<MedicationInfo[]> {
+// Current medications only (spec 0087): switched on AND not ended before
+// `todayStr` (YYYY-MM-DD on the caller's calendar), by the shared rule in
+// ../_shared/currentItems.ts. A med whose end date has passed is left out
+// even if it was never switched off.
+export async function loadActiveMedications(
+  client: SupabaseClient,
+  petId: string,
+  todayStr: string,
+): Promise<MedicationInfo[]> {
   const { data, error } = await client
     .from('medications')
-    .select('name, dosage, frequency, active')
+    .select('name, dosage, frequency, active, end_date')
     .eq('pet_id', petId)
     .eq('active', true)
     .order('start_date', { ascending: false });
   if (error) fail('medications lookup', error);
-  return (data ?? []).map((m) => ({
+  return (data ?? []).filter((m) => isCurrentItem(m, todayStr)).map((m) => ({
     name: m.name,
     dosage: m.dosage ?? null,
     frequency: m.frequency ?? null,
