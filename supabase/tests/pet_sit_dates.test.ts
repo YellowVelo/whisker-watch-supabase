@@ -34,6 +34,9 @@ const BAD: Record<string, Dates> = {
   'end in year 1999': { start_date: '1999-12-01', end_date: '1999-12-31' },
   'end before start': { start_date: '2027-01-10', end_date: '2027-01-09' },
   '31-day span': { start_date: '2027-01-01', end_date: '2027-02-01' },
+  // QA pass: 31 days across New Year, and across a leap-year February.
+  '31-day span across New Year': { start_date: '2026-12-15', end_date: '2027-01-15' },
+  '31-day span across Feb 29': { start_date: '2028-02-01', end_date: '2028-03-03' },
 };
 
 // Shapes the rule must accept, including both year limits.
@@ -43,6 +46,10 @@ const GOOD: Record<string, Dates> = {
   'ordinary week-long sit': { start_date: '2027-03-01', end_date: '2027-03-07' },
   'first allowed day': { start_date: '2000-01-01', end_date: '2000-01-01' },
   'last allowed day': { start_date: '2100-12-31', end_date: '2100-12-31' },
+  // QA pass: exactly 30 days across New Year and across Feb 29; a leap day.
+  '+30-day sit across New Year': { start_date: '2026-12-15', end_date: '2027-01-14' },
+  '+30-day sit across Feb 29': { start_date: '2028-02-01', end_date: '2028-03-02' },
+  'leap-day sit': { start_date: '2028-02-29', end_date: '2028-02-29' },
 };
 
 const CHECK_VIOLATION = '23514';
@@ -116,6 +123,27 @@ Deno.test('pet sit dates rule (spec 0085, migration 0063)', async (t) => {
       const { data, error: updateError } = await owner.client.from('pet_sits').update(next).eq('id', sit.id).select('start_date, end_date').single();
       assert(!updateError && data, `valid update must be accepted (got ${updateError?.message})`);
       assertEquals(data, next);
+    });
+
+    await t.step('editing another field of a valid sit is unaffected by the rule', async () => {
+      const { data: sit, error } = await insertSit(GOOD['ordinary week-long sit']);
+      if (error || !sit) throw new Error(`valid sit insert failed: ${error?.message}`);
+      const { data, error: updateError } = await owner.client
+        .from('pet_sits')
+        .update({ sitter_name: 'Renamed Sitter' })
+        .eq('id', sit.id)
+        .select('sitter_name')
+        .single();
+      assert(!updateError && data, `name-only update must be accepted (got ${updateError?.message})`);
+      assertEquals(data.sitter_name, 'Renamed Sitter');
+    });
+
+    await t.step('missing dates are refused (columns are not null)', async () => {
+      const { error } = await owner.client
+        .from('pet_sits')
+        .insert({ created_by: owner.userId, pet_ids: [pid], start_date: '2027-01-01', end_date: null })
+        .select('id');
+      assert(error, 'a sit with no end date must be refused');
     });
 
     await t.step('the rule binds the service role too', async () => {

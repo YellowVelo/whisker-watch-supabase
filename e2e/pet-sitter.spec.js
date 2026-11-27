@@ -32,6 +32,23 @@ async function signInAsTest1(supabase) {
   if (error) throw new Error(`pet-sitter.spec.js: could not sign in as test1@: ${error.message}`);
 }
 
+// One signed-in test1@ client per worker for this file's own setup, checks
+// and cleanup (Supabase limits sign-ins per IP). A failed test restarts the
+// worker, which simply signs in once more.
+let test1ClientPromise = null;
+function test1Client() {
+  if (!test1ClientPromise) {
+    test1ClientPromise = (async () => {
+      const supabase = newClient();
+      await signInAsTest1(supabase);
+      const { data } = await supabase.auth.getUser();
+      return { supabase, userId: data.user.id };
+    })();
+    test1ClientPromise.catch(() => { test1ClientPromise = null; });
+  }
+  return test1ClientPromise;
+}
+
 // Signs in as test4@ directly via signInWithPassword (same approach
 // global-setup.js uses for test1@) and hands Playwright a storageState
 // object with that session pre-loaded into localStorage, so every test in
@@ -79,10 +96,7 @@ let test4OwnsPets = false;
 let satPetIdsVisibleToTest4 = [];
 
 test.beforeAll(async () => {
-  const supabase = newClient();
-  await signInAsTest1(supabase);
-  const { data: userData } = await supabase.auth.getUser();
-  const ownerId = userData.user.id;
+  const { supabase, userId: ownerId } = await test1Client();
 
   const { data: pets, error: petsError } = await supabase
     .from('pets')
@@ -194,8 +208,7 @@ test.beforeAll(async () => {
 });
 
 test.afterAll(async () => {
-  const supabase = newClient();
-  await signInAsTest1(supabase);
+  const { supabase } = await test1Client();
   // delete-pet (the same Edge Function the real Delete Pet flow uses, and
   // the same one add-pet.spec.js's cleanup calls) already strips the pet
   // out of any pet_sits.pet_ids array it's in, deleting the pet_sits row
@@ -345,50 +358,140 @@ test('AC3: Ask Wysker\'s general chat does not tell the AI about a sat pet', asy
 });
 
 // Spec 0085: the owner's sit list (as test1@, who created the sit seeded in
-// beforeAll). Cards are found by this run's unique pet name, since older
-// runs may have left "E2E Sitter" sits behind on dev.
-function sitCard(page, petName) {
-  return page.locator('div.rounded-xl', { hasText: petName });
+// beforeAll). Cards are found by this run's unique pet or sitter name, since
+// older runs may have left "E2E Sitter" sits behind on dev.
+function sitCard(page, text) {
+  return page.locator('div.rounded-xl', { hasText: text });
 }
 
-async function countTest1Sits() {
-  const supabase = newClient();
-  await signInAsTest1(supabase);
-  const { data: userData } = await supabase.auth.getUser();
-  const { count, error } = await supabase
-    .from('pet_sits')
-    .select('id', { count: 'exact', head: true })
-    .eq('created_by', userData.user.id);
+async function test1SitIds() {
+  const { supabase, userId } = await test1Client();
+  const { data, error } = await supabase.from('pet_sits').select('id').eq('created_by', userId);
   if (error) throw error;
-  return count;
+  return new Set((data || []).map((r) => r.id));
 }
 
-test1('AC4: a start year of 2101 typed on the keyboard shows the date message and saves nothing', async ({ page }) => {
-  const before = await countTest1Sits();
+async function newSitIdsSince(before) {
+  return [...(await test1SitIds())].filter((id) => !before.has(id));
+}
 
+// Safety net: removes any sit test1@ gained during a test, so a refused save
+// that ever slipped through (or a test that saves on purpose) leaves nothing
+// behind. Errors are logged, not thrown, so they can't hide the real result.
+async function deleteSitsCreatedSince(before) {
+  try {
+    const { supabase } = await test1Client();
+    for (const id of await newSitIdsSince(before)) {
+      const { error } = await supabase.from('pet_sits').delete().eq('id', id);
+      if (error) console.warn(`cleanup: could not delete pet sit ${id}: ${error.message}`);
+    }
+  } catch (err) {
+    console.warn(`cleanup: could not list test1@'s pet sits: ${err?.message ?? err}`);
+  }
+}
+
+async function openNewSitDialog(page) {
   await page.goto('/pet-sitter');
   await expect(sitCard(page, PET_WITH_CHECKIN_NAME)).toBeVisible({ timeout: 15000 });
   await page.getByRole('button', { name: 'New Pet Sit' }).click();
   const dialog = page.getByRole('dialog');
   await expect(dialog.getByText('New Pet Sitting Period')).toBeVisible();
-
   const petPill = dialog.getByRole('button', { name: PET_NO_CHECKIN_NAME });
   if (await petPill.count()) await petPill.click();
-
-  // focus() rather than click(): a click opens the calendar (openDatePicker).
   const [startInput, endInput] = await dialog.locator('input[type="date"]').all();
-  await startInput.focus();
-  await page.keyboard.type('01012101');
-  await endInput.focus();
-  await page.keyboard.type('01022026');
-  await expect(startInput).toHaveValue('2101-01-01');
-  await expect(endInput).toHaveValue('2026-01-02');
+  return { dialog, startInput, endInput };
+}
 
-  await dialog.getByRole('button', { name: 'Create & Generate Checklist' }).click();
-  await expect(dialog.getByText('Please enter a real date with a 4-digit year.')).toBeVisible();
-  await expect(dialog).toBeVisible();
+// Keyboard entry below assumes Chromium's en-US date order (MM/DD/YYYY),
+// which is Playwright's default locale for this suite.
+test1('AC4: a start year of 2101 typed on the keyboard shows the date message and saves nothing', async ({ page }) => {
+  const before = await test1SitIds();
+  try {
+    const { dialog, startInput, endInput } = await openNewSitDialog(page);
 
-  expect(await countTest1Sits()).toBe(before);
+    // focus() rather than click(): a click opens the calendar (openDatePicker).
+    await startInput.focus();
+    await page.keyboard.type('01012101');
+    await endInput.focus();
+    await page.keyboard.type('01022026');
+    await expect(startInput).toHaveValue('2101-01-01');
+    await expect(endInput).toHaveValue('2026-01-02');
+
+    await dialog.getByRole('button', { name: 'Create & Generate Checklist' }).click();
+    await expect(dialog.getByText('Please enter a real date with a 4-digit year.')).toBeVisible();
+    await expect(dialog).toBeVisible();
+
+    expect(await newSitIdsSince(before)).toEqual([]);
+  } finally {
+    await deleteSitsCreatedSince(before);
+  }
+});
+
+// AC12 wiring (the real calendar is drawn outside the page, so Lynn checks
+// that by hand): clicking the middle of each date box calls showPicker(), and
+// a showPicker() that throws causes no page error. Then AC5/AC6 through the
+// real dialog, ending with a 30-day sit that saves with 31 checklist days.
+test1('AC5/AC6/AC12: date box clicks open the calendar; reversed and 31-day sits are refused; 30 days saves with 31 rows', async ({ page }) => {
+  await page.addInitScript(() => {
+    const w = /** @type {any} */ (window);
+    w.__showPickerCalls = 0;
+    w.__showPickerThrows = false;
+    HTMLInputElement.prototype.showPicker = function showPicker() {
+      w.__showPickerCalls += 1;
+      if (w.__showPickerThrows) throw new DOMException('not allowed', 'NotAllowedError');
+    };
+  });
+  const pageErrors = [];
+  page.on('pageerror', (err) => pageErrors.push(err.message));
+  const pickerCalls = () => page.evaluate(() => /** @type {any} */ (window).__showPickerCalls);
+
+  const before = await test1SitIds();
+  const sitterName = `E2E 30 Day Sit ${RUN_ID}`;
+  try {
+    const { dialog, startInput, endInput } = await openNewSitDialog(page);
+    await dialog.getByPlaceholder('e.g. Sarah').fill(sitterName);
+
+    await startInput.click(); // Playwright clicks the centre of the box
+    await expect.poll(pickerCalls).toBe(1);
+    await endInput.click();
+    await expect.poll(pickerCalls).toBe(2);
+    await page.evaluate(() => { /** @type {any} */ (window).__showPickerThrows = true; });
+    await startInput.click();
+    await expect.poll(pickerCalls).toBe(3);
+    await page.evaluate(() => { /** @type {any} */ (window).__showPickerThrows = false; });
+    expect(pageErrors).toEqual([]);
+
+    const save = dialog.getByRole('button', { name: 'Create & Generate Checklist' });
+
+    // AC5: end before start.
+    await startInput.fill('2026-03-10');
+    await endInput.fill('2026-03-09');
+    await save.click();
+    await expect(dialog.getByText("The end date can't be before the start date.")).toBeVisible();
+    // Changing a date clears the message.
+    await endInput.fill('2026-03-10');
+    await expect(dialog.getByRole('alert')).toHaveCount(0);
+
+    // AC6: 31 days after start is refused.
+    await endInput.fill('2026-04-10');
+    await save.click();
+    await expect(dialog.getByText('A pet sit can be up to 30 days. For a longer trip, add a second sit.')).toBeVisible();
+    await expect(dialog).toBeVisible();
+    expect(await newSitIdsSince(before)).toEqual([]);
+
+    // AC6: exactly 30 days saves, with one checklist row per day (31).
+    await endInput.fill('2026-04-09');
+    await save.click();
+    await expect(dialog).toHaveCount(0, { timeout: 15000 });
+    const card = sitCard(page, sitterName);
+    await expect(card.getByText('Mar 10 – Apr 9, 2026')).toBeVisible({ timeout: 15000 });
+    await expect(card.getByText('Thursday, April 9', { exact: true })).toBeVisible({ timeout: 15000 });
+    await expect(card.getByText(/^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday), /)).toHaveCount(31);
+    expect(await newSitIdsSince(before)).toHaveLength(1);
+    expect(pageErrors).toEqual([]);
+  } finally {
+    await deleteSitsCreatedSince(before);
+  }
 });
 
 test1('AC11: Share, Edit and Delete on a sit are each at least 44x44px', async ({ page }) => {
@@ -403,17 +506,97 @@ test1('AC11: Share, Edit and Delete on a sit are each at least 44x44px', async (
   }
 });
 
+const overlaps = (a, b) => a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
+
+// Reviewer item: at phone width (375px) a sit with a long sitter name and
+// long pet names keeps its three 44px buttons on screen, inside the card,
+// not on top of the header text, with no sideways scrolling. Also checks the
+// Custom Daily Tasks chips' 44px "x" buttons never cover a neighbouring chip.
+test1('phone width: sit card header buttons and task-chip "x" buttons fit at 375px', async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 375, height: 812 });
+  const { supabase, userId } = await test1Client();
+  const before = await test1SitIds();
+  const sitterName = `E2E Sitter With A Really Quite Long Name ${RUN_ID}`;
+  const today = new Date().toISOString().slice(0, 10);
+  const { error } = await supabase.from('pet_sits').insert({
+    created_by: userId,
+    pet_ids: [petWithCheckinId, petNoCheckinId],
+    sitter_name: sitterName,
+    start_date: today,
+    end_date: today,
+  });
+  if (error) throw error;
+
+  try {
+    await page.goto('/pet-sitter');
+    const card = sitCard(page, sitterName);
+    await expect(card).toBeVisible({ timeout: 15000 });
+    await card.scrollIntoViewIfNeeded();
+    const cardBox = await card.boundingBox();
+    const header = await card.locator('p', { hasText: /Dates not set| – / }).first().boundingBox();
+    const boxes = [];
+    for (const name of ['Share with sitter', 'Edit sit', 'Delete sit']) {
+      const box = await card.getByRole('button', { name, exact: true }).boundingBox();
+      expect(box, name).not.toBeNull();
+      expect(box.width, name).toBeGreaterThanOrEqual(44);
+      expect(box.height, name).toBeGreaterThanOrEqual(44);
+      expect(box.x, `${name} left edge`).toBeGreaterThanOrEqual(cardBox.x - 0.5);
+      expect(box.x + box.width, `${name} right edge`).toBeLessThanOrEqual(Math.min(375, cardBox.x + cardBox.width) + 0.5);
+      expect(overlaps(box, header), `${name} covers the date header`).toBe(false);
+      boxes.push(box);
+    }
+    expect(overlaps(boxes[0], boxes[1]) || overlaps(boxes[1], boxes[2])).toBe(false);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(375);
+    await testInfo.attach('sit-card-375', { body: await card.screenshot(), contentType: 'image/png' });
+
+    // Task chips in the New Pet Sit dialog, enough to wrap onto 2+ rows.
+    await page.getByRole('button', { name: 'New Pet Sit' }).click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog.getByText('New Pet Sitting Period')).toBeVisible();
+    const taskInput = dialog.getByPlaceholder('e.g. Change water, Clean litter...');
+    for (const t of ['Water', 'Clean litter', 'Brush', 'Give the evening pill', 'Play', 'Lights']) {
+      await taskInput.fill(t);
+      await taskInput.press('Enter');
+    }
+    const removeButtons = dialog.getByRole('button', { name: /^Remove / });
+    await expect(removeButtons).toHaveCount(6);
+    const chips = await removeButtons.evaluateAll((btns) => btns.map((b) => {
+      const chip = /** @type {HTMLElement} */ (b.parentElement).getBoundingClientRect();
+      const btn = b.getBoundingClientRect();
+      return {
+        chip: { x: chip.x, y: chip.y, width: chip.width, height: chip.height },
+        btn: { x: btn.x, y: btn.y, width: btn.width, height: btn.height },
+      };
+    }));
+    const buttonOverlaps = [];
+    for (let i = 0; i < chips.length; i++) {
+      expect(chips[i].btn.width, `chip ${i} x width`).toBeGreaterThanOrEqual(44);
+      expect(chips[i].btn.height, `chip ${i} x height`).toBeGreaterThanOrEqual(44);
+      for (let j = 0; j < chips.length; j++) {
+        if (i === j) continue;
+        expect(overlaps(chips[i].btn, chips[j].chip), `chip ${i}'s x covers chip ${j}`).toBe(false);
+        if (j > i && overlaps(chips[i].btn, chips[j].btn)) buttonOverlaps.push([i, j]);
+      }
+    }
+    await testInfo.attach('task-chips-375', {
+      body: JSON.stringify({ chips, buttonOverlaps }, null, 2),
+      contentType: 'application/json',
+    });
+    await testInfo.attach('task-chips-375-shot', { body: await dialog.screenshot(), contentType: 'image/png' });
+  } finally {
+    await deleteSitsCreatedSince(before);
+  }
+});
+
 // AC2/AC3 regression on a valid sit. Uses its own sit (on the seeded pet
 // without check-ins) so deleting it can't affect the sitter tests above.
 test1('AC2/AC3: an owner can edit a sit\'s dates, see one checklist row per day, then delete it', async ({ page }) => {
-  const supabase = newClient();
-  await signInAsTest1(supabase);
-  const { data: userData } = await supabase.auth.getUser();
+  const { supabase, userId } = await test1Client();
   const sitterName = `E2E Edit Sit ${RUN_ID}`;
   const { data: sit, error } = await supabase
     .from('pet_sits')
     .insert({
-      created_by: userData.user.id,
+      created_by: userId,
       pet_ids: [petNoCheckinId],
       sitter_name: sitterName,
       start_date: '2026-03-01',
@@ -447,6 +630,7 @@ test1('AC2/AC3: an owner can edit a sit\'s dates, see one checklist row per day,
     const { data: rows } = await supabase.from('pet_sits').select('id').eq('id', sit.id);
     expect(rows ?? []).toHaveLength(0);
   } finally {
-    await supabase.from('pet_sits').delete().eq('id', sit.id);
+    const { error: cleanupError } = await supabase.from('pet_sits').delete().eq('id', sit.id);
+    if (cleanupError) console.warn(`cleanup: could not delete pet sit ${sit.id}: ${cleanupError.message}`);
   }
 });

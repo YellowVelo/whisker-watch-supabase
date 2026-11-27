@@ -173,3 +173,67 @@ describe('saveSit (spec 0085)', () => {
     expect(ents.PetSitLog.bulkCreate).toHaveBeenCalledWith([{ pet_sit_id: 's', pet_id: 'p1', date: '2026-12-02' }]);
   });
 });
+
+// QA edge cases (spec 0085 QA pass).
+describe('saveSit edge cases (spec 0085 QA)', () => {
+  it('editing an existing sit to bad dates writes nothing either', async () => {
+    const ents = fakeEntities();
+    const result = await saveSit({ form: { ...validForm, end_date: '2101-01-01' }, selectedPetIds: ['p1'], editing: { id: 'old' }, ents });
+    expect(result.dateError).toBe('Please enter a real date with a 4-digit year.');
+    expect(ents.PetSit.update).not.toHaveBeenCalled();
+    expect(ents.PetSit.create).not.toHaveBeenCalled();
+  });
+
+  it('a valid edit updates (never creates) and adds only the missing days', async () => {
+    const ents = fakeEntities({ PetSitLog: { filter: vi.fn(async () => [{ date: '2026-12-01' }]) } });
+    const result = await saveSit({ form: { ...validForm, start_date: '2026-12-01', end_date: '2026-12-03' }, selectedPetIds: ['p1', 'p2'], editing: { id: 'old' }, ents });
+    expect(result.error).toBeNull();
+    expect(ents.PetSit.create).not.toHaveBeenCalled();
+    expect(ents.PetSit.update).toHaveBeenCalledWith('old', expect.objectContaining({ pet_ids: ['p1', 'p2'], end_date: '2026-12-03' }));
+    expect(ents.PetSitLog.bulkCreate).toHaveBeenCalledWith([
+      { pet_sit_id: 'old', pet_id: 'p1', date: '2026-12-02' },
+      { pet_sit_id: 'old', pet_id: 'p1', date: '2026-12-03' },
+    ]);
+  });
+
+  it('a one-day sit builds exactly one checklist row', async () => {
+    const ents = fakeEntities();
+    await saveSit({ form: { ...validForm, start_date: '2026-12-31', end_date: '2026-12-31' }, selectedPetIds: ['p1'], editing: null, ents });
+    expect(ents.PetSitLog.bulkCreate.mock.calls[0][0]).toEqual([{ pet_sit_id: 'new-sit', pet_id: 'p1', date: '2026-12-31' }]);
+  });
+
+  it('a network failure loading existing checklist rows is reported and keeps the new sit for retry', async () => {
+    reportClientError.mockClear();
+    const ents = fakeEntities({ PetSitLog: { filter: vi.fn(async () => { throw new TypeError('Failed to fetch'); }) } });
+    const result = await saveSit({ form: validForm, selectedPetIds: ['p1'], editing: null, ents });
+    expect(result.sit?.id).toBe('new-sit');
+    expect(result.error).toBeInstanceOf(TypeError);
+    expect(reportClientError).toHaveBeenCalledWith(result.error, { feature: 'pet-sitting', note: 'create' });
+  });
+
+  it('ensureLogsForSit never builds rows for a bad saved range', async () => {
+    for (const sit of [
+      { id: 's', pet_ids: ['p1'], start_date: '0202-01-01', end_date: '2026-12-01' },
+      { id: 's', pet_ids: ['p1'], start_date: '2026-12-05', end_date: '2026-12-01' },
+      { id: 's', pet_ids: ['p1'], start_date: '2026-12-01', end_date: '20266-12-01' },
+    ]) {
+      const ents = fakeEntities();
+      await ensureLogsForSit(sit, ents);
+      expect(ents.PetSitLog.filter).not.toHaveBeenCalled();
+      expect(ents.PetSitLog.bulkCreate).not.toHaveBeenCalled();
+    }
+  });
+});
+
+describe('SitCard: several sits, one with no dates (spec 0085 QA)', () => {
+  it('a sit with both dates missing, beside a sit crossing New Year, renders without throwing', () => {
+    const empty = { id: 'empty', start_date: null, end_date: null };
+    const newYear = { id: 'ny', start_date: '2026-12-31', end_date: '2027-01-01' };
+    let html = '';
+    expect(() => { html = renderCards([empty], [newYear, [{ id: 'a', date: '2026-12-31' }, { id: 'b', date: '2027-01-01' }]]); }).not.toThrow();
+    expect(html).toContain('Dates not set');
+    expect(html).toContain('Dec 31 – Jan 1, 2027');
+    expect(html).toContain('Thursday, December 31');
+    expect(html).toContain('Friday, January 1');
+  });
+});

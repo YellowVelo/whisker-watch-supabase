@@ -167,3 +167,69 @@ describe('openDatePicker (AC12)', () => {
     expect(showPicker).toHaveBeenCalledTimes(1);
   });
 });
+
+// QA edge cases (spec 0085 QA pass).
+describe('edge cases: leap days, year boundaries, odd input', () => {
+  it('leap days: real ones parse, impossible ones do not (2100 is not a leap year)', () => {
+    expect(parseSitDate('2028-02-29')).not.toBeNull();
+    expect(parseSitDate('2000-02-29')).not.toBeNull();
+    expect(parseSitDate('2027-02-29')).toBeNull();
+    expect(parseSitDate('2100-02-29')).toBeNull();
+    expect(validateSitDates('2027-02-29', '2027-03-01')).toBe(INVALID);
+  });
+
+  it('a sit crossing New Year counts calendar days correctly', () => {
+    expect(validateSitDates('2026-12-15', '2027-01-14')).toBeNull();
+    expect(validateSitDates('2026-12-15', '2027-01-15')).toBe(TOO_LONG);
+    const days = sitDays({ start_date: '2026-12-15', end_date: '2027-01-14' });
+    expect(days).toHaveLength(31);
+    expect(format(days[16], 'yyyy-MM-dd')).toBe('2026-12-31');
+    expect(format(days[17], 'yyyy-MM-dd')).toBe('2027-01-01');
+    expect(formatSitRange({ start_date: '2026-12-31', end_date: '2027-01-01' })).toBe('Dec 31 – Jan 1, 2027');
+  });
+
+  it('a sit spanning a leap-year February counts Feb 29', () => {
+    expect(sitDays({ start_date: '2028-02-01', end_date: '2028-03-01' })).toHaveLength(30);
+    expect(validateSitDates('2028-02-01', '2028-03-02')).toBeNull();
+    expect(validateSitDates('2028-02-01', '2028-03-03')).toBe(TOO_LONG);
+  });
+
+  it.each([
+    ' 2026-12-01', '2026-12-01 ', '2026-12-01T00:00:00Z', '2026/12/01', '12/01/2026',
+    '02026-12-01', '2026-00-10', '2026-12-00', '2026-12-32', 'abcd-ef-gh', '2026-12', {}, [], true,
+  ])('rejects malformed %j', (v) => {
+    expect(parseSitDate(v)).toBeNull();
+    expect(validateSitDates(v, '2026-12-02')).toBe(INVALID);
+    expect(formatSitRange({ start_date: v, end_date: '2026-12-02' })).toBe('Dates not set');
+    expect(sitDays({ start_date: v, end_date: '2026-12-02' })).toEqual([]);
+  });
+
+  it('a Date object is not accepted (dates are stored and sent as strings)', () => {
+    expect(parseSitDate(new Date(2026, 11, 1))).toBeNull();
+  });
+
+  it('an unusable date wins over a reversed range', () => {
+    expect(validateSitDates('2026-12-05', '20266-12-01')).toBe(INVALID);
+    expect(validateSitDates('2026-12-05', '1999-01-01')).toBe(INVALID);
+  });
+
+  it.each(['Pacific/Kiritimati', 'Pacific/Pago_Pago', 'Asia/Kolkata', 'Australia/Lord_Howe'])(
+    'in %s the day stays the typed day and spans stay exact',
+    (tz) => {
+      const originalTz = process.env.TZ;
+      process.env.TZ = tz;
+      try {
+        const d = parseSitDate('2026-12-31');
+        expect([d.getFullYear(), d.getMonth(), d.getDate()]).toEqual([2026, 11, 31]);
+        expect(validateSitDates('2026-12-01', '2026-12-31')).toBeNull();
+        expect(validateSitDates('2026-12-01', '2027-01-01')).toBe(TOO_LONG);
+        const days = sitDays({ start_date: '2026-12-30', end_date: '2027-01-02' });
+        expect(days.map((x) => format(x, 'yyyy-MM-dd'))).toEqual(['2026-12-30', '2026-12-31', '2027-01-01', '2027-01-02']);
+        expect(formatSitRange({ start_date: '2026-12-01', end_date: '2026-12-05' })).toBe('Dec 1 – Dec 5, 2026');
+      } finally {
+        if (originalTz === undefined) delete process.env.TZ;
+        else process.env.TZ = originalTz;
+      }
+    },
+  );
+});
