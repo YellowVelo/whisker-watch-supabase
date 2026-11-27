@@ -26,13 +26,31 @@
 -- users): any backup taken before prod's bad sit is fixed still contains it,
 -- so restoring that backup's pet_sits data fails this rule, and its child
 -- tables (pet_sit_logs, pet_sitter_access) then fail their foreign keys.
--- Backups are kept 30 days. If a restore or the restore drill
--- (scripts/restore-test.sh) fails on pet_sits_dates_sane:
---   1. alter table public.pet_sits drop constraint if exists pet_sits_dates_sane;
---   2. Load the data again.
---   3. Fix (update public.pet_sits set start_date = ..., end_date = ...
+--
+-- Once this file is on main, every restore drill (scripts/restore-test.sh,
+-- run by hand or by the quarterly 15 Jan/Apr/Jul/Oct schedule) restores
+-- prod's NEWEST backup by default, so the drill fails on
+-- pet_sits_dates_sane from the merge until prod's bad sit is fixed and at
+-- least one nightly backup has run since. After that, older backups (kept
+-- 30 days) still contain the bad sit and still fail.
+--
+-- If the drill fails on pet_sits_dates_sane: don't drop the constraint and
+-- rerun, because the drill replays every migration and adds it back. Rerun
+-- the "Database Restore Test" GitHub workflow with its backup_key input set
+-- to a backup taken after prod's bad sit was fixed. (A failed drill run
+-- stops before handle_new_user is switched back on; that only matters for
+-- the disposable scratch database, and the next successful run fixes it.)
+--
+-- For a real restore by hand:
+--   1. Replay the migrations (including this one).
+--   2. BEFORE the first data load:
+--        alter table public.pet_sits drop constraint if exists pet_sits_dates_sane;
+--      (Not after a failed load: a second pg_restore hits duplicate keys on
+--      the rows the first one already loaded.)
+--   3. Load the data.
+--   4. Fix (update public.pet_sits set start_date = ..., end_date = ...
 --      where id = ...) or delete the bad sit(s).
---   4. alter table public.pet_sits add constraint pet_sits_dates_sane check (
+--   5. alter table public.pet_sits add constraint pet_sits_dates_sane check (
 --        start_date between '2000-01-01' and '2100-12-31'
 --        and end_date between '2000-01-01' and '2100-12-31'
 --        and end_date >= start_date

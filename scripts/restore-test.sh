@@ -89,8 +89,9 @@ psql "$RESTORE_TEST_DB_URL" -v ON_ERROR_STOP=1 -q -c "DELETE FROM auth.users;"
 # Three migrations refuse to run until a deploy marker says that
 # environment's frontend is live: 0055 (spec 0071), 0061 (spec 0081) and
 # 0063 (spec 0085). The scratch database has no frontend to wait for, so
-# mark all three before replaying. Same snippet as those migrations' headers. The private schema
-# isn't reset above, so each line is safe to rerun on a later drill.
+# mark all three before replaying. Same snippet as those migrations'
+# headers. The private schema isn't reset above, so each line is safe to
+# rerun on a later drill.
 echo "== Setting deploy markers for gated migrations =="
 psql "$RESTORE_TEST_DB_URL" -v ON_ERROR_STOP=1 -q -c "
   CREATE SCHEMA IF NOT EXISTS private;
@@ -172,12 +173,22 @@ echo "== Restoring data into scratch project =="
 # Migration 0063 (spec 0085) adds the check constraint pet_sits_dates_sane.
 # Any backup taken before prod's bad sit was fixed still contains that sit,
 # so restoring its pet_sits data fails this rule (and its child tables,
-# pet_sit_logs and pet_sitter_access, then fail their foreign keys).
-# Backups are kept 30 days, so this can only happen with a backup from that
-# window; the risk was accepted (Lynn, 2026-11-26), not engineered around.
-# If a restore or drill fails on pet_sits_dates_sane:
+# pet_sit_logs and pet_sitter_access, then fail their foreign keys). The
+# risk was accepted (Lynn, 2026-11-26), not engineered around.
+# Once 0063 is on main, every drill (by hand or the quarterly 15 Jan/Apr/
+# Jul/Oct run) restores prod's NEWEST backup by default, so it fails here
+# from the merge until prod's bad sit is fixed and at least one nightly
+# backup has run since. After that, older backups (kept 30 days) still fail.
+# Drill fix: don't drop the constraint and rerun (this script replays every
+# migration and adds it back). Rerun the "Database Restore Test" workflow
+# with its backup_key input set to a backup taken after the bad sit was
+# fixed. A failed run stops before handle_new_user is reinstated below; that
+# only matters for this disposable scratch database.
+# Real restore by hand: replay the migrations, then drop the constraint
+# BEFORE the first data load (not after a failed one: a second pg_restore
+# hits duplicate keys), load, fix or delete the bad sit(s), then re-add it:
 #   alter table public.pet_sits drop constraint if exists pet_sits_dates_sane;
-#   -- run the restore / data load again
+#   -- load the data
 #   -- fix (update ... set start_date = ..., end_date = ...) or delete the bad sit(s)
 #   alter table public.pet_sits add constraint pet_sits_dates_sane check (
 #     start_date between '2000-01-01' and '2100-12-31'
