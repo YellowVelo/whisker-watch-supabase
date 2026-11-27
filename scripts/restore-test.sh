@@ -86,11 +86,12 @@ psql "$RESTORE_TEST_DB_URL" -v ON_ERROR_STOP=1 -q -c "
 # run's backup. auth's own FK cascades clear identities/sessions/etc.
 psql "$RESTORE_TEST_DB_URL" -v ON_ERROR_STOP=1 -q -c "DELETE FROM auth.users;"
 
-# Two migrations refuse to run until a deploy marker says that
-# environment's frontend is live: 0055 (spec 0071) and 0061 (spec 0081).
-# The scratch database has no frontend to wait for, so mark both before
-# replaying. Same snippet as those migrations' headers. The private schema
-# isn't reset above, so each line is safe to rerun on a later drill.
+# Three migrations refuse to run until a deploy marker says that
+# environment's frontend is live: 0055 (spec 0071), 0061 (spec 0081) and
+# 0063 (spec 0085). The scratch database has no frontend to wait for, so
+# mark all three before replaying. Same snippet as those migrations'
+# headers. The private schema isn't reset above, so each line is safe to
+# rerun on a later drill.
 echo "== Setting deploy markers for gated migrations =="
 psql "$RESTORE_TEST_DB_URL" -v ON_ERROR_STOP=1 -q -c "
   CREATE SCHEMA IF NOT EXISTS private;
@@ -101,7 +102,8 @@ psql "$RESTORE_TEST_DB_URL" -v ON_ERROR_STOP=1 -q -c "
   REVOKE ALL ON SCHEMA private FROM anon, authenticated;
   REVOKE ALL ON private.deploy_markers FROM anon, authenticated;
   INSERT INTO private.deploy_markers (key)
-  VALUES ('spec_0071_frontend_live'), ('spec_0081_frontend_live')
+  VALUES ('spec_0071_frontend_live'), ('spec_0081_frontend_live'),
+         ('spec_0085_frontend_live')
   ON CONFLICT (key) DO NOTHING;
 "
 
@@ -168,6 +170,39 @@ echo "== Restoring data into scratch project =="
 # --data-only: only public/auth data, matching how backup-db.sh dumps it.
 # --no-owner/--no-acl: source roles don't exist in the scratch project.
 # -L: restore only the entries in the list built above.
+# Migration 0063 (spec 0085) adds the check constraint pet_sits_dates_sane.
+# Any backup taken before prod's bad sit was fixed still contains that sit,
+# so restoring its pet_sits data fails this rule. pg_restore loads a table's
+# rows in one go, so one bad sit makes the WHOLE pet_sits load fail: every
+# sit in that backup is lost, not just the bad one, and then every checklist
+# row (pet_sit_logs) and sitter-access row (pet_sitter_access) fails its
+# foreign key and is lost too. The risk was accepted (Lynn, 2026-11-26), not
+# engineered around. (In Pet Sitter, a sit with a date outside 2000-2100
+# reads "Dates not set"; a backwards or over-30-day sit shows its real dates
+# but no checklist. Either kind fails this rule.)
+# Once 0063 is on main, every drill (by hand or the quarterly 15 Jan/Apr/
+# Jul/Oct run) restores prod's NEWEST backup by default, so it fails here
+# from the merge until prod's bad sit is fixed and at least one nightly
+# backup has run since. After that, older backups (kept 30 days) still fail.
+# Drill fix: don't drop the constraint and rerun (this script replays every
+# migration and adds it back). Rerun the "Database Restore Test" workflow
+# with its backup_key input set to a backup taken after the bad sit was
+# fixed. A failed run stops before handle_new_user is reinstated below; that
+# only matters for this disposable scratch database.
+# Real restore by hand onto a fresh project: first set the deploy markers
+# for 0055, 0061 and 0063 (the "Setting deploy markers" step above), or
+# those migrations refuse to run; then replay the migrations, drop the constraint
+# BEFORE the first data load (not after a failed one: a second pg_restore
+# hits duplicate keys), load, fix or delete the bad sit(s), then re-add it:
+#   alter table public.pet_sits drop constraint if exists pet_sits_dates_sane;
+#   -- load the data
+#   -- fix (update ... set start_date = ..., end_date = ...) or delete the bad sit(s)
+#   alter table public.pet_sits add constraint pet_sits_dates_sane check (
+#     start_date between '2000-01-01' and '2100-12-31'
+#     and end_date between '2000-01-01' and '2100-12-31'
+#     and end_date >= start_date
+#     and end_date - start_date <= 30
+#   );
 pg_restore --data-only --no-owner --no-acl \
   -L "$RESTORE_LIST" \
   -d "$RESTORE_TEST_DB_URL" "$DUMP_FILE"
