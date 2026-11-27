@@ -156,6 +156,14 @@ No mockups. The finish page and consent screen reuse `AuthLayout` (the same fram
 - Adding the breached-password check to password reset.
 - Deleting old unconfirmed accounts.
 
+## Planning decisions (Lynn, 2026-11-27)
+
+1. **Resend:** the sign-up function's "resend" (and its already-registered branch) sends a fresh link to any account that is unconfirmed **or has no password**, so someone whose link-click already confirmed them but who closed the page early can still get back in. Still enumeration-safe (same generic response).
+2. **Invite link for a finished account:** if `status` says no password and no consent are needed, `/accept-invite` skips the form and goes straight to the pet (or Pet Sitter page).
+3. **Partial failure:** if a password was saved but consent wasn't, the form re-checks `status` and shows just the Terms checkbox.
+4. **Marketing on the existing-account screen:** a finish call with no `marketing_opt_in` leaves the person's current setting unchanged.
+5. No rate limit on `finish-account-setup` (sign-in required). Sign-up integration tests stay local-only, as today.
+
 ## Open Questions
 
 None. Lynn answered these on 2026-11-27: the Terms checkbox moves to the finish page only; existing accounts get a blocking screen; marketing opt-in moves to the finish page (not shown on the existing-account screen); PA-19 is a required deploy step.
