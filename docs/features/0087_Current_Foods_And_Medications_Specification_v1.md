@@ -28,7 +28,7 @@ No new user-facing text. Existing headings ("Current Diet", "Past foods", "Activ
 
 ## Functional Requirements
 
-- **FR1.** One rule decides whether a food or medication is current: its switch is on, and it has no end date or its end date is today or later. The end date counts as a current day.
+- **FR1.** One rule decides whether a food or medication is current: its switch is on, and it has no end date or its end date is today or later. The end date counts as a current day. No end date means current. (Confirmed by Lynn 2026-11-27, including that switching an item off also ends it. This is the interim rule until the medication module adds prescriptions and refills; that module will revisit it for medications.)
 - **FR2.** "Today" means today in the viewer's saved time zone, falling back to the device's time zone, then UTC. On the server it's the caller's saved time zone, UTC if unset.
 - **FR3.** The sitter card (owners' and sitters' views) lists only current foods and current medications for each pet.
 - **FR4.** The Food tab's Current Diet / Past foods split and the pet profile's food list use the rule (behavior unchanged except for the time-zone fix).
