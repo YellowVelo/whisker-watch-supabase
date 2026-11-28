@@ -1,6 +1,6 @@
 # 0089_Database_Permissions_Parity_And_Env_Diff_Specification_v1
 
-**Status:** Draft, 2026-11-27. Waiting for Lynn's review. Nothing built.
+**Status:** Approved by Lynn 2026-11-27, including the sequence choice (item 4). Building.
 **Date:** 2026-11-27
 **Punch list:** PA-16, PA-78 (bundle B02, "Same database permissions on all 3 projects")
 **Branch:** `claude/spec-0089-db-permissions-parity` (off `main` at `9399bfc`)
@@ -10,8 +10,8 @@
 
 ## Lynn — what I need from you
 
-1. **Review and approve this spec.** This blocks everything else.
-2. **Approve one choice I made for you (item 4 under "Before You Approve This"):** new number counters (sequences) get usable by signed-in users and the server, but not by logged-out visitors. Say if you'd rather have Supabase's stock setting instead.
+1. ~~Review and approve this spec.~~ Approved 2026-11-27.
+2. ~~Approve the sequence choice.~~ Approved 2026-11-27.
 3. After review passes: **OK the PROTECTED merge.**
 4. Nothing to promote in Cloudflare. This spec changes no app screens.
 
@@ -122,4 +122,4 @@ No new functions, so `function_permissions.test.ts` lists don't change.
 
 ## Open Questions
 
-None, unless you'd prefer Supabase's stock sequence setting (item 4 above).
+None. (The sequence setting in item 4 was approved as written, 2026-11-27.)
