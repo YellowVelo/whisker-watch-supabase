@@ -75,8 +75,10 @@ export function formatSitRange(sit) {
 }
 
 /**
- * onClick handler for a date input: opens the browser's calendar where
- * supported. Does nothing if showPicker is missing or throws.
+ * Opens the browser's calendar for a date input, where supported. Called
+ * by DateField's calendar button with the input as `currentTarget` (spec
+ * 0088); the box itself has no click handler, so clicking it lets you type.
+ * Does nothing if the input or showPicker is missing, or showPicker throws.
  * @param {{ currentTarget: { showPicker?: () => void } }} e
  */
 export function openDatePicker(e) {

@@ -62,7 +62,7 @@
 - **AC9** 0063 stops with a clear message if the frontend marker is missing or any existing sit breaks the rule, and changes nothing in either case.
 - **AC10** Account deletion and the ownership hand-off still work for an owner with sits (no regression from the new rule).
 - **AC11** Share, Edit and Delete on a sit are each at least 44×44px and have the labels "Share with sitter", "Edit sit", "Delete sit".
-- **AC12** On desktop Chrome, clicking the middle of the Start or End date box opens the browser's calendar. Picking a day fills the box. In a browser without this ability, clicking does nothing extra and the page shows no error.
+- **AC12** On desktop Chrome, clicking the middle of the Start or End date box opens the browser's calendar. Picking a day fills the box. In a browser without this ability, clicking does nothing extra and the page shows no error. *(Superseded by spec 0088: a click in the box now places the cursor for typing; the calendar opens from a calendar button beside each box.)*
 - **AC13** Given a new sit whose create succeeds but whose checklist step fails, when the owner taps Save again, then the existing sit is updated, not created again (one sit, not two).
 
 ## Test Plan
