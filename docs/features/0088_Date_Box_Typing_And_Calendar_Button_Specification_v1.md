@@ -1,6 +1,6 @@
 # 0088_Date_Box_Typing_And_Calendar_Button_Specification_v1
 
-**Status:** Approved by Lynn 2026-11-27, including both button labels.
+**Status:** Built 2026-11-27 on `claude/spec-0088-date-box-typing`. Both tasks passed review (T2 after one fix round); QA and the final review passed. NORMAL, Claude merges. Approved by Lynn 2026-11-27, including both button labels.
 **Date:** 2026-11-27
 **Branch:** `claude/spec-0088-date-box-typing` (off `main` at `749e084`)
 **Migration:** none
