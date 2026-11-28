@@ -1,6 +1,6 @@
 # 0086_Account_Takeover_And_Consent_Specification_v1
 
-**Status:** Approved by Lynn 2026-11-27, as written, including all copy. Built 2026-11-27 on `claude/spec-0086-account-takeover-consent`: every task passed review, QA and the final whole-branch review passed. Migration 0064 and both functions are live on dev only. Waiting for Lynn's PROTECTED merge OK.
+**Status:** Approved by Lynn 2026-11-27, as written, including all copy. Built 2026-11-27 on `claude/spec-0086-account-takeover-consent`: every task passed review, QA and the final whole-branch review passed. Merged (PR #69) and shipped 2026-11-27 to dev, staging and prod: Supabase sign-up switched off (PA-19), both functions deployed, frontend live, marker set, migration 0064 pushed, `confirm-email` deleted, startup and §11 checks run. The §11 check found a pre-existing prod default-permission gap, logged as PA-86.
 **Date:** 2026-11-27
 **Punch list:** bundle B03, PA-13 (consent) and PA-18 (account takeover). Merge tier: PROTECTED (auth, migrations, service-role functions).
 **Reserved numbers:** spec 0086, migration 0064 (checked against every remote branch and open PR on 2026-11-27).
