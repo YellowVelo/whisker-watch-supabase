@@ -8,28 +8,47 @@
 //
 // Unlike invite-co-owner/invite-sitter, there is no logged-in caller —
 // that's the whole point of signup — so this function carries its own
-// input validation, password policy, and rate limiting rather than
-// inheriting an authenticated caller's implicit trust.
+// input validation and rate limiting rather than inheriting an
+// authenticated caller's implicit trust.
+//
+// Spec 0086 (account takeover, PA-13): the account is created with NO
+// password and no consent. When the emailed link is clicked, Supabase
+// itself gives the account a random password nobody knows (planning
+// decision 7). Whoever controls the inbox lands on the finish page
+// (/verify-email) and sets the real password and agrees to the Terms
+// there (finish-account-setup); that step asks for a password because the
+// session signed in from an email link, not because of what's stored.
+// Before 0086,
+// anyone could sign up with someone else's address and a password of
+// their choosing, and that password still worked after the real owner
+// confirmed. Any `password`, `accepted_terms` or `marketing_opt_in` an
+// old cached sign-up page still sends is ignored without an error, and
+// is never checked, because nothing from it is stored.
 //
 // Also worth knowing: account creation here goes through
-// adminClient.auth.admin.generateLink({type:'signup', ...}), a
+// adminClient.auth.admin.generateLink({type:'invite', ...}), a
 // privileged service-role call, rather than the public
 // supabase.auth.signUp() API the old Register.jsx used directly. That
 // call is documented to bypass whatever CAPTCHA/rate-limiting Supabase's
 // own Auth dashboard may have configured for the public signup surface
-// — this function's own rate limiting (below) and the leaked-password
-// check (isPasswordPwned) are meant as substitutes for that, not
-// identical replacements. CAPTCHA specifically is not replicated here —
-// see the spec's "no CAPTCHA at launch" decision.
+// — this function's own rate limiting (below) is meant as a substitute
+// for that, not an identical replacement. CAPTCHA specifically is not
+// replicated here — see the spec's "no CAPTCHA at launch" decision. The
+// leaked-password check now runs where the password is actually set
+// (finish-account-setup, via _shared/passwordPolicy.ts).
 //
 // Request body:
-//   { action: 'signup', email, password, first_name?, accepted_terms, marketing_opt_in? }
+//   { action: 'signup', email, first_name? }
 //   { action: 'resend', email }
+// (extra fields such as password/accepted_terms are ignored, see above)
 //
-// accepted_terms must be exactly `true` for a 'signup' request — this is
-// the server-side half of the signup consent gate (spec 0047); the client
-// disables its own submit button on this, but this function enforces it
-// independently so a direct API call can't skip it.
+// Both 'resend' and a 'signup' for an address that already has an
+// account send a fresh link when that account is unconfirmed OR has no
+// consent recorded (profiles.terms_accepted_at is null) — spec 0086
+// planning decisions 1 and 7: someone whose link click confirmed them but
+// who closed the finish page early can still get back in. "Has a
+// password" can't be used: every clicked link leaves a random one. A
+// confirmed account with consent recorded gets nothing.
 //
 // Response is deliberately the SAME generic shape regardless of whether
 // the account is brand new, already confirmed, already has a stuck
@@ -48,25 +67,12 @@ import { isValidEmail, normalizeEmail } from '../_shared/email/utils.ts';
 import { scopedCorsHeaders } from '../_shared/cors.ts';
 import { getValidatedAppUrl } from '../_shared/appUrl.ts';
 import { isAlreadyRegisteredError } from '../_shared/authErrors.ts';
-import { serverError } from '../_shared/errorReporting.ts';
+import { reportError, serverError } from '../_shared/errorReporting.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
 const MAX_FIRST_NAME_LENGTH = 100; // mirrors Register.jsx's existing maxLength
-const MIN_PASSWORD_LENGTH = 8;
-const MAX_PASSWORD_LENGTH = 128;
-
-// The "Last updated" strings a signup is recorded as having agreed to
-// (spec 0047). Deliberately this function's own copy, not something the
-// client sends — a modified client shouldn't be able to claim it agreed
-// to a different version than what's actually live. Must be kept in sync
-// by hand with TOS_LAST_UPDATED (src/lib/termsOfServiceContent.js) and
-// PRIVACY_POLICY_LAST_UPDATED (src/lib/privacyPolicyContent.js) — this
-// Edge Function runs on Deno and can't share an import with the Vite
-// frontend bundle.
-const TOS_VERSION = 'July 10, 2026';
-const PRIVACY_VERSION = 'November 20, 2026';
 
 // Rate limits (see check_and_record_rate_limits, migration 0039). Shared
 // across both 'signup' and 'resend' actions for the same key — a
@@ -109,39 +115,6 @@ function getRequestIp(req: Request): string {
   return parts[parts.length - 1] || 'unknown';
 }
 
-// Best-effort check against the Have I Been Pwned "Pwned Passwords"
-// range API (k-anonymity: only a 5-character SHA-1 prefix is sent, never
-// the password or its full hash) — a partial substitute for the
-// leaked-password protection Supabase's own dashboard may otherwise
-// enforce on the public signup surface, which admin.generateLink()
-// bypasses (see this file's header comment). Fails OPEN (treats a
-// network/API error as "not known to be pwned") rather than blocking
-// signup entirely if a third-party service hiccups — a leaked-password
-// check that occasionally misses is a much smaller risk than signup
-// going down whenever HIBP is slow or unreachable.
-async function isPasswordPwned(password: string): Promise<boolean> {
-  try {
-    const bytes = new TextEncoder().encode(password);
-    const digest = await crypto.subtle.digest('SHA-1', bytes);
-    const hashHex = Array.from(new Uint8Array(digest))
-      .map((b) => b.toString(16).padStart(2, '0'))
-      .join('')
-      .toUpperCase();
-    const prefix = hashHex.slice(0, 5);
-    const suffix = hashHex.slice(5);
-
-    const res = await fetch(`https://api.pwnedpasswords.com/range/${prefix}`, {
-      headers: { 'Add-Padding': 'true' },
-    });
-    if (!res.ok) return false;
-    const body = await res.text();
-    return body.split('\n').some((line) => line.split(':')[0]?.trim() === suffix);
-  } catch (err) {
-    console.error('isPasswordPwned check failed (failing open):', (err as Error).message);
-    return false;
-  }
-}
-
 // Row shape returned by the get_auth_user_confirmation_state() RPC.
 interface ConfirmationStateRow {
   user_id: string;
@@ -154,28 +127,67 @@ interface ResendResult {
   sentByUserId: string;
 }
 
-// Shared by both the 'resend' action and the 'signup' action's
-// already-registered-but-unconfirmed fallback — previously duplicated
-// near-verbatim in both branches. Returns null when there's genuinely
-// nothing to send (no such account, already confirmed, or the recovery
-// link itself couldn't be generated) — callers treat null as "respond
-// with the generic success shape", never as an error, to preserve
-// enumeration safety.
-async function resolveConfirmationResend(
+// Looks up whether an auth.users row exists for the email (and whether
+// it's confirmed). `failed` is true only when the lookup itself errored;
+// `state` is null when there's simply no account.
+async function lookupConfirmationState(
   adminClient: SupabaseClient,
   cleanEmail: string,
-  verifyPageUrl: string,
-): Promise<ResendResult | null> {
+): Promise<{ failed: boolean; state: ConfirmationStateRow | null }> {
   const { data: stateRows, error: stateError } = await adminClient.rpc('get_auth_user_confirmation_state', {
     p_email: cleanEmail,
   });
   if (stateError) {
     console.error('get_auth_user_confirmation_state error:', stateError);
-    return null;
+    return { failed: true, state: null };
   }
   const state = (Array.isArray(stateRows) ? stateRows[0] : stateRows) as ConfirmationStateRow | null | undefined;
-  if (!state || state.email_confirmed) {
-    return null;
+  return { failed: false, state: state ?? null };
+}
+
+// Shared by the 'resend' action and the 'signup' action whenever the
+// email already has an account. Sends when the account is unconfirmed
+// or has no consent recorded (spec 0086 planning decisions 1 and 7).
+// Returns null when there's genuinely nothing to send (no such account,
+// confirmed with consent recorded, a lookup failed, or the recovery link
+// itself couldn't
+// be generated) — callers treat null as "respond with the generic
+// success shape", never as an error, to preserve enumeration safety.
+// `knownState` skips the lookup when the caller has already done it.
+async function resolveConfirmationResend(
+  adminClient: SupabaseClient,
+  cleanEmail: string,
+  verifyPageUrl: string,
+  knownState?: ConfirmationStateRow,
+): Promise<ResendResult | null> {
+  let state = knownState ?? null;
+  if (!state) {
+    const lookup = await lookupConfirmationState(adminClient, cleanEmail);
+    if (lookup.failed || !lookup.state) {
+      return null;
+    }
+    state = lookup.state;
+  }
+  if (state.email_confirmed) {
+    // Confirmed, but the finish page may never have been completed. Its
+    // consent write is the one reliable sign it was: email_has_password()
+    // is true for every account once its link is clicked (Supabase stores
+    // a random password then; spec 0086 planning decision 7). Read with
+    // the service role, by the id the lookup above returned. Fails
+    // closed: on a lookup error, send nothing. A missing profile row has
+    // no consent recorded, so it gets a link (it goes only to the inbox).
+    const { data: profile, error: profileError } = await adminClient
+      .from('profiles')
+      .select('terms_accepted_at')
+      .eq('id', state.user_id)
+      .maybeSingle();
+    if (profileError) {
+      console.error('profiles consent lookup error:', profileError);
+      return null;
+    }
+    if (profile?.terms_accepted_at) {
+      return null;
+    }
   }
 
   const { data: recoveryData, error: recoveryError } = await adminClient.auth.admin.generateLink({
@@ -210,14 +222,9 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: 'Invalid request body' }, 400, cors);
     }
 
-    const {
-      action,
-      email,
-      password,
-      first_name: firstNameRaw,
-      accepted_terms: acceptedTerms,
-      marketing_opt_in: marketingOptInRaw,
-    } = body as Record<string, unknown>;
+    // password / accepted_terms / marketing_opt_in are deliberately not
+    // read (spec 0086) — see the header comment.
+    const { action, email, first_name: firstNameRaw } = body as Record<string, unknown>;
 
     if (action !== 'signup' && action !== 'resend') {
       return jsonResponse({ error: "action must be 'signup' or 'resend'" }, 400, cors);
@@ -231,36 +238,6 @@ Deno.serve(async (req) => {
       typeof firstNameRaw === 'string' && firstNameRaw.trim().length > 0
         ? firstNameRaw.trim().slice(0, MAX_FIRST_NAME_LENGTH)
         : undefined;
-
-    if (action === 'signup') {
-      if (typeof password !== 'string' || password.length < MIN_PASSWORD_LENGTH || password.length > MAX_PASSWORD_LENGTH) {
-        // Not an enumeration concern — this is rejecting the request's
-        // own shape, not conditioned on whether the email exists.
-        return jsonResponse(
-          { error: `Password must be between ${MIN_PASSWORD_LENGTH} and ${MAX_PASSWORD_LENGTH} characters` },
-          400,
-          cors,
-        );
-      }
-      if (await isPasswordPwned(password)) {
-        return jsonResponse(
-          { error: 'This password has appeared in a data breach. Please choose a different password.' },
-          400,
-          cors,
-        );
-      }
-      // Server-side enforcement of the signup consent gate (spec 0047) —
-      // the Register.jsx checkbox/disabled-button is the normal path, but
-      // a direct API call must not be able to skip it.
-      if (acceptedTerms !== true) {
-        return jsonResponse(
-          { error: 'You must agree to the Terms of Service and Privacy Policy to create an account' },
-          400,
-          cors,
-        );
-      }
-    }
-    const marketingOptIn = marketingOptInRaw === true;
 
     // Rate limiting — checked before any real work (existence lookups,
     // account creation, or a send), so a rejected attempt never leaks
@@ -301,55 +278,91 @@ Deno.serve(async (req) => {
     let sentByUserId: string | undefined;
 
     if (action === 'signup') {
-      // Deliberately NOT generateLink({type:'signup'}) — despite mirroring
-      // invite-co-owner's admin-API pattern, that call turned out (verified
-      // in production 2026-07-26, not just documented behavior) to still
-      // trigger Supabase's own built-in confirmation email, unlike
-      // 'invite'/'recovery' types. That defeated the entire point of this
-      // spec: the user got BOTH Supabase's generic default email AND our
-      // branded one for the same signup. createUser() is a pure admin
-      // operation with no email side effect, and the 'recovery'-type
-      // generateLink call below is the same mechanism the 'resend' path
-      // already uses safely — see resolveConfirmationResend().
-      const { data: createData, error: createError } = await adminClient.auth.admin.createUser({
-        email: cleanEmail,
-        password: password as string,
-        email_confirm: false,
-        user_metadata: {
-          ...(firstName ? { first_name: firstName } : {}),
-          terms_accepted_at: new Date().toISOString(),
-          terms_version: TOS_VERSION,
-          privacy_version: PRIVACY_VERSION,
-          marketing_opt_in: marketingOptIn,
-        },
-      });
-
-      if (createError) {
-        if (!isAlreadyRegisteredError(createError)) {
-          console.error('createUser (signup) error:', createError);
-          return jsonResponse({ error: 'Unable to process this request right now' }, 500, cors);
-        }
-
-        // Already has an auth.users row — same "confirmed vs stuck
-        // unconfirmed" question the 'resend' action answers below.
-        const resend = await resolveConfirmationResend(adminClient, cleanEmail, verifyPageUrl);
+      // An address that already has an account (including a pending
+      // co-owner/sitter invitee, whose account invite-co-owner/
+      // invite-sitter created) never gets a fresh invite token minted
+      // here: it goes straight to the same resend decision as 'resend'.
+      // The response is identical either way (enumeration safety). The
+      // "already registered" fallback below stays as a backstop for a
+      // race where the account appears between this lookup and
+      // generateLink.
+      const existing = await lookupConfirmationState(adminClient, cleanEmail);
+      if (existing.failed) {
+        // The detail is already in the function log; Sentry gets a
+        // report too. The reply text is unchanged.
+        reportError(new Error('sign-up: get_auth_user_confirmation_state lookup failed'), {
+          function: 'sign-up',
+          step: 'lookup_confirmation_state',
+        });
+        return jsonResponse({ error: 'Unable to process this request right now' }, 500, cors);
+      }
+      if (existing.state) {
+        const resend = await resolveConfirmationResend(adminClient, cleanEmail, verifyPageUrl, existing.state);
         if (!resend) {
           return genericSent(cors);
         }
         ({ tokenHash, tokenType, sentByUserId } = resend);
       } else {
-        sentByUserId = createData?.user?.id;
+        // Deliberately NOT generateLink({type:'signup'}) — that call turned
+        // out (verified in production 2026-07-26, not just documented
+        // behavior) to still trigger Supabase's own built-in confirmation
+        // email, so the user got BOTH Supabase's default email AND our
+        // branded one. The 'invite' type is the same call invite-co-owner
+        // already uses: it creates the auth user and mints a token but,
+        // unlike admin.inviteUserByEmail(), sends no email itself.
+        //
+        // Also deliberately NOT admin.createUser() (spec 0086 planning
+        // decision 5): with no password it still stores a random password
+        // hash, so email_has_password() would say a never-clicked account
+        // already has one. An invite-created
+        // account starts with no password and no consent. Clicking the
+        // link gives it a random password nobody knows (Supabase does
+        // this for invited users, decision 7); the inbox owner then sets
+        // the real one on the finish page, which asks for it because the
+        // session came from an email link (JWT amr 'otp').
         const { data: linkData, error: linkError } = await adminClient.auth.admin.generateLink({
-          type: 'recovery',
+          type: 'invite',
           email: cleanEmail,
-          options: { redirectTo: verifyPageUrl },
+          options: {
+            data: firstName ? { first_name: firstName } : {},
+            redirectTo: verifyPageUrl,
+          },
         });
-        if (linkError || !linkData?.properties?.hashed_token) {
-          console.error('generateLink (recovery, post-createUser) error:', linkError);
-          return jsonResponse({ error: 'Unable to process this request right now' }, 500, cors);
+
+        if (linkError) {
+          if (!isAlreadyRegisteredError(linkError)) {
+            console.error('generateLink (invite, signup) error:', linkError);
+            // Sentry gets a report too, like the lookup failure above.
+            // The reply text is unchanged.
+            reportError(new Error('sign-up: generateLink (invite) failed'), {
+              function: 'sign-up',
+              step: 'generate_invite_link',
+            });
+            return jsonResponse({ error: 'Unable to process this request right now' }, 500, cors);
+          }
+
+          // Race backstop: the account appeared after the lookup above.
+          // Same "finished vs still needs a link" question the 'resend'
+          // action answers below.
+          const resend = await resolveConfirmationResend(adminClient, cleanEmail, verifyPageUrl);
+          if (!resend) {
+            return genericSent(cors);
+          }
+          ({ tokenHash, tokenType, sentByUserId } = resend);
+        } else {
+          if (!linkData?.properties?.hashed_token) {
+            console.error('generateLink (invite, signup) returned no token');
+            return jsonResponse({ error: 'Unable to process this request right now' }, 500, cors);
+          }
+          sentByUserId = linkData.user?.id;
+          tokenHash = linkData.properties.hashed_token;
+          // The email link says type=signup, not invite: GoTrue stores an
+          // invite token as a confirmation token, so verifyOtp redeems it
+          // as 'signup' too (checked on dev, see index.test.ts). The
+          // frontend that's live before spec 0086's is promoted only
+          // accepts signup/recovery, and functions deploy first.
+          tokenType = 'signup';
         }
-        tokenHash = linkData.properties.hashed_token;
-        tokenType = 'recovery';
       }
     } else {
       // action === 'resend'

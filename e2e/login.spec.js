@@ -47,8 +47,8 @@ test('visiting a protected URL while logged out redirects to login with no conso
 
 // Spec 0076 (PA-20): Google sign-in is switched off, so its button is
 // hidden on both pages, and so is Login's Terms checkbox (it only ever
-// unlocked the Google button). Register keeps its checkbox, which still
-// gates Sign Up.
+// unlocked the Google button). Since spec 0086 Register has no checkbox
+// either, and Sign Up works with just a name and email.
 test('the Google button is hidden on Login and Register', async ({ page }) => {
   await page.goto('/login');
   await expect(page.getByRole('button', { name: 'Sign In' })).toBeVisible();
@@ -59,7 +59,11 @@ test('the Google button is hidden on Login and Register', async ({ page }) => {
   const signUp = page.getByRole('button', { name: 'Sign Up' });
   await expect(signUp).toBeVisible();
   await expect(page.getByRole('button', { name: 'Continue with Google' })).toHaveCount(0);
-  await expect(signUp).toBeDisabled();
-  await page.getByRole('checkbox', { name: /I agree to the/ }).click();
+  // Spec 0086: the password and the Terms checkbox moved to the page the
+  // confirmation email opens, so Register has neither.
+  await expect(page.getByRole('checkbox')).toHaveCount(0);
+  await expect(page.locator('input[type="password"]')).toHaveCount(0);
+  await page.getByLabel('First Name').fill('E2E Register Check');
+  await page.getByLabel('Email').fill('e2e-register-check@example.com');
   await expect(signUp).toBeEnabled();
 });

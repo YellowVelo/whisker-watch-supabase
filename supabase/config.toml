@@ -27,3 +27,8 @@ verify_jwt = true
 
 [functions.clear-email-suppression]
 verify_jwt = true
+
+# finish-account-setup (spec 0086) needs a signed-in caller; it reads who
+# they are from their own token. Recorded so it never rests on a default.
+[functions.finish-account-setup]
+verify_jwt = true

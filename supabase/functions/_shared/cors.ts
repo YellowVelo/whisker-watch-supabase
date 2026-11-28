@@ -4,7 +4,7 @@
 // use a wide-open `Access-Control-Allow-Origin: '*'` — acceptable there
 // because a valid Supabase session is still required before anything
 // privileged happens. A PUBLIC, unauthenticated, account-creating or
-// account-mutating endpoint (sign-up, confirm-email) is a different risk
+// account-mutating endpoint (sign-up, finish-account-setup) is a different risk
 // profile: an open CORS policy on those would let any origin's browser
 // script drive them. New functions in that category should use
 // `scopedCorsHeaders()` instead of inventing another one-off allowlist.

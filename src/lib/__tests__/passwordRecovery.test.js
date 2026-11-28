@@ -17,6 +17,21 @@ describe('shouldRedirectToReset', () => {
     expect(shouldRedirectToReset('PASSWORD_RECOVERY', RESET_PASSWORD_PATH)).toBe(false);
   });
 
+  // Spec 0086: these pages redeem 'recovery' links themselves (resent
+  // sign-up links, repeat sign-ups, re-invites) and show the finish form.
+  it.each(['/verify-email', '/accept-invite', '/verify-email/', '/accept-invite/'])(
+    'does not redirect a recovery-link login on %s',
+    (path) => {
+      expect(shouldRedirectToReset('PASSWORD_RECOVERY', path)).toBe(false);
+    },
+  );
+
+  it('still redirects from look-alike paths', () => {
+    expect(shouldRedirectToReset('PASSWORD_RECOVERY', '/verify-email-x')).toBe(true);
+    expect(shouldRedirectToReset('PASSWORD_RECOVERY', '/accept-invites')).toBe(true);
+    expect(shouldRedirectToReset('PASSWORD_RECOVERY', '/reset-password/x')).toBe(true);
+  });
+
   it.each(['SIGNED_IN', 'INITIAL_SESSION', 'TOKEN_REFRESHED', 'USER_UPDATED', 'SIGNED_OUT'])(
     'ignores the %s event',
     (event) => {
