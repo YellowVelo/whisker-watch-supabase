@@ -1,6 +1,8 @@
 # 0021_Branded_Signup_Confirmation_Email_Specification_v1
 
 **Status:** Implemented, deployed to all three Supabase projects (dev/staging/prod), and verified end-to-end on prod 2026-07-26 (real signup → branded email → click-through → signed in). Two real bugs were found only by live testing and fixed the same day — see changelog. A separate, unrelated deliverability issue (branded email landing in Spam on Yahoo Mail) was also found during verification; tracked on the launch punch list (P2), not a defect in this spec's design. See changelog at bottom for the full revision history.
+
+**Update 2026-11-27 (spec 0086):** superseded in part. The password and the Terms checkbox moved to the finish page, `confirm-email` and `pendingOAuthConsent.js` were removed, and consent is now recorded only by the server (`finish-account-setup`, migration 0064).
 **Date:** 2026-07-26
 **Related files:**
 - `src/pages/Register.jsx`

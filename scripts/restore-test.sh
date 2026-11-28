@@ -86,10 +86,10 @@ psql "$RESTORE_TEST_DB_URL" -v ON_ERROR_STOP=1 -q -c "
 # run's backup. auth's own FK cascades clear identities/sessions/etc.
 psql "$RESTORE_TEST_DB_URL" -v ON_ERROR_STOP=1 -q -c "DELETE FROM auth.users;"
 
-# Three migrations refuse to run until a deploy marker says that
-# environment's frontend is live: 0055 (spec 0071), 0061 (spec 0081) and
-# 0063 (spec 0085). The scratch database has no frontend to wait for, so
-# mark all three before replaying. Same snippet as those migrations'
+# Four migrations refuse to run until a deploy marker says that
+# environment's frontend is live: 0055 (spec 0071), 0061 (spec 0081), 0063
+# (spec 0085) and 0064 (spec 0086). The scratch database has no frontend to
+# wait for, so mark all four before replaying. Same snippet as those migrations'
 # headers. The private schema isn't reset above, so each line is safe to
 # rerun on a later drill.
 echo "== Setting deploy markers for gated migrations =="
@@ -103,7 +103,7 @@ psql "$RESTORE_TEST_DB_URL" -v ON_ERROR_STOP=1 -q -c "
   REVOKE ALL ON private.deploy_markers FROM anon, authenticated;
   INSERT INTO private.deploy_markers (key)
   VALUES ('spec_0071_frontend_live'), ('spec_0081_frontend_live'),
-         ('spec_0085_frontend_live')
+         ('spec_0085_frontend_live'), ('spec_0086_frontend_live')
   ON CONFLICT (key) DO NOTHING;
 "
 
@@ -190,7 +190,7 @@ echo "== Restoring data into scratch project =="
 # fixed. A failed run stops before handle_new_user is reinstated below; that
 # only matters for this disposable scratch database.
 # Real restore by hand onto a fresh project: first set the deploy markers
-# for 0055, 0061 and 0063 (the "Setting deploy markers" step above), or
+# for 0055, 0061, 0063 and 0064 (the "Setting deploy markers" step above), or
 # those migrations refuse to run; then replay the migrations, drop the constraint
 # BEFORE the first data load (not after a failed one: a second pg_restore
 # hits duplicate keys), load, fix or delete the bad sit(s), then re-add it:

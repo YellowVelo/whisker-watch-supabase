@@ -1,8 +1,7 @@
 import { useState } from 'react';
 import { supabase } from '@/api/supabaseClient';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import PasswordFields from '@/components/PasswordFields';
 import { Loader2 } from 'lucide-react';
 
 // Shared by ResetPassword.jsx and AcceptInvite.jsx — both need the same
@@ -34,8 +33,7 @@ export default function SetPasswordForm({ onSuccess, submitLabel = 'Set Password
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       {error && <p className="text-base text-destructive text-center">{error}</p>}
-      <div className="space-y-1.5"><Label>Password</Label><Input type="password" value={password} onChange={e => setPassword(e.target.value)} required /></div>
-      <div className="space-y-1.5"><Label>Confirm Password</Label><Input type="password" value={confirm} onChange={e => setConfirm(e.target.value)} required /></div>
+      <PasswordFields password={password} confirm={confirm} onPasswordChange={setPassword} onConfirmChange={setConfirm} />
       <Button type="submit" className="w-full" disabled={saving || disabled}>{saving ? <Loader2 className="h-4 w-4 animate-spin" /> : submitLabel}</Button>
     </form>
   );
