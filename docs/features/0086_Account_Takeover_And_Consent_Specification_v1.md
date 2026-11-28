@@ -1,6 +1,6 @@
 # 0086_Account_Takeover_And_Consent_Specification_v1
 
-**Status:** Approved by Lynn 2026-11-27, as written, including all copy. Not built yet.
+**Status:** Approved by Lynn 2026-11-27, as written, including all copy. Built 2026-11-27 on `claude/spec-0086-account-takeover-consent`: every task passed review, QA and the final whole-branch review passed. Migration 0064 and both functions are live on dev only. Waiting for Lynn's PROTECTED merge OK.
 **Date:** 2026-11-27
 **Punch list:** bundle B03, PA-13 (consent) and PA-18 (account takeover). Merge tier: PROTECTED (auth, migrations, service-role functions).
 **Reserved numbers:** spec 0086, migration 0064 (checked against every remote branch and open PR on 2026-11-27).
@@ -64,7 +64,7 @@
 ## Functional Requirements
 
 1. Signing up asks only for a first name and email. It never sets a password.
-2. The confirmation email's link opens a page where the person creates a password and agrees to the Terms and Privacy Policy, with an optional marketing opt-in. The account is only confirmed when they finish that page.
+2. The confirmation email's link opens a page where the person creates a password and agrees to the Terms and Privacy Policy, with an optional marketing opt-in. The account counts as set up only when they finish that page. (Supabase itself marks the email confirmed the moment the link is clicked; that's still safe, because only the inbox owner can click it, and nothing else is saved until they finish.)
 3. Accepting a co-owner or sitter invite uses the same page and records consent too.
 4. Finishing that page signs out every other session on the account.
 5. If someone signs up at another person's address, the real inbox owner, by finishing the page, ends up with the only working password. The person who filled in the form never gets in.
@@ -79,7 +79,7 @@
 2. **Given** someone signs up at address X (sending a password, as an old page would), **then** the account has no password.
 3. **Given** the inbox owner clicks the link and finishes with password B, **then** B works, the account is confirmed, and no other password works.
 4. **Given** the finish page, **when** the Terms box isn't ticked, **then** Finish is disabled, and the server refuses a request without it.
-5. **Given** a breached or out-of-range password, **then** the server refuses it with the existing message and nothing is confirmed.
+5. **Given** a breached or out-of-range password, **then** the server refuses it with the existing message and no password or consent is saved.
 6. **Given** two sessions on one account, **when** one finishes setup, **then** the other session can no longer refresh.
 7. **Given** a finish request, **then** `terms_accepted_at`, `terms_version` and `privacy_version` are set by the server, using the versions shown on the live Terms and Privacy pages; marketing opt-in matches the checkbox.
 8. **Given** consent is already recorded, **when** the finish call runs again, **then** the original record is kept.
@@ -145,7 +145,7 @@ No mockups. The finish page and consent screen reuse `AuthLayout` (the same fram
   - `getRequestIp`/`verifyTurnstile` are still copied in three functions (PA-39, bundle B04). Not touched here.
 - **Orphaned features nearby:** `pendingOAuthConsent.js` becomes unused and is deleted. The unused `password-reset` email template (PA-39) is unchanged.
 - **Punch list / known issues:** this closes PA-13 and PA-18. It depends on PA-19 (B01) as a deploy step. 0069's P2 "invite claims don't require a confirmed email" is part of PA-18 and closed here. PA-31 (CAPTCHA on Register) is separate (B04).
-- **Invite behavior change, by design:** `invite-co-owner`/`invite-sitter` decide "existing account vs stuck invite" by whether the address has a password (`email_has_password()`). An unconfirmed sign-up now has no password, so an invite to that address sends an invite link (going to the finish page) instead of the "you've been added" email. That's the safe outcome: the inbox owner gets a working link.
+- **Invite behavior change, by design:** `invite-co-owner`/`invite-sitter` decide "existing account vs stuck invite" by whether the address has a password (`email_has_password()`). An unconfirmed sign-up now has no password, so an invite to that address sends an invite link (going to the finish page) instead of the "you've been added" email. That's the safe outcome: the inbox owner gets a working link. **Build note:** someone who clicked their sign-up link but didn't finish has a random password stored by Supabase, so an invite to them sends the "you've been added" email, with no link. They get back in by signing up again (punch list PA-82).
 
 ## Non-Goals
 
