@@ -10,13 +10,26 @@ vi.mock('../InviteSitterDialog', () => ({ default: () => null }));
 vi.mock('@/lib/AuthContext', () => ({ useAuth: () => ({ user: null }) }));
 const reportClientError = vi.fn();
 vi.mock('@/lib/errorMonitoring', () => ({ reportClientError: (...args) => reportClientError(...args) }));
+// Spec 0088: record the props every Input receives, so the date boxes can be
+// checked for a click handler (static HTML drops event handlers).
+const inputProps = [];
+vi.mock('@/components/ui/input', async (importOriginal) => {
+  const actual = /** @type {any} */ (await importOriginal());
+  const RealInput = actual.Input;
+  const Input = React.forwardRef((/** @type {any} */ props, ref) => {
+    inputProps.push(props);
+    return React.createElement(RealInput, { ...props, ref });
+  });
+  return { ...actual, Input };
+});
 /** @type {any} */ (globalThis).React = React;
 // src/lib/utils.js (imported by the ui primitives) reads window at load time.
 if (typeof globalThis.window === 'undefined') {
   /** @type {any} */ (globalThis).window = { self: globalThis, top: globalThis };
 }
 
-const { SitCard, saveSit, ensureLogsForSit } = await import('../PetSittingSection.jsx');
+const { SitCard, SitDateFields, saveSit, ensureLogsForSit } = await import('../PetSittingSection.jsx');
+const { default: DateField } = await import('../DateField.jsx');
 
 const noop = () => {};
 const cardProps = (sit, logs = []) => ({
@@ -370,5 +383,89 @@ describe('SitCard current foods and meds: edge cases (spec 0087 QA)', () => {
   it('an item with no active flag at all (bad row) is treated as not current', () => {
     const html = render([{ id: 'p', name: 'Tribble' }], { p: [{ id: 'f1', name: 'No Flag Food', end_date: null }] }, {});
     expect(html).not.toContain('No Flag Food');
+  });
+});
+
+// Spec 0088 AC1-AC4: the sit dialog's date boxes take typing; a separate
+// calendar button beside each opens the calendar.
+describe('SitDateFields (spec 0088)', () => {
+  const renderFields = (startDate = '2026-12-01', endDate = '2026-12-03') => {
+    inputProps.length = 0;
+    return renderToStaticMarkup(createElement(SitDateFields, { startDate, endDate, onDateChange: noop }));
+  };
+
+  it('has a "Choose start date" and a "Choose end date" button, each type="button"', () => {
+    const html = renderFields();
+    for (const label of ['Choose start date', 'Choose end date']) {
+      const button = html.match(new RegExp(`<button[^>]*aria-label="${label}"[^>]*>`));
+      expect(button, label).toBeTruthy();
+      expect(button[0]).toContain('type="button"');
+      expect(button[0]).toContain(`title="${label}"`);
+      expect(button[0]).toMatch(/h-11 w-11/);
+    }
+  });
+
+  it('the date boxes have no click-to-open handler', () => {
+    renderFields();
+    const dateInputs = inputProps.filter(p => p.type === 'date');
+    expect(dateInputs).toHaveLength(2);
+    for (const p of dateInputs) {
+      expect(p.onClick).toBeUndefined();
+      expect(typeof p.onChange).toBe('function');
+    }
+  });
+
+  it('each label is linked to its box, and min/max are unchanged from spec 0085', () => {
+    const html = renderFields();
+    expect(html).toMatch(/<label[^>]*for="sit-start-date"[^>]*>Start Date \*<\/label>/);
+    expect(html).toMatch(/<label[^>]*for="sit-end-date"[^>]*>End Date \*<\/label>/);
+    const start = html.match(/<input[^>]*id="sit-start-date"[^>]*>/)[0];
+    const end = html.match(/<input[^>]*id="sit-end-date"[^>]*>/)[0];
+    expect(start).toContain('min="2000-01-01"');
+    expect(start).toContain('max="2100-12-31"');
+    // End's earliest date follows a real start date...
+    expect(end).toContain('min="2026-12-01"');
+    expect(end).toContain('max="2100-12-31"');
+    // ...and falls back to the floor when the start date isn't usable.
+    const fallback = renderFields('20266-12-01', '').match(/<input[^>]*id="sit-end-date"[^>]*>/)[0];
+    expect(fallback).toContain('min="2000-01-01"');
+  });
+
+  it('typing a date calls onDateChange with the field name', () => {
+    const onDateChange = vi.fn();
+    inputProps.length = 0;
+    renderToStaticMarkup(createElement(SitDateFields, { startDate: '', endDate: '', onDateChange }));
+    const [start, end] = inputProps.filter(p => p.type === 'date');
+    start.onChange({ target: { value: '2026-12-05' } });
+    end.onChange({ target: { value: '2026-12-06' } });
+    expect(onDateChange).toHaveBeenNthCalledWith(1, 'start_date', '2026-12-05');
+    expect(onDateChange).toHaveBeenNthCalledWith(2, 'end_date', '2026-12-06');
+  });
+});
+
+describe('DateField (spec 0088)', () => {
+  it('renders a 44px date box with room for the button, the browser icon hidden, and a labelled calendar button', () => {
+    inputProps.length = 0;
+    const html = renderToStaticMarkup(createElement(DateField, {
+      id: 'd1', value: '2026-12-01', onChange: noop, min: '2000-01-01', max: '2100-12-31',
+      buttonLabel: 'Pick a day', 'aria-describedby': 'hint',
+    }));
+    const input = html.match(/<input[^>]*>/)[0];
+    expect(input).toContain('type="date"');
+    expect(input).toContain('id="d1"');
+    expect(input).toContain('value="2026-12-01"');
+    expect(input).toContain('min="2000-01-01"');
+    expect(input).toContain('max="2100-12-31"');
+    expect(input).toContain('aria-describedby="hint"');
+    expect(input).toMatch(/\bh-11\b/);
+    expect(input).not.toMatch(/\bh-9\b/);
+    expect(input).toContain('pr-11');
+    expect(input).toContain('[&amp;::-webkit-calendar-picker-indicator]:hidden');
+    const button = html.match(/<button[^>]*>/)[0];
+    expect(button).toContain('type="button"');
+    expect(button).toContain('aria-label="Pick a day"');
+    expect(button).toContain('title="Pick a day"');
+    expect(html).toContain('text-muted-foreground');
+    expect(inputProps.at(-1).onClick).toBeUndefined();
   });
 });
